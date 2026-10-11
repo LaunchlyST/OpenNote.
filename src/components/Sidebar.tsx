@@ -7,10 +7,10 @@ import {
   dateKey,
   formatClock,
   isSameDay,
-  monthShort,
   relativeDayLabel,
-  weekdayShort,
+  startOfDay,
 } from '../lib/date'
+import { BLOCK_MS, blockStartOf, eventsInBlock } from '../lib/block'
 import { cn } from '../lib/id'
 import { useNow } from '../hooks'
 import { IconButton, Section } from './ui'
@@ -136,101 +136,36 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
 }
 
 export function Sidebar() {
-  const { calendars, events, selectedDate, addCalendar } = useApp()
-  const now = useNow(60_000)
+  const { calendars, events, selectedDate, addCalendar, settings } = useApp()
+  // Tick twice a minute so the visible block advances on its own.
+  const now = useNow(30_000)
 
-  const todayEvents = useMemo(() => {
-    const visible = new Set(calendars.filter((c) => c.visible).map((c) => c.id))
-    return events
-      .filter(
-        (e) => visible.has(e.calendarId) && isSameDay(new Date(e.start), selectedDate),
-      )
-      .sort((a, b) => a.start.localeCompare(b.start))
-  }, [events, calendars, selectedDate])
+  // The block view follows "today" by default — including across midnight,
+  // where it switches to the new day and the blocks reset to 00:00–02:00.
+  // Picking another day (mini calendar, arrows) pins the view to that day.
+  const [followToday, setFollowToday] = useState(true)
+  const prevDayRef = useRef(dateKey(now))
+  useEffect(() => {
+    const k = dateKey(now)
+    const rolled = prevDayRef.current !== k
+    prevDayRef.current = k
+    if (rolled) return
+    if (followToday && !isSameDay(selectedDate, now)) setFollowToday(false)
+  }, [now, selectedDate, followToday])
 
-  const viewingToday = isSameDay(selectedDate, now)
-  const dayKey = dateKey(selectedDate)
+  const realToday = startOfDay(now)
+  const effectiveDay = followToday ? realToday : selectedDate
 
-  // Start of the current 2-hour block (e.g. 10:00–12:00).
-  const periodStart = useMemo(() => {
-    const d = new Date(now)
-    d.setHours(Math.floor(d.getHours() / 2) * 2, 0, 0, 0)
-    return d.getTime()
-  }, [now])
+  // Start of the current 2-hour block (00:00–02:00, 02:00–04:00, …).
+  const blockStart = useMemo(() => blockStartOf(now), [now])
+  const blockEnd = blockStart + BLOCK_MS
 
-  // On the current day, hide tasks from earlier blocks so users can't
-  // scroll back — only the current 2-hour period and upcoming tasks show.
-  // On any other date, show every task with free scrolling.
-  const visibleTasks = useMemo(
-    () =>
-      viewingToday
-        ? todayEvents.filter((e) => new Date(e.end).getTime() > periodStart)
-        : todayEvents,
-    [todayEvents, viewingToday, periodStart],
+  const blockEvents = useMemo(
+    () => eventsInBlock(events, calendars, effectiveDay, blockStart),
+    [events, calendars, effectiveDay, blockStart],
   )
 
-  // First task that is still ongoing or upcoming — the auto-scroll target.
-  const currentTaskId = useMemo(
-    () =>
-      visibleTasks.find((e) => new Date(e.end).getTime() > now.getTime())
-        ?.id ?? null,
-    [visibleTasks, now],
-  )
-
-  const tasksRef = useRef<HTMLDivElement | null>(null)
-  const userScrolledRef = useRef(false)
-  const suppressRef = useRef(false)
-
-  const scrollToCurrent = () => {
-    const el = tasksRef.current
-    if (!el) return
-    const target =
-      currentTaskId != null
-        ? el.querySelector<HTMLElement>(`[data-task="${currentTaskId}"]`)
-        : null
-    suppressRef.current = true
-    el.scrollTop = target ? target.offsetTop : 0
-    window.setTimeout(() => {
-      suppressRef.current = false
-    }, 120)
-  }
-
-  const handleTasksScroll = () => {
-    if (suppressRef.current) {
-      suppressRef.current = false
-      return
-    }
-    userScrolledRef.current = true
-  }
-
-  // Reset and pin to the current period whenever the viewed day changes.
-  useEffect(() => {
-    userScrolledRef.current = false
-    scrollToCurrent()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dayKey])
-
-  // Keep the current period pinned as time passes, unless the user
-  // has manually scrolled forward through upcoming tasks.
-  const minuteKey = Math.floor(now.getTime() / 60_000)
-  useEffect(() => {
-    if (viewingToday && !userScrolledRef.current) scrollToCurrent()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [minuteKey])
-
-  const upcoming = useMemo(() => {
-    const visible = new Set(calendars.filter((c) => c.visible).map((c) => c.id))
-    return events
-      .filter(
-        (e) =>
-          visible.has(e.calendarId) &&
-          new Date(e.start).getTime() >=
-            new Date(now).setHours(0, 0, 0, 0) &&
-          dateKey(new Date(e.start)) !== dateKey(selectedDate),
-      )
-      .sort((a, b) => a.start.localeCompare(b.start))
-      .slice(0, 6)
-  }, [events, calendars, now, selectedDate])
+  const rangeLabel = `${formatClock(new Date(blockStart), settings.hour12, false)} – ${formatClock(new Date(blockEnd), settings.hour12, false)}`
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-[#eceef2] bg-white">
@@ -257,64 +192,31 @@ export function Sidebar() {
           </div>
         </Section>
 
-        <Section title="Today's tasks">
+        <Section title={rangeLabel}>
           <div className="mb-1.5 flex items-baseline justify-between px-1.5">
             <span className="text-[11px] font-medium text-[#a5aab8]">
-              {relativeDayLabel(selectedDate, now)}
+              {relativeDayLabel(effectiveDay, now)}
             </span>
             <span className="text-[10.5px] text-[#c3c7d1]">
-              {todayEvents.length}{' '}
-              {todayEvents.length === 1 ? 'task' : 'tasks'}
+              {blockEvents.length}{' '}
+              {blockEvents.length === 1 ? 'event' : 'events'}
             </span>
           </div>
-          <div
-            ref={tasksRef}
-            onScroll={handleTasksScroll}
-            className="scroll-area relative max-h-[248px] space-y-0.5 overflow-y-auto"
-          >
-            {visibleTasks.map((e) => (
-              <div key={e.id} data-task={e.id}>
-                <EventRow event={e} />
-              </div>
+          <div className="space-y-0.5">
+            {blockEvents.map((e) => (
+              <EventRow key={e.id} event={e} />
             ))}
-            {todayEvents.length === 0 && (
+            {blockEvents.length === 0 && (
               <p className="rounded-lg bg-[#fafbfc] px-2.5 py-2 text-[11.5px] leading-snug text-[#a5aab8]">
-                Nothing scheduled. Click a time slot to add something.
-              </p>
-            )}
-            {todayEvents.length > 0 && visibleTasks.length === 0 && (
-              <p className="rounded-lg bg-[#fafbfc] px-2.5 py-2 text-[11.5px] leading-snug text-[#a5aab8]">
-                You&apos;re all caught up for today.
+                No events in this block.
               </p>
             )}
           </div>
         </Section>
 
         <Section title="Upcoming">
-          <div className="space-y-0.5">
-            {upcoming.map((e, i) => {
-              const d = new Date(e.start)
-              const prev = i > 0 ? new Date(upcoming[i - 1].start) : null
-              const showDay = !prev || dateKey(prev) !== dateKey(d)
-              return (
-                <div key={e.id}>
-                  {showDay && (
-                    <div className="px-1.5 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#b6bbc7]">
-                      {weekdayShort(d)}, {monthShort(d)} {d.getDate()}
-                    </div>
-                  )}
-                  <EventRow event={e} />
-                </div>
-              )
-            })}
-            {upcoming.length === 0 && (
-              <p className="px-1.5 py-1 text-[11.5px] text-[#a5aab8]">
-                No upcoming events.
-              </p>
-            )}
-          </div>
+          <p className="px-1.5 py-1 text-[11.5px] text-[#a5aab8]">Coming Soon</p>
         </Section>
-
       </div>
 
       <div className="shrink-0 border-t border-[#eceef2] px-3 py-3">
