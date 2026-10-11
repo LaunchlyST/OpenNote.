@@ -48,7 +48,7 @@ export function seedEvents(): CalendarEvent[] {
     make('Deep work block', 'cal_study', d(0), 14, 0, 90),
     make('Client call', 'cal_work', d(1), 10, 0, 45),
     make('Workshop', 'cal_study', d(1), 13, 0, 120),
-    make('Morning yoga', 'cal_personal', d(2), 8, 30, 60),
+    make('Morning yoga', 'cal_personal', d(2), 9, 0, 60),
     make('1:1 with Alex', 'cal_work', d(2), 15, 0, 45),
     make('Sprint planning', 'cal_work', d(3), 9, 30, 90),
     make('Marketing sync', 'cal_work', d(3), 16, 0, 60),
@@ -56,8 +56,8 @@ export function seedEvents(): CalendarEvent[] {
     make('Lunch & learn', 'cal_social', d(4), 12, 30, 60),
     make('Dinner with friends', 'cal_social', d(5), 19, 0, 120),
     make('Errands', 'cal_personal', d(5), 11, 0, 60),
-    make('Plan the week', 'cal_personal', d(6), 18, 0, 60),
-    make('Read a chapter', 'cal_study', d(6), 20, 0, 45),
+    make('Plan the week', 'cal_personal', d(6), 16, 0, 60),
+    make('Read a chapter', 'cal_study', d(6), 20, 15, 45),
   ]
 }
 
