@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './store'
+import { AuthProvider } from './auth'
+import { ScreenProvider, useScreen } from './screens'
 import { TopBar } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
 import { NotesPanel } from './components/NotesPanel'
 import { TimeGrid } from './components/TimeGrid'
 import { MonthView } from './components/MonthView'
 import { EventModal } from './components/EventModal'
+import { AuthPage } from './components/AuthPage'
+import { AccountSettings } from './components/AccountSettings'
 import { Drawer } from './components/ui'
 import { isWeekend, weekDays } from './lib/date'
 
@@ -23,11 +27,13 @@ function MainArea() {
 }
 
 function Shell() {
+  const { screen } = useScreen()
   const { goToToday, setView, navigate } = useApp()
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
 
   useEffect(() => {
+    if (screen !== 'app') return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (
@@ -69,7 +75,10 @@ function Shell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, goToToday, setView])
+  }, [navigate, goToToday, setView, screen])
+
+  if (screen === 'signin' || screen === 'signup') return <AuthPage />
+  if (screen === 'account') return <AccountSettings />
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden bg-white">
@@ -108,8 +117,12 @@ function Shell() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <Shell />
-    </AppProvider>
+    <AuthProvider>
+      <ScreenProvider>
+        <AppProvider>
+          <Shell />
+        </AppProvider>
+      </ScreenProvider>
+    </AuthProvider>
   )
 }

@@ -15,6 +15,7 @@ import { cn } from '../lib/id'
 import { useNow } from '../hooks'
 import { IconButton, Section } from './ui'
 import { MiniCalendar } from './MiniCalendar'
+import { ProfileBox } from './ProfileBox'
 
 function EventRow({ event }: { event: CalendarEvent }) {
   const { calendars, openEdit, settings } = useApp()
@@ -135,7 +136,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
 }
 
 export function Sidebar() {
-  const { calendars, events, selectedDate, addCalendar, settings } = useApp()
+  const { calendars, events, selectedDate, addCalendar } = useApp()
   const now = useNow(60_000)
 
   const todayEvents = useMemo(() => {
@@ -314,10 +315,10 @@ export function Sidebar() {
           </div>
         </Section>
 
-        <div className="px-4 py-4 text-[10.5px] leading-relaxed text-[#c3c7d1]">
-          {settings.hour12 ? '12-hour' : '24-hour'} clock ·{' '}
-          {settings.weekStartsOn === 1 ? 'Monday' : 'Sunday'} start
-        </div>
+      </div>
+
+      <div className="shrink-0 border-t border-[#eceef2] px-3 py-3">
+        <ProfileBox />
       </div>
     </aside>
   )
