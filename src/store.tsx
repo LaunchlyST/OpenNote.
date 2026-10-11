@@ -1,0 +1,308 @@
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from 'react'
+import type { ReactNode } from 'react'
+import type { Calendar, CalendarEvent, Note, Settings, ViewMode } from './lib/types'
+import type { EventColorId } from './lib/colors'
+import { AUTO_COLORS } from './lib/colors'
+import {
+  DEFAULT_SETTINGS,
+  seedCalendars,
+  seedEvents,
+  seedNotes,
+} from './lib/seed'
+import { addDays, addMonths, startOfDay } from './lib/date'
+import { uid } from './lib/id'
+import { useLocalStorage } from './hooks'
+
+export interface ModalState {
+  mode: 'create' | 'edit'
+  event: CalendarEvent
+}
+
+interface AppContextValue {
+  events: CalendarEvent[]
+  calendars: Calendar[]
+  notes: Note[]
+  settings: Settings
+  updateSettings: (patch: Partial<Settings>) => void
+
+  view: ViewMode
+  setView: (view: ViewMode) => void
+  selectedDate: Date
+  selectDate: (date: Date) => void
+  navigate: (delta: number) => void
+  goToToday: () => void
+
+  modal: ModalState | null
+  openCreate: (start: Date, durationMin?: number, calendarId?: string) => void
+  openEdit: (event: CalendarEvent) => void
+  closeModal: () => void
+  saveEvent: (event: CalendarEvent) => void
+  deleteEvent: (id: string) => void
+
+  addCalendar: () => void
+  updateCalendar: (id: string, patch: Partial<Omit<Calendar, 'id'>>) => void
+  deleteCalendar: (id: string) => void
+  toggleCalendar: (id: string) => void
+
+  addNote: (patch?: Partial<Note>) => void
+  updateNote: (id: string, patch: Partial<Note>) => void
+  deleteNote: (id: string) => void
+  moveNote: (from: number, to: number) => void
+}
+
+const AppContext = createContext<AppContextValue | null>(null)
+
+const STORAGE = {
+  events: 'opennote.events.v1',
+  calendars: 'opennote.calendars.v1',
+  notes: 'opennote.notes.v1',
+  settings: 'opennote.settings.v1',
+}
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [events, setEvents] = useLocalStorage<CalendarEvent[]>(
+    STORAGE.events,
+    seedEvents,
+  )
+  const [calendars, setCalendars] = useLocalStorage<Calendar[]>(
+    STORAGE.calendars,
+    seedCalendars,
+  )
+  const [notes, setNotes] = useLocalStorage<Note[]>(STORAGE.notes, seedNotes)
+  const [settings, setSettings] = useLocalStorage<Settings>(
+    STORAGE.settings,
+    DEFAULT_SETTINGS,
+  )
+
+  const [view, setView] = useState<ViewMode>('week')
+  const [selectedDate, setSelectedDate] = useState<Date>(() =>
+    startOfDay(new Date()),
+  )
+  const [modal, setModal] = useState<ModalState | null>(null)
+
+  const updateSettings = useCallback(
+    (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })),
+    [setSettings],
+  )
+
+  const selectDate = useCallback((date: Date) => setSelectedDate(startOfDay(date)), [])
+
+  const navigate = useCallback(
+    (delta: number) => {
+      setSelectedDate((prev) => {
+        if (view === 'day') return addDays(prev, delta)
+        if (view === 'week') return addDays(prev, delta * 7)
+        return addMonths(prev, delta)
+      })
+    },
+    [view],
+  )
+
+  const goToToday = useCallback(() => setSelectedDate(startOfDay(new Date())), [])
+
+  const openCreate = useCallback(
+    (start: Date, durationMin = 60, calendarId?: string) => {
+      const calendar = calendarId ?? calendars[0]?.id ?? 'cal_work'
+      const end = new Date(start.getTime() + durationMin * 60_000)
+      setModal({
+        mode: 'create',
+        event: {
+          id: uid('evt'),
+          title: '',
+          start: start.toISOString(),
+          end: end.toISOString(),
+          calendarId: calendar,
+        },
+      })
+    },
+    [calendars],
+  )
+
+  const openEdit = useCallback((event: CalendarEvent) => {
+    setModal({ mode: 'edit', event })
+  }, [])
+
+  const closeModal = useCallback(() => setModal(null), [])
+
+  const saveEvent = useCallback(
+    (event: CalendarEvent) => {
+      setEvents((list) => {
+        const idx = list.findIndex((e) => e.id === event.id)
+        if (idx === -1) return [...list, event]
+        const next = [...list]
+        next[idx] = event
+        return next
+      })
+      setModal(null)
+    },
+    [setEvents],
+  )
+
+  const deleteEvent = useCallback(
+    (id: string) => {
+      setEvents((list) => list.filter((e) => e.id !== id))
+      setModal(null)
+    },
+    [setEvents],
+  )
+
+  const addCalendar = useCallback(() => {
+    setCalendars((list) => {
+      const color: EventColorId = AUTO_COLORS[list.length % AUTO_COLORS.length]
+      return [
+        ...list,
+        {
+          id: uid('cal'),
+          name: `Calendar ${list.length + 1}`,
+          color,
+          visible: true,
+        },
+      ]
+    })
+  }, [setCalendars])
+
+  const updateCalendar = useCallback(
+    (id: string, patch: Partial<Omit<Calendar, 'id'>>) => {
+      setCalendars((list) =>
+        list.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+      )
+    },
+    [setCalendars],
+  )
+
+  const deleteCalendar = useCallback(
+    (id: string) => {
+      setCalendars((list) => list.filter((c) => c.id !== id))
+      setEvents((list) => list.filter((e) => e.calendarId !== id))
+    },
+    [setCalendars, setEvents],
+  )
+
+  const toggleCalendar = useCallback(
+    (id: string) => {
+      setCalendars((list) =>
+        list.map((c) => (c.id === id ? { ...c, visible: !c.visible } : c)),
+      )
+    },
+    [setCalendars],
+  )
+
+  const addNote = useCallback(
+    (patch?: Partial<Note>) => {
+      const note: Note = {
+        id: uid('note'),
+        title: '',
+        body: '',
+        createdAt: Date.now(),
+        ...patch,
+      }
+      setNotes((list) => [note, ...list])
+    },
+    [setNotes],
+  )
+
+  const updateNote = useCallback(
+    (id: string, patch: Partial<Note>) => {
+      setNotes((list) =>
+        list.map((n) => (n.id === id ? { ...n, ...patch } : n)),
+      )
+    },
+    [setNotes],
+  )
+
+  const deleteNote = useCallback(
+    (id: string) => setNotes((list) => list.filter((n) => n.id !== id)),
+    [setNotes],
+  )
+
+  const moveNote = useCallback(
+    (from: number, to: number) => {
+      setNotes((list) => {
+        if (
+          from === to ||
+          from < 0 ||
+          to < 0 ||
+          from >= list.length ||
+          to >= list.length
+        ) {
+          return list
+        }
+        const next = [...list]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        return next
+      })
+    },
+    [setNotes],
+  )
+
+  const value = useMemo<AppContextValue>(
+    () => ({
+      events,
+      calendars,
+      notes,
+      settings,
+      updateSettings,
+      view,
+      setView,
+      selectedDate,
+      selectDate,
+      navigate,
+      goToToday,
+      modal,
+      openCreate,
+      openEdit,
+      closeModal,
+      saveEvent,
+      deleteEvent,
+      addCalendar,
+      updateCalendar,
+      deleteCalendar,
+      toggleCalendar,
+      addNote,
+      updateNote,
+      deleteNote,
+      moveNote,
+    }),
+    [
+      events,
+      calendars,
+      notes,
+      settings,
+      updateSettings,
+      view,
+      selectedDate,
+      selectDate,
+      navigate,
+      goToToday,
+      modal,
+      openCreate,
+      openEdit,
+      closeModal,
+      saveEvent,
+      deleteEvent,
+      addCalendar,
+      updateCalendar,
+      deleteCalendar,
+      toggleCalendar,
+      addNote,
+      updateNote,
+      deleteNote,
+      moveNote,
+    ],
+  )
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+}
+
+export function useApp(): AppContextValue {
+  const ctx = useContext(AppContext)
+  if (!ctx) throw new Error('useApp must be used inside <AppProvider>')
+  return ctx
+}
