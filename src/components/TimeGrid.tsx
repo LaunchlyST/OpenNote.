@@ -126,10 +126,12 @@ export function TimeGrid({ days }: { days: Date[] }) {
 
   // Measure the grid so single-day event cards can keep the same
   // width as one week-view column instead of stretching full-width.
-  useEffect(() => {
+  // clientWidth keeps the measurement on whole pixels (the browser rounds
+  // it) and matches the column area that the day header must line up with.
+  useLayoutEffect(() => {
     const el = gridRef.current
     if (!el) return
-    const update = () => setGridWidth(el.getBoundingClientRect().width)
+    const update = () => setGridWidth(el.clientWidth)
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
@@ -138,6 +140,22 @@ export function TimeGrid({ days }: { days: Date[] }) {
 
   // Width of one week-view column at the current viewport size.
   const weekColumnWidth = gridWidth > 0 ? gridWidth / 7 : 0
+
+  // Integer-pixel column widths shared by the day header and the grid body.
+  // Distribution by a flexible row lands the 1px vertical separators on
+  // fractional coordinates, which makes the horizontal gridlines look
+  // broken or offset at each column join. Distribute the measured width in
+  // whole pixels instead so every separator sits on a clean pixel boundary.
+  const colWidths = useMemo(() => {
+    if (gridWidth <= 0) return null
+    const base = Math.floor(gridWidth / days.length)
+    if (base <= 0) return null
+    const rem = gridWidth - base * days.length
+    return Array.from(
+      { length: days.length },
+      (_, i) => base + (i >= days.length - rem ? 1 : 0),
+    )
+  }, [gridWidth, days.length])
 
   const calMap = useMemo(
     () => new Map(calendars.map((c) => [c.id, c])),
@@ -252,7 +270,9 @@ export function TimeGrid({ days }: { days: Date[] }) {
     if (!grid) return
     e.stopPropagation()
     e.preventDefault()
-    const colWidth = grid.getBoundingClientRect().width / days.length
+    const colWidth =
+      (colWidths && colWidths[dayIndex]) ||
+      grid.getBoundingClientRect().width / days.length
     setDrag({
       id: event.id,
       mode,
@@ -285,40 +305,54 @@ export function TimeGrid({ days }: { days: Date[] }) {
       {/* Day header */}
       <div className="flex h-[64px] shrink-0 border-b border-[#eceef2] bg-white">
         <div className="w-[62px] shrink-0" />
-        {days.map((day) => {
-          const isToday = isSameDay(day, now)
-          const isSelected = isSameDay(day, selectedDate)
-          const count = noteCounts.get(dateKey(day)) ?? 0
-          return (
-            <button
-              key={day.toISOString()}
-              type="button"
-              onClick={() => {
-                selectDate(day)
-              }}
-              className="group flex flex-1 flex-col items-center justify-center gap-0.5 border-l border-[#eceef2] transition hover:bg-[#fafbfc]"
-            >
-              <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8b90a0]">
-                {weekdayShort(day)}
-                {count > 0 && (
-                  <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />
-                )}
-              </span>
-              <span
-                className={cn(
-                  'grid h-8 min-w-8 place-items-center rounded-full px-1.5 text-[15px] font-semibold tabular-nums transition',
-                  isSelected
-                    ? 'bg-[#bef264] text-[#3f4a14]'
-                    : isToday
-                      ? 'text-[#6f8f12] ring-1 ring-[#d4f08a]'
-                      : 'text-[#1f2330] group-hover:bg-[#f2f3f6]',
-                )}
+        <div
+          className="flex border-l border-[#eceef2]"
+          style={
+            colWidths
+              ? { width: gridWidth + 1, flex: '0 0 auto' }
+              : { flex: '1 1 0%', minWidth: 0 }
+          }
+        >
+          {days.map((day, di) => {
+            const isToday = isSameDay(day, now)
+            const isSelected = isSameDay(day, selectedDate)
+            const count = noteCounts.get(dateKey(day)) ?? 0
+            return (
+              <button
+                key={day.toISOString()}
+                type="button"
+                onClick={() => {
+                  selectDate(day)
+                }}
+                className="group flex flex-col items-center justify-center gap-0.5 border-l border-[#eceef2] first:border-l-0 transition hover:bg-[#fafbfc]"
+                style={
+                  colWidths
+                    ? { width: colWidths[di], flex: '0 0 auto' }
+                    : undefined
+                }
               >
-                {day.getDate()}
-              </span>
-            </button>
-          )
-        })}
+                <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8b90a0]">
+                  {weekdayShort(day)}
+                  {count > 0 && (
+                    <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />
+                  )}
+                </span>
+                <span
+                  className={cn(
+                    'grid h-8 min-w-8 place-items-center rounded-full px-1.5 text-[15px] font-semibold tabular-nums transition',
+                    isSelected
+                      ? 'bg-[#bef264] text-[#3f4a14]'
+                      : isToday
+                        ? 'text-[#6f8f12] ring-1 ring-[#d4f08a]'
+                        : 'text-[#1f2330] group-hover:bg-[#f2f3f6]',
+                  )}
+                >
+                  {day.getDate()}
+                </span>
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       {/* Timeline */}
@@ -367,7 +401,12 @@ export function TimeGrid({ days }: { days: Date[] }) {
                 <div
                   key={day.toISOString()}
                   onClick={(e) => createAt(e, day)}
-                  className="relative min-w-0 flex-1 border-l border-[#eceef2] first:border-l-0 hover:bg-[#fcfcfd]"
+                  className="relative border-l border-[#eceef2] first:border-l-0"
+                  style={
+                    colWidths
+                      ? { width: colWidths[di], flex: '0 0 auto' }
+                      : { flex: '1 1 0%', minWidth: 0 }
+                  }
                 >
                   {placed.map((p) => {
                     const color = colorOf(

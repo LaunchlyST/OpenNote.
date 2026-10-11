@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { StickyNote } from 'lucide-react'
 import { useApp } from '../store'
 import { colorOf } from '../lib/colors'
@@ -31,6 +31,9 @@ export function MonthView() {
   const { weekStartsOn, showWeekends, hour12 } = settings
   const today = new Date()
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [rowHeight, setRowHeight] = useState(122)
+
   const allCells = useMemo(
     () =>
       monthMatrix(
@@ -47,6 +50,23 @@ export function MonthView() {
   )
 
   const columns = showWeekends ? 7 : 5
+  const rows = Math.max(1, Math.ceil(cells.length / columns))
+
+  // Keep the month grid rows on whole pixels so the 1px row borders render as
+  // thin, continuous, evenly spaced lines instead of aliased/dotted ones.
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const update = () => {
+      const height = el.clientHeight
+      if (height <= 0) return
+      setRowHeight(Math.max(122, Math.floor(height / rows)))
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [rows])
 
   const byDay = useMemo(() => {
     const map = new Map<string, CalendarEvent[]>()
@@ -97,12 +117,12 @@ export function MonthView() {
         ))}
       </div>
 
-      <div className="scroll-area flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="scroll-area flex-1 overflow-y-auto">
         <div
-          className="grid min-h-full"
+          className="grid"
           style={{
             gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`,
-            gridAutoRows: 'minmax(122px, 1fr)',
+            gridAutoRows: `${rowHeight}px`,
           }}
         >
           {cells.map((d) => {
@@ -116,7 +136,7 @@ export function MonthView() {
                 key={d.toISOString()}
                 onClick={() => openCreate(fromMinutes(startOfDay(d), 9 * 60), 60)}
                 className={cn(
-                  'group/cell flex cursor-pointer flex-col gap-1 border-b border-l border-[#eceef2] p-1.5 transition first:border-l-0 hover:bg-[#fcfcfd]',
+                  'group/cell flex cursor-pointer flex-col gap-1 border-b border-l border-[#eceef2] p-1.5 transition first:border-l-0',
                   !inMonth && 'bg-[#fbfbfc]',
                 )}
               >
