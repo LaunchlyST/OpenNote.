@@ -33,6 +33,9 @@ interface AppContextValue {
 
   view: ViewMode
   setView: (view: ViewMode) => void
+  /** Full Week narrowed to a single chosen day (still the Full Week view). */
+  focusDay: boolean
+  focusOnDate: (date: Date) => void
   selectedDate: Date
   selectDate: (date: Date) => void
   navigate: (delta: number) => void
@@ -114,7 +117,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     DEFAULT_SETTINGS,
   )
 
-  const [view, setView] = useState<ViewMode>('week')
+  const [view, setViewState] = useState<ViewMode>('week')
+  const [focusDay, setFocusDay] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
     startOfDay(new Date()),
   )
@@ -126,6 +130,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const selectDate = useCallback((date: Date) => setSelectedDate(startOfDay(date)), [])
+
+  /** Changing view clears the single-day focus, so Full Week always shows 7 days. */
+  const setView = useCallback((next: ViewMode) => {
+    setViewState(next)
+    setFocusDay(false)
+  }, [])
+
+  /**
+   * Clicking a day in Full Week narrows the grid to that one day, full width,
+   * without leaving Full Week — the Full Week button stays selected and
+   * pressing it again restores all seven columns.
+   */
+  const focusOnDate = useCallback((date: Date) => {
+    setSelectedDate(startOfDay(date))
+    setFocusDay(true)
+  }, [])
 
   const navigate = useCallback(
     (delta: number) => {
@@ -288,6 +308,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateSettings,
       view,
       setView,
+      focusDay,
+      focusOnDate,
       selectedDate,
       selectDate,
       navigate,
@@ -314,6 +336,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       settings,
       updateSettings,
       view,
+      setView,
+      focusDay,
+      focusOnDate,
       selectedDate,
       selectDate,
       navigate,

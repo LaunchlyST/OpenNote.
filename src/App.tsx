@@ -11,10 +11,10 @@ import { EventModal } from './components/EventModal'
 import { AuthPage } from './components/AuthPage'
 import { AccountSettings } from './components/AccountSettings'
 import { Drawer } from './components/ui'
-import { isWeekend, weekDays } from './lib/date'
+import { dateKey, isWeekend, weekDays } from './lib/date'
 
 function MainArea() {
-  const { view, selectedDate, settings } = useApp()
+  const { view, selectedDate, settings, focusDay } = useApp()
 
   const days = useMemo(() => {
     const week = weekDays(selectedDate, settings.weekStartsOn)
@@ -23,6 +23,9 @@ function MainArea() {
 
   if (view === 'month') return <MonthView />
   if (view === 'day') return <TimeGrid key="day" days={[selectedDate]} />
+  // Full Week narrowed to the chosen day: one full-width column, still the
+  // Full Week view, until the Full Week button is pressed again.
+  if (focusDay) return <TimeGrid key={`focus-${dateKey(selectedDate)}`} days={[selectedDate]} />
   return <TimeGrid key={`week-${days.length}`} days={days} />
 }
 
