@@ -12,10 +12,61 @@
   --color-ink: #1f2330;
   --color-ink-soft: #5b6172;
   --color-hairline: #e9eaee;
+
+  /* surfaces */
+  --color-canvas: #f4f5f7;
+  --color-panel: #ffffff;
+  --color-rail: #fafbfc;
+  --color-well: #f7f8fa;
+
+  /* text */
+  --color-muted: #8b90a0;
+  --color-faint: #a5aab8;
+  --color-ghost: #c3c7d1;
+
+  /* lines */
+  --color-line: #eceef2;
+  --color-line-soft: #f0f1f4;
+}
+
+/* ---------- landing page palette ----------
+ * Appended, never replacing anything above, so the calendar app keeps its
+ * existing tokens. Pastel washes deliberately mirror the event colours in
+ * `lib/colors.ts` so the marketing previews match the real product. */
+@theme {
+  --color-lp-bg: #fbfbf9;
+  --color-lp-surface: #ffffff;
+  --color-lp-sunken: #f4f4f1;
+  --color-lp-line: #e8e8e3;
+  --color-lp-ink: #15171d;
+  --color-lp-body: #565b67;
+  --color-lp-muted: #868b97;
+
+  --color-lp-lime: #bef264;
+  --color-lp-lime-600: #a3d922;
+  --color-lp-lime-700: #6f960a;
+  --color-lp-lime-50: #f3fce2;
+
+  --color-lp-purple: #e6ddff;
+  --color-lp-blue: #d8ebff;
+  --color-lp-yellow: #fdf3ad;
+  --color-lp-pink: #ffdce9;
+  --color-lp-orange: #ffe6cc;
+  --color-lp-charcoal: #1b1e26;
+  --color-lp-charcoal-2: #242833;
 }
 
 :root {
   color-scheme: light;
+
+  /* elevation */
+  --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
+  --shadow-md: 0 6px 16px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
+  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.13), 0 4px 10px rgba(16, 24, 40, 0.05);
+  --shadow-xl: 0 28px 70px rgba(16, 24, 40, 0.22), 0 8px 20px rgba(16, 24, 40, 0.08);
+
+  --ring-brand: 0 0 0 3px rgba(190, 242, 100, 0.4);
 }
 
 html,
@@ -26,7 +77,7 @@ body,
 
 body {
   margin: 0;
-  background: #ffffff;
+  background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 14px;
@@ -61,11 +112,13 @@ select {
 }
 .scroll-area::-webkit-scrollbar-thumb {
   background: #dcdee5;
-  border: 3px solid #ffffff;
+  border: 3px solid transparent;
+  background-clip: padding-box;
   border-radius: 999px;
 }
 .scroll-area:hover::-webkit-scrollbar-thumb {
   background: #c6c9d4;
+  background-clip: padding-box;
 }
 
 /* ---------- misc ---------- */
@@ -82,11 +135,17 @@ input {
   outline: none;
 }
 
+:focus-visible {
+  outline: 2px solid var(--color-lime-deep);
+  outline-offset: 2px;
+}
+
 ::selection {
   background: #d9f99d;
   color: #1f2330;
 }
 
+/* ---------- motion ---------- */
 @keyframes pop-in {
   from {
     opacity: 0;
@@ -101,6 +160,36 @@ input {
   animation: pop-in 0.14s ease-out;
 }
 
+/* Floating sheet — used by the event editor and profile menu. */
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-sheet {
+  animation: sheet-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Sidebar rows and calendar cells settle in from below. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise-in 0.18s ease-out both;
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -111,4 +200,177 @@ input {
 }
 .animate-fade {
   animation: fade-in 0.12s ease-out;
+}
+
+@keyframes scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-scrim {
+  animation: scrim-in 0.16s ease-out;
+}
+
+/* ---------- shared primitives ---------- */
+@utility panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+@utility field {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--color-line);
+  background: #fff;
+  padding: 8px 11px;
+  font-size: 12.5px;
+  color: var(--color-ink);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+@utility field-focus {
+  border-color: var(--color-lime-bright);
+  box-shadow: var(--ring-brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Landing page — motion                                              */
+/* ------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* Reduced motion applies on top of the global reset above, so decorative
+     layers do not freeze mid-float. */
+  .lp-reveal,
+  .lp-drift,
+  .lp-float,
+  .lp-bob {
+    animation: none !important;
+  }
+  .lp-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* Scroll reveal — transform + opacity only, so it never shifts layout. */
+@keyframes lp-reveal-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+}
+.lp-reveal[data-revealed='true'] {
+  animation: lp-reveal-in 0.72s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Slow ambient drift for gradient orbs behind the hero. */
+@keyframes lp-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2.5%, -3%, 0) scale(1.08);
+  }
+}
+.lp-drift {
+  animation: lp-drift 26s ease-in-out infinite;
+}
+
+/* Gentle float for the cards that overlap the hero showcase. */
+@keyframes lp-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-9px);
+  }
+}
+.lp-float {
+  animation: lp-float 7.5s ease-in-out infinite;
+}
+
+/* Hero entrance: headline, copy, then the showcase. */
+@keyframes lp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.lp-bob {
+  animation: lp-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes lp-pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes lp-spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Smooth in-page scrolling for the anchor links in the navigation.
+     Scoped to the landing page so the calendar app keeps native scrolling. */
+  html.lp-smooth {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Landing-only reset. The calendar app sets its own background and font size. */
+body.lp-body {
+  background: var(--color-lp-bg);
+  color: var(--color-lp-ink);
+  font-size: 16px;
+  line-height: 1.6;
+}
+body.lp-body h1,
+body.lp-body h2,
+body.lp-body h3 {
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+/* Soft focus ring for landing controls, distinct from the app's lime outline. */
+body.lp-body :focus-visible {
+  outline: 2px solid var(--color-lp-lime-700);
+  outline-offset: 3px;
+  border-radius: 6px;
 }

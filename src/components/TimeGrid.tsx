@@ -141,6 +141,13 @@ export function TimeGrid({
   // width as one week-view column instead of stretching full-width.
   // clientWidth keeps the measurement on whole pixels (the browser rounds
   // it) and matches the column area that the day header must line up with.
+  //
+  // The columns are laid out at the width measured here, so the container
+  // must be allowed to shrink (`min-w-0`). Without that, the default
+  // `min-width: auto` keeps the container as wide as its own columns, the
+  // measurement never changes again, and a stale width clips the last days.
+  // The window listener re-measures in case the panel resizes without the
+  // grid itself changing (rail toggles, notes panel opening).
   useLayoutEffect(() => {
     const el = gridRef.current
     if (!el) return
@@ -148,7 +155,11 @@ export function TimeGrid({
     update()
     const observer = new ResizeObserver(update)
     observer.observe(el)
-    return () => observer.disconnect()
+    window.addEventListener('resize', update)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', update)
+    }
   }, [])
 
   // Width of one week-view column at the current viewport size.
@@ -354,14 +365,14 @@ export function TimeGrid({
                     selectDate(day)
                   }
                 }}
-                className="group flex flex-col items-center justify-center gap-0.5 border-l border-[#eceef2] first:border-l-0 transition hover:bg-[#fafbfc]"
+                className="group flex flex-col items-center justify-center gap-1 py-2 transition-colors"
                 style={
                   headerWidths
                     ? { width: headerWidths[di], flex: '0 0 auto' }
                     : undefined
                 }
               >
-                <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8b90a0]">
+                <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#a5aab8] transition-colors group-hover:text-[#6b7183]">
                   {weekdayShort(day)}
                   {count > 0 && (
                     <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />
@@ -369,11 +380,11 @@ export function TimeGrid({
                 </span>
                 <span
                   className={cn(
-                    'grid h-8 min-w-8 place-items-center rounded-full px-1.5 text-[15px] font-semibold tabular-nums transition',
+                    'grid h-8 min-w-8 place-items-center rounded-xl px-2 text-[15px] font-semibold tabular-nums transition-all duration-150',
                     isSelected
-                      ? 'bg-[#bef264] text-[#3f4a14]'
+                      ? 'bg-[#bef264] text-[#33400f] shadow-[0_1px_3px_rgba(16,24,40,0.16)] ring-1 ring-inset ring-[#a3d922]/50'
                       : isToday
-                        ? 'text-[#6f8f12] ring-1 ring-[#d4f08a]'
+                        ? 'bg-[#f4fbe0] text-[#5d7a0f] ring-1 ring-inset ring-[#d4f08a] group-hover:bg-[#eef8d4]'
                         : 'text-[#1f2330] group-hover:bg-[#f2f3f6]',
                   )}
                 >
@@ -406,7 +417,10 @@ export function TimeGrid({
             ))}
           </div>
 
-          <div ref={gridRef} className="relative flex flex-1 border-l border-[#eceef2]">
+          <div
+            ref={gridRef}
+            className="relative flex min-w-0 flex-1 border-l border-[#eceef2]"
+          >
             {/* gridlines */}
             <div className="pointer-events-none absolute inset-0">
               {HOURS.map((h) => (
@@ -481,10 +495,10 @@ export function TimeGrid({
                         }
                         onClick={(e) => e.stopPropagation()}
                         className={cn(
-                          'absolute overflow-hidden rounded-[7px] border text-left shadow-[0_1px_1px_rgba(16,24,40,0.05)] transition-shadow',
+                          'absolute overflow-hidden rounded-[10px] border text-left transition-shadow duration-150',
                           isDragging
-                            ? 'z-40 cursor-grabbing shadow-[0_10px_24px_rgba(16,24,40,0.18)]'
-                            : 'cursor-grab hover:z-20 hover:shadow-[0_4px_12px_rgba(16,24,40,0.12)]',
+                            ? 'z-40 cursor-grabbing shadow-[0_10px_24px_rgba(16,24,40,0.2)]'
+                            : 'cursor-grab shadow-[0_1px_2px_rgba(16,24,40,0.07)] hover:z-20 hover:shadow-[0_4px_12px_rgba(16,24,40,0.13)]',
                         )}
                         style={{
                           top,
@@ -503,12 +517,12 @@ export function TimeGrid({
                         }}
                         title={`${p.event.title || 'Untitled'} · ${formatClock(start, hour12)} – ${formatClock(end, hour12)}`}
                       >
-                        <div className="pointer-events-none px-2 py-[3px]">
-                          <div className="truncate text-[11.5px] font-semibold leading-tight">
+                        <div className="pointer-events-none px-2 py-[4px]">
+                          <div className="truncate text-[11.5px] font-semibold leading-tight tracking-[-0.005em]">
                             {p.event.title || 'Untitled'}
                           </div>
                           {height > 34 && (
-                            <div className="truncate text-[10.5px] font-medium leading-tight opacity-75">
+                            <div className="mt-[1px] truncate text-[10.5px] font-medium leading-tight opacity-75">
                               {formatClock(start, hour12)} –{' '}
                               {formatClock(end, hour12)}
                             </div>

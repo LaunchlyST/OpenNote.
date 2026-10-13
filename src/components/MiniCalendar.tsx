@@ -11,6 +11,9 @@ import {
 } from '../lib/date'
 import { cn } from '../lib/id'
 
+const ARROW =
+  'grid h-7 w-7 place-items-center rounded-lg text-[#8b90a0] transition hover:bg-[#eef0f4] hover:text-[#1f2330] active:scale-95'
+
 export function MiniCalendar() {
   const { selectedDate, selectDate, events, calendars, settings } = useApp()
   const [cursor, setCursor] = useState(
@@ -54,11 +57,12 @@ export function MiniCalendar() {
   const today = new Date()
 
   return (
-    <div className="border-b border-[#eceef2] px-3 pb-3 pt-3">
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[12.5px] font-semibold tracking-[-0.01em]">
-          {monthLong(cursor)} {cursor.getFullYear()}
-        </span>
+    <div className="border-b border-[#eceef2] px-3 pb-4 pt-4">
+      <div className="mb-3 flex items-center justify-between px-0.5">
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#1f2330]">
+          {monthLong(cursor)}{' '}
+          <span className="font-normal text-[#8b90a0]">{cursor.getFullYear()}</span>
+        </h2>
         <div className="flex items-center gap-0.5">
           <button
             type="button"
@@ -68,9 +72,9 @@ export function MiniCalendar() {
                 (c) => new Date(c.getFullYear(), c.getMonth() - 1, 1),
               )
             }
-            className="grid h-6 w-6 place-items-center rounded-md text-[#8b90a0] transition hover:bg-[#f2f3f6] hover:text-[#1f2330]"
+            className={ARROW}
           >
-            <ChevronLeft className="h-3.5 w-3.5" />
+            <ChevronLeft className="h-4 w-4" />
           </button>
           <button
             type="button"
@@ -80,18 +84,18 @@ export function MiniCalendar() {
                 (c) => new Date(c.getFullYear(), c.getMonth() + 1, 1),
               )
             }
-            className="grid h-6 w-6 place-items-center rounded-md text-[#8b90a0] transition hover:bg-[#f2f3f6] hover:text-[#1f2330]"
+            className={ARROW}
           >
-            <ChevronRight className="h-3.5 w-3.5" />
+            <ChevronRight className="h-4 w-4" />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-7">
+      <div className="mb-1 grid grid-cols-7">
         {cells.slice(0, 7).map((d, i) => (
           <span
             key={i}
-            className="grid h-5 place-items-center text-[10px] font-semibold uppercase text-[#a5aab8]"
+            className="grid h-6 place-items-center text-[10px] font-semibold uppercase tracking-[0.04em] text-[#a5aab8]"
           >
             {weekdayShort(d).charAt(0)}
           </span>
@@ -108,26 +112,33 @@ export function MiniCalendar() {
             <button
               key={d.toISOString()}
               type="button"
+              aria-label={d.toDateString()}
+              aria-current={isToday ? 'date' : undefined}
               onClick={() => selectDate(d)}
-              className="relative grid h-7 place-items-center"
+              className="group grid h-8 place-items-center"
             >
               <span
                 className={cn(
-                  'grid h-6 w-6 place-items-center rounded-full text-[11.5px] transition',
+                  'relative grid h-7 w-7 place-items-center rounded-full text-[12px] tabular-nums transition-all duration-150',
                   selected
-                    ? 'bg-[#bef264] font-semibold text-[#3f4a14]'
+                    ? 'bg-[#bef264] font-semibold text-[#33400f] shadow-[0_1px_3px_rgba(16,24,40,0.14)] ring-1 ring-inset ring-[#a3d922]/60'
                     : isToday
-                      ? 'font-semibold text-[#6f8f12] ring-1 ring-[#d4f08a]'
+                      ? 'font-semibold text-[#5d7a0f] ring-1 ring-[#cbe98a] hover:bg-[#f2f8e0]'
                       : inMonth
-                        ? 'text-[#3d4354] hover:bg-[#f2f3f6]'
-                        : 'text-[#c3c7d1] hover:bg-[#f7f8fa]',
+                        ? 'font-medium text-[#3d4354] group-hover:bg-[#eef0f4] group-hover:text-[#1f2330]'
+                        : 'font-medium text-[#ccd0d9] group-hover:bg-[#f5f6f8]',
                 )}
               >
                 {d.getDate()}
+                {hasEvents && !selected && (
+                  <span
+                    className={cn(
+                      'absolute bottom-[3px] h-[3px] w-[3px] rounded-full',
+                      inMonth ? 'bg-[#a3d922]' : 'bg-[#d4d8e0]',
+                    )}
+                  />
+                )}
               </span>
-              {hasEvents && !selected && (
-                <span className="absolute bottom-[-1px] h-[3px] w-[3px] rounded-full bg-[#a3d922]" />
-              )}
             </button>
           )
         })}

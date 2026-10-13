@@ -15,7 +15,9 @@ const TILT = ['', '-rotate-[0.35deg]', 'rotate-[0.3deg]']
 function autoGrow(el: HTMLTextAreaElement | null) {
   if (!el) return
   el.style.height = 'auto'
-  el.style.height = `${el.scrollHeight}px`
+  // Never collapse to nothing: a measurement taken while the panel is still
+  // zero-width would otherwise lock the field at 0px forever.
+  el.style.height = `${Math.max(el.scrollHeight, 24)}px`
 }
 
 function NoteCard({
@@ -40,9 +42,20 @@ function NoteCard({
   const { updateNote, deleteNote, selectedDate } = useApp()
   const [showMeta, setShowMeta] = useState(false)
   const bodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const cardRef = useRef<HTMLDivElement | null>(null)
 
   useLayoutEffect(() => {
-    autoGrow(bodyRef.current)
+    const el = bodyRef.current
+    const card = cardRef.current
+    if (!el) return
+    autoGrow(el)
+    if (!card) return
+    // Re-grow whenever the card is resized. The body text can already be set
+    // while the panel is unmounted or zero-width, and without this the height
+    // measured at that point would stick even after the panel becomes visible.
+    const ro = new ResizeObserver(() => autoGrow(el))
+    ro.observe(card)
+    return () => ro.disconnect()
   }, [note.body])
 
   const pinned = note.date ? parseDateInput(note.date) : null
@@ -65,12 +78,13 @@ function NoteCard({
         onDrop(index)
       }}
       onDragEnd={onDragEnd}
+      ref={cardRef}
       className={cn(
-        'group animate-pop relative rounded-xl border border-[#f2e79c] bg-[#fdf6ab] p-3 shadow-[0_2px_7px_rgba(176,146,20,0.13)] transition',
+        'group animate-pop relative rounded-2xl border border-[#f2e79c] bg-[#fdf6ab] p-3.5 shadow-[0_1px_3px_rgba(176,146,20,0.12),0_1px_1px_rgba(16,24,40,0.04)] transition-all duration-150',
         TILT[index % TILT.length],
         isDragging && 'opacity-45',
         isDropTarget && 'ring-2 ring-[#a3d922] ring-offset-1',
-        !isDragging && 'hover:shadow-[0_5px_14px_rgba(176,146,20,0.19)]',
+        !isDragging && 'hover:-translate-y-px hover:shadow-[0_6px_16px_rgba(176,146,20,0.2)]',
       )}
     >
       <div className="flex items-start gap-1.5">

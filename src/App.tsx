@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './store'
-import { AuthProvider } from './auth'
 import { ScreenProvider, useScreen } from './screens'
+import type { Screen } from './screens'
 import { TopBar } from './components/TopBar'
 import { Sidebar } from './components/Sidebar'
 import { NotesPanel } from './components/NotesPanel'
@@ -11,6 +11,7 @@ import { EventModal } from './components/EventModal'
 import { AuthPage } from './components/AuthPage'
 import { AccountSettings } from './components/AccountSettings'
 import { Drawer } from './components/ui'
+import { useMediaQuery } from './hooks'
 import { dateKey, isWeekend, weekDays } from './lib/date'
 
 function MainArea() {
@@ -44,6 +45,22 @@ function Shell() {
   const { goToToday, setView, navigate } = useApp()
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(true)
+
+  // At xl and above Notes is a docked rail; below that it is a drawer, so the
+  // same control has to drive whichever one is actually visible.
+  const wide = useMediaQuery('(min-width: 1280px)')
+
+  const toggleNotes = () => {
+    if (wide) {
+      setNotesOpen((o) => {
+        if (o) setRightOpen(false)
+        return !o
+      })
+    } else {
+      setRightOpen((o) => !o)
+    }
+  }
 
   useEffect(() => {
     if (screen !== 'app') return
@@ -94,29 +111,35 @@ function Shell() {
   if (screen === 'account') return <AccountSettings />
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-white">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[#f4f5f7]">
       <TopBar
         onToggleLeft={() => setLeftOpen((o) => !o)}
         onToggleRight={() => setRightOpen((o) => !o)}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-2 p-2">
         <div className="hidden lg:flex">
-          <Sidebar />
+          <div className="overflow-hidden rounded-2xl border border-[#e9eaee] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+            <Sidebar onToggleNotes={toggleNotes} />
+          </div>
         </div>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#e9eaee] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
           <MainArea />
         </main>
-        <div className="hidden xl:flex">
-          <NotesPanel />
-        </div>
+        {notesOpen && (
+          <div className="hidden xl:flex">
+            <div className="overflow-hidden rounded-2xl border border-[#e9eaee] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+              <NotesPanel />
+            </div>
+          </div>
+        )}
       </div>
 
       <EventModal />
 
       {leftOpen && (
         <Drawer side="left" onClose={() => setLeftOpen(false)}>
-          <Sidebar />
+          <Sidebar onToggleNotes={toggleNotes} />
         </Drawer>
       )}
       {rightOpen && (
@@ -128,14 +151,12 @@ function Shell() {
   )
 }
 
-export default function App() {
+export default function App({ screen }: { screen?: Screen } = {}) {
   return (
-    <AuthProvider>
-      <ScreenProvider>
-        <AppProvider>
-          <Shell />
-        </AppProvider>
-      </ScreenProvider>
-    </AuthProvider>
+    <ScreenProvider initialScreen={screen ?? 'app'}>
+      <AppProvider>
+        <Shell />
+      </AppProvider>
+    </ScreenProvider>
   )
 }

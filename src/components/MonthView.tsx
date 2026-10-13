@@ -149,9 +149,9 @@ export function MonthView() {
                       setView('day')
                     }}
                     className={cn(
-                      'grid h-6 min-w-6 place-items-center rounded-full px-1.5 text-[12px] font-semibold tabular-nums transition',
+                      'grid h-6 min-w-6 place-items-center rounded-[9px] px-1.5 text-[12px] font-semibold tabular-nums transition',
                       isToday
-                        ? 'bg-[#bef264] text-[#3f4a14]'
+                        ? 'bg-[#bef264] text-[#33400f] shadow-[0_1px_2px_rgba(16,24,40,0.14)] ring-1 ring-inset ring-[#a3d922]/50'
                         : inMonth
                           ? 'text-[#1f2330] hover:bg-[#f2f3f6]'
                           : 'text-[#c3c7d1] hover:bg-[#f7f8fa]',

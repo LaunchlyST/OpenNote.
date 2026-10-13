@@ -24,12 +24,12 @@ export function TopBar({
   const headerLabel = formatHeader(view, selectedDate, settings.weekStartsOn)
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-1 border-b border-[#eceef2] bg-white px-2.5 sm:px-3">
-      <div className="flex items-center gap-2 pr-1 lg:w-[248px]">
-        <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-[#bef264] text-[#3f4a14] shadow-[0_1px_2px_rgba(16,24,40,0.12)]">
-          <StickyNote className="h-[15px] w-[15px]" strokeWidth={2.3} />
+    <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-[#e9eaee] bg-white px-3 sm:px-4">
+      <div className="flex items-center gap-2 pr-1 lg:w-[236px]">
+        <div className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-[9px] bg-[#bef264] text-[#33400f] shadow-[0_1px_2px_rgba(16,24,40,0.14)]">
+          <StickyNote className="h-[16px] w-[16px]" strokeWidth={2.3} />
         </div>
-        <span className="hidden text-[15px] font-semibold tracking-[-0.01em] sm:block">
+        <span className="hidden text-[15px] font-semibold tracking-[-0.015em] sm:block">
           OpenNote
         </span>
       </div>
@@ -49,11 +49,11 @@ export function TopBar({
         <button
           type="button"
           onClick={goToToday}
-          className="ml-1 rounded-lg border border-[#e4e6ec] px-2.5 py-[5px] text-[12.5px] font-medium text-[#3d4354] transition hover:bg-[#f6f7f9] active:scale-[0.97]"
+          className="ml-1 rounded-lg border border-[#e4e6ec] bg-white px-3 py-[6px] text-[12.5px] font-medium text-[#3d4354] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#d4d8e0] hover:bg-[#f7f8fa] active:scale-[0.97]"
         >
           Today
         </button>
-        <h1 className="ml-2 hidden truncate text-[14.5px] font-semibold tracking-[-0.01em] md:block">
+        <h1 className="ml-2.5 hidden truncate text-[15px] font-semibold tracking-[-0.015em] md:block">
           {headerLabel}
         </h1>
       </div>
@@ -63,16 +63,16 @@ export function TopBar({
           {headerLabel}
         </span>
 
-        <div className="flex rounded-xl bg-[#f4f5f8] p-0.5">
+        <div className="flex rounded-xl bg-[#f1f2f5] p-[3px] ring-1 ring-black/[0.03]">
           {VIEWS.map((v) => (
             <button
               key={v.value}
               type="button"
               onClick={() => setView(v.value)}
               className={cn(
-                'rounded-[9px] px-2.5 py-[5px] text-[12.5px] font-medium transition sm:px-3',
+                'rounded-[9px] px-3 py-[6px] text-[12.5px] font-medium transition-all duration-150',
                 view === v.value
-                  ? 'bg-white text-[#1f2330] shadow-[0_1px_2px_rgba(16,24,40,0.09)]'
+                  ? 'bg-white text-[#1f2330] shadow-[0_1px_3px_rgba(16,24,40,0.12)]'
                   : 'text-[#6b7183] hover:text-[#1f2330]',
               )}
             >

@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import type { ReactNode } from 'react'
-import { Clock, Trash2, X } from 'lucide-react'
+import { CalendarDays, Clock, Trash2, X } from 'lucide-react'
 import { useApp } from '../store'
 import type { CalendarEvent } from '../lib/types'
 import { colorOf } from '../lib/colors'
@@ -14,20 +13,6 @@ import {
 import { cn } from '../lib/id'
 import { useEscape } from '../hooks'
 import { IconButton } from './ui'
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8b90a0]">
-        {label}
-      </span>
-      <span className="block">{children}</span>
-    </label>
-  )
-}
-
-const inputClass =
-  'w-full rounded-lg border border-[#e8eaef] px-2.5 py-2 text-[12.5px] text-[#1f2330] transition focus:border-[#c3e56a] focus:ring-2 focus:ring-[#eaf9bf]'
 
 function EventModalBody({
   event,
@@ -83,7 +68,7 @@ function EventModalBody({
 
   return (
     <div
-      className="animate-fade fixed inset-0 z-[60] flex items-center justify-center bg-[#0b0f19]/25 p-4"
+      className="animate-scrim fixed inset-0 z-[60] flex items-center justify-center bg-[#0b0f19]/30 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) closeModal()
       }}
@@ -93,10 +78,10 @@ function EventModalBody({
           e.preventDefault()
           handleSubmit()
         }}
-        className="animate-pop w-full max-w-[460px] rounded-2xl border border-[#eceef2] bg-white shadow-[0_24px_60px_rgba(16,24,40,0.25)]"
+        className="animate-sheet flex max-h-[92vh] w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-[#eceef2] bg-white shadow-[0_28px_70px_rgba(16,24,40,0.24),0_8px_20px_rgba(16,24,40,0.08)]"
       >
-        <div className="flex items-center justify-between border-b border-[#f0f1f4] px-5 py-3">
-          <h2 className="text-[13.5px] font-semibold">
+        <div className="flex items-center justify-between border-b border-[#f0f1f4] px-5 py-3.5">
+          <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#1f2330]">
             {mode === 'create' ? 'New event' : 'Edit event'}
           </h2>
           <div className="flex items-center gap-1">
@@ -104,7 +89,7 @@ function EventModalBody({
               <button
                 type="button"
                 onClick={() => deleteEvent(event.id)}
-                className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11.5px] font-medium text-[#c0392b] transition hover:bg-[#fdf1f1]"
+                className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11.5px] font-medium text-[#b4453c] transition hover:bg-[#fdf1f1]"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete
@@ -116,17 +101,17 @@ function EventModalBody({
           </div>
         </div>
 
-        <div className="space-y-3.5 px-5 py-4">
+        <div className="scroll-area flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <input
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Add a title"
-            className="w-full rounded-xl border border-[#e8eaef] px-3 py-2.5 text-[14px] font-medium placeholder:text-[#b6bbc7] transition focus:border-[#c3e56a] focus:ring-2 focus:ring-[#eaf9bf]"
+            className="w-full rounded-xl border border-transparent bg-transparent px-3 py-2 text-[17px] font-semibold tracking-[-0.01em] text-[#1f2330] transition placeholder:font-medium placeholder:text-[#b6bbc7] hover:bg-[#fafbfc] focus:border-[#e8eaef] focus:bg-white focus:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]"
           />
 
           <div>
-            <span className="mb-1.5 block text-[10.5px] font-semibold uppercase tracking-[0.06em] text-[#8b90a0]">
+            <span className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a5aab8]">
               Calendar
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -139,10 +124,10 @@ function EventModalBody({
                     type="button"
                     onClick={() => setCalendarId(c.id)}
                     className={cn(
-                      'flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition',
+                      'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all duration-150',
                       active
-                        ? 'border-transparent shadow-[0_1px_2px_rgba(16,24,40,0.08)] ring-1 ring-inset'
-                        : 'border-[#e8eaef] text-[#5b6172] hover:bg-[#fafbfc]',
+                        ? 'border-transparent shadow-[0_1px_2px_rgba(16,24,40,0.1)]'
+                        : 'border-[#e8eaef] text-[#5b6172] hover:border-[#d4d8e0] hover:bg-[#fafbfc]',
                     )}
                     style={
                       active
@@ -165,41 +150,49 @@ function EventModalBody({
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2.5">
-            <Field label="Date">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5 rounded-xl border border-[#e8eaef] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
+              <CalendarDays className="h-4 w-4 shrink-0 text-[#a5aab8]" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className={inputClass}
+                className="w-full bg-transparent py-1 text-[13px] font-medium text-[#1f2330]"
               />
-            </Field>
-            <Field label="Start">
-              <input
-                type="time"
-                step={900}
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="End">
-              <input
-                type="time"
-                step={900}
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className={inputClass}
-              />
-            </Field>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center gap-2 rounded-xl border border-[#e8eaef] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
+                <Clock className="h-4 w-4 shrink-0 text-[#a5aab8]" />
+                <input
+                  type="time"
+                  step={900}
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full bg-transparent py-1 text-[13px] font-medium text-[#1f2330]"
+                />
+              </div>
+              <div className="flex items-center gap-2 rounded-xl border border-[#e8eaef] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
+                <Clock className="h-4 w-4 shrink-0 text-[#a5aab8]" />
+                <input
+                  type="time"
+                  step={900}
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full bg-transparent py-1 text-[13px] font-medium text-[#1f2330]"
+                />
+              </div>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-[#fafbfc] px-3 py-2 text-[11.5px] text-[#6b7183]">
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-3.5 w-3.5 text-[#8b90a0]" />
+          <div className="flex items-center justify-between rounded-xl bg-[#f7f8fa] px-3.5 py-2.5 text-[11.5px] text-[#6b7183]">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Clock className="h-3.5 w-3.5 text-[#a5aab8]" />
               {relativeDayLabel(parsedDate)}
             </span>
-            <span className="font-medium text-[#4b6410]">{durationLabel}</span>
+            <span className="rounded-full bg-[#eaf9bf] px-2 py-0.5 font-semibold text-[#4b6410]">
+              {durationLabel}
+            </span>
           </div>
 
           <textarea
@@ -207,24 +200,24 @@ function EventModalBody({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes (optional)"
-            className={cn(inputClass, 'resize-none')}
+            className="w-full resize-none rounded-xl border border-[#e8eaef] px-3 py-2 text-[12.5px] text-[#1f2330] transition placeholder:text-[#b6bbc7] focus:border-[#c3e56a] focus:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]"
           />
+        </div>
 
-          <div className="flex items-center justify-end gap-2 pt-0.5">
-            <button
-              type="button"
-              onClick={closeModal}
-              className="rounded-lg px-3 py-2 text-[12.5px] font-medium text-[#5b6172] transition hover:bg-[#f4f5f8]"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="rounded-lg bg-[#bef264] px-4 py-2 text-[12.5px] font-semibold text-[#3f4a14] shadow-[0_1px_2px_rgba(16,24,40,0.1)] transition hover:bg-[#b1ee4d] active:scale-[0.98]"
-            >
-              {mode === 'create' ? 'Add event' : 'Save changes'}
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-2 border-t border-[#f0f1f4] px-5 py-3.5">
+          <button
+            type="button"
+            onClick={closeModal}
+            className="rounded-lg px-3 py-2 text-[12.5px] font-medium text-[#5b6172] transition hover:bg-[#f4f5f8]"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="rounded-lg bg-[#bef264] px-4 py-2 text-[12.5px] font-semibold text-[#33400f] shadow-[0_1px_2px_rgba(16,24,40,0.14)] transition hover:bg-[#b1ee4d] active:scale-[0.98]"
+          >
+            {mode === 'create' ? 'Add event' : 'Save changes'}
+          </button>
         </div>
       </form>
     </div>

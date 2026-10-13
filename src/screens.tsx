@@ -18,8 +18,18 @@ interface ScreenContextValue {
 
 const ScreenContext = createContext<ScreenContextValue | null>(null)
 
-export function ScreenProvider({ children }: { children: ReactNode }) {
-  const [screen, setScreen] = useState<Screen>('app')
+export function ScreenProvider({
+  children,
+  initialScreen = 'app',
+}: {
+  children: ReactNode
+  /**
+   * Which screen to open on. Only used on mount — afterwards the provider owns
+   * the state, so in-app navigation is unaffected.
+   */
+  initialScreen?: Screen
+}) {
+  const [screen, setScreen] = useState<Screen>(initialScreen)
 
   const goTo = useCallback((next: Screen) => setScreen(next), [])
   const close = useCallback(() => setScreen('app'), [])

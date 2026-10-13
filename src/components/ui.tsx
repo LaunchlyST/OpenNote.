@@ -51,19 +51,19 @@ export function Section({
 }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="border-b border-[#eceef2] px-3 py-3">
+    <section className="border-b border-[#eceef2] px-3 py-3.5 last:border-b-0">
       <div className="flex items-center justify-between gap-1">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="group flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-[#8b90a0] transition hover:text-[#5b6172]"
+          className="group flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a5aab8] transition hover:text-[#5b6172]"
         >
           <ChevronDown
             className={cn(
-              'h-3.5 w-3.5 transition-transform duration-150',
+              'h-3 w-3 transition-transform duration-200',
               !open && '-rotate-90',
             )}
-            strokeWidth={2.4}
+            strokeWidth={2.6}
           />
           {title}
         </button>

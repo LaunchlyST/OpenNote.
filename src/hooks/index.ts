@@ -42,6 +42,25 @@ export function useNow(intervalMs = 30_000): Date {
   return now
 }
 
+/**
+ * Tracks a CSS media query so JS-driven controls agree with the breakpoints
+ * the layout uses. The Notes rail is a docked panel at `xl` and above and a
+ * drawer below it, so anything that toggles it needs to know which is live.
+ */
+export function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window === 'undefined' ? false : window.matchMedia(query).matches,
+  )
+  useEffect(() => {
+    const mql = window.matchMedia(query)
+    const onChange = () => setMatches(mql.matches)
+    onChange()
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [query])
+  return matches
+}
+
 /** Fires a callback on Escape. */
 export function useEscape(enabled: boolean, onEscape: () => void) {
   const cb = useRef(onEscape)
