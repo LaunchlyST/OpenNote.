@@ -22,11 +22,12 @@ function MainArea() {
   }, [selectedDate, settings.weekStartsOn, settings.showWeekends])
 
   if (view === 'month') return <MonthView />
-  if (view === 'day') return <TimeGrid key="day" days={[selectedDate]} />
+  // Day view and a focused Full Week share one layout: the header keeps all
+  // seven day names, the timeline shows only the selected day at full width.
+  if (view === 'day')
+    return <TimeGrid key="day" days={days} gridDays={[selectedDate]} />
   // Full Week narrowed to the chosen day: one full-width column, still the
   // Full Week view, until the Full Week button is pressed again.
-  // Full Week focused on a chosen day: the header keeps all seven day names
-  // for context, while the timeline shows just that day across the full width.
   if (focusDay)
     return (
       <TimeGrid
