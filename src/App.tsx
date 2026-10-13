@@ -25,7 +25,16 @@ function MainArea() {
   if (view === 'day') return <TimeGrid key="day" days={[selectedDate]} />
   // Full Week narrowed to the chosen day: one full-width column, still the
   // Full Week view, until the Full Week button is pressed again.
-  if (focusDay) return <TimeGrid key={`focus-${dateKey(selectedDate)}`} days={[selectedDate]} />
+  // Full Week focused on a chosen day: the header keeps all seven day names
+  // for context, while the timeline shows just that day across the full width.
+  if (focusDay)
+    return (
+      <TimeGrid
+        key={`focus-${dateKey(selectedDate)}`}
+        days={days}
+        gridDays={[selectedDate]}
+      />
+    )
   return <TimeGrid key={`week-${days.length}`} days={days} />
 }
 

@@ -102,7 +102,18 @@ function layoutDay(eventsIn: CalendarEvent[], day: Date): Placed[] {
   return out
 }
 
-export function TimeGrid({ days }: { days: Date[] }) {
+/**
+ * `days` drives the day-name header; `gridDays` drives the timeline columns.
+ * They differ while Full Week is focused on a single day: the header keeps all
+ * seven names for context while the grid shows just that day, full width.
+ */
+export function TimeGrid({
+  days,
+  gridDays = days,
+}: {
+  days: Date[]
+  gridDays?: Date[]
+}) {
   const {
     events,
     calendars,
@@ -124,7 +135,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const [gridWidth, setGridWidth] = useState(0)
 
-  const isSingleDay = days.length === 1
+  const isSingleDay = gridDays.length === 1
 
   // Measure the grid so single-day event cards can keep the same
   // width as one week-view column instead of stretching full-width.
@@ -148,16 +159,27 @@ export function TimeGrid({ days }: { days: Date[] }) {
   // fractional coordinates, which makes the horizontal gridlines look
   // broken or offset at each column join. Distribute the measured width in
   // whole pixels instead so every separator sits on a clean pixel boundary.
-  const colWidths = useMemo(() => {
-    if (gridWidth <= 0) return null
-    const base = Math.floor(gridWidth / days.length)
+  const distribute = (count: number) => {
+    if (gridWidth <= 0 || count <= 0) return null
+    const base = Math.floor(gridWidth / count)
     if (base <= 0) return null
-    const rem = gridWidth - base * days.length
-    return Array.from(
-      { length: days.length },
-      (_, i) => base + (i >= days.length - rem ? 1 : 0),
-    )
-  }, [gridWidth, days.length])
+    const rem = gridWidth - base * count
+    return Array.from({ length: count }, (_, i) => base + (i >= count - rem ? 1 : 0))
+  }
+
+  const colWidths = useMemo(
+    () => distribute(gridDays.length),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gridWidth, gridDays.length],
+  )
+
+  // The header can show a different number of cells than the grid, so it gets
+  // its own equally-distributed widths spanning the same measured area.
+  const headerWidths = useMemo(
+    () => distribute(days.length),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gridWidth, days.length],
+  )
 
   const calMap = useMemo(
     () => new Map(calendars.map((c) => [c.id, c])),
@@ -216,7 +238,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
       const offsetDays = clamp(
         Math.round(dx / drag.colWidth),
         -drag.dayIndex,
-        days.length - 1 - drag.dayIndex,
+        gridDays.length - 1 - drag.dayIndex,
       )
       const rawMin = Math.round(((dy / hourHeight) * 60) / SNAP) * SNAP
       const offsetMin =
@@ -235,7 +257,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
         openEdit(ev)
         return
       }
-      const day = days[d.dayIndex + d.offsetDays] ?? days[d.dayIndex]
+      const day = gridDays[d.dayIndex + d.offsetDays] ?? gridDays[d.dayIndex]
       const newStartMin = d.mode === 'move' ? d.startMin + d.offsetMin : d.startMin
       const newStart = fromMinutes(startOfDay(day), newStartMin)
       const duration =
@@ -258,7 +280,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
       window.removeEventListener('pointerup', onUp)
       window.removeEventListener('pointercancel', onUp)
     }
-  }, [drag, days, events, hourHeight, openEdit, saveEvent])
+  }, [drag, gridDays, events, hourHeight, openEdit, saveEvent])
 
   const beginDrag = (
     e: ReactPointerEvent<HTMLDivElement>,
@@ -274,7 +296,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
     e.preventDefault()
     const colWidth =
       (colWidths && colWidths[dayIndex]) ||
-      grid.getBoundingClientRect().width / days.length
+      grid.getBoundingClientRect().width / gridDays.length
     setDrag({
       id: event.id,
       mode,
@@ -310,7 +332,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
         <div
           className="flex border-l border-[#eceef2]"
           style={
-            colWidths
+            headerWidths
               ? { width: gridWidth + 1, flex: '0 0 auto' }
               : { flex: '1 1 0%', minWidth: 0 }
           }
@@ -334,8 +356,8 @@ export function TimeGrid({ days }: { days: Date[] }) {
                 }}
                 className="group flex flex-col items-center justify-center gap-0.5 border-l border-[#eceef2] first:border-l-0 transition hover:bg-[#fafbfc]"
                 style={
-                  colWidths
-                    ? { width: colWidths[di], flex: '0 0 auto' }
+                  headerWidths
+                    ? { width: headerWidths[di], flex: '0 0 auto' }
                     : undefined
                 }
               >
@@ -402,7 +424,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
               )}
             </div>
 
-            {days.map((day, di) => {
+            {gridDays.map((day, di) => {
               const placed = layoutDay(byDay.get(dateKey(day)) ?? [], day)
               const isToday = isSameDay(day, now)
               return (
