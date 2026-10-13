@@ -113,6 +113,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
     saveEvent,
     selectDate,
     selectedDate,
+    setView,
   } = useApp()
   const now = useNow(30_000)
   const { hourHeight, hour12 } = settings
@@ -323,6 +324,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
                 type="button"
                 onClick={() => {
                   selectDate(day)
+                  setView('day')
                 }}
                 className="group flex flex-col items-center justify-center gap-0.5 border-l border-[#eceef2] first:border-l-0 transition hover:bg-[#fafbfc]"
                 style={
