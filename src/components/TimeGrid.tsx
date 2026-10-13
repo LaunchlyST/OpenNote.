@@ -113,8 +113,6 @@ export function TimeGrid({ days }: { days: Date[] }) {
     saveEvent,
     selectDate,
     selectedDate,
-    view,
-    focusOnDate,
   } = useApp()
   const now = useNow(30_000)
   const { hourHeight, hour12 } = settings
@@ -324,13 +322,7 @@ export function TimeGrid({ days }: { days: Date[] }) {
                 key={day.toISOString()}
                 type="button"
                 onClick={() => {
-                  // In Full Week, a day click narrows the grid to that day.
-                  // In Day view it just moves the selected date.
-                  if (view === 'week') {
-                    focusOnDate(day)
-                  } else {
-                    selectDate(day)
-                  }
+                  selectDate(day)
                 }}
                 className="group flex flex-col items-center justify-center gap-0.5 border-l border-[#eceef2] first:border-l-0 transition hover:bg-[#fafbfc]"
                 style={
