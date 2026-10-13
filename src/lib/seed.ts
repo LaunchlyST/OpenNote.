@@ -39,6 +39,7 @@ export function seedEvents(): CalendarEvent[] {
     id: uid('evt'),
     title,
     calendarId,
+    seeded: true,
     ...slot(day, hour, minute, duration),
   })
 

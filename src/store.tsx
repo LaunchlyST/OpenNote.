@@ -15,7 +15,7 @@ import {
   seedEvents,
   seedNotes,
 } from './lib/seed'
-import { addDays, addMonths, startOfDay } from './lib/date'
+import { addDays, addMonths, dateKey, startOfDay, startOfWeek } from './lib/date'
 import { uid } from './lib/id'
 import { useLocalStorage } from './hooks'
 
@@ -60,10 +60,44 @@ const AppContext = createContext<AppContextValue | null>(null)
 
 const STORAGE = {
   events: 'opennote.events.v1',
+  eventsWeek: 'opennote.events.week',
   calendars: 'opennote.calendars.v1',
   notes: 'opennote.notes.v1',
   settings: 'opennote.settings.v1',
 }
+
+/**
+ * Demo events are generated relative to the week of the first visit and then
+ * kept in localStorage forever, so once that week passes the current week
+ * renders empty. Record which week the stored demo events belong to, and
+ * repair storage when it no longer matches — keeping any event the user
+ * created or edited.
+ *
+ * This has to run before `useLocalStorage` reads the key: that hook returns
+ * an existing stored value without consulting its initializer, so a repair
+ * passed in as the initial value would never execute.
+ */
+function syncStoredEvents() {
+  const anchor = dateKey(startOfWeek(new Date(), DEFAULT_SETTINGS.weekStartsOn))
+  try {
+    const raw = window.localStorage.getItem(STORAGE.events)
+    if (raw !== null && window.localStorage.getItem(STORAGE.eventsWeek) === anchor) {
+      return
+    }
+    const kept = raw
+      ? (JSON.parse(raw) as CalendarEvent[]).filter((e) => !e.seeded)
+      : []
+    window.localStorage.setItem(
+      STORAGE.events,
+      JSON.stringify([...seedEvents(), ...kept]),
+    )
+    window.localStorage.setItem(STORAGE.eventsWeek, anchor)
+  } catch {
+    /* storage blocked or corrupt - the hook falls back to demo data */
+  }
+}
+
+syncStoredEvents()
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useLocalStorage<CalendarEvent[]>(
@@ -133,10 +167,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const saveEvent = useCallback(
     (event: CalendarEvent) => {
       setEvents((list) => {
-        const idx = list.findIndex((e) => e.id === event.id)
-        if (idx === -1) return [...list, event]
+        // Clearing `seeded` makes an edited event user-owned, so it survives
+        // the weekly demo-data refresh.
+        const owned = { ...event, seeded: false }
+        const idx = list.findIndex((e) => e.id === owned.id)
+        if (idx === -1) return [...list, owned]
         const next = [...list]
-        next[idx] = event
+        next[idx] = owned
         return next
       })
       setModal(null)

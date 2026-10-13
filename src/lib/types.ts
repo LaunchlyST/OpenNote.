@@ -18,6 +18,8 @@ export interface CalendarEvent {
   end: string
   calendarId: string
   notes?: string
+  /** Demo data. Refreshed each week; events the user creates or edits are not. */
+  seeded?: boolean
 }
 
 export interface Note {
