@@ -30,6 +30,12 @@ export function Cursor() {
 
     const html = document.documentElement
     html.classList.add('lp-cursor-on')
+    // Injected last so no later stylesheet (or host frame) can bring back the
+    // native arrow or text I-beam on top of the custom cursor.
+    const hide = document.createElement('style')
+    hide.textContent =
+      'html.lp-cursor-on, html.lp-cursor-on *, html.lp-cursor-on *::before, html.lp-cursor-on *::after { cursor: none !important; }'
+    document.head.appendChild(hide)
 
     const dotX = gsap.quickTo(dot, 'x', { duration: 0.08, ease: 'power3.out' })
     const dotY = gsap.quickTo(dot, 'y', { duration: 0.08, ease: 'power3.out' })
@@ -83,6 +89,7 @@ export function Cursor() {
     document.addEventListener('pointerleave', onLeave)
     return () => {
       html.classList.remove('lp-cursor-on')
+      hide.remove()
       window.removeEventListener('pointermove', onMove)
       window.removeEventListener('pointerdown', onDown)
       window.removeEventListener('pointerup', onUp)
