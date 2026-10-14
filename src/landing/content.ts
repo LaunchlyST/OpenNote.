@@ -278,6 +278,7 @@ export const PRICING = {
         { label: 'Collaborative scheduling', status: 'planned' },
         { label: 'Task assignments', status: 'planned' },
         { label: 'Business workspace', status: 'planned' },
+        { label: 'Desktop only', status: 'planned' },
         { label: 'Team productivity overview', status: 'planned' },
         { label: 'Advanced permissions', status: 'planned' },
         { label: 'More business tools coming soon', status: 'planned' },
@@ -329,7 +330,7 @@ export const FAQ = {
     {
       question: 'Can I use OpenNote on my phone?',
       answer:
-        'OpenNote is being designed to work across desktop, tablet, and mobile devices.',
+        'Yes. The Free and Pro plans work on desktop, tablet and mobile. OpenNote Business is designed for desktop only.',
     },
     {
       question: 'When is OpenNote Business launching?',

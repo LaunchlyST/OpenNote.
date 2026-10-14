@@ -50,7 +50,7 @@ export function FinalCta() {
           </article>
         </Reveal>
       </div>
-      <p className="mt-4 text-center text-[13px] text-lp-muted">OpenNote runs in your browser on desktop and mobile.</p>
+      <p className="mt-4 text-center text-[13px] text-lp-muted">OpenNote runs in your browser on desktop and mobile. OpenNote Business is desktop only.</p>
     </Section>
   )
 }
