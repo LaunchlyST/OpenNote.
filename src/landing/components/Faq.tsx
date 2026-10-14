@@ -10,18 +10,18 @@ export function Faq() {
   return (
     <Section id="faq" innerClassName="max-w-[820px]">
       <Reveal>
-        <h2 className="text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink">
+        <h2 data-anim="mask" className="text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink">
           {FAQ.heading}
         </h2>
       </Reveal>
       <Reveal delay={80}>
-        <ul className="mt-10 border-t border-lp-line">
+        <ul data-anim="lines" className="mt-10 border-t border-lp-line">
           {FAQ.items.map((item, i) => {
             const open = openIndex === i
             const buttonId = `faq-button-${i}`
             const panelId = `faq-panel-${i}`
             return (
-              <li key={item.question} className="border-b border-lp-line">
+              <li key={item.question} data-anim-item="" className="border-b border-lp-line">
                 <h3>
                   <button
                     id={buttonId}

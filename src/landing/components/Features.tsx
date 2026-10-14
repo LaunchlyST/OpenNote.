@@ -14,9 +14,9 @@ import { FeatureCard, Reveal, Section, SectionHeading } from './primitives'
 const ICON = 'h-5 w-5'
 
 /** The interface sits on the card floor, cropped by the card edge. */
-function Screen({ children }: { children: ReactNode }) {
+function Screen({ children, expand }: { children: ReactNode; expand?: boolean }) {
   return (
-    <div aria-hidden="true" className="overflow-hidden rounded-t-[12px] border border-b-0 border-black/[0.08] bg-white shadow-[0_-8px_30px_-18px_rgba(0,0,0,0.25)]">
+    <div aria-hidden="true" data-anim={expand ? 'expand' : undefined} className="overflow-hidden rounded-t-[12px] border border-b-0 border-black/[0.08] bg-white shadow-[0_-8px_30px_-18px_rgba(0,0,0,0.25)]">
       {children}
     </div>
   )
@@ -124,10 +124,10 @@ export function Features() {
         />
       </Reveal>
 
-      <div className="mt-14 grid gap-4 md:mt-16">
-        <Reveal>
+      <div data-anim="assemble" className="mt-14 grid gap-4 md:mt-16">
+        <Reveal data-anim-item="">
           <FeatureCard icon={<StickyNote className={ICON} />} title={FEATURES.notes.title} body={FEATURES.notes.body}>
-            <Screen>
+            <Screen expand>
               <FitStage width={720} height={330} maxScale={1.45}>
                 <div className="flex h-full">
                   <div className="min-w-0 flex-1">
@@ -141,12 +141,12 @@ export function Features() {
         </Reveal>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Reveal>
+          <Reveal data-anim-item="">
             <FeatureCard icon={<Palette className={ICON} />} title={FEATURES.categories.title} body={FEATURES.categories.body}>
               <CalendarFilter />
             </FeatureCard>
           </Reveal>
-          <Reveal delay={80}>
+          <Reveal data-anim-item="" delay={80}>
             <FeatureCard
               icon={<Plus className={ICON} />}
               title={FEATURES.compact[2].title}
@@ -161,7 +161,7 @@ export function Features() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <Reveal>
+          <Reveal data-anim-item="">
             <FeatureCard icon={<LayoutGrid className={ICON} />} title={FEATURES.compact[0].title} body={FEATURES.compact[0].body}>
               <Screen>
                 <FitStage width={420} height={250} maxScale={1.3}>
@@ -170,7 +170,7 @@ export function Features() {
               </Screen>
             </FeatureCard>
           </Reveal>
-          <Reveal delay={80}>
+          <Reveal data-anim-item="" delay={80}>
             <FeatureCard icon={<Compass className={ICON} />} title={FEATURES.compact[1].title} body={FEATURES.compact[1].body}>
               <NavigateVisual />
             </FeatureCard>

@@ -1,4 +1,7 @@
+import { useRef } from 'react'
 import type { ReactNode } from 'react'
+import { useTilt } from '../motion'
+import { RollingHeadline } from './RollingHeadline'
 import { BookOpen, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
@@ -27,6 +30,8 @@ export function Hero() {
   const authed = Boolean(user)
   const primary = authed ? HERO.authenticatedCta : HERO.primaryCta
   const icon = 'h-5 w-5'
+  const laptopRef = useRef<HTMLDivElement | null>(null)
+  useTilt(laptopRef, 5)
 
   return (
     <section id="top" className="relative overflow-hidden bg-white px-5 pt-[120px] pb-8 sm:px-8 sm:pt-[140px]">
@@ -43,14 +48,10 @@ export function Hero() {
           <div className="lp-bob" style={{ animationDelay: '40ms' }}>
             <AppIcon className="h-[68px] w-[68px] text-[68px] shadow-[4px_4px_0_0_#191919]" />
           </div>
-          <h1
-            className="lp-bob mt-8 text-[clamp(2.6rem,7vw,5rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-lp-ink"
-            style={{ animationDelay: '110ms' }}
-          >
-            {HERO.titleLead}
-            <br />
-            {HERO.titleEmphasis}
-          </h1>
+          <RollingHeadline
+            lines={[HERO.titleLead, HERO.titleEmphasis]}
+            className="mt-8 text-[clamp(2.6rem,7vw,5rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-lp-ink"
+          />
           <p
             className="lp-bob mt-5 max-w-[46ch] text-[clamp(1.02rem,1.6vw,1.2rem)] leading-relaxed text-lp-body"
             style={{ animationDelay: '180ms' }}
@@ -83,13 +84,15 @@ export function Hero() {
 
         {/* The real interface, in a laptop */}
         <div className="lp-settle relative mx-auto mt-14 max-w-[1040px] sm:mt-16" style={{ animationDelay: '380ms' }}>
-          <div className="rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
+          <div data-anim="tilt">
+          <div ref={laptopRef} className="rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
             <ResponsiveAppWindow view="week" label="opennote — week of October 5" />
           </div>
           <div aria-hidden="true" className="mx-auto hidden h-3.5 w-[108%] -translate-x-[3.7%] rounded-b-[18px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:block" />
           <span aria-hidden="true" className="absolute -bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full border border-lp-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-lp-body shadow-sm sm:inline-flex">
             <PenLine className="h-3.5 w-3.5" /> Notes on the right <Pin className="ml-1 h-3.5 w-3.5" /> pinned to days
           </span>
+          </div>
         </div>
       </div>
     </section>

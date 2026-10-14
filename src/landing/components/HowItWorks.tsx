@@ -131,10 +131,10 @@ export function HowItWorks() {
         />
       </Reveal>
 
-      <ol className="mt-14 grid gap-4 md:mt-16 lg:grid-cols-3">
+      <ol data-anim="unfold" className="mt-14 grid gap-4 md:mt-16 lg:grid-cols-3">
         {HOW_IT_WORKS.steps.map((step, i) => (
           <Reveal as="li" key={step.number} delay={i * 90} className="h-full">
-            <article className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
+            <article data-anim-item="" className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
               <div className="p-6 sm:p-7">
                 <span className="grid h-7 w-7 place-items-center rounded-full bg-lp-ink text-[13px] font-semibold text-white">
                   {i + 1}

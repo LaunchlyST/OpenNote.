@@ -9,11 +9,14 @@ import { Faq } from './components/Faq'
 import { FinalCta } from './components/FinalCta'
 import { Footer } from './components/Footer'
 import { useHashOnMount } from './hooks'
+import { useScrollMotion } from './motion'
+import { Cursor } from './components/Cursor'
 import { SITE, useDocumentMeta } from './seo'
 
 export function LandingPage() {
   useDocumentMeta(SITE.title, SITE.description)
   useHashOnMount()
+  useScrollMotion()
 
   // Scoped classes rather than global CSS overrides, so the calendar app is
   // completely unaffected by anything on this page.
@@ -35,6 +38,7 @@ export function LandingPage() {
         Skip to content
       </a>
 
+      <Cursor />
       <Nav />
 
       <main id="main">

@@ -1,7 +1,6 @@
-import { useRef } from 'react'
-import type { CSSProperties, ElementType, ReactNode } from 'react'
+import type { ElementType, ReactNode } from 'react'
 import { cn } from '../../lib/id'
-import { useLandingNav, useRevealEffect } from '../hooks'
+import { useLandingNav } from '../hooks'
 
 /* ------------------------------------------------------------------ */
 /* Scroll reveal                                                       */
@@ -22,18 +21,13 @@ export interface RevealProps {
  * `index.css` force it visible again — so the page degrades to fully readable
  * if the observer never fires.
  */
-export function Reveal({ children, delay = 0, className, as }: RevealProps) {
+export function Reveal({ children, className, as, delay, ...rest }: RevealProps & Record<`data-${string}`, string>) {
+  void delay // kept for call-site compatibility; GSAP handles staggering
   const Tag = (as ?? 'div') as ElementType
-  const ref = useRef<HTMLElement | null>(null)
-
-  useRevealEffect(ref)
-
+  // Motion is choreographed per section by `useScrollMotion` (GSAP); this
+  // wrapper only keeps the grouping, so content is always visible at rest.
   return (
-    <Tag
-      ref={ref}
-      className={cn('lp-reveal', className)}
-      style={delay ? ({ animationDelay: `${delay}ms` } as CSSProperties) : undefined}
-    >
+    <Tag className={className} {...rest}>
       {children}
     </Tag>
   )
@@ -233,6 +227,7 @@ export function IconTile({ children, tint = '#f1f1ef', className }: { children: 
   return (
     <span
       aria-hidden="true"
+      data-anim="tile"
       className={cn('grid h-12 w-12 place-items-center rounded-[12px] border border-lp-ink/[0.08] text-lp-ink', className)}
       style={{ background: tint }}
     >
@@ -272,6 +267,7 @@ export function SectionHeading({
         </IconTile>
       )}
       <h2
+        data-anim="mask"
         className={cn(
           'max-w-[20ch] text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink',
           align === 'center' && 'mx-auto',

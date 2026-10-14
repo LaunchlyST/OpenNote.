@@ -162,7 +162,7 @@ function PriceBlock({ plan }: { plan: Plan }) {
 /* Card                                                                */
 /* ------------------------------------------------------------------ */
 
-function PlanCard({ plan, index }: { plan: Plan; index: number }) {
+function PlanCard({ plan }: { plan: Plan }) {
   const t = THEME[plan.theme]
   // Every plan now sits on a light card.
   const isDark = false
@@ -171,7 +171,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
   const hasPlanned = plan.features.some((f) => f.status === 'planned')
 
   return (
-    <Reveal delay={index * 110} className="h-full">
+    <Reveal data-anim-item="" className="h-full">
       <article
         className={cn(
           'relative flex h-full flex-col rounded-[18px] border p-6 sm:p-7',
@@ -353,9 +353,9 @@ export function Pricing() {
         />
       </Reveal>
 
-      <div className="mt-14 grid items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:gap-5">
-        {PRICING.plans.map((plan, i) => (
-          <PlanCard key={plan.id} plan={plan} index={i} />
+      <div data-anim="flip" className="mt-14 grid items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:gap-5">
+        {PRICING.plans.map((plan) => (
+          <PlanCard key={plan.id} plan={plan} />
         ))}
       </div>
 

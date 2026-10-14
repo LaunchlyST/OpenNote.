@@ -1,4 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useTilt } from '../motion'
 import { MousePointerClick } from 'lucide-react'
 import { DEMO_WEEK_TITLE } from '../demo'
 import { ResponsiveAppWindow } from './mock/AppWindow'
@@ -19,6 +22,34 @@ const DATE_LABELS: Record<MockView, string> = {
 
 export function ProductPreview() {
   const [view, setView] = useState<MockView>('week')
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const touched = useRef(false)
+  useTilt(frameRef, 4)
+
+  // As the demo scrolls through the viewport it walks Day → Full Week → Month,
+  // until the visitor takes the controls themselves.
+  useEffect(() => {
+    const el = stageRef.current
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    gsap.registerPlugin(ScrollTrigger)
+    const st = ScrollTrigger.create({
+      trigger: el,
+      start: 'top 75%',
+      end: 'bottom 40%',
+      onUpdate: (self) => {
+        if (touched.current) return
+        const p = self.progress
+        setView(p < 0.3 ? 'day' : p < 0.65 ? 'week' : 'month')
+      },
+    })
+    return () => st.kill()
+  }, [])
+
+  const choose = (next: MockView) => {
+    touched.current = true
+    setView(next)
+  }
   const index = Math.max(0, VIEW_OPTIONS.findIndex((o) => o.value === view))
   const active = VIEW_OPTIONS[index]
 
@@ -47,7 +78,7 @@ export function ProductPreview() {
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setView(option.value)}
+                  onClick={() => choose(option.value)}
                   aria-pressed={selected}
                   className={
                     'relative z-10 rounded-[9px] py-2 text-[14px] font-medium transition-colors duration-300 ' +
@@ -66,8 +97,12 @@ export function ProductPreview() {
       </Reveal>
 
       <Reveal delay={150}>
-        <div className="mt-8 rounded-[22px] bg-lp-sunken p-2 sm:p-6">
-          <ResponsiveAppWindow view={view} onViewChange={setView} dateLabel={DATE_LABELS[view]} label="opennote — sample data" />
+        <div ref={stageRef} className="mt-8 rounded-[22px] bg-lp-sunken p-2 sm:p-6">
+          <div ref={frameRef}>
+          <div key={view} className="lp-viewswap">
+          <ResponsiveAppWindow view={view} onViewChange={choose} dateLabel={DATE_LABELS[view]} label="opennote — sample data" />
+          </div>
+          </div>
         </div>
         <p className="mt-4 text-center text-[13px] text-lp-muted">
           Sample data only. This demo isn’t connected to an account and can’t change your calendar.
