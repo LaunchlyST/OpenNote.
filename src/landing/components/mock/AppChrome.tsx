@@ -458,28 +458,34 @@ function EventBlock({
   style?: React.CSSProperties
 }) {
   const c = COLORS[color]
+  const short = duration * pxPerMinute < 28
   return (
     <span
       className={cn(
-        'absolute overflow-hidden rounded-[5px] border text-left leading-tight',
-        dense ? 'px-1 py-[2px]' : 'px-1.5 py-[3px]',
+        'absolute overflow-hidden rounded-[6px] text-left leading-tight shadow-[0_1px_2px_rgba(16,24,40,0.06)]',
+        dense ? 'py-[2px] pr-1 pl-[6px]' : 'py-[4px] pr-1.5 pl-[8px]',
         className,
       )}
       style={{
-        top: start * pxPerMinute,
-        height: Math.max(duration * pxPerMinute - 2, dense ? 12 : 18),
+        top: start * pxPerMinute + 1,
+        height: Math.max(duration * pxPerMinute - 3, dense ? 12 : 18),
         background: c.bg,
-        borderColor: c.border,
         color: c.text,
+        boxShadow: `inset 2.5px 0 0 ${c.dot}, inset 0 0 0 1px ${c.border}66`,
         ...style,
       }}
     >
-      <span className={cn('block truncate font-semibold', dense ? 'text-[7px]' : 'text-[8.5px]')}>
+      <span className={cn('block truncate font-semibold tracking-[-0.01em]', dense ? 'text-[7px]' : 'text-[9px]')}>
         {title}
+        {short && !dense && (
+          <span className="ml-1 font-normal opacity-60">{demoClock(GRID_START + start)}</span>
+        )}
       </span>
-      <span className={cn('block truncate opacity-70', dense ? 'text-[6px]' : 'text-[7px]')}>
-        {demoClock(GRID_START + start)} – {demoClock(GRID_START + start + duration)}
-      </span>
+      {!short && (
+        <span className={cn('mt-[1px] block truncate tabular-nums opacity-65', dense ? 'text-[6px]' : 'text-[7.5px]')}>
+          {demoClock(GRID_START + start)} – {demoClock(GRID_START + start + duration)}
+        </span>
+      )}
     </span>
   )
 }
@@ -490,7 +496,7 @@ function EventBlock({
 
 export const GRID_START = 8 * 60
 export const GRID_END = 21 * 60
-export const HOUR_H = 26
+export const HOUR_H = 30
 
 /** One event can span multiple day columns when it crosses midnight. */
 function eventsOnDay(day: number) {
@@ -564,7 +570,7 @@ export function MockWeekTimeline({
             {hourList.map((h) => (
               <span
                 key={h}
-                className="absolute right-1.5 -translate-y-1/2 text-[6.5px] tabular-nums text-[#a5aab8]"
+                className="absolute right-1.5 -translate-y-1/2 text-[7px] tabular-nums text-[#a5aab8]"
                 style={{ top: (h * 60 - GRID_START) * pxPerMinute }}
               >
                 {`${h}`.padStart(2, '0')}:00
@@ -574,7 +580,20 @@ export function MockWeekTimeline({
 
           {/* Day columns */}
           {DEMO_WEEKDAYS.map((_, day) => (
-            <span key={day} className="relative block border-l" style={{ borderColor: HAIRLINE }}>
+            <span
+              key={day}
+              className="relative block border-l"
+              style={{ borderColor: HAIRLINE, background: day === 3 ? '#fbfdf3' : undefined }}
+            >
+              {day === 3 && (
+                <span
+                  aria-hidden="true"
+                  className="absolute inset-x-0 z-10 h-[1.5px] bg-[#1f2330]"
+                  style={{ top: (10 * 60 + 40 - GRID_START) * pxPerMinute }}
+                >
+                  <span className="absolute -top-[3px] -left-[3px] h-[7.5px] w-[7.5px] rounded-full bg-[#1f2330]" />
+                </span>
+              )}
               {hourList.map((h) => (
                 <span
                   key={h}
@@ -651,7 +670,7 @@ export function MockDayTimeline({
             {hourList.map((h) => (
               <span
                 key={h}
-                className="absolute right-1.5 -translate-y-1/2 text-[6.5px] tabular-nums text-[#a5aab8]"
+                className="absolute right-1.5 -translate-y-1/2 text-[7px] tabular-nums text-[#a5aab8]"
                 style={{ top: (h * 60 - GRID_START) * pxPerMinute }}
               >
                 {`${h}`.padStart(2, '0')}:00

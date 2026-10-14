@@ -20,8 +20,8 @@ import { DEMO_WEEK_TITLE } from '../../demo'
  * and makes horizontal overflow impossible.
  */
 
-const BASE_W = 1080
-const BASE_H = 592
+const BASE_W = 980
+const BASE_H = 600
 const CHROME_H = 34
 
 function useFitScale(baseWidth: number) {
@@ -34,7 +34,7 @@ function useFitScale(baseWidth: number) {
 
     const measure = () => {
       const width = el.clientWidth
-      if (width > 0) setScale(Math.min(1, width / baseWidth))
+      if (width > 0) setScale(Math.min(1.25, width / baseWidth))
     }
 
     measure()
