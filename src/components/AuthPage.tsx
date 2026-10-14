@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import type { ChangeEvent, FormEvent, ReactNode } from 'react'
+import type { FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
-  Camera,
   Eye,
   EyeOff,
   Loader2,
@@ -15,10 +14,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useScreen } from '../screens'
-import { fileToAvatar } from '../lib/avatar'
 import { cn } from '../lib/id'
 import { AppIcon } from '../landing/components/primitives'
-import { Avatar } from './Avatar'
 
 /* ------------------------------------------------------------------ */
 /* Atmosphere                                                          */
@@ -124,23 +121,10 @@ export function AuthPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [avatar, setAvatar] = useState<string | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-
-  const pickAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    e.target.value = ''
-    if (!file) return
-    try {
-      setAvatar(await fileToAvatar(file))
-      setError(null)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not use that image.')
-    }
-  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -155,7 +139,7 @@ export function AuthPage() {
     setBusy(true)
     try {
       if (isSignup) {
-        await signUp({ fullName, email, password, avatar })
+        await signUp({ fullName, email, password })
       } else {
         await signIn(email, password)
       }
@@ -218,29 +202,6 @@ export function AuthPage() {
                 )}
 
                 <form onSubmit={submit} className="mt-6 space-y-4">
-                  {isSignup && (
-                    <div className="flex items-center gap-4 rounded-[16px] border border-white bg-white/60 p-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-                      <label className="group relative shrink-0 cursor-pointer" aria-label={avatar ? 'Change photo' : 'Add photo'}>
-                        <span className="block rounded-full ring-4 ring-white transition group-hover:ring-[#d6ebfa]">
-                          <Avatar size={56} name={fullName} src={avatar} />
-                        </span>
-                        <span className="absolute -right-0.5 -bottom-0.5 grid h-6 w-6 place-items-center rounded-full bg-[#141a26] text-white shadow-md ring-2 ring-white">
-                          <Camera className="h-3 w-3" />
-                        </span>
-                        <input type="file" accept="image/*" className="hidden" onChange={pickAvatar} />
-                      </label>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13.5px] font-semibold text-[#1b2232]">Profile photo</p>
-                        <p className="text-[12px] text-[#7a8599]">Optional · JPG or PNG</p>
-                      </div>
-                      <label className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-[10px] max-sm:hidden border border-[#dfe7f0] bg-white px-3 py-2 text-[12.5px] font-medium text-[#2c3547] shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-[#c6d6e6] hover:bg-[#f7fafd]">
-                        <Camera className="h-3.5 w-3.5" />
-                        {avatar ? 'Change photo' : 'Add photo'}
-                        <input type="file" accept="image/*" className="hidden" onChange={pickAvatar} />
-                      </label>
-                    </div>
-                  )}
-
                   {isSignup && (
                     <Field
                       label="Full name"
