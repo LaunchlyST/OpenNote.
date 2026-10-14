@@ -74,7 +74,7 @@ export function Nav() {
     >
       <div
         className={cn(
-          'mx-auto flex h-[60px] w-full max-w-[1200px] items-center gap-3 px-5 sm:px-8',
+          'relative mx-auto flex h-[60px] w-full max-w-[1200px] items-center gap-3 px-5 sm:px-8',
         )}
       >
         <a
@@ -90,7 +90,7 @@ export function Nav() {
           <Logo />
         </a>
 
-        <nav aria-label="Sections" className="ml-6 hidden lg:block">
+        <nav aria-label="Sections" className="absolute left-1/2 hidden -translate-x-1/2 lg:block">
           <ul className="flex items-center gap-0.5">
             {NAV_LINKS.map((link) => {
               const isActive = active === link.section
