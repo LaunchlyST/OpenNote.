@@ -98,7 +98,7 @@ export function MockTopBar({
             const content = (
               <span
                 className={cn(
-                  'block rounded-[7px] px-2 py-[3px] text-[9.5px] font-medium transition-colors',
+                  'block whitespace-nowrap rounded-[7px] px-2 py-[3px] text-[9.5px] font-medium transition-colors',
                   selected
                     ? 'bg-white text-[#1f2330] shadow-[0_1px_3px_rgba(16,24,40,0.12)]'
                     : 'text-[#6b7183]',
@@ -336,7 +336,7 @@ export function MockSidebar({ view, className }: { view: MockView; className?: s
 
       <div className="shrink-0 border-t px-2 py-2" style={{ borderColor: HAIRLINE }}>
         <span className="flex items-center gap-1.5 rounded-lg border bg-white px-1.5 py-1" style={{ borderColor: '#e4e6ec' }}>
-          <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-lp-lime text-[6.5px] font-bold text-[#3f4a14]">
+          <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[#bef264] text-[6.5px] font-bold text-[#3f4a14]">
             A
           </span>
           <span className="min-w-0">
@@ -478,7 +478,7 @@ function EventBlock({
         {title}
       </span>
       <span className={cn('block truncate opacity-70', dense ? 'text-[6px]' : 'text-[7px]')}>
-        {demoClock(start)} – {demoClock(start + duration)}
+        {demoClock(GRID_START + start)} – {demoClock(GRID_START + start + duration)}
       </span>
     </span>
   )

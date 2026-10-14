@@ -30,30 +30,27 @@
 }
 
 /* ---------- landing page palette ----------
- * Appended, never replacing anything above, so the calendar app keeps its
- * existing tokens. Pastel washes deliberately mirror the event colours in
- * `lib/colors.ts` so the marketing previews match the real product. */
+ * "Paper & Ink": warm paper, near-black ink and a single vermilion signal.
+ * Scoped by the `lp-` prefix so the calendar app keeps its own tokens. The
+ * product's pastel event colours appear only inside the interface mockups. */
 @theme {
-  --color-lp-bg: #fbfbf9;
-  --color-lp-surface: #ffffff;
-  --color-lp-sunken: #f4f4f1;
-  --color-lp-line: #e8e8e3;
-  --color-lp-ink: #15171d;
-  --color-lp-body: #565b67;
-  --color-lp-muted: #868b97;
+  --font-display: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-lp-lime: #bef264;
-  --color-lp-lime-600: #a3d922;
-  --color-lp-lime-700: #6f960a;
-  --color-lp-lime-50: #f3fce2;
+  --color-lp-bg: #f3efe7;
+  --color-lp-paper: #f3efe7;
+  --color-lp-surface: #fbf9f5;
+  --color-lp-sunken: #e9e4d9;
+  --color-lp-line: #dcd6c9;
+  --color-lp-ink: #14150f;
+  --color-lp-ink-2: #1f201a;
+  --color-lp-ink-3: #2b2c25;
+  --color-lp-body: #4d4f46;
+  --color-lp-muted: #827f74;
 
-  --color-lp-purple: #e6ddff;
-  --color-lp-blue: #d8ebff;
-  --color-lp-yellow: #fdf3ad;
-  --color-lp-pink: #ffdce9;
-  --color-lp-orange: #ffe6cc;
-  --color-lp-charcoal: #1b1e26;
-  --color-lp-charcoal-2: #242833;
+  --color-lp-signal: #ff4d1c;
+  --color-lp-signal-600: #e63f10;
+  --color-lp-signal-50: #ffe9e1;
 }
 
 :root {
@@ -86,16 +83,19 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-}
+/* In the base layer so Tailwind text utilities can still override them. */
+@layer base {
+  button {
+    font: inherit;
+    color: inherit;
+  }
 
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
+  input,
+  textarea,
+  select {
+    font: inherit;
+    color: inherit;
+  }
 }
 
 /* ---------- scrollbars ---------- */
@@ -253,26 +253,11 @@ input {
 /* Landing page — motion                                              */
 /* ------------------------------------------------------------------ */
 
-@media (prefers-reduced-motion: reduce) {
-  /* Reduced motion applies on top of the global reset above, so decorative
-     layers do not freeze mid-float. */
-  .lp-reveal,
-  .lp-drift,
-  .lp-float,
-  .lp-bob {
-    animation: none !important;
-  }
-  .lp-reveal {
-    opacity: 1 !important;
-    transform: none !important;
-  }
-}
-
 /* Scroll reveal — transform + opacity only, so it never shifts layout. */
 @keyframes lp-reveal-in {
   from {
     opacity: 0;
-    transform: translateY(18px);
+    transform: translateY(22px);
   }
   to {
     opacity: 1;
@@ -281,45 +266,17 @@ input {
 }
 .lp-reveal {
   opacity: 0;
-  transform: translateY(18px);
+  transform: translateY(22px);
 }
 .lp-reveal[data-revealed='true'] {
-  animation: lp-reveal-in 0.72s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
-/* Slow ambient drift for gradient orbs behind the hero. */
-@keyframes lp-drift {
-  0%,
-  100% {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  50% {
-    transform: translate3d(2.5%, -3%, 0) scale(1.08);
-  }
-}
-.lp-drift {
-  animation: lp-drift 26s ease-in-out infinite;
-}
-
-/* Gentle float for the cards that overlap the hero showcase. */
-@keyframes lp-float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-9px);
-  }
-}
-.lp-float {
-  animation: lp-float 7.5s ease-in-out infinite;
+  animation: lp-reveal-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 /* Hero entrance: headline, copy, then the showcase. */
 @keyframes lp-rise {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(28px);
   }
   to {
     opacity: 1;
@@ -327,22 +284,87 @@ input {
   }
 }
 .lp-bob {
-  animation: lp-rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: lp-rise 1s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-@keyframes lp-pulse-soft {
+/* Hero showcase settles from a slight tilt into place. */
+@keyframes lp-settle {
+  from {
+    opacity: 0;
+    transform: perspective(1800px) rotateX(9deg) translateY(56px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: perspective(1800px) rotateX(0) translateY(0) scale(1);
+  }
+}
+.lp-settle {
+  animation: lp-settle 1.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: 50% 0;
+}
+
+/* Gentle float for the close-up cards that overlap the hero showcase. */
+@keyframes lp-float {
   0%,
   100% {
-    opacity: 0.55;
+    transform: translateY(0);
   }
   50% {
+    transform: translateY(-8px);
+  }
+}
+.lp-float {
+  animation: lp-float 8s ease-in-out infinite;
+}
+
+/* Blinking caret in the hero's event-title close-up. */
+@keyframes lp-caret {
+  0%,
+  49% {
     opacity: 1;
   }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+.lp-caret {
+  animation: lp-caret 1.05s steps(1) infinite;
+}
+
+/* "Now" line pulse. */
+@keyframes lp-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 77, 28, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 0 9px rgba(255, 77, 28, 0);
+  }
+}
+.lp-pulse {
+  animation: lp-pulse 1.8s ease-out infinite;
 }
 
 @keyframes lp-spin-slow {
   to {
     transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-reveal,
+  .lp-float,
+  .lp-bob,
+  .lp-settle,
+  .lp-caret,
+  .lp-pulse {
+    animation: none !important;
+  }
+  .lp-reveal,
+  .lp-bob,
+  .lp-settle {
+    opacity: 1 !important;
+    transform: none !important;
   }
 }
 
@@ -364,13 +386,29 @@ body.lp-body {
 body.lp-body h1,
 body.lp-body h2,
 body.lp-body h3 {
-  letter-spacing: -0.03em;
   text-wrap: balance;
 }
+body.lp-body ::selection {
+  background: #ffd3c4;
+  color: #14150f;
+}
 
-/* Soft focus ring for landing controls, distinct from the app's lime outline. */
 body.lp-body :focus-visible {
-  outline: 2px solid var(--color-lp-lime-700);
+  outline: 2px solid var(--color-lp-signal);
   outline-offset: 3px;
   border-radius: 6px;
+}
+
+/* Paper grain: a faint ruled grid, like a planner page. */
+.lp-ruled {
+  background-image:
+    linear-gradient(to right, rgba(20, 21, 15, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(20, 21, 15, 0.055) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+.lp-ruled-dark {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 48px 48px;
 }

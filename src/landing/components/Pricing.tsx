@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRight, Check, Clock, Lock, Sparkles } from 'lucide-react'
+import { Check, Clock, Lock } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { PRICING } from '../content'
 import type { Plan, PlanFeature } from '../content'
@@ -20,32 +20,32 @@ const THEME: Record<Plan['theme'], {
   mutedText: string
 }> = {
   neutral: {
-    card: 'border-lp-line bg-white hover:border-[#dcdcd4] hover:shadow-[0_22px_48px_-28px_rgba(16,24,40,0.3)]',
+    card: 'border-lp-ink/12 bg-lp-surface hover:shadow-[0_40px_70px_-44px_rgba(40,30,10,0.5)]',
     badge: '',
     price: 'text-lp-ink',
     period: 'text-lp-body',
     footnote: 'text-lp-muted',
-    divider: 'border-lp-line',
+    divider: 'bg-lp-ink/10',
     featureText: 'text-lp-body',
     mutedText: 'text-lp-muted',
   },
   lime: {
-    card: 'border-lp-lime/45 bg-white ring-1 ring-lp-lime/25 shadow-[0_32px_64px_-28px_rgba(110,150,10,0.42)] hover:shadow-[0_40px_76px_-28px_rgba(110,150,10,0.5)]',
-    badge: 'bg-lp-lime text-[#2c3608]',
+    card: 'border-lp-ink bg-lp-surface shadow-[8px_8px_0_0_var(--color-lp-ink)] hover:shadow-[12px_12px_0_0_var(--color-lp-ink)] hover:-translate-x-0.5 hover:-translate-y-0.5',
+    badge: 'bg-lp-signal text-white',
     price: 'text-lp-ink',
-    period: 'text-lp-lime-700',
+    period: 'text-lp-signal',
     footnote: 'text-lp-muted',
-    divider: 'border-lp-line',
+    divider: 'bg-lp-ink/10',
     featureText: 'text-lp-ink',
     mutedText: 'text-lp-muted',
   },
   charcoal: {
-    card: 'border-lp-charcoal bg-lp-charcoal text-white shadow-[0_32px_64px_-30px_rgba(20,22,28,0.55)]',
-    badge: 'bg-white/10 text-white ring-1 ring-white/15',
+    card: 'border-lp-ink bg-lp-ink text-white',
+    badge: 'bg-lp-surface text-lp-ink ring-1 ring-lp-ink/15',
     price: 'text-white',
     period: 'text-white/60',
     footnote: 'text-white/45',
-    divider: 'border-white/10',
+    divider: 'bg-white/10',
     featureText: 'text-white/85',
     mutedText: 'text-white/45',
   },
@@ -78,7 +78,7 @@ function FeatureRow({
         <Check
           className={cn(
             'mt-[3px] h-4 w-4 shrink-0',
-            isDark ? 'text-lp-lime' : 'text-lp-lime-700',
+            isDark ? 'text-lp-signal' : 'text-lp-signal',
           )}
           strokeWidth={2.8}
           aria-hidden="true"
@@ -100,7 +100,7 @@ function FeatureRow({
               'ml-2 inline-block translate-y-px rounded-full px-1.5 py-px text-[10px] font-semibold tracking-[0.04em] uppercase',
               isDark
                 ? 'bg-white/10 text-white/60'
-                : 'bg-lp-sunken text-lp-muted ring-1 ring-lp-line',
+                : 'bg-lp-sunken text-lp-muted',
             )}
           >
             Planned
@@ -123,7 +123,7 @@ function PriceBlock({ plan }: { plan: Plan }) {
       <div className="min-h-[92px]">
         <p
           className={cn(
-            'text-[clamp(1.5rem,3.4vw,1.9rem)] leading-tight font-semibold tracking-[-0.03em]',
+            'font-display text-[clamp(2.4rem,5vw,3rem)] leading-none',
             t.price,
           )}
         >
@@ -139,7 +139,7 @@ function PriceBlock({ plan }: { plan: Plan }) {
       <p className="flex items-baseline gap-1.5">
         <span
           className={cn(
-            'text-[clamp(2.6rem,6vw,3.4rem)] leading-none font-semibold tracking-[-0.04em]',
+            'font-display text-[clamp(3.6rem,8vw,5rem)] leading-none tracking-[-0.02em]',
             t.price,
           )}
         >
@@ -172,7 +172,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
     <Reveal delay={index * 110} className="h-full">
       <article
         className={cn(
-          'relative flex h-full flex-col rounded-[22px] border p-6 transition-all duration-300 sm:p-7',
+          'relative flex h-full flex-col rounded-[28px] border p-6 transition-all duration-300 sm:p-8',
           t.card,
         )}
         aria-labelledby={`plan-${plan.id}`}
@@ -181,12 +181,11 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
         {plan.badge && (
           <span
             className={cn(
-              'absolute -top-3 left-6 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold tracking-[0.03em] shadow-[0_6px_16px_-8px_rgba(16,24,40,0.5)]',
+              'absolute -top-3.5 right-6 inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-mono text-[10.5px] tracking-[0.08em] uppercase',
               t.badge,
             )}
           >
-            {plan.featured && <Sparkles className="h-3 w-3" aria-hidden="true" />}
-            {plan.badge}
+                        {plan.badge}
           </span>
         )}
 
@@ -194,7 +193,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
           <h3
             id={`plan-${plan.id}`}
             className={cn(
-              'text-[19px] font-semibold tracking-[-0.02em]',
+              'font-display text-[30px] leading-none',
               isDark ? 'text-white' : 'text-lp-ink',
             )}
           >
@@ -202,8 +201,9 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
           </h3>
           <p
             className={cn(
-              'mt-1 text-[13px] font-medium',
-              isDark ? 'text-lp-lime' : 'text-lp-lime-700',
+              'mt-2',
+              'font-mono text-[11.5px] tracking-[0.06em] uppercase',
+              isDark ? 'text-white/50' : 'text-lp-signal',
             )}
           >
             {plan.tagline}
@@ -237,7 +237,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
               'mt-6 rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed',
               isDark
                 ? 'border-white/10 bg-white/5 text-white/65'
-                : 'border-lp-lime/40 bg-lp-lime-50/70 text-lp-lime-700',
+                : 'border-lp-signal/25 bg-lp-signal-50 text-[#9a2c0b]',
             )}
           >
             {PRICING.membershipNote}
@@ -253,7 +253,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 variant="primary"
                 size="lg"
                 className="w-full"
-                icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                arrow
               >
                 {plan.cta.label}
               </Button>
@@ -274,10 +274,9 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 aria-disabled="true"
                 onClick={() => setAcknowledged(true)}
                 className={cn(
-                  'inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full text-[15px] font-semibold',
-                  'bg-lp-lime text-[#2c3608] shadow-[0_8px_22px_rgba(140,185,20,0.3)]',
-                  'transition-all duration-200 hover:bg-[#b4ee56]',
-                  'aria-disabled:hover:bg-lp-lime',
+                  'inline-flex h-[54px] w-full cursor-pointer items-center justify-center gap-2 rounded-full text-[15px] font-semibold',
+                  'bg-lp-ink text-lp-surface',
+                  'transition-all duration-200',
                 )}
               >
                 <Lock className="h-4 w-4" aria-hidden="true" />
@@ -288,7 +287,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 className={cn(
                   'mt-3 rounded-xl px-3.5 py-2.5 text-center text-[12.5px] leading-relaxed transition-colors',
                   acknowledged
-                    ? 'bg-lp-lime-50 text-lp-lime-700 ring-1 ring-lp-lime/45'
+                    ? 'bg-lp-signal-50 text-[#9a2c0b] ring-1 ring-lp-signal/30'
                     : 'bg-lp-sunken text-lp-muted',
                 )}
               >
@@ -303,7 +302,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 type="button"
                 disabled
                 className={cn(
-                  'inline-flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full text-[15px] font-semibold',
+                  'inline-flex h-[54px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-full text-[15px] font-semibold',
                   isDark
                     ? 'bg-white/10 text-white/50 ring-1 ring-white/10'
                     : 'bg-lp-sunken text-lp-muted',
@@ -342,23 +341,24 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 
 export function Pricing() {
   return (
-    <Section id="pricing">
-      <Reveal>
-        <SectionHeading
-          eyebrow={PRICING.eyebrow}
-          heading={PRICING.heading}
-          description={PRICING.subtitle}
-        />
-      </Reveal>
+    <Section id="pricing" tone="muted">
+      <div className="grid gap-8 lg:grid-cols-12 lg:items-end">
+        <Reveal className="lg:col-span-7">
+          <SectionHeading eyebrow={PRICING.eyebrow} index="04" heading={PRICING.heading} />
+        </Reveal>
+        <Reveal delay={80} className="lg:col-span-5">
+          <p className="max-w-[44ch] text-[17px] leading-relaxed text-lp-body">{PRICING.subtitle}</p>
+        </Reveal>
+      </div>
 
-      <div className="mt-14 grid items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:gap-7">
+      <div className="mt-16 grid items-stretch gap-8 sm:mt-20 lg:grid-cols-3 lg:gap-6">
         {PRICING.plans.map((plan, i) => (
           <PlanCard key={plan.id} plan={plan} index={i} />
         ))}
       </div>
 
       <Reveal delay={120}>
-        <p className="mx-auto mt-10 max-w-[72ch] text-center text-[13.5px] leading-relaxed text-lp-muted">
+        <p className="mt-12 max-w-[80ch] border-t border-lp-ink/15 pt-6 text-[13.5px] leading-relaxed text-lp-muted">
           {PRICING.billingNote}
         </p>
       </Reveal>

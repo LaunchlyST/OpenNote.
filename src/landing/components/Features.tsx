@@ -1,264 +1,275 @@
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Compass,
-  Palette,
-  Plus,
-  StickyNote,
-  Sun,
-} from 'lucide-react'
+import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
+import { ArrowRight, Check, ChevronLeft, ChevronRight } from 'lucide-react'
 import { COLORS } from '../../lib/colors'
+import type { EventColorId } from '../../lib/colors'
 import { cn } from '../../lib/id'
-import { DEMO_CALENDARS } from '../demo'
 import { FEATURES } from '../content'
-import type { FeatureItem } from '../content'
-import {
-  MockDayTimeline,
-  MockMiniCalendar,
-  MockNotes,
-  MockWeekTimeline,
-} from './mock/AppChrome'
-import { Reveal, Section, SectionHeading } from './primitives'
-
-const ICONS: Record<string, ReactNode> = {
-  calendar: <CalendarDays className="h-[17px] w-[17px]" strokeWidth={2.1} />,
-  clock: <Clock className="h-[17px] w-[17px]" strokeWidth={2.1} />,
-  notes: <StickyNote className="h-[17px] w-[17px]" strokeWidth={2.1} />,
-  palette: <Palette className="h-[17px] w-[17px]" strokeWidth={2.1} />,
-  sun: <Sun className="h-[17px] w-[17px]" strokeWidth={2.1} />,
-  compass: <Compass className="h-[17px] w-[17px]" strokeWidth={2.1} />,
-}
+import { DEMO_CALENDARS, DEMO_EVENTS, DEMO_WEEKDAYS, demoClock } from '../demo'
+import { MockDayTimeline, MockMonthGrid, MockNotes } from './mock/AppChrome'
+import { EventComposer } from './mock/Closeups'
+import { FitStage } from './mock/FitStage'
+import { Eyebrow, Reveal, Section, SectionHeading } from './primitives'
 
 /* ------------------------------------------------------------------ */
-/* Per-feature visuals                                                 */
+/* A — Notes beside the calendar (split, interface close-up)           */
 /* ------------------------------------------------------------------ */
 
-function WeekVisual() {
+function NotesShowcase() {
+  const f = FEATURES.notes
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-      <div className="h-[150px]">
-        <MockWeekTimeline hours={false} dense />
-      </div>
-    </div>
-  )
-}
-
-function EventVisual() {
-  return (
-    <div className="rounded-xl border border-lp-line bg-white p-3 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-      <p className="mb-1.5 text-[9px] font-semibold tracking-[0.08em] text-lp-muted uppercase">
-        Title
-      </p>
-      <p className="rounded-md border border-lp-line bg-white px-2 py-1.5 text-[11px] text-lp-ink">
-        Client call
-      </p>
-      <div className="mt-2.5 grid grid-cols-3 gap-1.5">
-        {[
-          ['Date', '2026-10-06'],
-          ['Start', '10:00'],
-          ['End', '10:45'],
-        ].map(([label, value]) => (
-          <span key={label}>
-            <span className="mb-1 block text-[8.5px] font-medium text-lp-muted">{label}</span>
-            <span className="block rounded-md border border-lp-line bg-white px-1.5 py-1 text-[10px] tabular-nums text-lp-ink">
-              {value}
-            </span>
-          </span>
-        ))}
-      </div>
-      <div className="mt-2.5 flex items-center gap-1">
-        {(['lime', 'orange', 'pink', 'purple', 'yellow', 'blue'] as const).map((id) => (
-          <span
-            key={id}
-            className={cn(
-              'h-[13px] w-[13px] rounded-full ring-2 ring-white',
-              id === 'lime' && 'ring-lp-lime-600',
-            )}
-            style={{ background: COLORS[id].dot }}
-          />
-        ))}
-      </div>
-      <p className="mt-3 rounded-lg bg-lp-lime py-1.5 text-center text-[10.5px] font-semibold text-[#2c3608]">
-        Save event
-      </p>
-    </div>
-  )
-}
-
-function NotesVisual() {
-  return (
-    <div className="flex h-full origin-top-left scale-[0.86] flex-col overflow-hidden rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-      <div className="h-[176px]">
-        <MockNotes count={3} />
-      </div>
-    </div>
-  )
-}
-
-function ColoursVisual() {
-  return (
-    <div className="rounded-xl border border-lp-line bg-white p-3 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-      <div className="mb-2 flex items-center justify-between">
-        <p className="text-[8.5px] font-semibold tracking-[0.08em] text-lp-muted uppercase">
-          My Calendars
+    <div className="grid items-center gap-12 lg:grid-cols-12 lg:gap-16">
+      <Reveal className="lg:col-span-5">
+        <Eyebrow>{f.kicker}</Eyebrow>
+        <h3 className="mt-5 max-w-[14ch] font-display text-[clamp(2.2rem,4.4vw,3.4rem)] leading-[1] text-lp-ink">
+          {f.title}
+        </h3>
+        <p className="mt-5 max-w-[46ch] text-[16.5px] leading-relaxed text-lp-body">{f.body}</p>
+        <ul className="mt-7 divide-y divide-lp-ink/10 border-y border-lp-ink/10">
+          {f.points.map((p) => (
+            <li key={p} className="flex items-center gap-3 py-3.5 text-[15px] text-lp-ink">
+              <Check className="h-4 w-4 text-lp-signal" strokeWidth={2.5} aria-hidden="true" />
+              {p}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-6 max-w-[46ch] text-[14.5px] leading-relaxed text-lp-muted">
+          <span className="font-medium text-lp-ink">{FEATURES.daily.title}</span> {FEATURES.daily.body}
         </p>
-        <Plus className="h-3 w-3 text-lp-muted" strokeWidth={2.6} />
-      </div>
-      <ul className="space-y-1.5">
-        {DEMO_CALENDARS.map((cal) => (
-          <li key={cal.name} className="flex items-center gap-2">
-            <span
-              className="grid h-[13px] w-[13px] shrink-0 place-items-center rounded-[4px]"
-              style={{ background: COLORS[cal.color].dot }}
-            >
-              <svg viewBox="0 0 24 24" className="h-2 w-2 text-white" fill="none" stroke="currentColor" strokeWidth={4}>
-                <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-            <span className="text-[11px] text-lp-ink">{cal.name}</span>
-            <span
-              className="ml-auto h-1.5 w-1.5 rounded-full"
-              style={{ background: COLORS[cal.color].dot }}
-            />
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
+      </Reveal>
 
-function DayVisual() {
-  return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-      <div className="h-[150px]">
-        <MockDayTimeline dayIndex={3} dateLabel="Wednesday" dense />
-      </div>
-    </div>
-  )
-}
-
-function NavVisual() {
-  return (
-    <div className="flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
-      <div className="flex-1 rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-        <MockMiniCalendar showCurrent />
-      </div>
-      <div className="flex flex-1 flex-col gap-2.5">
-        <div className="flex items-center gap-2 rounded-xl border border-lp-line bg-white px-3 py-2.5 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-          <ChevronLeft className="h-3.5 w-3.5 text-lp-muted" />
-          <span className="rounded-md border border-lp-line px-2 py-1 text-[10px] font-medium text-lp-body">
-            Today
-          </span>
-          <span className="text-[11px] font-semibold text-lp-ink">October 5 – 11, 2026</span>
-          <ChevronRight className="ml-auto h-3.5 w-3.5 text-lp-muted" />
-        </div>
-        <div className="flex flex-1 flex-col justify-center gap-1.5 rounded-xl border border-lp-line bg-white p-3 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
-          <div className="grid grid-cols-4 gap-1.5">
-            {(['Day', 'Full Week', 'Month'] as const).map((label, i) => (
-              <span
-                key={label}
-                className={cn(
-                  'rounded-md px-2 py-1.5 text-center text-[10px] font-medium',
-                  i === 1
-                    ? 'bg-[#bef264] text-[#33400f]'
-                    : 'bg-lp-sunken text-lp-body',
-                )}
-              >
-                {label}
-              </span>
-            ))}
-            <span className="rounded-md bg-lp-sunken px-2 py-1.5 text-center text-[10px] font-medium text-lp-body">
-              T
-            </span>
+      <Reveal delay={120} className="lg:col-span-7">
+        <div className="relative rounded-[32px] bg-[#e4ddcd] p-4 sm:p-8">
+          <div aria-hidden="true" className="overflow-hidden rounded-[18px] bg-white shadow-[0_40px_80px_-40px_rgba(40,30,10,0.55)] ring-1 ring-black/[0.06]">
+            <FitStage width={420} height={392} maxScale={1.75}>
+              <div className="flex h-full">
+                <div className="min-w-0 flex-1">
+                  <MockDayTimeline dateLabel="Thursday, October 8" />
+                </div>
+                <MockNotes count={3} />
+              </div>
+            </FitStage>
           </div>
-          <p className="text-center text-[9px] text-lp-muted">
-            Arrow keys move between dates · D / W / M switch view
+          <p className="mt-4 text-center font-mono text-[11px] tracking-[0.1em] text-[#7d7562] uppercase">
+            Day view with the notes panel open
           </p>
         </div>
+      </Reveal>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* B — Colour-coded calendars (interactive)                            */
+/* ------------------------------------------------------------------ */
+
+function CategoriesShowcase() {
+  const f = FEATURES.categories
+  const [enabled, setEnabled] = useState<Record<EventColorId, boolean>>(() => ({
+    lime: true,
+    orange: true,
+    purple: true,
+    pink: true,
+    yellow: true,
+    blue: true,
+  }))
+
+  const minutesBy = useMemo(() => {
+    const totals = new Map<EventColorId, number>()
+    for (const e of DEMO_EVENTS) totals.set(e.color, (totals.get(e.color) ?? 0) + e.duration)
+    return totals
+  }, [])
+  const totalShown = DEMO_CALENDARS.reduce((sum, c) => sum + (enabled[c.color] ? minutesBy.get(c.color) ?? 0 : 0), 0)
+  const visible = DEMO_EVENTS.filter((e) => enabled[e.color])
+
+  return (
+    <div className="overflow-hidden rounded-[36px] bg-lp-ink text-lp-surface">
+      <div className="lp-ruled-dark grid gap-12 p-6 sm:p-10 lg:grid-cols-12 lg:gap-14 lg:p-14">
+        <Reveal className="lg:col-span-5">
+          <Eyebrow tone="dark">{f.kicker}</Eyebrow>
+          <h3 className="mt-5 max-w-[14ch] font-display text-[clamp(2.2rem,4.4vw,3.4rem)] leading-[1]">{f.title}</h3>
+          <p className="mt-5 max-w-[44ch] text-[16.5px] leading-relaxed text-white/65">{f.body}</p>
+
+          <div role="group" aria-label="Show calendars" className="mt-8 grid grid-cols-2 gap-2.5">
+            {DEMO_CALENDARS.map((c) => {
+              const col = COLORS[c.color]
+              const on = enabled[c.color]
+              const hours = (minutesBy.get(c.color) ?? 0) / 60
+              return (
+                <button
+                  key={c.name}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => setEnabled((s) => ({ ...s, [c.color]: !s[c.color] }))}
+                  className={cn(
+                    'flex items-center gap-3 rounded-2xl border px-3.5 py-3 text-left transition-all duration-300',
+                    on ? 'border-white/15 bg-white/[0.07]' : 'border-white/[0.06] bg-transparent opacity-50 hover:opacity-80',
+                  )}
+                >
+                  <span
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded-md transition-colors"
+                    style={{ background: on ? col.dot : 'transparent', boxShadow: `inset 0 0 0 1.5px ${col.dot}` }}
+                  >
+                    {on && <Check className="h-3 w-3 text-lp-ink" strokeWidth={3} aria-hidden="true" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-medium">{c.name}</span>
+                    <span className="block font-mono text-[11px] text-white/45">{hours.toFixed(1)} h this week</span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Share of the week, per calendar */}
+          <div className="mt-6" aria-hidden="true">
+            <div className="flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
+              {DEMO_CALENDARS.map((c) => {
+                const share = totalShown ? ((enabled[c.color] ? minutesBy.get(c.color) ?? 0 : 0) / totalShown) * 100 : 0
+                return (
+                  <span
+                    key={c.name}
+                    className="h-full transition-[width] duration-500 ease-out"
+                    style={{ width: `${share}%`, background: COLORS[c.color].dot }}
+                  />
+                )
+              })}
+            </div>
+            <p className="mt-2 font-mono text-[11px] text-white/40">
+              {(totalShown / 60).toFixed(1)} h shown · sample week
+            </p>
+          </div>
+        </Reveal>
+
+        <Reveal delay={120} className="lg:col-span-7">
+          <div className="rounded-[22px] bg-white p-3 text-[#1f2330] shadow-[0_40px_80px_-30px_rgba(0,0,0,0.7)] sm:p-4">
+            <div className="flex items-center justify-between px-1.5 pb-3">
+              <span className="text-[14px] font-semibold">Week of October 5</span>
+              <span aria-live="polite" className="font-mono text-[11px] text-[#8b90a0]">
+                {visible.length} of {DEMO_EVENTS.length} events
+              </span>
+            </div>
+            <ul className="grid gap-1.5 sm:grid-cols-2">
+              {DEMO_WEEKDAYS.map((day, i) => {
+                const events = DEMO_EVENTS.filter((e) => e.day === i)
+                return (
+                  <li key={day} className="rounded-2xl bg-[#f7f8fa] p-3">
+                    <p className="font-mono text-[10.5px] tracking-[0.1em] text-[#8b90a0] uppercase">
+                      {day} {5 + i}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {events.map((e) => {
+                        const col = COLORS[e.color]
+                        const on = enabled[e.color]
+                        return (
+                          <li
+                            key={e.title}
+                            className={cn(
+                              'flex items-center gap-2 rounded-lg px-2 py-1.5 text-[12px] transition-all duration-300',
+                              !on && 'opacity-25 grayscale',
+                            )}
+                            style={{ background: col.bg, color: col.text }}
+                          >
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: col.dot }} />
+                            <span className="truncate font-medium">{e.title}</span>
+                            <span className="ml-auto shrink-0 font-mono text-[10.5px] opacity-75">{demoClock(e.start)}</span>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </Reveal>
       </div>
     </div>
   )
 }
 
-const VISUALS: Record<FeatureItem['visual'], ReactNode> = {
-  week: <WeekVisual />,
-  event: <EventVisual />,
-  notes: <NotesVisual />,
-  colours: <ColoursVisual />,
-  day: <DayVisual />,
-  nav: <NavVisual />,
+/* ------------------------------------------------------------------ */
+/* C — Compact supporting cards                                        */
+/* ------------------------------------------------------------------ */
+
+function NavigateVisual() {
+  return (
+    <div aria-hidden="true" className="flex flex-col items-center gap-3">
+      <div className="flex items-center gap-1.5">
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-white ring-1 ring-black/[0.06]">
+          <ChevronLeft className="h-4 w-4" />
+        </span>
+        <span className="rounded-full bg-white px-4 py-2.5 text-[13px] font-medium ring-1 ring-black/[0.06]">Today</span>
+        <span className="grid h-10 w-10 place-items-center rounded-full bg-white ring-1 ring-black/[0.06]">
+          <ChevronRight className="h-4 w-4" />
+        </span>
+      </div>
+      <div className="flex rounded-full bg-white p-1 text-[12.5px] ring-1 ring-black/[0.06]">
+        <span className="rounded-full px-3.5 py-1.5 text-[#5b6172]">Day</span>
+        <span className="rounded-full bg-lp-ink px-3.5 py-1.5 text-white">Full Week</span>
+        <span className="rounded-full px-3.5 py-1.5 text-[#5b6172]">Month</span>
+      </div>
+    </div>
+  )
+}
+
+function CompactCards() {
+  const visuals: Record<string, ReactNode> = {
+    month: (
+      <div aria-hidden="true" className="w-full overflow-hidden rounded-xl bg-white ring-1 ring-black/[0.06]">
+        <FitStage width={300} height={200} maxScale={1.4}>
+          <MockMonthGrid dense />
+        </FitStage>
+      </div>
+    ),
+    navigate: <NavigateVisual />,
+    create: (
+      <div aria-hidden="true" className="origin-center scale-[0.82]">
+        <EventComposer title="Lunch & learn" calendar="pink" caret={false} />
+      </div>
+    ),
+  }
+
+  return (
+    <div className="grid gap-5 md:grid-cols-3">
+      {FEATURES.compact.map((card, i) => (
+        <Reveal key={card.id} delay={i * 90} className="h-full">
+          <article className="group flex h-full flex-col rounded-[28px] border border-lp-ink/10 bg-lp-surface p-3 transition-shadow duration-500 hover:shadow-[0_34px_60px_-36px_rgba(40,30,10,0.45)]">
+            <div className="grid min-h-[260px] place-items-center overflow-hidden rounded-[20px] bg-lp-sunken/70 p-5">
+              {visuals[card.id]}
+            </div>
+            <div className="flex items-start justify-between gap-4 p-4 pt-5">
+              <div>
+                <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-lp-ink">{card.title}</h3>
+                <p className="mt-1.5 text-[14.5px] leading-relaxed text-lp-body">{card.body}</p>
+              </div>
+              <ArrowRight
+                className="mt-1 h-4 w-4 shrink-0 -translate-x-1 text-lp-signal opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100"
+                aria-hidden="true"
+              />
+            </div>
+          </article>
+        </Reveal>
+      ))}
+    </div>
+  )
 }
 
 /* ------------------------------------------------------------------ */
 /* Section                                                             */
 /* ------------------------------------------------------------------ */
 
-const VISUAL_HEIGHT: Record<FeatureItem['visual'], string> = {
-  week: 'h-[150px]',
-  event: 'h-[186px]',
-  notes: 'h-[150px]',
-  colours: 'h-[186px]',
-  day: 'h-[150px]',
-  nav: 'h-[158px]',
-}
-
 export function Features() {
   return (
-    <Section id="features">
+    <Section id="features" className="pt-8 md:pt-12">
       <Reveal>
-        <SectionHeading
-          eyebrow={FEATURES.eyebrow}
-          heading={FEATURES.heading}
-          description={FEATURES.description}
-        />
+        <SectionHeading eyebrow={FEATURES.eyebrow} index="02" heading={FEATURES.heading} description={FEATURES.description} />
       </Reveal>
 
-      <div className="mt-14 grid gap-5 sm:mt-16 lg:grid-cols-12">
-        {FEATURES.items.map((feature, i) => (
-          <Reveal key={feature.id} delay={(i % 3) * 90} className={feature.colClass}>
-            <article
-              className={cn(
-                'group relative flex h-full flex-col overflow-hidden rounded-[22px] border border-lp-line bg-white',
-                'shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300',
-                'hover:-translate-y-1 hover:border-[#dcdcd4] hover:shadow-[0_24px_52px_-28px_rgba(16,24,40,0.32)]',
-              )}
-            >
-              {/* Wash */}
-              <div
-                aria-hidden="true"
-                className={cn(
-                  'pointer-events-none absolute inset-0 bg-gradient-to-br to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100',
-                  feature.wash,
-                )}
-              />
-
-              <div className="relative flex items-start gap-3 p-5 pb-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lp-lime-50 text-lp-lime-700 ring-1 ring-lp-lime/45 transition-transform duration-300 group-hover:scale-105">
-                  {ICONS[feature.icon]}
-                </span>
-                <div className="min-w-0">
-                  <h3 className="text-[18px] font-semibold tracking-[-0.02em] text-lp-ink">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-1.5 text-[14.5px] leading-relaxed text-lp-body">
-                    {feature.description}
-                  </p>
-                </div>
-              </div>
-
-              <div className="relative mt-auto px-5 pb-5">
-                <div className={cn('overflow-hidden', VISUAL_HEIGHT[feature.visual])}>
-                  <div className="h-full transition-transform duration-500 group-hover:-translate-y-0.5">
-                    {VISUALS[feature.visual]}
-                  </div>
-                </div>
-              </div>
-            </article>
-          </Reveal>
-        ))}
+      <div className="mt-16 space-y-24 md:mt-24 md:space-y-32">
+        <NotesShowcase />
+        <CategoriesShowcase />
+        <CompactCards />
       </div>
     </Section>
   )

@@ -5,6 +5,9 @@
  * edited in one place — in particular the pricing plans, which are temporary
  * and still subject to confirmation. Nothing in this file is wired to a
  * payment provider: the pricing section is presentation only.
+ *
+ * Copy rule: only describe what the shipped app does today. No testimonials,
+ * user counts, awards or integrations that do not exist.
  */
 
 /* ------------------------------------------------------------------ */
@@ -30,21 +33,26 @@ export const NAV_LINKS: NavLink[] = [
 /* ------------------------------------------------------------------ */
 
 export const HERO = {
-  eyebrow: 'Calendar + Notes, in one place',
-  title: 'Your time. Your plans. One beautiful place.',
+  eyebrow: 'Calendar & notes, side by side',
+  titleLead: 'Your calendar,',
+  titleEmphasis: 'with room to think.',
   description:
-    'Plan your days, organise your notes, and keep everything that matters in one simple calendar.',
-  primaryCta: { label: 'Get Started Free', href: '/app/signup' },
-  secondaryCta: { label: 'Explore Features', section: 'features' },
+    'OpenNote puts your day, week and month next to the notes that go with them. Block out your time, colour-code your life, and pin each thought to the day it belongs to.',
+  primaryCta: { label: 'Start Planning Free', href: '/app/signup' },
+  secondaryCta: { label: 'Try the live preview', section: 'preview' },
   authenticatedCta: { label: 'Open My Calendar', href: '/app' },
   signInCta: { label: 'Sign In', href: '/app/signin' },
-  /** Small trust strip under the buttons. */
-  reassurance: [
-    'Free forever plan',
-    'Day, week & month views',
-    'No card required',
-  ],
+  /** Small trust strip under the buttons — every item is true of the Free plan. */
+  reassurance: ['Free plan, no card required', 'Day, week & month views', 'Works on desktop and mobile'],
 } as const
+
+/** Facts strip under the hero showcase. Descriptive, never numerical claims. */
+export const HERO_FACTS = [
+  { label: 'Views', value: 'Day · Full Week · Month' },
+  { label: 'Calendars', value: 'Work · Personal · Study · Social' },
+  { label: 'Notes', value: 'Pinned to the day they belong to' },
+  { label: 'Price', value: 'Free plan, free forever' },
+] as const
 
 /* ------------------------------------------------------------------ */
 /* How it works                                                        */
@@ -52,37 +60,37 @@ export const HERO = {
 
 export interface Step {
   number: string
-  icon: 'calendar' | 'clock' | 'notes'
   title: string
   description: string
+  detail: string
 }
 
 export const HOW_IT_WORKS = {
-  eyebrow: 'How OpenNote works',
-  heading: 'A simpler way to plan your day.',
+  eyebrow: 'How it works',
+  heading: 'Three moves from a blank week to a plan.',
   description:
-    'Three small steps, and the whole day makes sense at a glance.',
+    'No setup wizard and no learning curve. If you have used a paper diary, you already know how OpenNote works.',
   steps: [
     {
       number: '01',
-      icon: 'calendar',
-      title: 'Choose Your Day',
+      title: 'Pick the day',
       description:
-        'Navigate your calendar and find the perfect time for everything that matters.',
+        'Jump to any date from the mini calendar, or step through days, weeks and months with the arrows.',
+      detail: 'Mini calendar · Today button',
     },
     {
       number: '02',
-      icon: 'clock',
-      title: 'Plan Your Time',
+      title: 'Block the time',
       description:
-        'Create events and organise your activities into clear, manageable time slots.',
+        'Give an event a title, a calendar, a date and a start and end time. It lands on the grid in its colour.',
+      detail: 'Title · Calendar · Start & end',
     },
     {
       number: '03',
-      icon: 'notes',
-      title: 'Keep Your Notes Together',
+      title: 'Pin the thought',
       description:
-        'Write down ideas, save important details, and pin notes to your day.',
+        'Write a note in the side panel and pin it to a day. It sits beside your schedule instead of in another app.',
+      detail: 'Notes panel · Pin to day',
     },
   ] satisfies Step[],
 } as const
@@ -91,120 +99,46 @@ export const HOW_IT_WORKS = {
 /* Features                                                            */
 /* ------------------------------------------------------------------ */
 
-export interface FeatureItem {
-  id: string
-  icon: string
-  title: string
-  description: string
-  /** Tailwind grid span for the bento layout (12-column grid at `lg`). */
-  colClass: string
-  visual: 'week' | 'event' | 'notes' | 'colours' | 'day' | 'nav'
-  /** Soft background wash used behind each card's visual. */
-  wash: string
-}
-
 /**
  * Only capabilities that exist in the shipped app are listed here. Planned or
- * unimplemented behaviour deliberately has no feature card.
+ * unimplemented behaviour deliberately has no feature entry.
  */
 export const FEATURES = {
   eyebrow: 'Features',
-  heading: 'Everything you need to stay organised.',
+  heading: 'Built around how a day actually unfolds.',
   description:
-    'One beautiful workspace for your calendar, schedule, and notes.',
-  items: [
+    'A calendar that reads like a page, notes that stay with the plan, and colour that means something.',
+  notes: {
+    kicker: 'Notes beside the calendar',
+    title: 'The thought stays next to the plan.',
+    body: 'Shopping lists, call-backs and half-formed ideas live in a notes panel right beside your schedule. Pin a note to a date and it travels with that day.',
+    points: ['Notes panel on every view', 'Pin a note to any day', 'Edit in place — no extra app'],
+  },
+  categories: {
+    kicker: 'Colour-coded calendars',
+    title: 'See the shape of your week in colour.',
+    body: 'Keep Work, Personal, Study and Social on separate calendars. Each has its own colour, so a glance tells you where your time is going. Try switching them on and off.',
+  },
+  daily: {
+    kicker: 'Daily schedules',
+    title: 'Hour by hour, without the clutter.',
+    body: 'Day view lays out events on a clean timeline with a start and an end, so the day reads like a plan instead of a list.',
+  },
+  compact: [
     {
-      id: 'calendar',
-      icon: 'calendar',
-      title: 'Beautiful Calendar',
-      description:
-        'Organise your schedule using day, week, and month views.',
-      colClass: 'lg:col-span-7',
-      visual: 'week',
-      wash: 'from-lp-lime/70',
+      id: 'month',
+      title: 'Month at a glance',
+      body: 'Every event in the month on a single grid, in its calendar colour.',
     },
     {
-      id: 'time-based',
-      icon: 'clock',
-      title: 'Time-Based Planning',
-      description: 'Create events for specific dates and times.',
-      colClass: 'lg:col-span-5',
-      visual: 'event',
-      wash: 'from-lp-blue/70',
+      id: 'navigate',
+      title: 'Move through time',
+      body: 'Previous, next and Today. Switch between Day, Full Week and Month in one click.',
     },
     {
-      id: 'notes',
-      icon: 'notes',
-      title: 'Notes and Ideas',
-      description: 'Keep important information beside your calendar.',
-      colClass: 'lg:col-span-4',
-      visual: 'notes',
-      wash: 'from-lp-yellow/70',
-    },
-    {
-      id: 'colours',
-      icon: 'palette',
-      title: 'Colour-Coded Calendars',
-      description:
-        'Separate Work, Personal, Study, and Social activities using different colours.',
-      colClass: 'lg:col-span-4',
-      visual: 'colours',
-      wash: 'from-lp-pink/70',
-    },
-    {
-      id: 'daily',
-      icon: 'sun',
-      title: 'Daily Planning',
-      description: "Quickly see what's scheduled for your day.",
-      colClass: 'lg:col-span-4',
-      visual: 'day',
-      wash: 'from-lp-orange/70',
-    },
-    {
-      id: 'navigation',
-      icon: 'compass',
-      title: 'Easy Navigation',
-      description: 'Move smoothly between dates and calendar views.',
-      colClass: 'lg:col-span-12',
-      visual: 'nav',
-      wash: 'from-lp-purple/70',
-    },
-  ] satisfies FeatureItem[],
-} as const
-
-/* ------------------------------------------------------------------ */
-/* Why OpenNote                                                        */
-/* ------------------------------------------------------------------ */
-
-export const WHY = {
-  eyebrow: 'Why OpenNote',
-  heading: 'Less chaos. More clarity.',
-  description:
-    'Your calendar and notes should work together, not live in separate places.',
-  benefits: [
-    {
-      title: 'One organised workspace',
-      body: 'Your schedule and your notes sit side by side instead of in two apps.',
-    },
-    {
-      title: 'Simple daily planning',
-      body: 'Open the current time block and see exactly what is coming up.',
-    },
-    {
-      title: 'Clear schedules',
-      body: 'Events carry a start and an end, so a day reads like a plan.',
-    },
-    {
-      title: 'Notes beside your calendar',
-      body: 'Pin a note to a date and it appears on the timeline with your events.',
-    },
-    {
-      title: 'Less clutter',
-      body: 'Thin lines, calm surfaces, and colour used only where it carries meaning.',
-    },
-    {
-      title: 'More control over your time',
-      body: 'Move between days and views until the shape of the week feels right.',
+      id: 'create',
+      title: 'Create in seconds',
+      body: 'Title, calendar, date, start and end — then Add event. That is the whole form.',
     },
   ],
 } as const
@@ -267,7 +201,7 @@ export const PRICING = {
   /** Shown on the Pro card, where it is most relevant. */
   membershipNote:
     'Already a member of our main platform? OpenNote Pro may be included with your membership.',
-  /** Shonce under the grid, covering all three plans at once. */
+  /** Shown once under the grid, covering all three plans at once. */
   billingNote:
     'Prices shown are introductory and not yet final. Billing periods, Pro availability and membership integration will be announced before anything is charged.',
   plans: [
@@ -410,11 +344,12 @@ export const FAQ = {
 /* ------------------------------------------------------------------ */
 
 export const FINAL_CTA = {
-  heading: 'Make room for what matters.',
+  headingLead: 'Make room for',
+  headingEmphasis: 'what matters.',
   description:
-    'Bring your schedule, plans, and notes together in one beautiful workspace.',
+    'Bring your schedule, plans and notes together in one calm workspace. The Free plan is free forever.',
   primary: { label: 'Start Planning for Free', href: '/app/signup' },
-  secondary: { label: 'Explore OpenNote', section: 'preview' },
+  secondary: { label: 'Sign In', href: '/app/signin' },
 } as const
 
 export interface FooterLink {
@@ -442,14 +377,17 @@ export const FOOTER = {
       links: [
         { label: 'Features', section: 'features' },
         { label: 'How It Works', section: 'how-it-works' },
+        { label: 'Preview', section: 'preview' },
         { label: 'Pricing', section: 'pricing' },
+        { label: 'FAQ', section: 'faq' },
       ],
     },
     {
       heading: 'Account',
       links: [
         { label: 'Sign In', href: '/app/signin' },
-        { label: 'Get Started Free', href: '/app/signup' },
+        { label: 'Create an account', href: '/app/signup' },
+        { label: 'Open calendar', href: '/app' },
       ],
     },
     {
@@ -457,20 +395,11 @@ export const FOOTER = {
       links: [
         {
           label: 'Privacy Policy',
-          unavailableNote: 'Not published yet — this page is not ready.',
+          unavailableNote: 'Coming before launch',
         },
         {
           label: 'Terms of Service',
-          unavailableNote: 'Not published yet — this page is not ready.',
-        },
-      ],
-    },
-    {
-      heading: 'Support',
-      links: [
-        {
-          label: 'Contact',
-          unavailableNote: 'Support details will be added before launch.',
+          unavailableNote: 'Coming before launch',
         },
       ],
     },

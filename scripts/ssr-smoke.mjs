@@ -189,42 +189,29 @@ try {
   /* Content contract — the copy the brief asked for. */
   const expected = [
     // Hero
-    'Your time. Your plans.',
-    'One beautiful place.',
-    'Plan your days, organise your notes',
-    'Get Started Free',
-    'Explore Features',
+    'Your calendar,',
+    'with room to think',
+    'OpenNote puts your day, week and month',
+    'Start Planning Free',
+    'Try the live preview',
     'Sign In',
-    'Free forever plan',
+    'Free plan, no card required',
     // How it works
-    'A simpler way to plan your day.',
-    'Choose Your Day',
-    'Plan Your Time',
-    'Keep Your Notes Together',
-    'Navigate your calendar and find the perfect time',
-    'Create events and organise your activities',
-    'Write down ideas, save important details',
+    'Three moves from a blank week to a plan.',
+    'Pick the day',
+    'Block the time',
+    'Pin the thought',
     // Features
-    'Everything you need to stay organised.',
-    'Beautiful Calendar',
-    'Time-Based Planning',
-    'Notes and Ideas',
-    'Colour-Coded Calendars',
-    'Daily Planning',
-    'Easy Navigation',
+    'Built around how a day actually unfolds.',
+    'The thought stays next to the plan.',
+    'See the shape of your week in colour.',
+    'Month at a glance',
+    'Move through time',
+    'Create in seconds',
     // Preview
-    'See your day differently.',
-    'Discover a cleaner way to organise your time.',
+    'Take it for a spin.',
     'Full Week',
-    'Ready to plan your day?',
-    // Why
-    'Less chaos.',
-    'More clarity.',
-    'One organised workspace',
-    'Simple daily planning',
-    'Clear schedules',
-    'Less clutter',
-    'More control over your time',
+    'Start with your own week',
     // Pricing
     'Simple plans. Better planning.',
     'Free Forever',
@@ -271,8 +258,8 @@ try {
 
   /* Product mockups */
   check('hero shows the week grid', html.includes('Morning planning'))
-  check('hero shows a note card', html.includes('Grocery list'))
-  check('demo calendars render', html.includes('Colour-Coded') && html.includes('Study'))
+  check('hero shows a note card', html.includes('Call back'))
+  check('demo calendars render', html.includes('Colour-coded') && html.includes('Study'))
   check('no localStorage writes during render', globalThis.localStorage._v.size === 0)
 
   /* No placeholders or debug leftovers */
