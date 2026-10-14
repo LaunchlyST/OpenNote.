@@ -322,9 +322,9 @@ export const FAQ = {
         'Pricing details are coming soon. Stay tuned!',
     },
     {
-      question: 'Is OpenNote included with my existing membership?',
+      question: 'Is OpenNote Pro a monthly subscription?',
       answer:
-        'Eligible members of our main platform are planned to receive OpenNote Pro at no additional cost. Integration details will be announced later.',
+        'OpenNote Pro will offer a monthly subscription with access to premium business tools, advanced features, and regular updates.',
     },
     {
       question: 'Can I use OpenNote on my phone?',
