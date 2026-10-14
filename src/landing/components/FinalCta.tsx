@@ -1,7 +1,7 @@
-import { Monitor, Smartphone } from 'lucide-react'
+import { Monitor } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { FINAL_CTA } from '../content'
-import { AppWindow, AppWindowMobile } from './mock/AppWindow'
+import { AppWindow } from './mock/AppWindow'
 import { AppIcon, Button, Reveal, Section } from './primitives'
 
 export function FinalCta() {
@@ -26,31 +26,21 @@ export function FinalCta() {
         </div>
       </Reveal>
 
-      <div data-anim="rise3d" className="mt-16 grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Reveal>
-          <article data-anim-item="" className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
+      <div data-anim="rise3d" className="mt-16">
+        <Reveal data-anim-item="">
+          <article className="overflow-hidden rounded-[18px] bg-lp-sunken">
             <div className="flex items-center gap-2 p-6 text-[16px] font-semibold text-lp-ink sm:p-7">
-              <Monitor className="h-5 w-5" aria-hidden="true" /> On your computer
+              <Monitor className="h-5 w-5" aria-hidden="true" /> Made for your computer
             </div>
-            <div aria-hidden="true" className="mt-auto pl-6 sm:pl-7">
+            <div aria-hidden="true" className="pl-6 sm:pl-7">
               <div className="overflow-hidden rounded-tl-[12px]">
                 <AppWindow view="month" dateLabel="October 2026" label="opennote — month" />
               </div>
             </div>
           </article>
         </Reveal>
-        <Reveal delay={80}>
-          <article data-anim-item="" className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
-            <div className="flex items-center gap-2 p-6 text-[16px] font-semibold text-lp-ink sm:p-7">
-              <Smartphone className="h-5 w-5" aria-hidden="true" /> On your phone
-            </div>
-            <div aria-hidden="true" className="mx-auto mt-auto h-[300px] w-[240px] overflow-hidden">
-              <AppWindowMobile view="day" />
-            </div>
-          </article>
-        </Reveal>
       </div>
-      <p className="mt-4 text-center text-[13px] text-lp-muted">OpenNote runs in your browser on desktop and mobile. OpenNote Business is desktop only.</p>
+      <p className="mt-4 text-center text-[13px] text-lp-muted">OpenNote is designed for desktop and runs in your browser.</p>
     </Section>
   )
 }

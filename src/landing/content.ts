@@ -43,7 +43,7 @@ export const HERO = {
   authenticatedCta: { label: 'Open My Calendar', href: '/app' },
   signInCta: { label: 'Sign In', href: '/app/signin' },
   /** Small trust strip under the buttons — every item is true of the Free plan. */
-  reassurance: ['Free plan, no card required', 'Day, week & month views', 'Works on desktop and mobile'],
+  reassurance: ['Free plan, no card required', 'Day, week & month views', 'Built for desktop'],
 } as const
 
 /** Facts strip under the hero showcase. Descriptive, never numerical claims. */
@@ -223,7 +223,7 @@ export const PRICING = {
         { label: 'Basic notes', status: 'available' },
         { label: 'Daily scheduling', status: 'available' },
         { label: 'Colour-coded calendars', status: 'available' },
-        { label: 'Desktop and mobile access', status: 'available' },
+        { label: 'Desktop access in your browser', status: 'available' },
       ],
       cta: { label: 'Get Started Free', kind: 'signup' },
       theme: 'neutral',
@@ -278,7 +278,6 @@ export const PRICING = {
         { label: 'Collaborative scheduling', status: 'planned' },
         { label: 'Task assignments', status: 'planned' },
         { label: 'Business workspace', status: 'planned' },
-        { label: 'Desktop only', status: 'planned' },
         { label: 'Team productivity overview', status: 'planned' },
         { label: 'Advanced permissions', status: 'planned' },
         { label: 'More business tools coming soon', status: 'planned' },
@@ -330,7 +329,7 @@ export const FAQ = {
     {
       question: 'Can I use OpenNote on my phone?',
       answer:
-        'Yes. The Free and Pro plans work on desktop, tablet and mobile. OpenNote Business is designed for desktop only.',
+        'No. OpenNote is designed for desktop only.',
     },
     {
       question: 'When is OpenNote Business launching?',

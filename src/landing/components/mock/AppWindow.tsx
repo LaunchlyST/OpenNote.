@@ -199,14 +199,11 @@ export function ResponsiveAppWindow({
   label?: string
   className?: string
 }) {
+  // OpenNote is desktop-only, so every screen size shows the desktop app,
+  // scaled to fit.
   return (
-    <>
-      <div className={cn('hidden sm:block', className)}>
-        <AppWindow view={view} onViewChange={onViewChange} dateLabel={dateLabel} label={label} />
-      </div>
-      <div className={cn('sm:hidden', className)}>
-        <AppWindowMobile view={view} />
-      </div>
-    </>
+    <div className={className}>
+      <AppWindow view={view} onViewChange={onViewChange} dateLabel={dateLabel} label={label} />
+    </div>
   )
 }
