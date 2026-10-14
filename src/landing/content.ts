@@ -314,12 +314,12 @@ export const FAQ = {
     {
       question: 'What does OpenNote Pro include?',
       answer:
-        'Pro is planned to provide additional organisation and customisation features. Its final feature set will be confirmed later.',
+        'OpenNote Pro will include advanced business tools, better team communication, and smarter workplace management features.',
     },
     {
       question: 'How much does OpenNote Pro cost?',
       answer:
-        'The currently proposed introductory price is £9. Final billing details will be announced later.',
+        'Pricing details are coming soon. Stay tuned!',
     },
     {
       question: 'Is OpenNote included with my existing membership?',
