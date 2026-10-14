@@ -305,7 +305,7 @@ export const FAQ = {
     {
       question: 'What is OpenNote?',
       answer:
-        'OpenNote is a calendar and notes workspace designed to help organise daily schedules, events, and ideas.',
+        'OpenNote is an all-in-one platform to manage your business, organise schedules, track tasks, and keep everything in one place.',
     },
     {
       question: 'Is OpenNote free?',
