@@ -52,38 +52,35 @@ interface LogoProps {
   tone?: 'ink' | 'paper'
 }
 
-/**
- * The mark is a page from a planner: an ink tile with a single signal-red
- * "now" line across it. The wordmark pairs the serif with a roman "Note".
- */
+/** The OpenNote app icon: a calendar page with a folded note corner. */
+export function AppIcon({ className, day = '8' }: { className?: string; day?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'relative inline-flex flex-col overflow-hidden rounded-[22%] border-[1.5px] border-lp-ink bg-white',
+        className,
+      )}
+    >
+      <span className="h-[26%] w-full bg-lp-ink" />
+      <span className="grid flex-1 place-items-center font-semibold leading-none tracking-[-0.04em] text-lp-ink" style={{ fontSize: '0.5em' }}>
+        {day}
+      </span>
+      <span className="absolute right-0 bottom-0 h-[30%] w-[30%] rounded-tl-[30%] border-t-[1.5px] border-l-[1.5px] border-lp-ink bg-[#bef264]" />
+    </span>
+  )
+}
+
 export function Logo({ className, size = 'md', markOnly = false, tone = 'ink' }: LogoProps) {
-  const mark = { sm: 'h-7 w-7 rounded-[8px]', md: 'h-8 w-8 rounded-[9px]', lg: 'h-11 w-11 rounded-xl' }[size]
-  const word = { sm: 'text-[19px]', md: 'text-[22px]', lg: 'text-[28px]' }[size]
-  const paper = tone === 'paper'
+  const mark = { sm: 'h-6 w-6 text-[24px]', md: 'h-7 w-7 text-[28px]', lg: 'h-9 w-9 text-[36px]' }[size]
+  const word = { sm: 'text-[15px]', md: 'text-[16.5px]', lg: 'text-[19px]' }[size]
 
   return (
-    <span className={cn('inline-flex items-center gap-2.5', className)}>
-      <span
-        aria-hidden="true"
-        className={cn(
-          'relative grid shrink-0 place-items-center overflow-hidden',
-          paper ? 'bg-lp-surface' : 'bg-lp-ink',
-          mark,
-        )}
-      >
-        <span className={cn('absolute inset-x-[22%] top-[30%] h-[1.5px] rounded-full', paper ? 'bg-lp-ink/25' : 'bg-white/25')} />
-        <span className="absolute inset-x-[22%] top-[49%] h-[2px] rounded-full bg-lp-signal" />
-        <span className={cn('absolute inset-x-[22%] top-[68%] h-[1.5px] w-[34%] rounded-full', paper ? 'bg-lp-ink/25' : 'bg-white/25')} />
-      </span>
+    <span className={cn('inline-flex items-center gap-2', className)}>
+      <AppIcon className={mark} />
       {!markOnly && (
-        <span
-          className={cn(
-            'font-display leading-none tracking-[-0.01em]',
-            paper ? 'text-lp-surface' : 'text-lp-ink',
-            word,
-          )}
-        >
-          Open<span className="italic">Note</span>
+        <span className={cn('font-semibold tracking-[-0.02em]', tone === 'paper' ? 'text-white' : 'text-lp-ink', word)}>
+          OpenNote
         </span>
       )}
     </span>
@@ -98,15 +95,14 @@ export type ButtonVariant = 'primary' | 'signal' | 'secondary' | 'ghost' | 'inve
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const BUTTON_BASE =
-  'group/btn relative inline-flex select-none items-center justify-center gap-2 rounded-full font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform,border-color] duration-200 ease-out active:translate-y-px disabled:cursor-not-allowed'
+  'group/btn relative inline-flex select-none items-center justify-center gap-2 rounded-[10px] font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform,border-color] duration-200 ease-out active:translate-y-px disabled:cursor-not-allowed'
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    'bg-lp-ink text-lp-surface shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_2px_rgba(20,21,15,0.3),0_8px_20px_-8px_rgba(20,21,15,0.5)] hover:bg-lp-ink-3 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.14),0_1px_2px_rgba(20,21,15,0.3),0_14px_28px_-10px_rgba(20,21,15,0.55)]',
+  primary: 'bg-lp-ink text-white hover:bg-lp-ink-3',
   signal:
     'bg-lp-signal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_10px_24px_-10px_rgba(255,77,28,0.7)] hover:bg-lp-signal-600',
   secondary:
-    'border border-lp-ink/15 bg-lp-surface/70 text-lp-ink backdrop-blur hover:border-lp-ink/35 hover:bg-lp-surface',
+    'border border-lp-line bg-white text-lp-ink hover:bg-lp-sunken',
   ghost: 'text-lp-body hover:bg-lp-ink/[0.06] hover:text-lp-ink',
   inverse:
     'bg-lp-surface text-lp-ink shadow-[0_10px_24px_-12px_rgba(0,0,0,0.6)] hover:bg-white',
@@ -115,9 +111,9 @@ const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
 }
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: 'h-9 px-4 text-[14px]',
-  md: 'h-11 px-5 text-[15px]',
-  lg: 'h-[54px] px-7 text-[16px]',
+  sm: 'h-8 px-3 text-[13.5px]',
+  md: 'h-9 px-3.5 text-[14px]',
+  lg: 'h-11 px-5 text-[15px]',
 }
 
 /** Arrow that nudges forward on hover — the only flourish buttons get. */
@@ -232,73 +228,58 @@ export function Button(props: ButtonProps) {
 /* Section furniture                                                   */
 /* ------------------------------------------------------------------ */
 
-/** Monospaced chapter marker, e.g. `02 — Features`. */
-export function Eyebrow({
-  children,
-  index,
-  tone = 'light',
-}: {
-  children: ReactNode
-  index?: string
-  tone?: 'light' | 'dark'
-}) {
+/** Small square icon tile that sits above a section heading. */
+export function IconTile({ children, tint = '#f1f1ef', className }: { children: ReactNode; tint?: string; className?: string }) {
   return (
     <span
-      className={cn(
-        'inline-flex items-center gap-3 font-mono text-[12px] tracking-[0.14em] uppercase',
-        tone === 'dark' ? 'text-white/60' : 'text-lp-muted',
-      )}
+      aria-hidden="true"
+      className={cn('grid h-12 w-12 place-items-center rounded-[12px] border border-lp-ink/[0.08] text-lp-ink', className)}
+      style={{ background: tint }}
     >
-      {index && <span className="text-lp-signal">{index}</span>}
-      {index && <span aria-hidden="true" className={cn('h-px w-6', tone === 'dark' ? 'bg-white/25' : 'bg-lp-ink/20')} />}
       {children}
     </span>
   )
 }
 
+/** Small uppercase label. Kept for compatibility with older call sites. */
+export function Eyebrow({ children }: { children: ReactNode; index?: string; tone?: 'light' | 'dark' }) {
+  return <span className="text-[13px] font-semibold text-lp-muted">{children}</span>
+}
+
 export function SectionHeading({
-  eyebrow,
-  index,
+  icon,
+  tint,
   heading,
   description,
-  align = 'left',
-  tone = 'light',
+  align = 'center',
   className,
 }: {
+  icon?: ReactNode
+  tint?: string
+  heading: ReactNode
+  description?: ReactNode
+  align?: 'center' | 'left'
+  className?: string
   eyebrow?: string
   index?: string
-  heading: ReactNode
-  description?: string
-  align?: 'center' | 'left'
   tone?: 'light' | 'dark'
-  className?: string
 }) {
   return (
-    <div className={cn('flex flex-col gap-5', align === 'center' && 'items-center text-center', className)}>
-      {eyebrow && (
-        <Eyebrow index={index} tone={tone}>
-          {eyebrow}
-        </Eyebrow>
+    <div className={cn('flex flex-col gap-4', align === 'center' && 'items-center text-center', className)}>
+      {icon && (
+        <IconTile tint={tint} className="mb-2">
+          {icon}
+        </IconTile>
       )}
       <h2
         className={cn(
-          'max-w-[17ch] font-display text-[clamp(2.5rem,5.6vw,4.4rem)] leading-[0.98] font-normal tracking-[-0.02em]',
-          tone === 'dark' ? 'text-lp-surface' : 'text-lp-ink',
+          'max-w-[20ch] text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink',
           align === 'center' && 'mx-auto',
         )}
       >
         {heading}
       </h2>
-      {description && (
-        <p
-          className={cn(
-            'max-w-[52ch] text-[17px] leading-relaxed',
-            tone === 'dark' ? 'text-white/65' : 'text-lp-body',
-          )}
-        >
-          {description}
-        </p>
-      )}
+      {description && <p className="max-w-[52ch] text-[17px] leading-relaxed text-lp-body">{description}</p>}
     </div>
   )
 }
@@ -309,7 +290,6 @@ export function Section({
   children,
   className,
   innerClassName,
-  tone = 'light',
 }: {
   id?: string
   children: ReactNode
@@ -318,59 +298,36 @@ export function Section({
   tone?: 'light' | 'muted' | 'dark'
 }) {
   return (
-    <section
-      id={id}
-      className={cn(
-        'relative scroll-mt-24 px-5 py-24 sm:px-8 md:py-32',
-        tone === 'light' && 'bg-lp-bg',
-        tone === 'muted' && 'bg-lp-sunken',
-        tone === 'dark' && 'bg-lp-ink text-lp-surface',
-        className,
-      )}
-    >
-      <div className={cn('mx-auto w-full max-w-[1240px]', innerClassName)}>{children}</div>
+    <section id={id} className={cn('relative scroll-mt-24 bg-white px-5 py-20 sm:px-8 md:py-28', className)}>
+      <div className={cn('mx-auto w-full max-w-[1080px]', innerClassName)}>{children}</div>
     </section>
   )
 }
 
-/** A browser frame for product shots. */
-export function BrowserFrame({
+/** A soft grey feature card: heading top-left, interface below. */
+export function FeatureCard({
+  icon,
+  title,
+  body,
   children,
-  label = 'opennote — calendar',
-  tone = 'light',
   className,
+  visualClassName,
 }: {
-  children: ReactNode
-  label?: string
-  tone?: 'light' | 'dark'
+  icon?: ReactNode
+  title: string
+  body: string
+  children?: ReactNode
   className?: string
+  visualClassName?: string
 }) {
-  const dark = tone === 'dark'
   return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-[14px] border',
-        dark
-          ? 'border-white/10 bg-lp-ink-2 shadow-[0_50px_100px_-40px_rgba(0,0,0,0.8)]'
-          : 'border-lp-ink/10 bg-lp-surface shadow-[0_1px_0_rgba(255,255,255,0.8)_inset,0_50px_90px_-40px_rgba(40,30,10,0.35),0_18px_36px_-20px_rgba(40,30,10,0.2)]',
-        className,
-      )}
-    >
-      <div className={cn('flex h-9 items-center gap-1.5 border-b px-3.5', dark ? 'border-white/10' : 'border-lp-ink/[0.08]')}>
-        <span className={cn('h-2.5 w-2.5 rounded-full', dark ? 'bg-white/15' : 'bg-lp-ink/15')} />
-        <span className={cn('h-2.5 w-2.5 rounded-full', dark ? 'bg-white/15' : 'bg-lp-ink/15')} />
-        <span className={cn('h-2.5 w-2.5 rounded-full', dark ? 'bg-white/15' : 'bg-lp-ink/15')} />
-        <span
-          className={cn(
-            'mx-auto truncate rounded-md px-3 py-0.5 font-mono text-[10.5px]',
-            dark ? 'bg-white/5 text-white/45' : 'bg-lp-ink/[0.05] text-lp-muted',
-          )}
-        >
-          {label}
-        </span>
-        <span className="w-[42px]" aria-hidden="true" />
+    <article className={cn('flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken', className)}>
+      <div className="p-6 sm:p-7">
+        {icon && <span className="mb-3 block text-lp-ink">{icon}</span>}
+        <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-lp-ink">{title}</h3>
+        <p className="mt-1.5 max-w-[46ch] text-[15px] leading-relaxed text-lp-body">{body}</p>
       </div>
-      {children}
-    </div>
+      {children && <div className={cn('mt-auto px-6 sm:px-7', visualClassName)}>{children}</div>}
+    </article>
   )
 }

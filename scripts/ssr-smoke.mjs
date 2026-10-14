@@ -189,29 +189,29 @@ try {
   /* Content contract — the copy the brief asked for. */
   const expected = [
     // Hero
-    'Your calendar,',
-    'with room to think',
-    'OpenNote puts your day, week and month',
+    'Plan the day.',
+    'Keep the thought.',
+    'OpenNote is a calendar with your notes built in.',
     'Start Planning Free',
-    'Try the live preview',
+    'See it in action',
     'Sign In',
     'Free plan, no card required',
     // How it works
-    'Three moves from a blank week to a plan.',
+    'From a blank week to a plan.',
     'Pick the day',
     'Block the time',
     'Pin the thought',
     // Features
-    'Built around how a day actually unfolds.',
+    'Your calendar and notes, finally together.',
     'The thought stays next to the plan.',
     'See the shape of your week in colour.',
     'Month at a glance',
     'Move through time',
     'Create in seconds',
     // Preview
-    'Take it for a spin.',
+    'Try it right here.',
     'Full Week',
-    'Start with your own week',
+    'No account needed.',
     // Pricing
     'Simple plans. Better planning.',
     'Free Forever',
@@ -225,13 +225,13 @@ try {
     'Shared team calendars',
     'Advanced permissions',
     // FAQ
-    'Questions, answered.',
+    'Questions &amp; answers',
     'What is OpenNote?',
     'Is OpenNote free?',
     'When is OpenNote Business launching?',
     // Final CTA
-    'Make room for',
-    'what matters.',
+    'Get OpenNote',
+    'for free.',
     'Start Planning for Free',
     // Footer
     'OpenNote',
@@ -258,7 +258,7 @@ try {
 
   /* Product mockups */
   check('hero shows the week grid', html.includes('Morning planning'))
-  check('hero shows a note card', html.includes('Call back'))
+  check('page shows a note card', html.includes('Grocery list'))
   check('demo calendars render', html.includes('Colour-coded') && html.includes('Study'))
   check('no localStorage writes during render', globalThis.localStorage._v.size === 0)
 
@@ -295,7 +295,7 @@ try {
   check('nav shows “Open My Calendar” when signed in', authedHeader.includes('Open My Calendar'))
   check('nav hides “Get Started Free” when signed in', !authedHeader.includes('Get Started Free'))
   check('nav still shows Sign In when signed in', authedHeader.includes('Sign In'))
-  check('hero primary CTA becomes Open My Calendar', authedHtml.includes('Switch account'))
+  check('hero secondary CTA becomes Switch account', authedHtml.includes('Switch account'))
 
   globalThis.localStorage.removeItem('opennote.accounts.v1')
   globalThis.localStorage.removeItem('opennote.session.v1')

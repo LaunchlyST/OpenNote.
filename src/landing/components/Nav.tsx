@@ -65,13 +65,16 @@ export function Nav() {
   const primary = authed ? HERO.authenticatedCta : HERO.primaryCta
 
   return (
-    <header data-landing-header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4">
+    <header
+      data-landing-header
+      className={cn(
+        'fixed inset-x-0 top-0 z-50 border-b bg-white/90 backdrop-blur-md transition-colors duration-300',
+        scrolled || open ? 'border-lp-line' : 'border-transparent',
+      )}
+    >
       <div
         className={cn(
-          'mx-auto flex h-[60px] w-full items-center gap-3 rounded-full pr-2 pl-5 transition-[background-color,box-shadow,border-color,max-width] duration-500 ease-out',
-          scrolled || open
-            ? 'max-w-[1080px] border border-lp-ink/10 bg-lp-surface/80 shadow-[0_12px_40px_-18px_rgba(40,30,10,0.35)] backdrop-blur-xl backdrop-saturate-150'
-            : 'max-w-[1240px] border border-transparent bg-transparent',
+          'mx-auto flex h-[60px] w-full max-w-[1200px] items-center gap-3 px-5 sm:px-8',
         )}
       >
         <a
@@ -87,7 +90,7 @@ export function Nav() {
           <Logo />
         </a>
 
-        <nav aria-label="Sections" className="mx-auto hidden lg:block">
+        <nav aria-label="Sections" className="ml-6 hidden lg:block">
           <ul className="flex items-center gap-0.5">
             {NAV_LINKS.map((link) => {
               const isActive = active === link.section
@@ -101,17 +104,10 @@ export function Nav() {
                     }}
                     aria-current={isActive ? 'true' : undefined}
                     className={cn(
-                      'relative flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[14.5px] transition-colors duration-200',
-                      isActive ? 'text-lp-ink' : 'text-lp-body hover:text-lp-ink',
+                      'relative flex items-center rounded-lg px-3 py-1.5 text-[14px] transition-colors duration-200',
+                      isActive ? 'bg-lp-sunken text-lp-ink' : 'text-lp-body hover:bg-lp-sunken hover:text-lp-ink',
                     )}
                   >
-                    <span
-                      aria-hidden="true"
-                      className={cn(
-                        'h-1.5 rounded-full bg-lp-signal transition-all duration-300',
-                        isActive ? 'w-1.5 opacity-100' : 'w-0 opacity-0',
-                      )}
-                    />
                     {link.label}
                   </a>
                 </li>
@@ -120,7 +116,7 @@ export function Nav() {
           </ul>
         </nav>
 
-        <div className="ml-auto flex items-center gap-1.5 lg:ml-0">
+        <div className="ml-auto flex items-center gap-1.5">
           <Button href={HERO.signInCta.href} variant="ghost" size="md" className="max-sm:hidden">
             Sign In
           </Button>
@@ -134,7 +130,7 @@ export function Nav() {
             aria-expanded={open}
             aria-controls="landing-mobile-menu"
             aria-label={open ? 'Close menu' : 'Open menu'}
-            className="relative grid h-11 w-11 place-items-center rounded-full bg-lp-ink text-lp-surface transition active:scale-95 lg:hidden"
+            className="relative grid h-10 w-10 place-items-center rounded-[10px] border border-lp-line bg-white text-lp-ink transition active:scale-95 lg:hidden"
           >
             <span
               aria-hidden="true"
@@ -158,11 +154,11 @@ export function Nav() {
       <div
         id="landing-mobile-menu"
         hidden={!open}
-        className="fixed inset-x-3 top-[84px] bottom-3 overflow-y-auto rounded-[28px] border border-lp-ink/10 bg-lp-surface p-6 shadow-[0_30px_80px_-30px_rgba(40,30,10,0.5)] sm:inset-x-5 lg:hidden"
+        className="fixed inset-x-0 top-[61px] bottom-0 overflow-y-auto bg-white px-5 pt-4 pb-8 sm:px-8 lg:hidden"
       >
         <nav aria-label="Sections (mobile)">
           <ul>
-            {NAV_LINKS.map((link, i) => (
+            {NAV_LINKS.map((link) => (
               <li key={link.section} className="border-b border-lp-line last:border-b-0">
                 <a
                   href={`#${link.section}`}
@@ -173,8 +169,7 @@ export function Nav() {
                   }}
                   className="flex items-baseline gap-4 py-4"
                 >
-                  <span className="font-mono text-[12px] text-lp-signal">0{i + 1}</span>
-                  <span className="font-display text-[34px] leading-none text-lp-ink">{link.label}</span>
+                  <span className="text-[22px] font-semibold tracking-[-0.02em] text-lp-ink">{link.label}</span>
                 </a>
               </li>
             ))}

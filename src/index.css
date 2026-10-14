@@ -30,27 +30,27 @@
 }
 
 /* ---------- landing page palette ----------
- * "Paper & Ink": warm paper, near-black ink and a single vermilion signal.
- * Scoped by the `lp-` prefix so the calendar app keeps its own tokens. The
- * product's pastel event colours appear only inside the interface mockups. */
+ * Clean white page, ink text, soft grey cards. Colour lives only inside the
+ * product itself, so the calendar's own event colours carry the page.
+ * Scoped by the `lp-` prefix so the calendar app keeps its own tokens. */
 @theme {
-  --font-display: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-lp-bg: #f3efe7;
-  --color-lp-paper: #f3efe7;
-  --color-lp-surface: #fbf9f5;
-  --color-lp-sunken: #e9e4d9;
-  --color-lp-line: #dcd6c9;
-  --color-lp-ink: #14150f;
-  --color-lp-ink-2: #1f201a;
-  --color-lp-ink-3: #2b2c25;
-  --color-lp-body: #4d4f46;
-  --color-lp-muted: #827f74;
+  --color-lp-bg: #ffffff;
+  --color-lp-paper: #ffffff;
+  --color-lp-surface: #ffffff;
+  --color-lp-sunken: #f7f7f5;
+  --color-lp-line: #ebebe9;
+  --color-lp-ink: #191919;
+  --color-lp-ink-2: #2a2a28;
+  --color-lp-ink-3: #3a3a37;
+  --color-lp-body: #5f5e5b;
+  --color-lp-muted: #91908c;
 
-  --color-lp-signal: #ff4d1c;
-  --color-lp-signal-600: #e63f10;
-  --color-lp-signal-50: #ffe9e1;
+  --color-lp-signal: #2f76d2;
+  --color-lp-signal-600: #2563b8;
+  --color-lp-signal-50: #eef4fc;
 }
 
 :root {
@@ -335,10 +335,10 @@ input {
 /* "Now" line pulse. */
 @keyframes lp-pulse {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 77, 28, 0.5);
+    box-shadow: 0 0 0 0 rgba(47, 118, 210, 0.45);
   }
   100% {
-    box-shadow: 0 0 0 9px rgba(255, 77, 28, 0);
+    box-shadow: 0 0 0 9px rgba(47, 118, 210, 0);
   }
 }
 .lp-pulse {
@@ -389,8 +389,8 @@ body.lp-body h3 {
   text-wrap: balance;
 }
 body.lp-body ::selection {
-  background: #ffd3c4;
-  color: #14150f;
+  background: #d7e6fa;
+  color: #191919;
 }
 
 body.lp-body :focus-visible {

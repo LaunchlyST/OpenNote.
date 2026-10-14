@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { ChevronLeft, ChevronRight, Pin } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pin, Route } from 'lucide-react'
 import { COLORS } from '../../lib/colors'
 import { cn } from '../../lib/id'
 import { HOW_IT_WORKS } from '../content'
@@ -17,7 +17,7 @@ const TODAY = 5
 
 function PickDayVisual() {
   return (
-    <div className="mx-auto w-full max-w-[280px] rounded-2xl bg-white p-4 shadow-[0_20px_40px_-24px_rgba(40,30,10,0.4)] ring-1 ring-black/[0.05]">
+    <div className="mx-auto w-full max-w-[280px] rounded-2xl bg-white p-4 ring-1 ring-black/[0.06]">
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-semibold text-[#1f2330]">October 2026</span>
         <span className="flex gap-1 text-[#8b90a0]">
@@ -43,7 +43,7 @@ function PickDayVisual() {
               key={day}
               className={cn(
                 'mx-auto grid h-7 w-7 place-items-center rounded-full text-[11px]',
-                selected && 'bg-lp-signal font-semibold text-white shadow-[0_6px_14px_-6px_rgba(255,77,28,0.9)]',
+                selected && 'bg-lp-ink font-semibold text-white ',
                 today && !selected && 'font-semibold text-[#1f2330] ring-1 ring-[#1f2330]/25',
                 !selected && !today && 'text-[#3d4354]',
               )}
@@ -61,7 +61,7 @@ function BlockTimeVisual() {
   const lime = COLORS.lime
   const hours = ['09:00', '10:00', '11:00', '12:00']
   return (
-    <div className="mx-auto w-full max-w-[280px] rounded-2xl bg-white p-4 shadow-[0_20px_40px_-24px_rgba(40,30,10,0.4)] ring-1 ring-black/[0.05]">
+    <div className="mx-auto w-full max-w-[280px] rounded-2xl bg-white p-4 ring-1 ring-black/[0.06]">
       <p className="text-[13px] font-semibold text-[#1f2330]">Mon 5 October</p>
       <div className="relative mt-3 h-[216px]">
         {hours.map((h, i) => (
@@ -79,7 +79,7 @@ function BlockTimeVisual() {
         </div>
         {/* The one being created */}
         <div
-          className="absolute right-0 left-11 rounded-lg px-2.5 py-1.5 text-[11px] ring-2 ring-lp-signal/70"
+          className="absolute right-0 left-11 rounded-lg px-2.5 py-1.5 text-[11px] ring-2 ring-lp-ink/70"
           style={{ top: 150, height: 60, background: lime.bg, color: lime.text, boxShadow: `inset 3px 0 0 ${lime.dot}` }}
         >
           <span className="block font-semibold">Design review</span>
@@ -107,7 +107,7 @@ function PinNoteVisual() {
         <span className="text-[12px] text-[#3d4354]">
           <span className="font-semibold text-[#1f2330]">Thursday</span> · 1 note pinned
         </span>
-        <span className="ml-auto h-2 w-2 rounded-full bg-lp-signal" />
+        
       </div>
     </div>
   )
@@ -121,36 +121,29 @@ const VISUALS: ReactNode[] = [<PickDayVisual key="a" />, <BlockTimeVisual key="b
 
 export function HowItWorks() {
   return (
-    <Section id="how-it-works">
-      <div className="grid gap-8 lg:grid-cols-12 lg:items-end">
-        <Reveal className="lg:col-span-7">
-          <SectionHeading eyebrow={HOW_IT_WORKS.eyebrow} index="01" heading={HOW_IT_WORKS.heading} />
-        </Reveal>
-        <Reveal delay={80} className="lg:col-span-5">
-          <p className="max-w-[46ch] text-[17px] leading-relaxed text-lp-body">{HOW_IT_WORKS.description}</p>
-        </Reveal>
-      </div>
+    <Section id="how-it-works" className="pt-6 md:pt-10">
+      <Reveal>
+        <SectionHeading
+          icon={<Route className="h-6 w-6" />}
+          tint="#e8f7b5"
+          heading={HOW_IT_WORKS.heading}
+          description={HOW_IT_WORKS.description}
+        />
+      </Reveal>
 
-      <ol className="mt-16 grid gap-5 md:mt-20 lg:grid-cols-3">
+      <ol className="mt-14 grid gap-4 md:mt-16 lg:grid-cols-3">
         {HOW_IT_WORKS.steps.map((step, i) => (
-          <Reveal as="li" key={step.number} delay={i * 110} className="h-full">
-            <article className="group flex h-full flex-col overflow-hidden rounded-[28px] border border-lp-ink/10 bg-lp-surface transition-[transform,box-shadow] duration-500 ease-out hover:-translate-y-1 hover:shadow-[0_40px_70px_-40px_rgba(40,30,10,0.45)]">
-              <div className="lp-ruled relative flex min-h-[300px] items-center bg-lp-sunken/60 px-6 py-8">
-                <span
-                  aria-hidden="true"
-                  className="absolute top-3 left-5 font-display text-[64px] leading-none text-lp-ink/10 italic"
-                >
-                  {step.number}
+          <Reveal as="li" key={step.number} delay={i * 90} className="h-full">
+            <article className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
+              <div className="p-6 sm:p-7">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-lp-ink text-[13px] font-semibold text-white">
+                  {i + 1}
                 </span>
-                <div className="relative w-full transition-transform duration-500 ease-out group-hover:scale-[1.02]">
-                  {VISUALS[i]}
-                </div>
+                <h3 className="mt-4 text-[16px] font-semibold tracking-[-0.01em] text-lp-ink">{step.title}</h3>
+                <p className="mt-1.5 text-[15px] leading-relaxed text-lp-body">{step.description}</p>
               </div>
-              <div className="flex flex-1 flex-col p-6 sm:p-7">
-                <p className="font-mono text-[11px] tracking-[0.14em] text-lp-signal uppercase">Step {step.number}</p>
-                <h3 className="mt-2 font-display text-[34px] leading-none text-lp-ink">{step.title}</h3>
-                <p className="mt-3 text-[15.5px] leading-relaxed text-lp-body">{step.description}</p>
-                <p className="mt-auto pt-5 font-mono text-[11.5px] text-lp-muted">{step.detail}</p>
+              <div aria-hidden="true" className="mt-auto px-6 pb-7 sm:px-7">
+                {VISUALS[i]}
               </div>
             </article>
           </Reveal>

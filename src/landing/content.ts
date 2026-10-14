@@ -34,12 +34,12 @@ export const NAV_LINKS: NavLink[] = [
 
 export const HERO = {
   eyebrow: 'Calendar & notes, side by side',
-  titleLead: 'Your calendar,',
-  titleEmphasis: 'with room to think.',
+  titleLead: 'Plan the day.',
+  titleEmphasis: 'Keep the thought.',
   description:
-    'OpenNote puts your day, week and month next to the notes that go with them. Block out your time, colour-code your life, and pin each thought to the day it belongs to.',
+    'OpenNote is a calendar with your notes built in. Plan by day, week or month, and keep every note next to the day it belongs to.',
   primaryCta: { label: 'Start Planning Free', href: '/app/signup' },
-  secondaryCta: { label: 'Try the live preview', section: 'preview' },
+  secondaryCta: { label: 'See it in action', section: 'preview' },
   authenticatedCta: { label: 'Open My Calendar', href: '/app' },
   signInCta: { label: 'Sign In', href: '/app/signin' },
   /** Small trust strip under the buttons — every item is true of the Free plan. */
@@ -67,9 +67,9 @@ export interface Step {
 
 export const HOW_IT_WORKS = {
   eyebrow: 'How it works',
-  heading: 'Three moves from a blank week to a plan.',
+  heading: 'From a blank week to a plan.',
   description:
-    'No setup wizard and no learning curve. If you have used a paper diary, you already know how OpenNote works.',
+    'No setup and no learning curve. If you have used a paper diary, you already know how OpenNote works.',
   steps: [
     {
       number: '01',
@@ -107,17 +107,17 @@ export const FEATURES = {
   eyebrow: 'Features',
   heading: 'Built around how a day actually unfolds.',
   description:
-    'A calendar that reads like a page, notes that stay with the plan, and colour that means something.',
+    'Plan your time and keep your notes in the same place, so nothing important lives in a different app.',
   notes: {
     kicker: 'Notes beside the calendar',
     title: 'The thought stays next to the plan.',
-    body: 'Shopping lists, call-backs and half-formed ideas live in a notes panel right beside your schedule. Pin a note to a date and it travels with that day.',
+    body: 'Lists, call-backs and ideas live in a notes panel beside your schedule. Pin a note to a date and it stays with that day.',
     points: ['Notes panel on every view', 'Pin a note to any day', 'Edit in place — no extra app'],
   },
   categories: {
     kicker: 'Colour-coded calendars',
     title: 'See the shape of your week in colour.',
-    body: 'Keep Work, Personal, Study and Social on separate calendars. Each has its own colour, so a glance tells you where your time is going. Try switching them on and off.',
+    body: 'Work, Personal, Study and Social each get their own colour. Switch them on and off to focus. Try it here.',
   },
   daily: {
     kicker: 'Daily schedules',
@@ -300,7 +300,7 @@ export interface FaqItem {
 
 export const FAQ = {
   eyebrow: 'FAQ',
-  heading: 'Questions, answered.',
+  heading: 'Questions & answers',
   items: [
     {
       question: 'What is OpenNote?',
@@ -344,10 +344,10 @@ export const FAQ = {
 /* ------------------------------------------------------------------ */
 
 export const FINAL_CTA = {
-  headingLead: 'Make room for',
-  headingEmphasis: 'what matters.',
+  headingLead: 'Get OpenNote',
+  headingEmphasis: 'for free.',
   description:
-    'Bring your schedule, plans and notes together in one calm workspace. The Free plan is free forever.',
+    'Your schedule, plans and notes in one place. The Free plan stays free.',
   primary: { label: 'Start Planning for Free', href: '/app/signup' },
   secondary: { label: 'Sign In', href: '/app/signin' },
 } as const

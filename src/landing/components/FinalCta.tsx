@@ -1,40 +1,56 @@
+import { Monitor, Smartphone } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { FINAL_CTA } from '../content'
-import { MockWeekTimeline } from './mock/AppChrome'
-import { FitStage } from './mock/FitStage'
-import { Button, Reveal } from './primitives'
+import { AppWindow, AppWindowMobile } from './mock/AppWindow'
+import { AppIcon, Button, Reveal, Section } from './primitives'
 
 export function FinalCta() {
   const { user } = useAuth()
   return (
-    <section className="px-3 pb-3 sm:px-5 sm:pb-5">
-      <div className="relative mx-auto max-w-[1400px] overflow-hidden rounded-[36px] bg-lp-signal px-6 pt-20 text-white sm:px-12 sm:pt-28">
-        <div aria-hidden="true" className="lp-ruled-dark absolute inset-0 opacity-60" />
-        <Reveal className="relative mx-auto max-w-[900px] text-center">
-          <h2 className="font-display text-[clamp(3rem,8.5vw,7rem)] leading-[0.92] tracking-[-0.03em]">
-            {FINAL_CTA.headingLead}
-            <br />
-            <span className="italic">{FINAL_CTA.headingEmphasis}</span>
-          </h2>
-          <p className="mx-auto mt-6 max-w-[48ch] text-[17px] leading-relaxed text-white/85">{FINAL_CTA.description}</p>
-          <div className="mt-9 flex flex-col justify-center gap-2.5 sm:flex-row">
-            <Button href={user ? '/app' : FINAL_CTA.primary.href} variant="primary" size="lg" arrow>
-              {user ? 'Open My Calendar' : FINAL_CTA.primary.label}
+    <Section className="pt-10 md:pt-16">
+      <Reveal className="flex flex-col items-center text-center">
+        <AppIcon className="h-14 w-14 text-[56px] shadow-[3px_3px_0_0_#191919]" />
+        <h2 className="mt-7 text-[clamp(2.2rem,5vw,3.6rem)] leading-[1.05] font-semibold tracking-[-0.04em] text-lp-ink">
+          {FINAL_CTA.headingLead} {FINAL_CTA.headingEmphasis}
+        </h2>
+        <p className="mt-4 max-w-[46ch] text-[17px] leading-relaxed text-lp-body">{FINAL_CTA.description}</p>
+        <div className="mt-7 flex flex-col gap-2.5 sm:flex-row">
+          <Button href={user ? '/app' : FINAL_CTA.primary.href} variant="primary" size="lg" arrow>
+            {user ? 'Open My Calendar' : FINAL_CTA.primary.label}
+          </Button>
+          {!user && (
+            <Button href={FINAL_CTA.secondary.href} variant="secondary" size="lg">
+              {FINAL_CTA.secondary.label}
             </Button>
-            {!user && (
-              <Button href={FINAL_CTA.secondary.href} variant="outline-dark" size="lg">
-                {FINAL_CTA.secondary.label}
-              </Button>
-            )}
-          </div>
-        </Reveal>
-        {/* The week grid rising out of the bottom edge */}
-        <div aria-hidden="true" className="relative mx-auto mt-16 h-[180px] max-w-[980px] overflow-hidden rounded-t-[18px] bg-white shadow-[0_-20px_60px_-20px_rgba(0,0,0,0.35)] sm:h-[240px]">
-          <FitStage width={720} height={360} maxScale={1.4}>
-            <MockWeekTimeline />
-          </FitStage>
+          )}
         </div>
+      </Reveal>
+
+      <div className="mt-16 grid gap-4 md:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <Reveal>
+          <article className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
+            <div className="flex items-center gap-2 p-6 text-[16px] font-semibold text-lp-ink sm:p-7">
+              <Monitor className="h-5 w-5" aria-hidden="true" /> On your computer
+            </div>
+            <div aria-hidden="true" className="mt-auto pl-6 sm:pl-7">
+              <div className="overflow-hidden rounded-tl-[12px]">
+                <AppWindow view="month" dateLabel="October 2026" label="opennote — month" />
+              </div>
+            </div>
+          </article>
+        </Reveal>
+        <Reveal delay={80}>
+          <article className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
+            <div className="flex items-center gap-2 p-6 text-[16px] font-semibold text-lp-ink sm:p-7">
+              <Smartphone className="h-5 w-5" aria-hidden="true" /> On your phone
+            </div>
+            <div aria-hidden="true" className="mx-auto mt-auto h-[300px] w-[240px] overflow-hidden">
+              <AppWindowMobile view="day" />
+            </div>
+          </article>
+        </Reveal>
       </div>
-    </section>
+      <p className="mt-4 text-center text-[13px] text-lp-muted">OpenNote runs in your browser on desktop and mobile.</p>
+    </Section>
   )
 }

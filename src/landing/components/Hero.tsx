@@ -1,116 +1,96 @@
+import type { ReactNode } from 'react'
+import { BookOpen, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
 import { useAuth } from '../../auth'
-import { HERO, HERO_FACTS } from '../content'
+import { cn } from '../../lib/id'
+import { HERO } from '../content'
 import { ResponsiveAppWindow } from './mock/AppWindow'
-import { EventComposer, NoteCloseup, NowChip } from './mock/Closeups'
-import { Button, Eyebrow } from './primitives'
+import { AppIcon, Button } from './primitives'
 
-/**
- * Editorial hero: an oversized serif headline set left, the pitch and actions
- * in a narrow right-hand column, then the real interface settling into place
- * beneath — flanked by two close-ups (the event editor and a pinned note) that
- * name the two things OpenNote does.
- */
+/** Small line-icon tiles scattered around the hero, each in a product colour. */
+function Doodle({ children, tint, className }: { children: ReactNode; tint: string; className: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'lp-float absolute hidden h-11 w-11 place-items-center rounded-[11px] border-[1.5px] border-lp-ink text-lp-ink shadow-[3px_3px_0_0_#191919] xl:grid',
+        className,
+      )}
+      style={{ background: tint }}
+    >
+      {children}
+    </span>
+  )
+}
+
 export function Hero() {
   const { user } = useAuth()
   const authed = Boolean(user)
   const primary = authed ? HERO.authenticatedCta : HERO.primaryCta
+  const icon = 'h-5 w-5'
 
   return (
-    <section id="top" className="relative overflow-hidden px-5 pt-[120px] sm:px-8 sm:pt-[140px]">
-      {/* Planner-page ruling, fading out toward the edges */}
-      <div
-        aria-hidden="true"
-        className="lp-ruled pointer-events-none absolute inset-x-0 top-0 -z-0 h-[900px]"
-        style={{
-          maskImage: 'radial-gradient(80% 70% at 50% 30%, #000 0%, transparent 75%)',
-          WebkitMaskImage: 'radial-gradient(80% 70% at 50% 30%, #000 0%, transparent 75%)',
-        }}
-      />
+    <section id="top" className="relative overflow-hidden bg-white px-5 pt-[120px] pb-8 sm:px-8 sm:pt-[140px]">
+      <div className="relative mx-auto w-full max-w-[1200px]">
+        {/* Doodles — desktop only, never over the copy */}
+        <Doodle tint="#d8ebff" className="top-2 left-[6%] -rotate-6"><CalendarDays className={icon} /></Doodle>
+        <Doodle tint="#ffdce9" className="top-[150px] left-[1%] rotate-6" ><Coffee className={icon} /></Doodle>
+        <Doodle tint="#fdf3ad" className="top-[290px] left-[11%] -rotate-3"><StickyNote className={icon} /></Doodle>
+        <Doodle tint="#e8f7b5" className="top-0 right-[7%] rotate-6"><Sun className={icon} /></Doodle>
+        <Doodle tint="#ffe6cc" className="top-[160px] right-[1%] -rotate-6"><Clock className={icon} /></Doodle>
+        <Doodle tint="#e6ddff" className="top-[300px] right-[12%] rotate-3"><BookOpen className={icon} /></Doodle>
 
-      <div className="relative mx-auto w-full max-w-[1240px]">
-        <div className="grid gap-10 lg:grid-cols-12 lg:items-end lg:gap-8">
-          <div className="lg:col-span-8">
-            <div className="lp-bob" style={{ animationDelay: '40ms' }}>
-              <Eyebrow index="●">{HERO.eyebrow}</Eyebrow>
-            </div>
-            <h1
-              className="lp-bob mt-7 font-display text-[clamp(3.2rem,8.2vw,7.2rem)] leading-[0.9] font-normal tracking-[-0.035em] text-lp-ink"
-              style={{ animationDelay: '120ms' }}
-            >
-              {HERO.titleLead}
-              <br />
-              <span className="italic">
-                {HERO.titleEmphasis.replace(/\.$/, '')}
-                <span className="text-lp-signal">.</span>
-              </span>
-            </h1>
+        <div className="flex flex-col items-center text-center">
+          <div className="lp-bob" style={{ animationDelay: '40ms' }}>
+            <AppIcon className="h-[68px] w-[68px] text-[68px] shadow-[4px_4px_0_0_#191919]" />
           </div>
-
-          <div className="lp-bob lg:col-span-4 lg:pb-3" style={{ animationDelay: '220ms' }}>
-            <p className="max-w-[44ch] text-[17px] leading-relaxed text-lp-body">{HERO.description}</p>
-            <div className="mt-7 flex flex-col gap-2.5 sm:flex-row lg:flex-col xl:flex-row">
-              <Button href={primary.href} variant="primary" size="lg" className="w-full sm:w-auto" arrow>
-                {primary.label}
+          <h1
+            className="lp-bob mt-8 text-[clamp(2.6rem,7vw,5rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-lp-ink"
+            style={{ animationDelay: '110ms' }}
+          >
+            {HERO.titleLead}
+            <br />
+            {HERO.titleEmphasis}
+          </h1>
+          <p
+            className="lp-bob mt-5 max-w-[46ch] text-[clamp(1.02rem,1.6vw,1.2rem)] leading-relaxed text-lp-body"
+            style={{ animationDelay: '180ms' }}
+          >
+            {HERO.description}
+          </p>
+          <div className="lp-bob mt-8 flex w-full flex-col items-center justify-center gap-2.5 sm:w-auto sm:flex-row" style={{ animationDelay: '240ms' }}>
+            <Button href={primary.href} variant="primary" size="lg" className="w-full sm:w-auto" arrow>
+              {primary.label}
+            </Button>
+            {authed ? (
+              <Button href={HERO.signInCta.href} variant="secondary" size="lg" className="w-full sm:w-auto">
+                Switch account
               </Button>
-              {authed ? (
-                <Button href={HERO.signInCta.href} variant="secondary" size="lg" className="w-full sm:w-auto">
-                  Switch account
-                </Button>
-              ) : (
-                <Button section={HERO.secondaryCta.section} variant="secondary" size="lg" className="w-full sm:w-auto">
-                  {HERO.secondaryCta.label}
-                </Button>
-              )}
-            </div>
-            <ul className="mt-6 space-y-1.5">
-              {HERO.reassurance.map((item) => (
-                <li key={item} className="flex items-center gap-2.5 text-[14px] text-lp-muted">
-                  <span aria-hidden="true" className="h-px w-3 bg-lp-signal" />
-                  {item}
-                </li>
-              ))}
-            </ul>
+            ) : (
+              <Button section={HERO.secondaryCta.section} variant="secondary" size="lg" className="w-full sm:w-auto">
+                {HERO.secondaryCta.label}
+              </Button>
+            )}
           </div>
+          <p className="lp-bob mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13.5px] text-lp-muted" style={{ animationDelay: '300ms' }}>
+            {HERO.reassurance.map((item, i) => (
+              <span key={item} className="flex items-center gap-4">
+                {i > 0 && <span aria-hidden="true" className="h-1 w-1 rounded-full bg-lp-line" />}
+                {item}
+              </span>
+            ))}
+          </p>
         </div>
 
-        {/* Showcase */}
-        <div className="relative mt-14 sm:mt-16 lg:mt-20">
-          <div className="lp-settle relative" style={{ animationDelay: '360ms' }}>
-            <ResponsiveAppWindow view="week" label="opennote.app — week of October 5" />
+        {/* The real interface, in a laptop */}
+        <div className="lp-settle relative mx-auto mt-14 max-w-[1040px] sm:mt-16" style={{ animationDelay: '380ms' }}>
+          <div className="rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
+            <ResponsiveAppWindow view="week" label="opennote — week of October 5" />
           </div>
-
-          {/* Close-ups — only where there is room beside the window */}
-          <div className="pointer-events-none absolute inset-0 hidden xl:block" aria-hidden="true">
-            <div className="lp-bob absolute -bottom-10 -left-10" style={{ animationDelay: '900ms' }}>
-              <div className="lp-float">
-                <EventComposer />
-              </div>
-            </div>
-            <div className="lp-bob absolute top-[18%] -right-12" style={{ animationDelay: '1050ms' }}>
-              <div className="lp-float" style={{ animationDelay: '-4s' }}>
-                <NoteCloseup className="rotate-[2deg]" />
-              </div>
-            </div>
-            <div className="lp-bob absolute -top-5 left-[38%]" style={{ animationDelay: '1200ms' }}>
-              <NowChip />
-            </div>
-          </div>
+          <div aria-hidden="true" className="mx-auto hidden h-3.5 w-[108%] -translate-x-[3.7%] rounded-b-[18px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:block" />
+          <span aria-hidden="true" className="absolute -bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full border border-lp-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-lp-body shadow-sm sm:inline-flex">
+            <PenLine className="h-3.5 w-3.5" /> Notes on the right <Pin className="ml-1 h-3.5 w-3.5" /> pinned to days
+          </span>
         </div>
-
-        {/* Facts strip — descriptive only, no numbers we cannot back up */}
-        <dl className="mt-20 grid grid-cols-1 border-t border-lp-ink/15 sm:grid-cols-2 lg:mt-28 lg:grid-cols-4">
-          {HERO_FACTS.map((fact, i) => (
-            <div
-              key={fact.label}
-              className="flex flex-col gap-1.5 border-b border-lp-ink/10 py-5 sm:px-5 sm:odd:pl-0 lg:border-b-0 lg:border-l lg:px-6 lg:py-7 lg:first:border-l-0 lg:first:pl-0"
-            >
-              <dt className="font-mono text-[11px] tracking-[0.14em] text-lp-muted uppercase">
-                <span className="text-lp-signal">0{i + 1}</span> {fact.label}
-              </dt>
-              <dd className="text-[15.5px] text-lp-ink">{fact.value}</dd>
-            </div>
-          ))}
-        </dl>
       </div>
     </section>
   )
