@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import type { ElementType, ReactNode } from 'react'
 import { cn } from '../../lib/id'
 import { useLandingNav } from '../hooks'
@@ -47,7 +48,10 @@ interface LogoProps {
 }
 
 /** The OpenNote app icon: a calendar page with a folded note corner. */
-export function AppIcon({ className, day = '8' }: { className?: string; day?: string }) {
+export function AppIcon({ className, day }: { className?: string; day?: string }) {
+  // Today's date, in the visitor's own time zone.
+  const [today] = useState(() => String(new Date().getDate()))
+  const label = day ?? today
   return (
     <span
       aria-hidden="true"
@@ -57,8 +61,8 @@ export function AppIcon({ className, day = '8' }: { className?: string; day?: st
       )}
     >
       <span className="h-[26%] w-full bg-lp-ink" />
-      <span className="grid flex-1 place-items-center font-semibold leading-none tracking-[-0.04em] text-lp-ink" style={{ fontSize: '0.5em' }}>
-        {day}
+      <span className="grid flex-1 place-items-center font-semibold leading-none tracking-[-0.04em] text-lp-ink" style={{ fontSize: label.length > 1 ? '0.4em' : '0.5em', paddingRight: label.length > 1 ? '0.08em' : 0 }}>
+        {label}
       </span>
       <span className="absolute right-0 bottom-0 h-[30%] w-[30%] rounded-tl-[30%] border-t-[1.5px] border-l-[1.5px] border-lp-ink bg-[#bef264]" />
     </span>
