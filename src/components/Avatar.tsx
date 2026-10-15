@@ -31,7 +31,7 @@ export function Avatar({ name, src, size = 32, className }: AvatarProps) {
         </span>
       ) : (
         <UserRound
-          className="text-[#8b90a0]"
+          className="text-[#8f8e8a]"
           style={{ width: size * 0.52, height: size * 0.52 }}
         />
       )}

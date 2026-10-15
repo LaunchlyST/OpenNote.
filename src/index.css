@@ -9,24 +9,24 @@
   --color-lime-bright: #bef264;
   --color-lime-deep: #a3d922;
 
-  --color-ink: #1f2330;
-  --color-ink-soft: #5b6172;
-  --color-hairline: #e9eaee;
+  --color-ink: #191919;
+  --color-ink-soft: #5f5e5b;
+  --color-hairline: #e9e9e7;
 
   /* surfaces */
-  --color-canvas: #f4f5f7;
+  --color-canvas: #f7f7f5;
   --color-panel: #ffffff;
-  --color-rail: #fafbfc;
-  --color-well: #f7f8fa;
+  --color-rail: #fbfbfa;
+  --color-well: #f7f7f5;
 
   /* text */
-  --color-muted: #8b90a0;
-  --color-faint: #a5aab8;
-  --color-ghost: #c3c7d1;
+  --color-muted: #8f8e8a;
+  --color-faint: #a3a29e;
+  --color-ghost: #c4c3be;
 
   /* lines */
-  --color-line: #eceef2;
-  --color-line-soft: #f0f1f4;
+  --color-line: #ececea;
+  --color-line-soft: #f1f1ef;
 }
 
 /* ---------- landing page palette ----------

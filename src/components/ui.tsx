@@ -26,8 +26,8 @@ export function IconButton({
       onClick={onClick}
       className={cn(
         'grid h-8 w-8 place-items-center rounded-lg text-[#565d70] transition',
-        'hover:bg-[#f2f3f6] hover:text-[#1f2330] active:scale-95',
-        active && 'bg-[#eaf9bf] text-[#4b6410] hover:bg-[#e3f6ad] hover:text-[#4b6410]',
+        'hover:bg-[#f3f3f1] hover:text-[#191919] active:scale-95',
+        active && 'bg-[#191919] text-white hover:bg-[#37352f] hover:text-white',
         className,
       )}
     >
@@ -51,12 +51,12 @@ export function Section({
 }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="border-b border-[#eceef2] px-3 py-3.5 last:border-b-0">
+    <section className="border-b border-[#ececea] px-3 py-3.5 last:border-b-0">
       <div className="flex items-center justify-between gap-1">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="group flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a5aab8] transition hover:text-[#5b6172]"
+          className="group flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a3a29e] transition hover:text-[#5f5e5b]"
         >
           <ChevronDown
             className={cn(
@@ -113,5 +113,5 @@ export function Drawer({
 }
 
 export function Divider() {
-  return <div className="h-px w-full bg-[#eceef2]" />
+  return <div className="h-px w-full bg-[#ececea]" />
 }

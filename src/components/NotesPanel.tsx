@@ -189,37 +189,37 @@ export function NotesPanel() {
   }, [dragIndex])
 
   return (
-    <aside className="flex h-full w-[288px] shrink-0 flex-col border-l border-[#eceef2] bg-[#fdfefb]">
-      <div className="flex items-center justify-between border-b border-[#eceef2] bg-white px-4 py-[11px]">
+    <aside className="flex h-full w-[288px] shrink-0 flex-col border-l border-[#ececea] bg-[#fdfefb]">
+      <div className="flex items-center justify-between border-b border-[#ececea] bg-white px-4 py-[11px]">
         <div className="flex items-center gap-2">
           <StickyNote className="h-4 w-4 text-[#d8b31a]" strokeWidth={2.2} />
           <h2 className="text-[13.5px] font-semibold tracking-[-0.01em]">
             Notes
           </h2>
-          <span className="rounded-full bg-[#f2f3f6] px-1.5 py-[1px] text-[10.5px] font-semibold text-[#6b7183]">
+          <span className="rounded-full bg-[#f3f3f1] px-1.5 py-[1px] text-[10.5px] font-semibold text-[#6b6a66]">
             {notes.length}
           </span>
         </div>
         <button
           type="button"
           onClick={() => addNote()}
-          className="flex items-center gap-1 rounded-lg bg-[#bef264] px-2 py-[5px] text-[11.5px] font-semibold text-[#3f4a14] shadow-[0_1px_2px_rgba(16,24,40,0.1)] transition hover:bg-[#b1ee4d] active:scale-[0.97]"
+          className="flex items-center gap-1 rounded-lg px-2.5 py-[5px] text-[11.5px] font-semibold transition bg-[#191919] text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:bg-[#37352f] active:scale-[0.97]"
         >
           <Plus className="h-3.5 w-3.5" strokeWidth={2.6} />
           New
         </button>
       </div>
 
-      <div className="border-b border-[#eceef2] bg-white px-4 py-2.5">
+      <div className="border-b border-[#ececea] bg-white px-4 py-2.5">
         <button
           type="button"
           onClick={() => addNote({ date: dateKey(selectedDate) })}
-          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#dfe2e8] py-[7px] text-[11.5px] font-medium text-[#6b7183] transition hover:border-[#c3e56a] hover:bg-[#f8fce9] hover:text-[#4b6410]"
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#e0dfdb] py-[7px] text-[11.5px] font-medium text-[#6b6a66] transition hover:border-[#c3e56a] hover:bg-[#f8fce9] hover:text-[#4b6410]"
         >
           <CalendarPlus className="h-3.5 w-3.5" />
           Pin note to {relativeDayLabel(selectedDate)}
           {pinnedForSelected > 0 && (
-            <span className="text-[#a5aab8]">· {pinnedForSelected}</span>
+            <span className="text-[#a3a29e]">· {pinnedForSelected}</span>
           )}
         </button>
       </div>
@@ -247,9 +247,9 @@ export function NotesPanel() {
         ))}
 
         {notes.length === 0 && (
-          <div className="rounded-xl border border-dashed border-[#dfe2e8] p-4 text-center">
+          <div className="rounded-xl border border-dashed border-[#e0dfdb] p-4 text-center">
             <StickyNote className="mx-auto mb-2 h-5 w-5 text-[#d8b31a]" />
-            <p className="text-[11.5px] leading-snug text-[#a5aab8]">
+            <p className="text-[11.5px] leading-snug text-[#a3a29e]">
               No notes yet. Add one to keep track of the little things.
             </p>
           </div>

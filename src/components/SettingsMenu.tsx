@@ -17,7 +17,7 @@ import { IconButton } from './ui'
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-[12px] text-[#5b6172]">{label}</span>
+      <span className="text-[12px] text-[#5f5e5b]">{label}</span>
       {children}
     </div>
   )
@@ -33,7 +33,7 @@ function Choice<T extends string | number>({
   onChange: (value: T) => void
 }) {
   return (
-    <div className="flex rounded-lg bg-[#f4f5f8] p-0.5">
+    <div className="flex rounded-lg bg-[#f5f5f3] p-0.5">
       {options.map((o) => (
         <button
           key={String(o.value)}
@@ -42,8 +42,8 @@ function Choice<T extends string | number>({
           className={cn(
             'rounded-[7px] px-2 py-1 text-[11px] font-medium transition',
             value === o.value
-              ? 'bg-white text-[#1f2330] shadow-[0_1px_2px_rgba(16,24,40,0.09)]'
-              : 'text-[#6b7183] hover:text-[#1f2330]',
+              ? 'bg-white text-[#191919] shadow-[0_1px_2px_rgba(16,24,40,0.09)]'
+              : 'text-[#6b6a66] hover:text-[#191919]',
           )}
         >
           {o.label}
@@ -78,9 +78,9 @@ export function SettingsMenu() {
       </IconButton>
 
       {open && (
-        <div className="animate-pop absolute right-0 z-50 mt-2 w-[268px] rounded-xl border border-[#e8eaef] bg-white p-3 shadow-[0_12px_32px_rgba(16,24,40,0.14)]">
+        <div className="animate-pop absolute right-0 z-50 mt-2 w-[268px] rounded-xl border border-[#e9e9e7] bg-white p-3 shadow-[0_12px_32px_rgba(16,24,40,0.14)]">
           <div className="mb-1 flex items-center gap-1.5 px-1 pb-1">
-            <SettingsIcon className="h-3.5 w-3.5 text-[#8b90a0]" />
+            <SettingsIcon className="h-3.5 w-3.5 text-[#8f8e8a]" />
             <h3 className="text-[12.5px] font-semibold">Preferences</h3>
           </div>
 
@@ -114,21 +114,21 @@ export function SettingsMenu() {
             />
           </Row>
 
-          <div className="my-2 h-px bg-[#f0f1f4]" />
+          <div className="my-2 h-px bg-[#f1f1ef]" />
 
           <button
             type="button"
             onClick={() => set('showWeekends', !settings.showWeekends)}
-            className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 hover:bg-[#f7f8fa]"
+            className="flex w-full items-center justify-between rounded-lg px-1 py-1.5 hover:bg-[#f7f7f5]"
           >
-            <span className="flex items-center gap-2 text-[12px] text-[#5b6172]">
-              <Sun className="h-3.5 w-3.5 text-[#8b90a0]" />
+            <span className="flex items-center gap-2 text-[12px] text-[#5f5e5b]">
+              <Sun className="h-3.5 w-3.5 text-[#8f8e8a]" />
               Show weekends
             </span>
             <span
               className={cn(
                 'relative block h-[18px] w-[32px] rounded-full transition',
-                settings.showWeekends ? 'bg-[#a3d922]' : 'bg-[#dfe2e8]',
+                settings.showWeekends ? 'bg-[#191919]' : 'bg-[#e0dfdb]',
               )}
             >
               <span
@@ -140,7 +140,7 @@ export function SettingsMenu() {
             </span>
           </button>
 
-          <div className="my-2 h-px bg-[#f0f1f4]" />
+          <div className="my-2 h-px bg-[#f1f1ef]" />
 
           <div className="flex items-start gap-2 rounded-lg bg-[#fbfce8] p-2.5">
             <CalendarDays className="mt-[1px] h-3.5 w-3.5 shrink-0 text-[#a3d922]" />
@@ -161,7 +161,7 @@ export function SettingsMenu() {
                 window.location.reload()
               }
             }}
-            className="mt-2 flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] text-[#8b90a0] transition hover:bg-[#fdf1f1] hover:text-[#c0392b]"
+            className="mt-2 flex w-full items-center gap-2 rounded-lg px-1 py-1.5 text-[12px] text-[#8f8e8a] transition hover:bg-[#fdf1f1] hover:text-[#c0392b]"
           >
             <RotateCcw className="h-3.5 w-3.5" />
             Reset sample data

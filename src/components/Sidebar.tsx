@@ -50,14 +50,14 @@ function NavItem({
       className={cn(
         'group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-[7px] text-left text-[12.5px] transition-all duration-150',
         active
-          ? 'bg-white font-medium text-[#1f2330] shadow-[0_1px_2px_rgba(16,24,40,0.07)] ring-1 ring-black/[0.04]'
-          : 'font-medium text-[#6b7183] hover:bg-white/70 hover:text-[#1f2330]',
+          ? 'bg-white font-medium text-[#191919] shadow-[0_1px_2px_rgba(16,24,40,0.07)] ring-1 ring-black/[0.04]'
+          : 'font-medium text-[#6b6a66] hover:bg-white/70 hover:text-[#191919]',
       )}
     >
       <span
         className={cn(
           'shrink-0 transition-colors',
-          active ? 'text-[#3f4a14]' : 'text-[#a5aab8] group-hover:text-[#6b7183]',
+          active ? 'text-[#191919]' : 'text-[#a3a29e] group-hover:text-[#6b6a66]',
         )}
       >
         {icon}
@@ -84,10 +84,10 @@ function EventRow({ event }: { event: CalendarEvent }) {
         style={{ background: color.dot }}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[12.5px] font-medium leading-snug text-[#1f2330]">
+        <span className="block truncate text-[12.5px] font-medium leading-snug text-[#191919]">
           {event.title || 'Untitled'}
         </span>
-        <span className="block text-[11px] leading-snug text-[#8b90a0]">
+        <span className="block text-[11px] leading-snug text-[#8f8e8a]">
           {formatClock(start, settings.hour12)} –{' '}
           {formatClock(end, settings.hour12)}
         </span>
@@ -111,7 +111,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
           onKeyDown={(e) => {
             if (e.key === 'Enter') setEditing(false)
           }}
-          className="w-full rounded-lg border border-[#eceef2] bg-white px-2 py-1 text-[12px]"
+          className="w-full rounded-lg border border-[#ececea] bg-white px-2 py-1 text-[12px]"
         />
         <div className="mt-2 flex items-center gap-1">
           {COLOR_IDS.map((id) => (
@@ -132,7 +132,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
               type="button"
               aria-label="Delete calendar"
               onClick={() => deleteCalendar(calendar.id)}
-              className="grid h-5 w-5 place-items-center rounded text-[#c3c7d1] transition hover:bg-[#fdf1f1] hover:text-[#c0392b]"
+              className="grid h-5 w-5 place-items-center rounded text-[#c4c3be] transition hover:bg-[#fdf1f1] hover:text-[#c0392b]"
             >
               <Trash2 className="h-3 w-3" />
             </button>
@@ -140,7 +140,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
               type="button"
               aria-label="Done"
               onClick={() => setEditing(false)}
-              className="grid h-5 w-5 place-items-center rounded text-[#6b7183] transition hover:bg-[#f7f8fa]"
+              className="grid h-5 w-5 place-items-center rounded text-[#6b6a66] transition hover:bg-[#f7f7f5]"
             >
               <Check className="h-3.5 w-3.5" />
             </button>
@@ -169,7 +169,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
       <span
         className={cn(
           'min-w-0 flex-1 truncate text-[12.5px]',
-          calendar.visible ? 'text-[#1f2330]' : 'text-[#a5aab8] line-through',
+          calendar.visible ? 'text-[#191919]' : 'text-[#a3a29e] line-through',
         )}
       >
         {calendar.name}
@@ -178,7 +178,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
         type="button"
         aria-label="Edit calendar"
         onClick={() => setEditing(true)}
-        className="grid h-5 w-5 place-items-center rounded text-[#a5aab8] opacity-0 transition hover:bg-white group-hover:opacity-100 focus:opacity-100"
+        className="grid h-5 w-5 place-items-center rounded text-[#a3a29e] opacity-0 transition hover:bg-white group-hover:opacity-100 focus:opacity-100"
       >
         <Pencil className="h-3 w-3" />
       </button>
@@ -228,13 +228,13 @@ export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
   const rangeLabel = `${formatClock(new Date(blockStart), settings.hour12, false)} – ${formatClock(new Date(blockEnd), settings.hour12, false)}`
 
   return (
-    <aside className="flex h-full w-[252px] shrink-0 flex-col border-r border-[#eceef2] bg-[#fafbfc]">
+    <aside className="flex h-full w-[252px] shrink-0 flex-col border-r border-[#ececea] bg-[#fbfbfa]">
       <MiniCalendar />
 
       <div className="scroll-area flex-1 overflow-y-auto px-3 pb-2">
         {/* Primary navigation — every item maps to an existing action. */}
         <nav className="animate-rise pt-3">
-          <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a5aab8]">
+          <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a3a29e]">
             Menu
           </p>
           <div className="space-y-0.5">
@@ -257,7 +257,7 @@ export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
           </div>
         </nav>
 
-        <div className="my-3 h-px bg-[#eceef2]" />
+        <div className="my-3 h-px bg-[#ececea]" />
 
         <Section
           title="My Calendars"
@@ -272,7 +272,7 @@ export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
               <CalendarRow key={c.id} calendar={c} />
             ))}
             {calendars.length === 0 && (
-              <p className="px-2 py-1 text-[11.5px] text-[#a5aab8]">
+              <p className="px-2 py-1 text-[11.5px] text-[#a3a29e]">
                 No calendars yet — add one above.
               </p>
             )}
@@ -281,10 +281,10 @@ export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
 
         <Section title={rangeLabel}>
           <div className="mb-1.5 flex items-baseline justify-between px-2">
-            <span className="text-[11px] font-medium text-[#8b90a0]">
+            <span className="text-[11px] font-medium text-[#8f8e8a]">
               {relativeDayLabel(effectiveDay, now)}
             </span>
-            <span className="text-[10.5px] tabular-nums text-[#a5aab8]">
+            <span className="text-[10.5px] tabular-nums text-[#a3a29e]">
               {blockEvents.length}{' '}
               {blockEvents.length === 1 ? 'event' : 'events'}
             </span>
@@ -294,7 +294,7 @@ export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
               <EventRow key={e.id} event={e} />
             ))}
             {blockEvents.length === 0 && (
-              <p className="rounded-lg bg-white/80 px-2.5 py-2 text-[11.5px] leading-snug text-[#a5aab8] ring-1 ring-black/[0.03]">
+              <p className="rounded-lg bg-white/80 px-2.5 py-2 text-[11.5px] leading-snug text-[#a3a29e] ring-1 ring-black/[0.03]">
                 No events in this block.
               </p>
             )}
@@ -302,11 +302,11 @@ export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
         </Section>
 
         <Section title="Upcoming">
-          <p className="px-2 py-1 text-[11.5px] text-[#a5aab8]">Coming Soon</p>
+          <p className="px-2 py-1 text-[11.5px] text-[#a3a29e]">Coming Soon</p>
         </Section>
       </div>
 
-      <div className="shrink-0 border-t border-[#eceef2] px-3 py-3">
+      <div className="shrink-0 border-t border-[#ececea] px-3 py-3">
         <ProfileBox />
       </div>
     </aside>

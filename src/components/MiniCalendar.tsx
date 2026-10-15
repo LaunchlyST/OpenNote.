@@ -12,7 +12,7 @@ import {
 import { cn } from '../lib/id'
 
 const ARROW =
-  'grid h-7 w-7 place-items-center rounded-lg text-[#8b90a0] transition hover:bg-[#eef0f4] hover:text-[#1f2330] active:scale-95'
+  'grid h-7 w-7 place-items-center rounded-lg text-[#8f8e8a] transition hover:bg-[#eef0f4] hover:text-[#191919] active:scale-95'
 
 export function MiniCalendar() {
   const { selectedDate, selectDate, events, calendars, settings } = useApp()
@@ -57,11 +57,11 @@ export function MiniCalendar() {
   const today = new Date()
 
   return (
-    <div className="border-b border-[#eceef2] px-3 pb-4 pt-4">
+    <div className="border-b border-[#ececea] px-3 pb-4 pt-4">
       <div className="mb-3 flex items-center justify-between px-0.5">
-        <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#1f2330]">
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#191919]">
           {monthLong(cursor)}{' '}
-          <span className="font-normal text-[#8b90a0]">{cursor.getFullYear()}</span>
+          <span className="font-normal text-[#8f8e8a]">{cursor.getFullYear()}</span>
         </h2>
         <div className="flex items-center gap-0.5">
           <button
@@ -95,7 +95,7 @@ export function MiniCalendar() {
         {cells.slice(0, 7).map((d, i) => (
           <span
             key={i}
-            className="grid h-6 place-items-center text-[10px] font-semibold uppercase tracking-[0.04em] text-[#a5aab8]"
+            className="grid h-6 place-items-center text-[10px] font-semibold uppercase tracking-[0.04em] text-[#a3a29e]"
           >
             {weekdayShort(d).charAt(0)}
           </span>
@@ -121,11 +121,11 @@ export function MiniCalendar() {
                 className={cn(
                   'relative grid h-7 w-7 place-items-center rounded-full text-[12px] tabular-nums transition-all duration-150',
                   selected
-                    ? 'bg-[#bef264] font-semibold text-[#33400f] shadow-[0_1px_3px_rgba(16,24,40,0.14)] ring-1 ring-inset ring-[#a3d922]/60'
+                    ? 'bg-[#191919] font-semibold text-white shadow-[0_2px_6px_-1px_rgba(0,0,0,0.35)]'
                     : isToday
                       ? 'font-semibold text-[#5d7a0f] ring-1 ring-[#cbe98a] hover:bg-[#f2f8e0]'
                       : inMonth
-                        ? 'font-medium text-[#3d4354] group-hover:bg-[#eef0f4] group-hover:text-[#1f2330]'
+                        ? 'font-medium text-[#37352f] group-hover:bg-[#eef0f4] group-hover:text-[#191919]'
                         : 'font-medium text-[#ccd0d9] group-hover:bg-[#f5f6f8]',
                 )}
               >
@@ -134,7 +134,7 @@ export function MiniCalendar() {
                   <span
                     className={cn(
                       'absolute bottom-[3px] h-[3px] w-[3px] rounded-full',
-                      inMonth ? 'bg-[#a3d922]' : 'bg-[#d4d8e0]',
+                      inMonth ? 'bg-[#a3d922]' : 'bg-[#dcdbd7]',
                     )}
                   />
                 )}

@@ -104,13 +104,13 @@ export function MonthView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       <div
-        className="grid h-9 shrink-0 border-b border-[#eceef2]"
+        className="grid h-9 shrink-0 border-b border-[#ececea]"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
         {headerDays.map((d, i) => (
           <div
             key={i}
-            className="grid place-items-center border-l border-[#eceef2] text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8b90a0] first:border-l-0"
+            className="grid place-items-center border-l border-[#ececea] text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8f8e8a] first:border-l-0"
           >
             {weekdayShort(d)}
           </div>
@@ -136,7 +136,7 @@ export function MonthView() {
                 key={d.toISOString()}
                 onClick={() => openCreate(fromMinutes(startOfDay(d), 9 * 60), 60)}
                 className={cn(
-                  'group/cell flex cursor-pointer flex-col gap-1 border-b border-l border-[#eceef2] p-1.5 transition first:border-l-0',
+                  'group/cell flex cursor-pointer flex-col gap-1 border-b border-l border-[#ececea] p-1.5 transition first:border-l-0',
                   !inMonth && 'bg-[#fbfbfc]',
                 )}
               >
@@ -151,10 +151,10 @@ export function MonthView() {
                     className={cn(
                       'grid h-6 min-w-6 place-items-center rounded-[9px] px-1.5 text-[12px] font-semibold tabular-nums transition',
                       isToday
-                        ? 'bg-[#bef264] text-[#33400f] shadow-[0_1px_2px_rgba(16,24,40,0.14)] ring-1 ring-inset ring-[#a3d922]/50'
+                        ? 'bg-[#191919] font-semibold text-white shadow-[0_2px_6px_-1px_rgba(0,0,0,0.35)]'
                         : inMonth
-                          ? 'text-[#1f2330] hover:bg-[#f2f3f6]'
-                          : 'text-[#c3c7d1] hover:bg-[#f7f8fa]',
+                          ? 'text-[#191919] hover:bg-[#f3f3f1]'
+                          : 'text-[#c4c3be] hover:bg-[#f7f7f5]',
                     )}
                   >
                     {d.getDate()}
@@ -163,7 +163,7 @@ export function MonthView() {
                     {noteCount > 0 && (
                       <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />
                     )}
-                    <span className="grid h-5 w-5 place-items-center rounded-full text-[#b6bbc7] opacity-0 transition group-hover/cell:opacity-100">
+                    <span className="grid h-5 w-5 place-items-center rounded-full text-[#b4b3ae] opacity-0 transition group-hover/cell:opacity-100">
                       <span className="text-[14px] leading-none">+</span>
                     </span>
                   </div>
@@ -195,7 +195,7 @@ export function MonthView() {
                     )
                   })}
                   {dayEvents.length > 3 && (
-                    <span className="pl-1.5 text-[10px] font-medium text-[#8b90a0]">
+                    <span className="pl-1.5 text-[10px] font-medium text-[#8f8e8a]">
                       +{dayEvents.length - 3} more
                     </span>
                   )}

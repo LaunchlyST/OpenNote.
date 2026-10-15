@@ -114,7 +114,7 @@ function Shell() {
   if (screen === 'account') return <AccountSettings />
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[#f4f5f7]">
+    <div className="flex h-full w-full flex-col overflow-hidden bg-[#f7f7f5]">
       <TopBar
         onToggleLeft={() => setLeftOpen((o) => !o)}
         onToggleRight={() => setRightOpen((o) => !o)}
@@ -122,16 +122,16 @@ function Shell() {
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         <div className="hidden lg:flex">
-          <div className="overflow-hidden rounded-2xl border border-[#e9eaee] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+          <div className="overflow-hidden rounded-2xl border border-[#e9e9e7] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
             <Sidebar onToggleNotes={toggleNotes} />
           </div>
         </div>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#e9eaee] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#e9e9e7] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
           <MainArea />
         </main>
         {notesOpen && (
           <div className="hidden xl:flex">
-            <div className="overflow-hidden rounded-2xl border border-[#e9eaee] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+            <div className="overflow-hidden rounded-2xl border border-[#e9e9e7] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
               <NotesPanel />
             </div>
           </div>
@@ -198,8 +198,8 @@ function Gate() {
 
 function SessionCheck() {
   return (
-    <div className="grid h-full w-full place-items-center bg-[#f4f5f7]">
-      <span className="h-1 w-24 overflow-hidden rounded-full bg-[#e4e6ec]" aria-hidden="true">
+    <div className="grid h-full w-full place-items-center bg-[#f7f7f5]">
+      <span className="h-1 w-24 overflow-hidden rounded-full bg-[#e3e3e0]" aria-hidden="true">
         <span className="block h-full w-2/5 animate-pulse rounded-full bg-[#bef264]" />
       </span>
       <span className="sr-only" role="status">
