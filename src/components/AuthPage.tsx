@@ -370,11 +370,17 @@ export function AuthPage() {
                       {primaryLabel}
                     </button>
 
-                    {config.google && (mode === 'signin' || mode === 'signup') && (
+                    {(mode === 'signin' || mode === 'signup') && (
                       <button
                         type="button"
                         onClick={() => {
                           setError(null)
+                          // The button is always offered; it only works once the
+                          // server has Google credentials (GOOGLE_CLIENT_ID/SECRET).
+                          if (!config.google) {
+                            setError('Google sign-in isn’t available yet. Please use your email for now.')
+                            return
+                          }
                           signInWithGoogle().catch((err: unknown) =>
                             setError(err instanceof Error ? err.message : 'Google sign-in failed.'),
                           )
