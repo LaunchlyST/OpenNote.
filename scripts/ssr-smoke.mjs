@@ -131,12 +131,22 @@ globalThis.PopStateEvent = class {
 }
 
 /** Renders the calendar app exactly as `Root` mounts it. */
-async function renderApp(props) {
+const TEST_USER = {
+  id: 'usr_test',
+  fullName: 'Test User',
+  email: 'test@example.com',
+  createdAt: new Date().toISOString(),
+  emailVerified: true,
+}
+
+/** Renders the calendar app exactly as `Root` mounts it, with a fixed session. */
+async function renderApp(props, user = TEST_USER) {
   const appMod = await vite.ssrLoadModule('/src/App.tsx')
+  const auth = await vite.ssrLoadModule('/src/auth.tsx')
   return renderToString(
     React.createElement(
-      authMod.AuthProvider,
-      null,
+      auth.StaticAuthProvider,
+      { user },
       React.createElement(appMod.default, props),
     ),
   )
@@ -162,14 +172,14 @@ const check = (label, ok, detail = '') => {
 }
 
 /** Renders the landing page the way `Root` does — inside both providers. */
-async function renderLanding() {
+async function renderLanding(user = null) {
   const mod = await vite.ssrLoadModule('/src/landing/LandingPage.tsx')
   const auth = await vite.ssrLoadModule('/src/auth.tsx')
   const routerMod = await vite.ssrLoadModule('/src/router.tsx')
   return renderToString(
     React.createElement(
-      auth.AuthProvider,
-      null,
+      auth.StaticAuthProvider,
+      { user },
       React.createElement(
         routerMod.RouterProvider,
         null,
@@ -271,24 +281,7 @@ try {
   /* Authenticated state — the nav must reflect a real session.      */
   /* -------------------------------------------------------------- */
   console.log('\n  Authenticated state:')
-  // `useLocalStorage` JSON-encodes on write, so values must be stored as JSON.
-  globalThis.localStorage.setItem(
-    'opennote.accounts.v1',
-    JSON.stringify([
-      {
-        id: 'usr_test',
-        fullName: 'Test User',
-        email: 'test@example.com',
-        createdAt: new Date().toISOString(),
-        passwordHash: 'x',
-        salt: 'x',
-        iterations: 1,
-      },
-    ]),
-  )
-  globalThis.localStorage.setItem('opennote.session.v1', JSON.stringify('usr_test'))
-
-  const authedHtml = await renderLanding()
+  const authedHtml = await renderLanding(TEST_USER)
   // Scope to the header: the pricing section legitimately keeps its own
   // “Get Started Free” button for the Free plan.
   const authedHeader = authedHtml.slice(0, authedHtml.indexOf('<main'))
@@ -297,8 +290,6 @@ try {
   check('nav still shows Sign In when signed in', authedHeader.includes('Sign In'))
   check('hero secondary CTA becomes Switch account', authedHtml.includes('Switch account'))
 
-  globalThis.localStorage.removeItem('opennote.accounts.v1')
-  globalThis.localStorage.removeItem('opennote.session.v1')
 
   /* -------------------------------------------------------------- */
   /* The existing calendar app must still render.                   */
@@ -315,6 +306,13 @@ try {
   check('calendar shows the sidebar calendars', appHtml.includes('My Calendars'))
 
   /* Route-provided screens */
+  const guestHtml = await renderApp(undefined, null)
+  check('dashboard is not rendered without a session', !guestHtml.includes('Full Week') && !guestHtml.includes('Team stand-up'))
+  const forgotHtml = await renderApp({ screen: 'forgot' }, null)
+  check('/app/forgot-password renders the reset request form', forgotHtml.includes('Reset your password'))
+  const resetHtml = await renderApp({ screen: 'reset' }, null)
+  check('/app/reset-password renders the new password form', resetHtml.includes('Choose a new password'))
+
   const signupHtml = await renderApp({ screen: 'signup' })
   check('/app/signup renders the sign-up form', signupHtml.includes('Create your account'))
   check('sign-up form asks for a full name', signupHtml.includes('Full name'))

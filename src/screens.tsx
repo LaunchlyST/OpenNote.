@@ -8,7 +8,7 @@ import {
 import type { ReactNode } from 'react'
 
 /** Top-level views the app can show instead of the calendar. */
-export type Screen = 'app' | 'signin' | 'signup' | 'account'
+export type Screen = 'app' | 'signin' | 'signup' | 'account' | 'forgot' | 'reset'
 
 interface ScreenContextValue {
   screen: Screen

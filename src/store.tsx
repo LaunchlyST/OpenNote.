@@ -18,6 +18,7 @@ import {
 import { addDays, addMonths, dateKey, startOfDay, startOfWeek } from './lib/date'
 import { uid } from './lib/id'
 import { useLocalStorage } from './hooks'
+import { useWorkspaceSync } from './sync'
 
 export interface ModalState {
   mode: 'create' | 'edit'
@@ -102,20 +103,41 @@ function syncStoredEvents() {
 
 syncStoredEvents()
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({
+  children,
+  userId,
+}: {
+  children: ReactNode
+  /** Signed-in user. Their workspace is cached under their own keys and synced to the server. */
+  userId?: string
+}) {
+  // Each account gets its own local cache, so two people sharing a browser
+  // never see each other's calendar.
+  const key = (base: string) => (userId ? `${base}:${userId}` : base)
   const [events, setEvents] = useLocalStorage<CalendarEvent[]>(
-    STORAGE.events,
+    key(STORAGE.events),
     seedEvents,
   )
   const [calendars, setCalendars] = useLocalStorage<Calendar[]>(
-    STORAGE.calendars,
+    key(STORAGE.calendars),
     seedCalendars,
   )
-  const [notes, setNotes] = useLocalStorage<Note[]>(STORAGE.notes, seedNotes)
+  const [notes, setNotes] = useLocalStorage<Note[]>(key(STORAGE.notes), seedNotes)
   const [settings, setSettings] = useLocalStorage<Settings>(
-    STORAGE.settings,
+    key(STORAGE.settings),
     DEFAULT_SETTINGS,
   )
+
+  const workspace = useMemo(
+    () => ({ events, calendars, notes, settings }),
+    [events, calendars, notes, settings],
+  )
+  useWorkspaceSync(userId, workspace, (saved) => {
+    setEvents(saved.events)
+    setCalendars(saved.calendars)
+    setNotes(saved.notes)
+    setSettings({ ...DEFAULT_SETTINGS, ...saved.settings })
+  })
 
   const [view, setViewState] = useState<ViewMode>('week')
   const [focusDay, setFocusDay] = useState(false)

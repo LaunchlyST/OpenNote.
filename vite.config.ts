@@ -8,6 +8,11 @@ import { defineConfig } from 'vite'
 // default `localhost` makes the proxy fail with "proxy upstream error".
 const PORT = Number(process.env.PORT ?? 5173)
 
+// The Better Auth + workspace API runs as a separate Node server (server/).
+// Proxying keeps it same-origin, so the httpOnly session cookie is first-party.
+const API_TARGET = `http://localhost:${process.env.API_PORT ?? 3001}`
+const proxy = { '/api': { target: API_TARGET, changeOrigin: false, xfwd: true } }
+
 // Inside a Daytona sandbox the proxy terminates TLS, so the browser talks
 // to the server over wss:// on 443. When not sandboxed (plain local dev) we
 // leave Vite's defaults alone so HMR keeps working over ws://localhost.
@@ -38,6 +43,7 @@ export default defineConfig({
       interval: 300,
     },
     ...(isDaytona ? { hmr: { clientPort: 443, protocol: 'wss' } } : {}),
+    proxy,
   },
   // `vite preview` serves the dist/ build; keep it reachable too.
   preview: {
@@ -45,5 +51,6 @@ export default defineConfig({
     port: PORT,
     strictPort: true,
     allowedHosts: true,
+    proxy,
   },
 })

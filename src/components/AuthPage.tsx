@@ -5,9 +5,11 @@ import {
   Eye,
   EyeOff,
   Loader2,
+  KeyRound,
   LogIn,
   Lock,
   Mail,
+  MailCheck,
   ShieldCheck,
   UserRound,
   UserRoundPlus,
@@ -112,44 +114,121 @@ function RevealToggle({ shown, onToggle }: { shown: boolean; onToggle: () => voi
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
+type Mode = 'signin' | 'signup' | 'forgot' | 'reset'
+
+const HEADINGS: Record<Mode, { title: string; body: string }> = {
+  signup: {
+    title: 'Create your account',
+    body: 'Your calendar, notes and tasks together in one calm place. Free to start.',
+  },
+  signin: { title: 'Welcome back', body: 'Sign in to OpenNote to pick up where you left off.' },
+  forgot: {
+    title: 'Reset your password',
+    body: 'Enter your account email and we will send you a link to choose a new password.',
+  },
+  reset: { title: 'Choose a new password', body: 'Pick a new password for your OpenNote account.' },
+}
+
+function readResetToken(): { token: string | null; invalid: boolean } {
+  if (typeof window === 'undefined') return { token: null, invalid: false }
+  const params = new URLSearchParams(window.location.search)
+  return { token: params.get('token'), invalid: params.get('error') === 'INVALID_TOKEN' }
+}
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z" />
+      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24Z" />
+      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
+      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9Z" />
+    </svg>
+  )
+}
+
 export function AuthPage() {
   const { screen, goTo, close } = useScreen()
-  const { signIn, signUp } = useAuth()
-  const isSignup = screen === 'signup'
+  const { user, config, signIn, signUp, signInWithGoogle, requestPasswordReset, resetPassword, resendVerification } =
+    useAuth()
+  const mode: Mode = screen === 'signup' || screen === 'forgot' || screen === 'reset' ? screen : 'signin'
+  const isSignup = mode === 'signup'
+  const [reset] = useState(readResetToken)
 
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(
+    mode === 'reset' && (reset.invalid || !reset.token)
+      ? 'This reset link is invalid or has expired. Please request a new one.'
+      : null,
+  )
+  /** Success message that replaces the form, e.g. "check your email". */
+  const [notice, setNotice] = useState<{ title: string; body: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+
+  const switchTo = (next: Mode) => {
+    setError(null)
+    setNotice(null)
+    setPassword('')
+    setConfirm('')
+    goTo(next)
+  }
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
     if (busy) return
     setError(null)
 
-    if (isSignup && password !== confirm) {
+    if ((mode === 'signup' || mode === 'reset') && password !== confirm) {
       setError('Passwords do not match.')
       return
     }
 
     setBusy(true)
     try {
-      if (isSignup) {
-        await signUp({ fullName, email, password })
-      } else {
+      if (mode === 'signup') {
+        const { needsVerification } = await signUp({ fullName, email, password })
+        if (needsVerification) {
+          setNotice({
+            title: 'Check your email',
+            body: `We sent a verification link to ${email.trim()}. Open it to finish creating your account.`,
+          })
+          return
+        }
+        close()
+      } else if (mode === 'signin') {
         await signIn(email, password)
+        close()
+      } else if (mode === 'forgot') {
+        await requestPasswordReset(email)
+        setNotice({
+          title: 'Check your email',
+          body: `If an account exists for ${email.trim()}, you will get a link to reset your password. It expires in one hour.`,
+        })
+      } else {
+        if (!reset.token) throw new Error('This reset link is invalid or has expired. Please request a new one.')
+        await resetPassword(reset.token, password)
+        // Drop the used token from the address bar.
+        window.history.replaceState(null, '', '/app/signin')
+        setPassword('')
+        setConfirm('')
+        goTo('signin')
+        setNotice({ title: 'Password updated', body: 'You can now sign in with your new password.' })
       }
-      close()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
     } finally {
       setBusy(false)
     }
   }
+
+  const heading = notice ?? HEADINGS[mode]
+  const HeaderIcon = mode === 'signup' ? UserRoundPlus : mode === 'signin' ? LogIn : KeyRound
+  const showForm = !notice || (mode === 'signin' && notice.title === 'Password updated')
+  const primaryLabel = { signup: 'Create account', signin: 'Sign in', forgot: 'Send reset link', reset: 'Update password' }[mode]
 
   return (
     <div className="scroll-area relative min-h-full w-full overflow-x-hidden">
@@ -162,14 +241,24 @@ export function AuthPage() {
             <AppIcon className="h-7 w-7 text-[28px]" />
             <span className="text-[15.5px] font-semibold tracking-[-0.02em] text-[#141a26]">OpenNote</span>
           </span>
-          <button
-            type="button"
-            onClick={close}
-            className="inline-flex items-center gap-1.5 rounded-full bg-white/55 px-3.5 py-1.5 text-[12.5px] font-medium text-[#3b4558] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-white/70 backdrop-blur-md transition hover:bg-white/80"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to calendar
-          </button>
+          {user ? (
+            <button
+              type="button"
+              onClick={close}
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/55 px-3.5 py-1.5 text-[12.5px] font-medium text-[#3b4558] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-white/70 backdrop-blur-md transition hover:bg-white/80"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to calendar
+            </button>
+          ) : (
+            <a
+              href="/"
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/55 px-3.5 py-1.5 text-[12.5px] font-medium text-[#3b4558] shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-white/70 backdrop-blur-md transition hover:bg-white/80"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to home
+            </a>
+          )}
         </div>
 
         {/* Card */}
@@ -183,16 +272,10 @@ export function AuthPage() {
                 {/* Header */}
                 <div className="flex flex-col items-center text-center">
                   <span className="grid h-14 w-14 place-items-center rounded-[16px] bg-white text-[#1b2232] shadow-[0_10px_24px_-10px_rgba(30,80,130,0.45),inset_0_-1px_0_rgba(16,24,40,0.06)] ring-1 ring-black/[0.04]">
-                    {isSignup ? <UserRoundPlus className="h-6 w-6" strokeWidth={1.8} /> : <LogIn className="h-6 w-6" strokeWidth={1.8} />}
+                    {notice ? <MailCheck className="h-6 w-6" strokeWidth={1.8} /> : <HeaderIcon className="h-6 w-6" strokeWidth={1.8} />}
                   </span>
-                  <h1 className="mt-5 text-[24px] font-semibold tracking-[-0.03em] text-[#141a26]">
-                    {isSignup ? 'Create your account' : 'Welcome back'}
-                  </h1>
-                  <p className="mt-1.5 max-w-[32ch] text-[14px] leading-relaxed text-[#5e687b]">
-                    {isSignup
-                      ? 'Your calendar, notes and tasks together in one calm place. Free to start.'
-                      : 'Sign in to OpenNote to pick up where you left off.'}
-                  </p>
+                  <h1 className="mt-5 text-[24px] font-semibold tracking-[-0.03em] text-[#141a26]">{heading.title}</h1>
+                  <p className="mt-1.5 max-w-[34ch] text-[14px] leading-relaxed text-[#5e687b]">{heading.body}</p>
                 </div>
 
                 {error && (
@@ -201,96 +284,144 @@ export function AuthPage() {
                   </div>
                 )}
 
-                <form onSubmit={submit} className="mt-6 space-y-4">
-                  {isSignup && (
-                    <Field
-                      label="Full name"
-                      value={fullName}
-                      onChange={setFullName}
-                      placeholder="Ada Lovelace"
-                      autoComplete="name"
-                      autoFocus
-                      icon={<UserRound className="h-4 w-4" />}
-                    />
-                  )}
-
-                  <Field
-                    label="Email address"
-                    type="email"
-                    value={email}
-                    onChange={setEmail}
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    autoFocus={!isSignup}
-                    icon={<Mail className="h-4 w-4" />}
-                  />
-
-                  <Field
-                    label="Password"
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={setPassword}
-                    placeholder={isSignup ? 'At least 8 characters' : 'Your password'}
-                    autoComplete={isSignup ? 'new-password' : 'current-password'}
-                    minLength={isSignup ? 8 : undefined}
-                    icon={<Lock className="h-4 w-4" />}
-                    trailing={<RevealToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />}
-                  />
-
-                  {isSignup && (
-                    <Field
-                      label="Confirm password"
-                      type={showConfirm ? 'text' : 'password'}
-                      value={confirm}
-                      onChange={setConfirm}
-                      placeholder="Re-enter your password"
-                      autoComplete="new-password"
-                      icon={<Lock className="h-4 w-4" />}
-                      trailing={<RevealToggle shown={showConfirm} onToggle={() => setShowConfirm((s) => !s)} />}
-                    />
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={busy}
-                    className={cn(
-                      'group relative mt-2 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-[12px] text-[14.5px] font-semibold text-white',
-                      'bg-[linear-gradient(180deg,#2b3242_0%,#141a26_100%)] shadow-[0_12px_24px_-10px_rgba(20,26,38,0.65),inset_0_1px_0_rgba(255,255,255,0.14)]',
-                      'transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-[0_16px_30px_-10px_rgba(20,26,38,0.7),inset_0_1px_0_rgba(255,255,255,0.18)] active:translate-y-0 disabled:opacity-60',
+                {showForm && (
+                  <form onSubmit={submit} className="mt-6 space-y-4">
+                    {isSignup && (
+                      <Field
+                        label="Full name"
+                        value={fullName}
+                        onChange={setFullName}
+                        placeholder="Ada Lovelace"
+                        autoComplete="name"
+                        autoFocus
+                        icon={<UserRound className="h-4 w-4" />}
+                      />
                     )}
+
+                    {mode !== 'reset' && (
+                      <Field
+                        label="Email address"
+                        type="email"
+                        value={email}
+                        onChange={setEmail}
+                        placeholder="you@example.com"
+                        autoComplete="email"
+                        autoFocus={!isSignup}
+                        icon={<Mail className="h-4 w-4" />}
+                      />
+                    )}
+
+                    {mode !== 'forgot' && (
+                      <div>
+                        <Field
+                          label={mode === 'reset' ? 'New password' : 'Password'}
+                          type={showPassword ? 'text' : 'password'}
+                          value={password}
+                          onChange={setPassword}
+                          placeholder={mode === 'signin' ? 'Your password' : 'At least 8 characters'}
+                          autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                          minLength={mode === 'signin' ? undefined : 8}
+                          autoFocus={mode === 'reset'}
+                          icon={<Lock className="h-4 w-4" />}
+                          trailing={<RevealToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />}
+                        />
+                        {mode === 'signin' && (
+                          <div className="mt-2 flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => switchTo('forgot')}
+                              className="text-[12.5px] font-medium text-[#2f6fae] transition hover:text-[#1d4f82] hover:underline"
+                            >
+                              Forgot password?
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {(isSignup || mode === 'reset') && (
+                      <Field
+                        label="Confirm password"
+                        type={showConfirm ? 'text' : 'password'}
+                        value={confirm}
+                        onChange={setConfirm}
+                        placeholder="Re-enter your password"
+                        autoComplete="new-password"
+                        icon={<Lock className="h-4 w-4" />}
+                        trailing={<RevealToggle shown={showConfirm} onToggle={() => setShowConfirm((s) => !s)} />}
+                      />
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={busy || (mode === 'reset' && !reset.token)}
+                      className={cn(
+                        'group relative mt-2 flex h-12 w-full items-center justify-center gap-2 overflow-hidden rounded-[12px] text-[14.5px] font-semibold text-white',
+                        'bg-[linear-gradient(180deg,#2b3242_0%,#141a26_100%)] shadow-[0_12px_24px_-10px_rgba(20,26,38,0.65),inset_0_1px_0_rgba(255,255,255,0.14)]',
+                        'transition-[transform,box-shadow] duration-200 hover:-translate-y-px hover:shadow-[0_16px_30px_-10px_rgba(20,26,38,0.7),inset_0_1px_0_rgba(255,255,255,0.18)] active:translate-y-0 disabled:opacity-60',
+                      )}
+                    >
+                      {/* moving gloss */}
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-y-0 -left-1/3 w-1/3 -skew-x-12 bg-white/15 transition-transform duration-700 ease-out group-hover:translate-x-[420%]"
+                      />
+                      {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+                      {primaryLabel}
+                    </button>
+
+                    {config.google && (mode === 'signin' || mode === 'signup') && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError(null)
+                          signInWithGoogle().catch((err: unknown) =>
+                            setError(err instanceof Error ? err.message : 'Google sign-in failed.'),
+                          )
+                        }}
+                        className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[12px] border border-[#dfe7f0] bg-white/80 text-[14px] font-semibold text-[#1b2232] shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-[#c6d6e6] hover:bg-white"
+                      >
+                        <GoogleIcon />
+                        Continue with Google
+                      </button>
+                    )}
+                  </form>
+                )}
+
+                {notice && notice.title === 'Check your email' && mode === 'signup' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setError(null)
+                      resendVerification(email).catch((err: unknown) =>
+                        setError(err instanceof Error ? err.message : 'Could not resend the email.'),
+                      )
+                    }}
+                    className="mt-6 flex h-11 w-full items-center justify-center rounded-[12px] border border-[#dfe7f0] bg-white/80 text-[14px] font-semibold text-[#1b2232] transition hover:bg-white"
                   >
-                    {/* moving gloss */}
-                    <span
-                      aria-hidden="true"
-                      className="absolute inset-y-0 -left-1/3 w-1/3 -skew-x-12 bg-white/15 transition-transform duration-700 ease-out group-hover:translate-x-[420%]"
-                    />
-                    {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {isSignup ? 'Create account' : 'Sign in'}
+                    Resend verification email
                   </button>
-                </form>
+                )}
 
                 {/* Switch */}
                 <div className="mt-6 flex items-center gap-3 text-[12px] text-[#8a94a7]">
                   <span className="h-px flex-1 bg-[linear-gradient(90deg,transparent,#d5dee8)]" />
-                  {isSignup ? 'Already have an account?' : "Don't have an account?"}
+                  {isSignup ? 'Already have an account?' : mode === 'signin' ? "Don't have an account?" : 'Remembered it?'}
                   <span className="h-px flex-1 bg-[linear-gradient(90deg,#d5dee8,transparent)]" />
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    setError(null)
-                    goTo(isSignup ? 'signin' : 'signup')
-                  }}
+                  onClick={() => switchTo(mode === 'signin' ? 'signup' : 'signin')}
                   className="mt-3 flex h-11 w-full items-center justify-center rounded-[12px] border border-[#dfe7f0] bg-white/80 text-[14px] font-semibold text-[#1b2232] shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-[#c6d6e6] hover:bg-white"
                 >
-                  {isSignup ? 'Sign in' : 'Create one'}
+                  {mode === 'signin' ? 'Create one' : 'Sign in'}
                 </button>
               </div>
             </div>
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-[#5e6f86]">
               <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              Passwords are hashed with PBKDF2 and never stored in plain text.
+              Passwords are securely hashed and never stored in plain text.
             </p>
           </div>
         </div>

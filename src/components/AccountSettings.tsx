@@ -65,6 +65,7 @@ export function AccountSettings() {
   const [name, setName] = useState(user?.fullName ?? '')
   const [avatar, setAvatar] = useState<string | undefined>(user?.avatar)
   const [saved, setSaved] = useState(false)
+  const [profileError, setProfileError] = useState<string | null>(null)
 
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
@@ -106,9 +107,15 @@ export function AccountSettings() {
     e.preventDefault()
     const trimmed = name.trim()
     if (trimmed.length < 2) return
+    setProfileError(null)
     updateProfile({ fullName: trimmed, avatar: avatar ?? null })
-    setSaved(true)
-    window.setTimeout(() => setSaved(false), 2000)
+      .then(() => {
+        setSaved(true)
+        window.setTimeout(() => setSaved(false), 2000)
+      })
+      .catch((err: unknown) =>
+        setProfileError(err instanceof Error ? err.message : 'Could not save your profile.'),
+      )
   }
 
   const submitPassword = async (e: FormEvent) => {
@@ -175,7 +182,9 @@ export function AccountSettings() {
                     type="button"
                     onClick={() => {
                       setAvatar(undefined)
-                      updateProfile({ avatar: null })
+                      updateProfile({ avatar: null }).catch((err: unknown) =>
+                        setProfileError(err instanceof Error ? err.message : 'Could not remove your photo.'),
+                      )
                     }}
                     className="inline-flex items-center gap-1.5 self-start rounded-lg px-1 py-0.5 text-[11.5px] text-[#8b90a0] transition hover:text-[#c0392b]"
                   >
@@ -203,6 +212,11 @@ export function AccountSettings() {
               {saved ? <Check className="h-4 w-4" /> : <UserRound className="h-4 w-4" />}
               {saved ? 'Saved' : 'Save changes'}
             </button>
+            {profileError && (
+              <p role="alert" className="mt-2 text-[12px] text-[#c0392b]">
+                {profileError}
+              </p>
+            )}
           </form>
 
           <div className="my-5 h-px bg-[#f0f1f4]" />
@@ -286,8 +300,7 @@ export function AccountSettings() {
           <button
             type="button"
             onClick={() => {
-              signOut()
-              close()
+              void signOut().then(close)
             }}
             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] text-[#c0392b] transition hover:bg-[#fdf1f1]"
           >

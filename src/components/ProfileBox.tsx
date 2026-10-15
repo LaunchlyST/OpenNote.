@@ -84,7 +84,7 @@ export function ProfileBox() {
               type="button"
               onClick={() => {
                 setOpen(false)
-                signOut()
+                void signOut()
               }}
               className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[12.5px] text-[#c0392b] transition hover:bg-[#fdf1f1]"
             >

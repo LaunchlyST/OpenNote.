@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './store'
+import { useAuth } from './auth'
 import { ScreenProvider, useScreen } from './screens'
 import type { Screen } from './screens'
 import { TopBar } from './components/TopBar'
@@ -107,7 +108,9 @@ function Shell() {
     return () => window.removeEventListener('keydown', onKey)
   }, [navigate, goToToday, setView, screen])
 
-  if (screen === 'signin' || screen === 'signup') return <AuthPage />
+  if (screen === 'signin' || screen === 'signup' || screen === 'forgot' || screen === 'reset') {
+    return <AuthPage />
+  }
   if (screen === 'account') return <AccountSettings />
 
   return (
@@ -151,12 +154,65 @@ function Shell() {
   )
 }
 
+/** Auth screens are public; the calendar and account settings need a session. */
+const PUBLIC_SCREENS: Screen[] = ['signin', 'signup', 'forgot', 'reset']
+
+const SCREEN_PATHS: Partial<Record<Screen, string>> = {
+  app: '/app',
+  signin: '/app/signin',
+  signup: '/app/signup',
+  forgot: '/app/forgot-password',
+  account: '/app/account',
+}
+
+function Gate() {
+  const { user, loading } = useAuth()
+  const { screen, goTo } = useScreen()
+  const needsUser = !PUBLIC_SCREENS.includes(screen)
+
+  // Signed out (or the session expired) while on a private screen: send to sign in.
+  // Already signed in on the sign-in / sign-up screen: go straight to the calendar.
+  useEffect(() => {
+    if (loading) return
+    if (!user && needsUser) goTo('signin')
+    else if (user && (screen === 'signin' || screen === 'signup')) goTo('app')
+  }, [loading, user, needsUser, screen, goTo])
+
+  // Keep the address bar honest, so a reload shows the same screen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const path = SCREEN_PATHS[screen]
+    if (path && window.location.pathname !== path) {
+      window.history.replaceState(null, '', path)
+    }
+  }, [screen])
+
+  if (needsUser && !user) return <SessionCheck />
+  return (
+    // Remount per account so one user's workspace never leaks into another's.
+    <AppProvider key={user?.id ?? 'guest'} userId={user?.id}>
+      <Shell />
+    </AppProvider>
+  )
+}
+
+function SessionCheck() {
+  return (
+    <div className="grid h-full w-full place-items-center bg-[#f4f5f7]">
+      <span className="h-1 w-24 overflow-hidden rounded-full bg-[#e4e6ec]" aria-hidden="true">
+        <span className="block h-full w-2/5 animate-pulse rounded-full bg-[#bef264]" />
+      </span>
+      <span className="sr-only" role="status">
+        Checking your session…
+      </span>
+    </div>
+  )
+}
+
 export default function App({ screen }: { screen?: Screen } = {}) {
   return (
     <ScreenProvider initialScreen={screen ?? 'app'}>
-      <AppProvider>
-        <Shell />
-      </AppProvider>
+      <Gate />
     </ScreenProvider>
   )
 }

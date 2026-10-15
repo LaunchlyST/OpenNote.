@@ -24,6 +24,8 @@ function screenForPath(path: string): Screen | undefined {
   if (path === '/app/signin' || path === '/signin') return 'signin'
   if (path === '/app/signup' || path === '/signup') return 'signup'
   if (path === '/app/account' || path === '/account') return 'account'
+  if (path === '/app/forgot-password') return 'forgot'
+  if (path === '/app/reset-password') return 'reset'
   return undefined
 }
 
@@ -33,7 +35,9 @@ function isAppRoute(path: string): boolean {
     path === '/dashboard' ||
     path === '/app/signin' ||
     path === '/app/signup' ||
-    path === '/app/account'
+    path === '/app/account' ||
+    path === '/app/forgot-password' ||
+    path === '/app/reset-password'
   )
 }
 
