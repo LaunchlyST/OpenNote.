@@ -46,7 +46,7 @@ function Shell() {
   const { goToToday, setView, navigate } = useApp()
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
-  const [notesOpen, setNotesOpen] = useState(true)
+  const [notesOpen, setNotesOpen] = useState(false)
 
   // At xl and above Notes is a docked rail; below that it is a drawer, so the
   // same control has to drive whichever one is actually visible.
@@ -114,35 +114,34 @@ function Shell() {
   if (screen === 'account') return <AccountSettings />
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-[#f7f7f5]">
-      <TopBar
-        onToggleLeft={() => setLeftOpen((o) => !o)}
-        onToggleRight={() => setRightOpen((o) => !o)}
-      />
+    <div className="flex h-full w-full overflow-hidden bg-white">
+      <div className="hidden lg:flex">
+        <Sidebar onToggleNotes={toggleNotes} notesOpen={notesOpen} />
+      </div>
 
-      <div className="flex min-h-0 flex-1 gap-2 p-2">
-        <div className="hidden lg:flex">
-          <div className="overflow-hidden rounded-2xl border border-[#e9e9e7] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
-            <Sidebar onToggleNotes={toggleNotes} />
-          </div>
-        </div>
-        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-[#e9e9e7] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar
+          onToggleLeft={() => setLeftOpen((o) => !o)}
+          onToggleNotes={toggleNotes}
+          notesOpen={wide ? notesOpen : rightOpen}
+        />
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
           <MainArea />
         </main>
-        {notesOpen && (
-          <div className="hidden xl:flex">
-            <div className="overflow-hidden rounded-2xl border border-[#e9e9e7] bg-white shadow-[0_1px_3px_rgba(16,24,40,0.06)]">
-              <NotesPanel />
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Notes stay out of the way until asked for. */}
+      {notesOpen && (
+        <div className="animate-rise hidden border-l border-[#ececea] bg-[#fbfbfa] xl:flex">
+          <NotesPanel />
+        </div>
+      )}
 
       <EventModal />
 
       {leftOpen && (
         <Drawer side="left" onClose={() => setLeftOpen(false)}>
-          <Sidebar onToggleNotes={toggleNotes} />
+          <Sidebar onToggleNotes={toggleNotes} notesOpen={rightOpen} />
         </Drawer>
       )}
       {rightOpen && (

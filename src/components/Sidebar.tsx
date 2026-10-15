@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   CalendarDays,
   Check,
@@ -12,21 +12,20 @@ import { useApp } from '../store'
 import type { Calendar, CalendarEvent } from '../lib/types'
 import { COLOR_IDS, colorOf } from '../lib/colors'
 import {
-  dateKey,
   formatClock,
   isSameDay,
   relativeDayLabel,
   startOfDay,
 } from '../lib/date'
-import { BLOCK_MS, blockStartOf, eventsInBlock } from '../lib/block'
 import { cn } from '../lib/id'
 import { useNow } from '../hooks'
 import { IconButton, Section } from './ui'
-import { MiniCalendar } from './MiniCalendar'
 import { ProfileBox } from './ProfileBox'
+import { AppIcon } from '../landing/components/primitives'
 
 interface SidebarProps {
   onToggleNotes?: () => void
+  notesOpen?: boolean
 }
 
 function NavItem({
@@ -186,124 +185,106 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
   )
 }
 
-export function Sidebar({ onToggleNotes }: SidebarProps = {}) {
-  const {
-    calendars,
-    events,
-    selectedDate,
-    addCalendar,
-    settings,
-    view,
-    setView,
-    goToToday,
-  } = useApp()
-  // Tick twice a minute so the visible block advances on its own.
-  const now = useNow(30_000)
+export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {}) {
+  const { calendars, events, selectedDate, addCalendar, view, setView, goToToday, openCreate } = useApp()
+  const now = useNow(60_000)
 
-  // The block view follows "today" by default — including across midnight,
-  // where it switches to the new day and the blocks reset to 00:00–02:00.
-  // Picking another day (mini calendar, arrows) pins the view to that day.
-  const [followToday, setFollowToday] = useState(true)
-  const prevDayRef = useRef(dateKey(now))
-  useEffect(() => {
-    const k = dateKey(now)
-    const rolled = prevDayRef.current !== k
-    prevDayRef.current = k
-    if (rolled) return
-    if (followToday && !isSameDay(selectedDate, now)) setFollowToday(false)
-  }, [now, selectedDate, followToday])
+  // The next few events across all visible calendars, soonest first.
+  const upNext = useMemo(() => {
+    const visible = new Set(calendars.filter((c) => c.visible).map((c) => c.id))
+    return events
+      .filter((e) => visible.has(e.calendarId) && new Date(e.end).getTime() > now.getTime())
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime())
+      .slice(0, 5)
+  }, [events, calendars, now])
 
-  const realToday = startOfDay(now)
-  const effectiveDay = followToday ? realToday : selectedDate
-
-  // Start of the current 2-hour block (00:00–02:00, 02:00–04:00, …).
-  const blockStart = useMemo(() => blockStartOf(now), [now])
-  const blockEnd = blockStart + BLOCK_MS
-
-  const blockEvents = useMemo(
-    () => eventsInBlock(events, calendars, effectiveDay, blockStart),
-    [events, calendars, effectiveDay, blockStart],
-  )
-
-  const rangeLabel = `${formatClock(new Date(blockStart), settings.hour12, false)} – ${formatClock(new Date(blockEnd), settings.hour12, false)}`
+  const newEvent = () => {
+    // Next whole hour on the selected day (or now, if that is today).
+    const base = isSameDay(selectedDate, now) ? new Date(now) : new Date(selectedDate)
+    if (isSameDay(selectedDate, now)) base.setHours(now.getHours() + 1, 0, 0, 0)
+    else base.setHours(9, 0, 0, 0)
+    openCreate(base, 60)
+  }
 
   return (
-    <aside className="flex h-full w-[252px] shrink-0 flex-col border-r border-[#ececea] bg-[#fbfbfa]">
-      <MiniCalendar />
+    <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-[#ececea] bg-[#fbfbfa]">
+      <div className="flex h-[64px] shrink-0 items-center gap-2.5 px-4">
+        <AppIcon className="h-[30px] w-[30px] text-[30px]" />
+        <span className="text-[16px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
+      </div>
 
-      <div className="scroll-area flex-1 overflow-y-auto px-3 pb-2">
-        {/* Primary navigation — every item maps to an existing action. */}
-        <nav className="animate-rise pt-3">
-          <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a3a29e]">
-            Menu
-          </p>
-          <div className="space-y-0.5">
-            <NavItem
-              icon={<CalendarDays className="h-[15px] w-[15px]" />}
-              label="Calendar"
-              active={view !== 'month'}
-              onClick={() => setView('week')}
-            />
-            <NavItem
-              icon={<StickyNote className="h-[15px] w-[15px]" />}
-              label="Notes"
-              onClick={onToggleNotes}
-            />
-            <NavItem
-              icon={<Sun className="h-[15px] w-[15px]" />}
-              label="Today"
-              onClick={goToToday}
-            />
-          </div>
-        </nav>
-
-        <div className="my-3 h-px bg-[#ececea]" />
-
-        <Section
-          title="My Calendars"
-          action={
-            <IconButton label="Add calendar" onClick={addCalendar} className="h-6 w-6">
-              <Plus className="h-3.5 w-3.5" />
-            </IconButton>
-          }
+      <div className="px-3">
+        <button
+          type="button"
+          onClick={newEvent}
+          className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-[#191919] text-[13.5px] font-semibold text-white shadow-[0_6px_16px_-8px_rgba(0,0,0,0.6)] transition hover:bg-[#37352f] active:scale-[0.99]"
         >
-          <div className="space-y-0.5">
-            {calendars.map((c) => (
-              <CalendarRow key={c.id} calendar={c} />
-            ))}
-            {calendars.length === 0 && (
-              <p className="px-2 py-1 text-[11.5px] text-[#a3a29e]">
-                No calendars yet — add one above.
-              </p>
-            )}
-          </div>
-        </Section>
+          <Plus className="h-4 w-4" strokeWidth={2.4} />
+          New event
+        </button>
+      </div>
 
-        <Section title={rangeLabel}>
-          <div className="mb-1.5 flex items-baseline justify-between px-2">
-            <span className="text-[11px] font-medium text-[#8f8e8a]">
-              {relativeDayLabel(effectiveDay, now)}
-            </span>
-            <span className="text-[10.5px] tabular-nums text-[#a3a29e]">
-              {blockEvents.length}{' '}
-              {blockEvents.length === 1 ? 'event' : 'events'}
-            </span>
-          </div>
-          <div className="space-y-0.5">
-            {blockEvents.map((e) => (
-              <EventRow key={e.id} event={e} />
-            ))}
-            {blockEvents.length === 0 && (
-              <p className="rounded-lg bg-white/80 px-2.5 py-2 text-[11.5px] leading-snug text-[#a3a29e] ring-1 ring-black/[0.03]">
-                No events in this block.
-              </p>
-            )}
-          </div>
-        </Section>
+      <div className="scroll-area mt-2 flex-1 overflow-y-auto">
+        <div className="px-3 pb-3">
+          <nav className="pt-2">
+            <div className="space-y-0.5">
+              <NavItem
+                icon={<CalendarDays className="h-[15px] w-[15px]" />}
+                label="Calendar"
+                active={!notesOpen}
+                onClick={() => {
+                  if (notesOpen) onToggleNotes?.()
+                  if (view === 'month') setView('week')
+                }}
+              />
+              <NavItem
+                icon={<StickyNote className="h-[15px] w-[15px]" />}
+                label="Notes"
+                active={notesOpen}
+                onClick={onToggleNotes}
+              />
+              <NavItem icon={<Sun className="h-[15px] w-[15px]" />} label="Today" onClick={goToToday} />
+            </div>
+          </nav>
 
-        <Section title="Upcoming">
-          <p className="px-2 py-1 text-[11.5px] text-[#a3a29e]">Coming Soon</p>
-        </Section>
+          <div className="my-3 h-px bg-[#ececea]" />
+
+          <Section
+            title="My Calendars"
+            action={
+              <IconButton label="Add calendar" onClick={addCalendar} className="h-6 w-6">
+                <Plus className="h-3.5 w-3.5" />
+              </IconButton>
+            }
+          >
+            <div className="space-y-0.5">
+              {calendars.map((c) => (
+                <CalendarRow key={c.id} calendar={c} />
+              ))}
+              {calendars.length === 0 && (
+                <p className="px-2 py-1 text-[11.5px] text-[#a3a29e]">No calendars yet — add one above.</p>
+              )}
+            </div>
+          </Section>
+
+          <Section title="Up next">
+            <div className="space-y-0.5">
+              {upNext.map((e) => (
+                <div key={e.id}>
+                  <EventRow event={e} />
+                  <p className="-mt-1 pb-1 pl-[26px] text-[10.5px] text-[#a3a29e]">
+                    {relativeDayLabel(startOfDay(new Date(e.start)), now)}
+                  </p>
+                </div>
+              ))}
+              {upNext.length === 0 && (
+                <p className="rounded-lg bg-white px-2.5 py-2 text-[11.5px] leading-snug text-[#a3a29e] ring-1 ring-black/[0.04]">
+                  Nothing coming up. Enjoy the space.
+                </p>
+              )}
+            </div>
+          </Section>
+        </div>
       </div>
 
       <div className="shrink-0 border-t border-[#ececea] px-3 py-3">

@@ -300,9 +300,9 @@ try {
   check('calendar shows the OpenNote wordmark', appHtml.includes('OpenNote'))
   check('calendar shows the view switcher', appHtml.includes('Full Week'))
   check('calendar shows the notes rail', appHtml.includes('Notes'))
-  check('calendar shows the mini calendar', appHtml.includes('October'))
+  check('calendar shows the date title', /\d{4}/.test(appHtml))
   check('calendar shows seeded events', appHtml.includes('Team stand-up'))
-  check('calendar shows seeded notes', appHtml.includes('Grocery list'))
+  check('notes stay hidden until opened', !appHtml.includes('Grocery list'))
   check('calendar shows the sidebar calendars', appHtml.includes('My Calendars'))
 
   /* Route-provided screens */

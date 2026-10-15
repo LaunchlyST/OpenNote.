@@ -1,87 +1,115 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, PanelLeft, StickyNote } from 'lucide-react'
 import { useApp } from '../store'
 import type { ViewMode } from '../lib/types'
 import { formatHeader } from '../lib/date'
-import { AppIcon } from '../landing/components/primitives'
 import { cn } from '../lib/id'
-import { IconButton } from './ui'
-import { PanelToggles, SettingsMenu } from './SettingsMenu'
+import { SettingsMenu } from './SettingsMenu'
 import { SearchMenu } from './SearchMenu'
 
-const VIEWS: Array<{ value: ViewMode; short: string; long: string }> = [
-  { value: 'day', short: 'Day', long: 'Day' },
-  { value: 'week', short: 'Week', long: 'Full Week' },
-  { value: 'month', short: 'Month', long: 'Month' },
+const VIEWS: Array<{ value: ViewMode; label: string }> = [
+  { value: 'day', label: 'Day' },
+  { value: 'week', label: 'Full Week' },
+  { value: 'month', label: 'Month' },
 ]
+
+/** Splits "October 12 – 18, 2026" into a bold range and a quieter year. */
+function splitYear(label: string): [string, string] {
+  const m = label.match(/^(.*?),?\s(\d{4})$/)
+  return m ? [m[1], m[2]] : [label, '']
+}
 
 export function TopBar({
   onToggleLeft,
-  onToggleRight,
+  onToggleNotes,
+  notesOpen,
 }: {
   onToggleLeft: () => void
-  onToggleRight: () => void
+  onToggleNotes: () => void
+  notesOpen: boolean
 }) {
   const { view, setView, selectedDate, navigate, goToToday, settings } = useApp()
-  const headerLabel = formatHeader(view, selectedDate, settings.weekStartsOn)
+  const [range, year] = splitYear(formatHeader(view, selectedDate, settings.weekStartsOn))
+  const active = Math.max(0, VIEWS.findIndex((v) => v.value === view))
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-1.5 border-b border-[#e9e9e7] bg-white px-3 sm:px-4">
-      <div className="flex items-center gap-2 pr-1 lg:w-[236px]">
-        <AppIcon className="h-[30px] w-[30px] text-[30px]" />
-        <span className="hidden text-[15px] font-semibold tracking-[-0.015em] sm:block">
-          OpenNote
-        </span>
-      </div>
+    <header className="flex h-[64px] shrink-0 items-center gap-3 border-b border-[#ececea] bg-white px-3 sm:px-5">
+      <button
+        type="button"
+        onClick={onToggleLeft}
+        aria-label="Open sidebar"
+        className="grid h-9 w-9 place-items-center rounded-lg text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919] lg:hidden"
+      >
+        <PanelLeft className="h-[18px] w-[18px]" />
+      </button>
 
-      <PanelToggles
-        onToggleLeft={onToggleLeft}
-        onToggleRight={onToggleRight}
-      />
+      <h1 className="min-w-0 truncate text-[20px] font-semibold tracking-[-0.03em] text-[#191919] sm:text-[22px]">
+        {range}
+        {year && <span className="ml-2 font-normal text-[#a3a29e]">{year}</span>}
+      </h1>
 
-      <div className="flex items-center gap-0.5">
-        <IconButton label="Previous" onClick={() => navigate(-1)}>
-          <ChevronLeft className="h-[18px] w-[18px]" />
-        </IconButton>
-        <IconButton label="Next" onClick={() => navigate(1)}>
-          <ChevronRight className="h-[18px] w-[18px]" />
-        </IconButton>
+      <div className="flex shrink-0 items-center rounded-[10px] border border-[#e3e3e0] bg-white p-[2px] shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <button
+          type="button"
+          aria-label="Previous"
+          onClick={() => navigate(-1)}
+          className="grid h-7 w-7 place-items-center rounded-[7px] text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919]"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={goToToday}
-          className="ml-1 rounded-lg border border-[#e3e3e0] bg-white px-3 py-[6px] text-[12.5px] font-medium text-[#37352f] shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition hover:border-[#dcdbd7] hover:bg-[#f7f7f5] active:scale-[0.97]"
+          className="h-7 rounded-[7px] px-2.5 text-[12.5px] font-medium text-[#37352f] transition hover:bg-[#f3f3f1]"
         >
           Today
         </button>
-        <h1 className="ml-3 hidden truncate text-[17px] font-semibold tracking-[-0.025em] md:block">
-          {headerLabel}
-        </h1>
+        <button
+          type="button"
+          aria-label="Next"
+          onClick={() => navigate(1)}
+          className="grid h-7 w-7 place-items-center rounded-[7px] text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919]"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
       </div>
 
-      <div className="ml-auto flex items-center gap-1.5">
-        <span className="mr-0.5 hidden truncate text-[13px] font-semibold md:block xl:hidden">
-          {headerLabel}
-        </span>
-
-        <div className="flex rounded-xl bg-[#f1f2f5] p-[3px] ring-1 ring-black/[0.03]">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {/* View switcher with a sliding indicator */}
+        <div role="group" aria-label="Calendar view" className="relative grid grid-cols-3 rounded-[10px] bg-[#f1f1ef] p-[3px]">
+          <span
+            aria-hidden="true"
+            className="absolute inset-y-[3px] left-[3px] w-[calc((100%-6px)/3)] rounded-[7px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            style={{ transform: `translateX(${active * 100}%)` }}
+          />
           {VIEWS.map((v) => (
             <button
               key={v.value}
               type="button"
               onClick={() => setView(v.value)}
+              aria-pressed={view === v.value}
               className={cn(
-                'rounded-[9px] px-3 py-[6px] text-[12.5px] font-medium transition-all duration-150',
-                view === v.value
-                  ? 'bg-white text-[#191919] shadow-[0_1px_3px_rgba(16,24,40,0.12)]'
-                  : 'text-[#6b6a66] hover:text-[#191919]',
+                'relative z-10 px-3 py-[5px] text-[12.5px] font-medium transition-colors sm:px-4',
+                view === v.value ? 'text-[#191919]' : 'text-[#6b6a66] hover:text-[#191919]',
               )}
             >
-              <span className="hidden md:inline">{v.long}</span>
-              <span className="md:hidden">{v.short}</span>
+              {v.label}
             </button>
           ))}
         </div>
 
         <SearchMenu />
+        <button
+          type="button"
+          onClick={onToggleNotes}
+          aria-pressed={notesOpen}
+          className={cn(
+            'inline-flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-medium transition',
+            notesOpen ? 'bg-[#191919] text-white' : 'text-[#6b6a66] hover:bg-[#f3f3f1] hover:text-[#191919]',
+          )}
+        >
+          <StickyNote className="h-4 w-4" />
+          <span className="hidden md:inline">Notes</span>
+        </button>
         <SettingsMenu />
       </div>
     </header>
