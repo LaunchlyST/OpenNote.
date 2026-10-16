@@ -2,7 +2,7 @@ import { createContext, useContext, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useTilt } from '../motion'
 import { RollingHeadline } from './RollingHeadline'
-import { BookOpen, ChevronLeft, ChevronRight, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, CalendarDays, Clock, Coffee, StickyNote, Sun } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
 import { HERO } from '../content'
@@ -92,9 +92,6 @@ export function Hero() {
             <HeroPlanScreens />
           </div>
           <div aria-hidden="true" className="mx-auto hidden h-3.5 w-[108%] -translate-x-[3.7%] rounded-b-[18px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:block" />
-          <span aria-hidden="true" className="absolute -bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full border border-lp-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-lp-body shadow-sm sm:inline-flex">
-            <PenLine className="h-3.5 w-3.5" /> Notes one click away <Pin className="ml-1 h-3.5 w-3.5" /> pinned to days
-          </span>
           </div>
         </div>
         <HeroPlanDots />
