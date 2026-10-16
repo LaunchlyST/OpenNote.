@@ -79,7 +79,7 @@ function FeatureList({ items, planned }: { items: string[]; planned?: boolean })
             aria-hidden="true"
             className={cn(
               'mt-[1px] grid h-5 w-5 shrink-0 place-items-center rounded-full',
-              planned ? 'bg-[#f1eefc] text-[#6b55c9]' : 'bg-[#eef7d9] text-[#4d6516]',
+              planned ? 'bg-[#f1f1ef] text-lp-ink-3' : 'bg-[#eef7d9] text-[#4d6516]',
             )}
           >
             {planned ? <Clock className="h-3 w-3" strokeWidth={2.5} /> : <Check className="h-3 w-3" strokeWidth={3} />}
@@ -130,23 +130,22 @@ export function ProOverlay({ showBadge = true }: { showBadge?: boolean }) {
   return (
     <>
       {/* Soft frost: the calendar stays recognisable underneath. */}
-      <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.15)_0%,rgba(250,248,255,0.45)_55%,rgba(255,255,255,0.75)_100%)] backdrop-blur-[3px]" />
-      <div aria-hidden="true" className="lp-pro-glow pointer-events-none absolute inset-0" />
+      <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.35)_0%,rgba(255,255,255,0.55)_60%,rgba(255,255,255,0.8)_100%)] backdrop-blur-[3px]" />
 
       {/* Planned Pro-only surfaces, hinted behind the frost. */}
-      <div aria-hidden="true" className="pointer-events-none absolute top-[14%] right-[3%] hidden w-[22%] rounded-[14px] border border-white/80 bg-white/60 p-3 shadow-[0_20px_40px_-24px_rgba(80,60,160,0.5)] blur-[1.5px] md:block">
-        <div className="h-2 w-1/2 rounded-full bg-[#d9d2f7]" />
+      <div aria-hidden="true" className="pointer-events-none absolute top-[14%] right-[3%] hidden w-[22%] rounded-[14px] border border-lp-line bg-white/80 p-3 shadow-[0_18px_36px_-24px_rgba(0,0,0,0.35)] blur-[1.5px] md:block">
+        <div className="h-2 w-1/2 rounded-full bg-[#e3e3e0]" />
         <div className="mt-3 flex h-14 items-end gap-1.5">
           {[40, 65, 50, 85, 70, 95].map((h, i) => (
-            <span key={i} className="flex-1 rounded-t-[4px] bg-gradient-to-t from-[#b9acf0] to-[#e3dcfb]" style={{ height: `${h}%` }} />
+            <span key={i} className={cn('flex-1 rounded-t-[4px]', i === 5 ? 'bg-lime-bright' : 'bg-[#dcdbd7]')} style={{ height: `${h}%` }} />
           ))}
         </div>
       </div>
-      <div aria-hidden="true" className="pointer-events-none absolute bottom-[12%] left-[4%] hidden items-center rounded-full border border-white/80 bg-white/70 py-1.5 pr-3 pl-1.5 shadow-[0_16px_32px_-20px_rgba(80,60,160,0.5)] blur-[1px] md:flex">
-        {['#bef264', '#f9a8c8', '#c4b5fd', '#fdba74'].map((c, i) => (
+      <div aria-hidden="true" className="pointer-events-none absolute bottom-[12%] left-[4%] hidden items-center rounded-full border border-lp-line bg-white/85 py-1.5 pr-3 pl-1.5 shadow-[0_14px_28px_-20px_rgba(0,0,0,0.35)] blur-[1px] md:flex">
+        {['#bef264', '#f9a8c8', '#fdba74', '#dcdbd7'].map((c, i) => (
           <span key={c} className="h-6 w-6 rounded-full border-2 border-white" style={{ background: c, marginLeft: i ? -8 : 0 }} />
         ))}
-        <span className="ml-2 h-2 w-14 rounded-full bg-[#d9d2f7]" />
+        <span className="ml-2 h-2 w-14 rounded-full bg-[#e3e3e0]" />
       </div>
 
       {showBadge && <div className="absolute top-3 right-3 z-10 sm:top-4 sm:right-4">
@@ -156,25 +155,23 @@ export function ProOverlay({ showBadge = true }: { showBadge?: boolean }) {
       </div>}
 
       <div className="absolute inset-0 grid place-items-center p-3 sm:p-6">
-        <div className="lp-pro-card relative w-full max-w-[360px] rounded-[22px] p-[1px] sm:max-w-[400px]">
-          <div className="rounded-[21px] bg-white/80 px-5 py-4 text-center backdrop-blur-xl sm:px-7 sm:py-6">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f1eefc] px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-[#6b55c9] sm:text-[11px]">
-              <Sparkles className="h-3 w-3" aria-hidden="true" /> Coming soon
-            </span>
-            <p className="mt-2.5 flex items-center justify-center gap-2 text-[22px] font-semibold tracking-[-0.03em] text-lp-ink sm:mt-3 sm:text-[28px]">
-              <Lock className="h-[0.7em] w-[0.7em] text-[#6b55c9]" strokeWidth={2.4} aria-hidden="true" />
-              OpenNote <span className="lp-pro-text">Pro</span>
-            </p>
-            <p className="mx-auto mt-1.5 hidden max-w-[32ch] text-[13.5px] leading-relaxed text-lp-body sm:block">
-              Unlock more powerful tools to manage your business, organise your work, and stay productive.
-            </p>
-            <div className="mt-3 flex flex-wrap justify-center gap-1.5 sm:mt-4">
-              {['Team workspaces', 'Business tools', 'Smart insights'].map((t) => (
-                <span key={t} className="rounded-full border border-[#e6e1f8] bg-white px-2.5 py-1 text-[11px] font-medium text-[#4b3f86] sm:text-[11.5px]">
-                  {t}
-                </span>
-              ))}
-            </div>
+        <div className="w-full max-w-[340px] rounded-[18px] border-[1.5px] border-lp-ink bg-white px-5 py-4 text-center shadow-[4px_4px_0_0_#191919] sm:max-w-[380px] sm:px-7 sm:py-6">
+          <span className="mx-auto grid h-10 w-10 place-items-center rounded-[11px] border-[1.5px] border-lp-ink bg-lime-bright text-lp-ink shadow-[2px_2px_0_0_#191919] sm:h-11 sm:w-11">
+            <Lock className="h-[18px] w-[18px]" strokeWidth={2.4} aria-hidden="true" />
+          </span>
+          <p className="mt-3 text-[22px] font-semibold tracking-[-0.03em] text-lp-ink sm:mt-4 sm:text-[27px]">OpenNote Pro</p>
+          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-lp-ink px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white sm:text-[11px]">
+            <Sparkles className="h-3 w-3 text-lime-bright" aria-hidden="true" /> Coming soon
+          </span>
+          <p className="mx-auto mt-3 hidden max-w-[32ch] text-[13.5px] leading-relaxed text-lp-body sm:block">
+            Unlock more powerful tools to manage your business, organise your work, and stay productive.
+          </p>
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5 sm:mt-4">
+            {['Team workspaces', 'Business tools', 'Smart insights'].map((t) => (
+              <span key={t} className="rounded-full border border-lp-line bg-lp-sunken px-2.5 py-1 text-[11px] font-medium text-lp-ink-3 sm:text-[11.5px]">
+                {t}
+              </span>
+            ))}
           </div>
         </div>
       </div>
@@ -203,7 +200,7 @@ function ProSlide() {
       <div className="mt-8 px-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-lp-ink">Planned for Pro</h3>
-          <span className="rounded-full bg-[#f1eefc] px-2 py-0.5 text-[11.5px] font-medium text-[#6b55c9]">Not yet available</span>
+          <span className="rounded-full bg-lp-ink px-2 py-0.5 text-[11.5px] font-medium text-white">Not yet available</span>
         </div>
         <p className="mt-1.5 text-[14px] text-lp-muted sm:hidden">
           Unlock more powerful tools to manage your business, organise your work, and stay productive.
