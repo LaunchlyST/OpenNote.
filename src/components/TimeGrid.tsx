@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { StickyNote } from 'lucide-react'
+import { StickyNote, ZoomIn } from 'lucide-react'
 import { useApp } from '../store'
 import { colorOf } from '../lib/colors'
 import type { CalendarEvent } from '../lib/types'
@@ -156,6 +156,17 @@ export function TimeGrid({
     setZoomState(clampZoom(next))
   }
   const [slotTarget, setSlotTarget] = useState<SlotTarget | null>(null)
+  // Zoom mode: click the corner square once and the wheel zooms instead of
+  // scrolling (down = in, up = out); click it again to scroll normally.
+  const [zoomMode, setZoomMode] = useState(false)
+  const zoomModeRef = useRef(zoomMode)
+  zoomModeRef.current = zoomMode
+  useEffect(() => {
+    if (!zoomMode) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setZoomMode(false)
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [zoomMode])
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
@@ -289,9 +300,11 @@ export function TimeGrid({
     let last = 0
     const step = (dir: number) => setZoomRef.current(zoomRef.current + dir)
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey && !e.metaKey) return
+      const pinchOrCtrl = e.ctrlKey || e.metaKey
+      if (!pinchOrCtrl && !zoomModeRef.current) return
       e.preventDefault()
-      acc += e.deltaY
+      // Ctrl/pinch: up = in (like maps). Zoom mode: down = in, up = out.
+      acc += pinchOrCtrl ? e.deltaY : -e.deltaY
       const now = Date.now()
       if (Math.abs(acc) < 40 || now - last < 120) return
       setZoomRef.current(zoomRef.current + (acc < 0 ? 1 : -1))
@@ -608,13 +621,29 @@ export function TimeGrid({
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       {/* Day header */}
       <div className="flex h-[64px] shrink-0 border-b border-[#ececea] bg-white">
-        <div
-          className="flex w-[62px] shrink-0 items-end justify-center pb-2"
-          title="Pinch, or hold Ctrl (⌘ on Mac) and scroll, to zoom the calendar"
-        >
-          <span className="text-[9.5px] font-medium tabular-nums text-[#a3a29e]" data-testid="zoom-label">
-            {ZOOM_LEVELS[zoom].label}
-          </span>
+        <div className="flex w-[62px] shrink-0 items-center justify-center">
+          <button
+            type="button"
+            aria-pressed={zoomMode}
+            aria-label={zoomMode ? 'Stop zooming with the scroll wheel' : 'Zoom with the scroll wheel'}
+            title={
+              zoomMode
+                ? 'Zoom mode on: scroll down to zoom in, up to zoom out. Click again to scroll normally.'
+                : 'Click, then scroll down to zoom in and up to zoom out'
+            }
+            onClick={() => setZoomMode((on) => !on)}
+            className={cn(
+              'flex h-11 w-11 flex-col items-center justify-center gap-0.5 rounded-xl border transition',
+              zoomMode
+                ? 'border-[#191919] bg-[#191919] text-white shadow-[0_2px_6px_-1px_rgba(0,0,0,0.35)]'
+                : 'border-[#e3e3e0] bg-white text-[#a3a29e] hover:border-[#cfcfcb] hover:text-[#6b6a66]',
+            )}
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+            <span className="text-[9px] font-semibold tabular-nums leading-none" data-testid="zoom-label">
+              {ZOOM_LEVELS[zoom].label}
+            </span>
+          </button>
         </div>
         <div
           className="flex border-l border-[#ececea]"
