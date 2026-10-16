@@ -27,6 +27,16 @@
   /* lines */
   --color-line: #ececea;
   --color-line-soft: #f1f1ef;
+  /* Settings page palette (restored with the Settings page). */
+  --color-surface: #f7f8fa;
+  --color-border-subtle: #e4e6ec;
+  --color-border-strong: #d4d8e0;
+  --color-accent: #a3d922;
+  --color-accent-hover: #92c41e;
+  --color-accent-deep: #7fb312;
+  --color-accent-soft: #f0f9d9;
+  --color-accent-text: #4b6410;
+  --color-canvas-warm: #fafaf8;
 }
 
 /* ---------- landing page palette ----------
@@ -439,4 +449,40 @@ html.lp-cursor-on * {
   .lp-viewswap {
     animation: none;
   }
+}
+
+/* ---------- settings page transition ----------
+ * The Settings page slides in over the calendar it replaces: 10px of travel,
+ * ease-out. No fill-mode on purpose, so a throttled animation can never leave
+ * the page stuck invisible. */
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes settings-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+.settings-enter {
+  animation: settings-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.settings-exit {
+  animation: settings-out 0.18s cubic-bezier(0.4, 0, 1, 1);
+  pointer-events: none;
+}
+.reduce-motion .settings-enter,
+.reduce-motion .settings-exit {
+  animation: none;
 }

@@ -31,7 +31,7 @@ export function TopBar({
   onToggleNotes: () => void
   notesOpen: boolean
 }) {
-  const { view, setView, selectedDate, navigate, goToToday, settings, saveStatus } = useApp()
+  const { view, setView, selectedDate, navigate, goToToday, settings, saveStatus, settingsOpen, openSettings, closeSettings } = useApp()
   const project = useCurrentProject()
   const router = useRouter()
   const [range, year] = splitYear(formatHeader(view, selectedDate, settings.weekStartsOn))
@@ -144,7 +144,7 @@ export function TopBar({
           <StickyNote className="h-4 w-4" />
           <span className="hidden md:inline">Notes</span>
         </button>
-        <SettingsMenu />
+        <SettingsMenu active={settingsOpen} onToggle={() => (settingsOpen ? closeSettings() : openSettings())} />
       </div>
     </header>
   )

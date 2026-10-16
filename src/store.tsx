@@ -20,7 +20,28 @@ export interface ModalState {
   event: CalendarEvent
 }
 
+/** The sections of the Settings page, in the order they appear in its nav. */
+export type SettingsSectionId =
+  | 'profile'
+  | 'account'
+  | 'general'
+  | 'appearance'
+  | 'notifications'
+  | 'calendar'
+  | 'security'
+  | 'billing'
+  /** Admin-only. Gated by the server, not by this list. */
+  | 'deploy'
+
 interface AppContextValue {
+  /** Whether the Settings page is open in the main content area. */
+  settingsOpen: boolean
+  /** Which section of the Settings page is showing. */
+  settingsSection: SettingsSectionId
+  setSettingsSection: (section: SettingsSectionId) => void
+  openSettings: (section?: SettingsSectionId) => void
+  closeSettings: () => void
+
   /** Whether the latest change has reached the server. */
   saveStatus: SaveStatus
   events: CalendarEvent[]
@@ -96,6 +117,16 @@ export function AppProvider({
     startOfDay(new Date()),
   )
   const [modal, setModal] = useState<ModalState | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSectionId>('profile')
+
+  const openSettings = useCallback((target?: SettingsSectionId) => {
+    if (target) setSettingsSection(target)
+    setSettingsOpen(true)
+  }, [])
+
+  const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   const updateSettings = useCallback(
     (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })),
@@ -273,6 +304,11 @@ export function AppProvider({
 
   const value = useMemo<AppContextValue>(
     () => ({
+      settingsOpen,
+      settingsSection,
+      setSettingsSection,
+      openSettings,
+      closeSettings,
       saveStatus,
       events,
       calendars,
@@ -303,6 +339,10 @@ export function AppProvider({
       moveNote,
     }),
     [
+      settingsOpen,
+      settingsSection,
+      openSettings,
+      closeSettings,
       saveStatus,
       events,
       calendars,
@@ -335,6 +375,11 @@ export function AppProvider({
   )
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
+}
+
+/** The calendar context when inside a project, or null elsewhere (e.g. the dashboard). */
+export function useOptionalApp(): AppContextValue | null {
+  return useContext(AppContext)
 }
 
 export function useApp(): AppContextValue {

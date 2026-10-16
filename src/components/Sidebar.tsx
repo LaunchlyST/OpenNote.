@@ -3,6 +3,7 @@ import {
   CalendarDays,
   Check,
   Pencil,
+  Settings as SettingsIcon,
   Plus,
   StickyNote,
   Sun,
@@ -187,7 +188,7 @@ function CalendarRow({ calendar }: { calendar: Calendar }) {
 }
 
 export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {}) {
-  const { calendars, events, selectedDate, addCalendar, view, setView, goToToday, openCreate } = useApp()
+  const { calendars, events, selectedDate, addCalendar, view, setView, goToToday, openCreate, settingsOpen, openSettings, closeSettings } = useApp()
   const now = useNow(60_000)
 
   // The next few events across all visible calendars, soonest first.
@@ -236,8 +237,9 @@ export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {})
               <NavItem
                 icon={<CalendarDays className="h-[15px] w-[15px]" />}
                 label="Calendar"
-                active={!notesOpen}
+                active={!notesOpen && !settingsOpen}
                 onClick={() => {
+                  closeSettings()
                   if (notesOpen) onToggleNotes?.()
                   if (view === 'month') setView('week')
                 }}
@@ -249,6 +251,12 @@ export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {})
                 onClick={onToggleNotes}
               />
               <NavItem icon={<Sun className="h-[15px] w-[15px]" />} label="Today" onClick={goToToday} />
+              <NavItem
+                icon={<SettingsIcon className="h-[15px] w-[15px]" />}
+                label="Settings"
+                active={settingsOpen}
+                onClick={() => openSettings()}
+              />
             </div>
           </nav>
 

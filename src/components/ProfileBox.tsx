@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../auth'
 import { useScreen } from '../screens'
+import { useOptionalApp } from '../store'
 import { useClickOutside, useEscape } from '../hooks'
 import { cn } from '../lib/id'
 import { Avatar } from './Avatar'
@@ -25,6 +26,11 @@ function formatJoined(iso: string): string {
 export function ProfileBox() {
   const { user, signOut } = useAuth()
   const { goTo } = useScreen()
+  // Inside a project, Profile and Settings open the Settings page in the main
+  // area (sidebar stays); elsewhere they fall back to the account screen.
+  const app = useOptionalApp()
+  const openAccount = (section: 'profile' | 'account') =>
+    app ? app.openSettings(section) : goTo('account')
   const [open, setOpen] = useState(false)
   const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false))
   useEscape(open, () => setOpen(false))
@@ -72,7 +78,7 @@ export function ProfileBox() {
           </div>
 
           <div className="space-y-0.5 px-2.5 pb-2.5">
-            <button type="button" role="menuitem" className={item} onClick={() => { close(); goTo('account') }}>
+            <button type="button" role="menuitem" className={item} onClick={() => { close(); openAccount('profile') }}>
               <UserRound className="h-[18px] w-[18px]" />
               Profile
             </button>
@@ -85,7 +91,7 @@ export function ProfileBox() {
                 </span>
               </span>
             </a>
-            <button type="button" role="menuitem" className={item} onClick={() => { close(); goTo('account') }}>
+            <button type="button" role="menuitem" className={item} onClick={() => { close(); openAccount('account') }}>
               <SettingsIcon className="h-[18px] w-[18px]" />
               Settings
             </button>

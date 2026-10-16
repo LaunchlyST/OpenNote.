@@ -20,7 +20,9 @@ import { EventModal } from './components/EventModal'
 import { AuthPage } from './components/AuthPage'
 import { AccountSettings } from './components/AccountSettings'
 import { Drawer } from './components/ui'
-import { useMediaQuery } from './hooks'
+import { SettingsPage } from './components/SettingsPage'
+import { SETTINGS_TRANSITION_MS, useEscape, useExitTransition, useMediaQuery } from './hooks'
+import { cn } from './lib/id'
 import { dateKey, isWeekend, weekDays } from './lib/date'
 
 function MainArea() {
@@ -51,7 +53,11 @@ function MainArea() {
 
 /** The existing OpenNote calendar UI, for whichever project is loaded. */
 function CalendarShell() {
-  const { goToToday, setView, navigate } = useApp()
+  const { goToToday, setView, navigate, settingsOpen, closeSettings } = useApp()
+  // Settings opens in the main content area, over the calendar (which stays
+  // mounted underneath, so closing it returns to the same view and scroll).
+  const settingsTransition = useExitTransition(settingsOpen, SETTINGS_TRANSITION_MS)
+  useEscape(settingsOpen, closeSettings)
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
@@ -72,6 +78,7 @@ function CalendarShell() {
   }
 
   useEffect(() => {
+    if (settingsOpen) return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (
@@ -113,7 +120,7 @@ function CalendarShell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, goToToday, setView])
+  }, [navigate, goToToday, setView, settingsOpen])
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-white">
@@ -128,12 +135,24 @@ function CalendarShell() {
           notesOpen={wide ? notesOpen : rightOpen}
         />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-white">
-          <MainArea />
+          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+            <MainArea />
+            {settingsTransition.mounted && (
+              <div
+                className={cn(
+                  'absolute inset-0 z-20 flex flex-col bg-canvas-warm',
+                  settingsTransition.exiting ? 'settings-exit' : 'settings-enter',
+                )}
+              >
+                <SettingsPage onBack={closeSettings} />
+              </div>
+            )}
+          </div>
         </main>
       </div>
 
       {/* Notes stay out of the way until asked for. */}
-      {notesOpen && (
+      {notesOpen && !settingsTransition.mounted && (
         <div className="animate-rise hidden border-l border-[#ececea] bg-[#fbfbfa] xl:flex">
           <NotesPanel />
         </div>
