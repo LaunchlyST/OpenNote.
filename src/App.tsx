@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './store'
+import type { ProjectData } from './store'
+import { useRouter } from './router'
+import { WorkspacePicker } from './projects/WorkspacePicker'
+import { ProjectDashboard } from './projects/ProjectDashboard'
+import { PageChrome, Spinner, btn } from './projects/Chrome'
+import { ProjectContext } from './projects/context'
+import { ApiError, parseWorkspaceRoute, paths, projectsApi } from './projects/api'
+import type { ProjectSummary } from './projects/api'
 import { useAuth } from './auth'
 import { ScreenProvider, useScreen } from './screens'
 import type { Screen } from './screens'
@@ -41,8 +49,8 @@ function MainArea() {
   return <TimeGrid key={`week-${days.length}`} days={days} />
 }
 
-function Shell() {
-  const { screen } = useScreen()
+/** The existing OpenNote calendar UI, for whichever project is loaded. */
+function CalendarShell() {
   const { goToToday, setView, navigate } = useApp()
   const [leftOpen, setLeftOpen] = useState(false)
   const [rightOpen, setRightOpen] = useState(false)
@@ -64,7 +72,6 @@ function Shell() {
   }
 
   useEffect(() => {
-    if (screen !== 'app') return
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       if (
@@ -106,12 +113,7 @@ function Shell() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [navigate, goToToday, setView, screen])
-
-  if (screen === 'signin' || screen === 'signup' || screen === 'forgot' || screen === 'reset') {
-    return <AuthPage />
-  }
-  if (screen === 'account') return <AccountSettings />
+  }, [navigate, goToToday, setView])
 
   return (
     <div className="flex h-full w-full overflow-hidden bg-white">
@@ -153,6 +155,100 @@ function Shell() {
   )
 }
 
+/** Renders one project's calendar from already-loaded data. Also used by tests. */
+export function ProjectCalendar({
+  project,
+  data,
+  persist = true,
+}: {
+  project: ProjectSummary
+  data: ProjectData
+  persist?: boolean
+}) {
+  return (
+    <ProjectContext.Provider value={project}>
+      <AppProvider key={project.id} projectId={persist ? project.id : undefined} initial={data}>
+        <CalendarShell />
+      </AppProvider>
+    </ProjectContext.Provider>
+  )
+}
+
+/** Loads a project the signed-in user owns, then opens its calendar. */
+function ProjectView({ id }: { id: string }) {
+  const { navigate } = useRouter()
+  const [state, setState] = useState<
+    | { status: 'loading' }
+    | { status: 'error'; message: string; missing: boolean }
+    | { status: 'ready'; project: ProjectSummary; data: ProjectData }
+  >({ status: 'loading' })
+  const [attempt, setAttempt] = useState(0)
+
+  useEffect(() => {
+    let alive = true
+    setState({ status: 'loading' })
+    projectsApi
+      .open(id)
+      .then(({ project, data }) => alive && setState({ status: 'ready', project, data }))
+      .catch(
+        (e: Error) =>
+          alive &&
+          setState({
+            status: 'error',
+            message: e.message,
+            missing: e instanceof ApiError && (e.status === 404 || e.status === 403),
+          }),
+      )
+    return () => {
+      alive = false
+    }
+  }, [id, attempt])
+
+  if (state.status === 'ready') return <ProjectCalendar project={state.project} data={state.data} />
+  if (state.status === 'loading')
+    return (
+      <PageChrome>
+        <Spinner label="Opening your project…" />
+      </PageChrome>
+    )
+  return (
+    <PageChrome>
+      <div className="mx-auto mt-16 max-w-md text-center">
+        <h1 className="text-[20px] font-semibold text-[#191919]">
+          {state.missing ? 'This project isn’t available' : 'Couldn’t open this project'}
+        </h1>
+        <p className="mt-2 text-[14px] text-[#6b6a66]">{state.message}</p>
+        <div className="mt-5 flex justify-center gap-2">
+          {!state.missing && (
+            <button type="button" className={btn.secondary} onClick={() => setAttempt((n) => n + 1)}>
+              Try again
+            </button>
+          )}
+          <button type="button" className={btn.primary} onClick={() => navigate(paths.picker)}>
+            Back to Projects
+          </button>
+        </div>
+      </div>
+    </PageChrome>
+  )
+}
+
+function Shell() {
+  const { screen } = useScreen()
+  const { path } = useRouter()
+
+  if (screen === 'signin' || screen === 'signup' || screen === 'forgot' || screen === 'reset') {
+    return <AuthPage />
+  }
+  if (screen === 'account') return <AccountSettings />
+
+  // Sign In → Choose workspace → My Projects → a project's calendar.
+  const route = parseWorkspaceRoute(path) ?? { kind: 'picker' as const }
+  if (route.kind === 'dashboard') return <ProjectDashboard key={route.workspace} workspace={route.workspace} />
+  if (route.kind === 'project') return <ProjectView key={route.id} id={route.id} />
+  return <WorkspacePicker />
+}
+
 /** Auth screens are public; the calendar and account settings need a session. */
 const PUBLIC_SCREENS: Screen[] = ['signin', 'signup', 'forgot', 'reset']
 
@@ -167,6 +263,7 @@ const SCREEN_PATHS: Partial<Record<Screen, string>> = {
 function Gate() {
   const { user, loading } = useAuth()
   const { screen, goTo } = useScreen()
+  const { path: routerPath } = useRouter()
   const needsUser = !PUBLIC_SCREENS.includes(screen)
 
   // Signed out (or the session expired) while on a private screen: send to sign in.
@@ -180,19 +277,16 @@ function Gate() {
   // Keep the address bar honest, so a reload shows the same screen.
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const path = SCREEN_PATHS[screen]
+    const path =
+      screen === 'app' && parseWorkspaceRoute(routerPath) ? routerPath : SCREEN_PATHS[screen]
     if (path && window.location.pathname !== path) {
       window.history.replaceState(null, '', path)
     }
-  }, [screen])
+  }, [screen, routerPath])
 
   if (needsUser && !user) return <SessionCheck />
-  return (
-    // Remount per account so one user's workspace never leaks into another's.
-    <AppProvider key={user?.id ?? 'guest'} userId={user?.id}>
-      <Shell />
-    </AppProvider>
-  )
+  // Remount per account so one user's projects never leak into another's.
+  return <Shell key={user?.id ?? 'guest'} />
 }
 
 function SessionCheck() {

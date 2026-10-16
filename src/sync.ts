@@ -17,7 +17,7 @@ export function stopSync() {
   pendingFlush = null
 }
 
-/** Everything that belongs to one user's calendar. */
+/** Everything that belongs to one project's calendar. */
 export interface Workspace<E = unknown, C = unknown, N = unknown, S = unknown> {
   events: E[]
   calendars: C[]
@@ -25,74 +25,75 @@ export interface Workspace<E = unknown, C = unknown, N = unknown, S = unknown> {
   settings: S
 }
 
+export type SaveStatus = 'saved' | 'saving' | 'error'
+
 /**
- * Keeps a signed-in user's workspace in step with the server.
+ * Saves a project's calendar to the server on every change (debounced).
  *
- * - On mount it loads the user's saved workspace. If the server has one, it
- *   replaces the local copy; if the account is brand new, the local copy is
- *   uploaded as its starting point.
- * - After that every change is saved (debounced).
- * - If the first load fails (offline, server down) nothing is uploaded, so a
- *   failed load can never overwrite data already saved on the server.
+ * The project's data is loaded before the calendar mounts, so the first
+ * render is never saved back — only real edits are. A failed save is retried
+ * on the next change and when the tab is hidden.
  */
-export function useWorkspaceSync<E, C, N, S>(
-  userId: string | undefined,
-  workspace: Workspace<E, C, N, S>,
-  apply: (saved: Workspace<E, C, N, S>) => void,
-) {
-  const [ready, setReady] = useState(false)
-  const applyRef = useRef(apply)
+export function useProjectSync(projectId: string | undefined, workspace: Workspace): SaveStatus {
+  const [status, setStatus] = useState<SaveStatus>('saved')
   const latest = useRef(workspace)
+  const first = useRef(true)
+  const dirty = useRef(false)
   useLayoutEffect(() => {
-    applyRef.current = apply
     latest.current = workspace
   })
 
-  useEffect(() => {
-    if (!userId) return
-    let alive = true
-    fetch('/api/workspace', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then(async (body: { data: Workspace<E, C, N, S> | null }) => {
-        if (!alive || stopped) return
-        if (body.data) applyRef.current(body.data)
-        else await save(latest.current)
-        setReady(true)
+  async function push(data: Workspace) {
+    if (!projectId || stopped) return
+    setStatus('saving')
+    try {
+      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/data`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data }),
+        keepalive: true,
       })
-      .catch(() => {
-        /* stay local-only until the next visit */
-      })
-    return () => {
-      alive = false
+      if (!res.ok) throw new Error(String(res.status))
+      if (!dirty.current) setStatus('saved')
+    } catch {
+      dirty.current = true
+      setStatus('error')
     }
-  }, [userId])
-
-  // Changes not yet saved when the debounce is cut short (refresh, tab close).
-  const dirty = useRef(false)
+  }
+  const pushRef = useRef(push)
+  useLayoutEffect(() => {
+    pushRef.current = push
+  })
 
   useEffect(() => {
-    if (!userId || !ready) return
+    if (!projectId) return
+    if (first.current) {
+      first.current = false
+      return
+    }
     dirty.current = true
+    setStatus('saving')
     const timer = window.setTimeout(() => {
       dirty.current = false
-      void save(workspace)
+      void pushRef.current(workspace)
     }, 600)
     return () => window.clearTimeout(timer)
-  }, [userId, ready, workspace])
+  }, [projectId, workspace])
 
-  // Leaving the page within the debounce window must not drop the last edit:
-  // flush it with a keepalive request, which the browser completes after unload.
+  // Leaving the page (or the project) within the debounce must not drop the
+  // last edit: flush it with a keepalive request.
   useEffect(() => {
-    if (!userId || !ready) return
+    if (!projectId) return
     const flush = () => {
       if (!dirty.current) return
       dirty.current = false
-      void save(latest.current)
+      void pushRef.current(latest.current)
     }
     pendingFlush = async () => {
       if (!dirty.current) return
       dirty.current = false
-      await save(latest.current)
+      await pushRef.current(latest.current)
     }
     const onHidden = () => {
       if (document.visibilityState === 'hidden') flush()
@@ -103,21 +104,9 @@ export function useWorkspaceSync<E, C, N, S>(
       window.removeEventListener('pagehide', flush)
       document.removeEventListener('visibilitychange', onHidden)
       pendingFlush = null
+      flush()
     }
-  }, [userId, ready])
-}
+  }, [projectId])
 
-async function save(workspace: Workspace) {
-  if (stopped) return
-  try {
-    await fetch('/api/workspace', {
-      method: 'PUT',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: workspace }),
-      keepalive: true,
-    })
-  } catch {
-    /* next change retries */
-  }
+  return status
 }

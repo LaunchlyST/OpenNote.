@@ -137,17 +137,19 @@ const TEST_USER = {
   email: 'test@example.com',
   createdAt: new Date().toISOString(),
   emailVerified: true,
+  plan: 'free',
 }
 
 /** Renders the calendar app exactly as `Root` mounts it, with a fixed session. */
 async function renderApp(props, user = TEST_USER) {
   const appMod = await vite.ssrLoadModule('/src/App.tsx')
   const auth = await vite.ssrLoadModule('/src/auth.tsx')
+  const routerMod = await vite.ssrLoadModule('/src/router.tsx')
   return renderToString(
     React.createElement(
       auth.StaticAuthProvider,
       { user },
-      React.createElement(appMod.default, props),
+      React.createElement(routerMod.RouterProvider, null, React.createElement(appMod.default, props)),
     ),
   )
 }
@@ -161,6 +163,23 @@ const vite = await createServer({
   server: { middlewareMode: true },
   appType: 'custom',
 })
+
+/** Renders a freshly created (empty) project's calendar. */
+async function renderProject() {
+  const appMod = await vite.ssrLoadModule('/src/App.tsx')
+  const auth = await vite.ssrLoadModule('/src/auth.tsx')
+  const routerMod = await vite.ssrLoadModule('/src/router.tsx')
+  const screens = await vite.ssrLoadModule('/src/screens.tsx')
+  const now = new Date().toISOString()
+  const project = { id: 'prj_test', workspace: 'free', name: 'Business', color: 'blue', description: '', createdAt: now, updatedAt: now, openedAt: now, eventCount: 0, noteCount: 0 }
+  const data = { events: [], calendars: [{ id: 'cal_main', name: 'My calendar', color: 'blue', visible: true }], notes: [], settings: {} }
+  return renderToString(
+    React.createElement(auth.StaticAuthProvider, { user: TEST_USER },
+      React.createElement(routerMod.RouterProvider, null,
+        React.createElement(screens.ScreenProvider, null,
+          React.createElement(appMod.ProjectCalendar, { project, data, persist: false })))),
+  )
+}
 
 let failures = 0
 const check = (label, ok, detail = '') => {
@@ -294,20 +313,33 @@ try {
   /* -------------------------------------------------------------- */
   /* The existing calendar app must still render.                   */
   /* -------------------------------------------------------------- */
-  console.log('\n  Existing calendar app:')
+  console.log('\n  Workspace picker (after sign-in):')
   const appHtml = await renderApp()
-  check('calendar app renders', appHtml.length > 3000, `${appHtml.length} chars`)
-  check('calendar shows the OpenNote wordmark', appHtml.includes('OpenNote'))
-  check('calendar shows the view switcher', appHtml.includes('Full Week'))
-  check('calendar shows the notes rail', appHtml.includes('Notes'))
-  check('calendar shows the date title', /\d{4}/.test(appHtml))
-  check('calendar shows seeded events', appHtml.includes('Team stand-up'))
-  check('notes stay hidden until opened', !appHtml.includes('Grocery list'))
-  check('calendar shows the sidebar calendars', appHtml.includes('My Calendars'))
+  check('signed-in /app shows the workspace picker', appHtml.includes('Choose Your Workspace'))
+  check('picker offers OpenNote Free', appHtml.includes('OpenNote Free') && appHtml.includes('Open Free workspace'))
+  check('picker shows OpenNote Pro', appHtml.includes('OpenNote Pro'))
+  check('Pro is locked for a Free account', appHtml.includes('Pro is coming soon') && !appHtml.includes('Open Pro workspace'))
+  check('picker does not jump straight to the calendar', !appHtml.includes('Full Week'))
+  const proHtml = await renderApp(undefined, { ...TEST_USER, plan: 'pro' })
+  check('Pro account can open the Pro workspace', proHtml.includes('Open Pro workspace'))
+
+  console.log('\n  Project calendar (existing calendar UI):')
+  const calHtml = await renderProject()
+  check('calendar app renders', calHtml.length > 3000, `${calHtml.length} chars`)
+  check('calendar shows the OpenNote wordmark', calHtml.includes('OpenNote'))
+  check('calendar shows the view switcher', calHtml.includes('Full Week'))
+  check('calendar shows the notes rail', calHtml.includes('Notes'))
+  check('calendar shows the date title', /\d{4}/.test(calHtml))
+  check('calendar shows the sidebar calendars', calHtml.includes('My Calendars'))
+  check('calendar has Back to Projects', calHtml.includes('Back to Projects'))
+  check('calendar shows the project name', calHtml.includes('Business'))
+  for (const demo of ['Team stand-up', 'Morning yoga', 'Sprint planning', 'Client call', 'Dinner with friends', '1:1 with Alex', 'Read a chapter', 'Grocery list']) {
+    check(`new project has no demo content: “${demo}”`, !calHtml.includes(demo))
+  }
 
   /* Route-provided screens */
   const guestHtml = await renderApp(undefined, null)
-  check('dashboard is not rendered without a session', !guestHtml.includes('Full Week') && !guestHtml.includes('Team stand-up'))
+  check('workspace is not rendered without a session', !guestHtml.includes('Full Week') && !guestHtml.includes('Choose Your Workspace'))
   const forgotHtml = await renderApp({ screen: 'forgot' }, null)
   check('/app/forgot-password renders the reset request form', forgotHtml.includes('Reset your password'))
   const resetHtml = await renderApp({ screen: 'reset' }, null)

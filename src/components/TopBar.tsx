@@ -1,4 +1,8 @@
-import { ChevronLeft, ChevronRight, PanelLeft, StickyNote } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Cloud, CloudOff, PanelLeft, StickyNote } from 'lucide-react'
+import { useRouter } from '../router'
+import { useCurrentProject } from '../projects/context'
+import { colorOf } from '../lib/colors'
+import { paths } from '../projects/api'
 import { useApp } from '../store'
 import type { ViewMode } from '../lib/types'
 import { formatHeader } from '../lib/date'
@@ -27,7 +31,9 @@ export function TopBar({
   onToggleNotes: () => void
   notesOpen: boolean
 }) {
-  const { view, setView, selectedDate, navigate, goToToday, settings } = useApp()
+  const { view, setView, selectedDate, navigate, goToToday, settings, saveStatus } = useApp()
+  const project = useCurrentProject()
+  const router = useRouter()
   const [range, year] = splitYear(formatHeader(view, selectedDate, settings.weekStartsOn))
   const active = Math.max(0, VIEWS.findIndex((v) => v.value === view))
 
@@ -41,6 +47,34 @@ export function TopBar({
       >
         <PanelLeft className="h-[18px] w-[18px]" />
       </button>
+
+      {project && (
+        <div className="flex min-w-0 shrink items-center gap-2 border-r border-[#ececea] pr-3">
+          <button
+            type="button"
+            onClick={() => router.navigate(paths.dashboard(project.workspace))}
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[12.5px] font-medium text-[#37352f] transition hover:bg-[#f3f3f1]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Back to Projects</span>
+            <span className="sr-only sm:hidden">Back to Projects</span>
+          </button>
+          <span className="hidden min-w-0 items-center gap-1.5 2xl:flex" title={project.name}>
+            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: colorOf(project.color).dot }} />
+            <span className="max-w-[160px] truncate text-[12.5px] font-semibold text-[#191919]">{project.name}</span>
+          </span>
+          <span
+            role="status"
+            title={saveStatus === 'error' ? 'Not saved — will retry on your next change' : saveStatus === 'saving' ? 'Saving…' : 'All changes saved'}
+            className={cn('hidden shrink-0 items-center gap-1 text-[11px] lg:inline-flex', saveStatus === 'error' ? 'text-[#dc2626]' : 'text-[#a3a29e]')}
+          >
+            {saveStatus === 'error' ? <CloudOff className="h-3.5 w-3.5" /> : <Cloud className="h-3.5 w-3.5" />}
+            <span className="hidden 2xl:inline">
+              {saveStatus === 'error' ? 'Not saved' : saveStatus === 'saving' ? 'Saving…' : 'Saved'}
+            </span>
+          </span>
+        </div>
+      )}
 
       <h1 className="min-w-0 truncate text-[20px] font-semibold tracking-[-0.03em] text-[#191919] sm:text-[22px]">
         {range}

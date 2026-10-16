@@ -22,6 +22,21 @@ const EVENT = `Alice secret meeting ${stamp}`
 const NOTE = `Alice private note ${stamp}`
 
 const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 15000 })
+const pickerReady = (p) => p.getByText('Choose Your Workspace').first().waitFor({ timeout: 15000 })
+/** Sign-in lands on the workspace picker: open Free, then open (or create) the named project. */
+async function enterProject(p, name) {
+  await pickerReady(p)
+  await p.getByRole('button', { name: 'Open Free workspace' }).click()
+  await p.getByText(/No projects yet|All projects/).first().waitFor({ timeout: 15000 })
+  const card = p.getByRole('button', { name: `Open ${name}`, exact: true }).first()
+  if (await card.count()) await card.click()
+  else {
+    await p.getByRole('button', { name: /Create (New|your first) Project/i }).first().click()
+    await p.getByLabel('Project name').fill(name)
+    await p.getByRole('button', { name: 'Create project' }).click()
+  }
+  await appReady(p)
+}
 const signinReady = (p) => p.getByRole('heading', { name: 'Welcome back' }).waitFor({ timeout: 15000 })
 
 async function confirmViaInbox(p, email) {
@@ -45,9 +60,9 @@ async function signUp(p, u) {
   await p.getByLabel('Password', { exact: true }).fill(u.pw)
   await p.getByLabel('Confirm password', { exact: true }).fill(u.pw)
   await p.getByRole('button', { name: 'Create account' }).click()
-  await Promise.race([p.getByText('Check your email').first().waitFor({ timeout: 15000 }), appReady(p)])
+  await Promise.race([p.getByText('Check your email').first().waitFor({ timeout: 15000 }), pickerReady(p)])
   if (await p.getByText('Check your email').count()) await confirmViaInbox(p, u.email)
-  await appReady(p)
+  await enterProject(p, 'Private')
 }
 
 async function signIn(p, u) {
@@ -55,7 +70,7 @@ async function signIn(p, u) {
   await p.getByLabel('Email address', { exact: true }).fill(u.email)
   await p.getByLabel('Password', { exact: true }).fill(u.pw)
   await p.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await appReady(p)
+  await enterProject(p, 'Private')
 }
 
 async function signOut(p, name) {
@@ -96,7 +111,7 @@ async function openNotes(p) {
   await p.getByRole('button', { name: /Pin note to/ }).click()
   await p.getByPlaceholder('Title').first().fill(NOTE)
   check((await pageHas(p, EVENT)) && (await pageHas(p, NOTE)), 'User A created an event and a note')
-  check((await cacheKeys(p)).length > 0, 'while signed in, A’s workspace is cached in this browser (normal persistence)')
+  check((await cacheKeys(p)).length === 0, 'project data lives on the server, not in this browser’s storage')
 
   // Sign out immediately — the note edit is still inside the save debounce.
   await signOut(p, A.name)
@@ -120,11 +135,9 @@ async function openNotes(p) {
   check(!(await pageHas(p, EVENT)), 'User B does not see A’s event')
   await openNotes(p)
   check(!(await pageHas(p, NOTE)), 'User B does not see A’s note')
-  const bWs = await (await p.request.get(`${B}/api/workspace`)).text()
+  const bWs = await (await p.request.get(`${B}/api/projects?workspace=free`)).text()
   check(!bWs.includes(EVENT) && !bWs.includes(NOTE), 'B’s server workspace holds none of A’s data')
-  const bKeys = await cacheKeys(p)
-  const bId = (await (await p.request.get(`${B}/api/auth/get-session`)).json()).user.id
-  check(bKeys.length > 0 && bKeys.every((k) => k.endsWith(`:${bId}`)), 'the browser cache now holds only B’s keys, scoped to B')
+  check((await cacheKeys(p)).length === 0, 'the browser holds no account data for B either')
   await signOut(p, Bu.name)
   check((await cacheKeys(p)).length === 0, 'after B signs out, nothing of B remains either')
 

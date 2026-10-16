@@ -9,16 +9,11 @@ import type { ReactNode } from 'react'
 import type { Calendar, CalendarEvent, Note, Settings, ViewMode } from './lib/types'
 import type { EventColorId } from './lib/colors'
 import { AUTO_COLORS } from './lib/colors'
-import {
-  DEFAULT_SETTINGS,
-  seedCalendars,
-  seedEvents,
-  seedNotes,
-} from './lib/seed'
-import { addDays, addMonths, dateKey, startOfDay, startOfWeek } from './lib/date'
+import { DEFAULT_SETTINGS } from './lib/seed'
+import { addDays, addMonths, startOfDay } from './lib/date'
 import { uid } from './lib/id'
-import { useLocalStorage } from './hooks'
-import { useWorkspaceSync } from './sync'
+import { useProjectSync } from './sync'
+import type { SaveStatus, Workspace } from './sync'
 
 export interface ModalState {
   mode: 'create' | 'edit'
@@ -26,6 +21,8 @@ export interface ModalState {
 }
 
 interface AppContextValue {
+  /** Whether the latest change has reached the server. */
+  saveStatus: SaveStatus
   events: CalendarEvent[]
   calendars: Calendar[]
   notes: Note[]
@@ -62,84 +59,38 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null)
 
-const STORAGE = {
-  events: 'opennote.events.v1',
-  eventsWeek: 'opennote.events.week',
-  calendars: 'opennote.calendars.v1',
-  notes: 'opennote.notes.v1',
-  settings: 'opennote.settings.v1',
-}
+export type ProjectData = Workspace<CalendarEvent, Calendar, Note, Partial<Settings>>
 
 /**
- * Demo events are generated relative to the week of the first visit and then
- * kept in localStorage forever, so once that week passes the current week
- * renders empty. Record which week the stored demo events belong to, and
- * repair storage when it no longer matches — keeping any event the user
- * created or edited.
- *
- * This has to run before `useLocalStorage` reads the key: that hook returns
- * an existing stored value without consulting its initializer, so a repair
- * passed in as the initial value would never execute.
+ * One project's calendar: its events, calendars, notes and settings. The data
+ * is loaded from the server before this mounts and every change is saved back
+ * to that project only — nothing is shared between projects.
  */
-function syncStoredEvents() {
-  const anchor = dateKey(startOfWeek(new Date(), DEFAULT_SETTINGS.weekStartsOn))
-  try {
-    const raw = window.localStorage.getItem(STORAGE.events)
-    if (raw !== null && window.localStorage.getItem(STORAGE.eventsWeek) === anchor) {
-      return
-    }
-    const kept = raw
-      ? (JSON.parse(raw) as CalendarEvent[]).filter((e) => !e.seeded)
-      : []
-    window.localStorage.setItem(
-      STORAGE.events,
-      JSON.stringify([...seedEvents(), ...kept]),
-    )
-    window.localStorage.setItem(STORAGE.eventsWeek, anchor)
-  } catch {
-    /* storage blocked or corrupt - the hook falls back to demo data */
-  }
-}
-
-syncStoredEvents()
-
 export function AppProvider({
   children,
-  userId,
+  projectId,
+  initial,
 }: {
   children: ReactNode
-  /** Signed-in user. Their workspace is cached under their own keys and synced to the server. */
-  userId?: string
+  /** The open project. Omitted only in tests, where nothing is saved. */
+  projectId?: string
+  initial: ProjectData
 }) {
-  // Each account gets its own local cache, so two people sharing a browser
-  // never see each other's calendar.
-  const key = (base: string) => (userId ? `${base}:${userId}` : base)
-  const [events, setEvents] = useLocalStorage<CalendarEvent[]>(
-    key(STORAGE.events),
-    seedEvents,
-  )
-  const [calendars, setCalendars] = useLocalStorage<Calendar[]>(
-    key(STORAGE.calendars),
-    seedCalendars,
-  )
-  const [notes, setNotes] = useLocalStorage<Note[]>(key(STORAGE.notes), seedNotes)
-  const [settings, setSettings] = useLocalStorage<Settings>(
-    key(STORAGE.settings),
-    DEFAULT_SETTINGS,
-  )
+  const [events, setEvents] = useState<CalendarEvent[]>(initial.events)
+  const [calendars, setCalendars] = useState<Calendar[]>(initial.calendars)
+  const [notes, setNotes] = useState<Note[]>(initial.notes)
+  const [settings, setSettings] = useState<Settings>(() => ({
+    ...DEFAULT_SETTINGS,
+    ...initial.settings,
+  }))
 
   const workspace = useMemo(
     () => ({ events, calendars, notes, settings }),
     [events, calendars, notes, settings],
   )
-  useWorkspaceSync(userId, workspace, (saved) => {
-    setEvents(saved.events)
-    setCalendars(saved.calendars)
-    setNotes(saved.notes)
-    setSettings({ ...DEFAULT_SETTINGS, ...saved.settings })
-  })
+  const saveStatus = useProjectSync(projectId, workspace)
 
-  const [view, setViewState] = useState<ViewMode>('week')
+  const [view, setViewState] = useState<ViewMode>(() => settings.defaultView)
   const [focusDay, setFocusDay] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
     startOfDay(new Date()),
@@ -184,7 +135,7 @@ export function AppProvider({
 
   const openCreate = useCallback(
     (start: Date, durationMin = 60, calendarId?: string) => {
-      const calendar = calendarId ?? calendars[0]?.id ?? 'cal_work'
+      const calendar = calendarId ?? calendars[0]?.id ?? 'cal_main'
       const end = new Date(start.getTime() + durationMin * 60_000)
       setModal({
         mode: 'create',
@@ -209,9 +160,8 @@ export function AppProvider({
   const saveEvent = useCallback(
     (event: CalendarEvent) => {
       setEvents((list) => {
-        // Clearing `seeded` makes an edited event user-owned, so it survives
-        // the weekly demo-data refresh.
-        const owned = { ...event, seeded: false }
+        const owned = { ...event }
+        delete owned.seeded
         const idx = list.findIndex((e) => e.id === owned.id)
         if (idx === -1) return [...list, owned]
         const next = [...list]
@@ -323,6 +273,7 @@ export function AppProvider({
 
   const value = useMemo<AppContextValue>(
     () => ({
+      saveStatus,
       events,
       calendars,
       notes,
@@ -352,6 +303,7 @@ export function AppProvider({
       moveNote,
     }),
     [
+      saveStatus,
       events,
       calendars,
       notes,

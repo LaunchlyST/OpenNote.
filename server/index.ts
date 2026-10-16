@@ -14,6 +14,7 @@ import { productionMailProblem, senderProblem, verifySmtp } from './mail/transpo
 import { applyMigrations } from './schema.ts'
 import { PLANS, planOf, requirePlan } from './plans.ts'
 import { validateWorkspace } from './workspace.ts'
+import { projectsRouter } from './projects.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
@@ -95,6 +96,9 @@ app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
   putWorkspace.run(req.userId!, JSON.stringify(data), updatedAt)
   res.json({ ok: true, updatedAt })
 })
+
+// Each user's projects (independent calendars), filed under Free or Pro.
+app.use('/api/projects', projectsRouter())
 
 // Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())

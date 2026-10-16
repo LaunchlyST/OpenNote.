@@ -30,6 +30,21 @@ async function mailLink(p, to, subject, button) {
   return null
 }
 const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 15000 })
+const pickerReady = (p) => p.getByText('Choose Your Workspace').first().waitFor({ timeout: 15000 })
+/** Sign-in lands on the workspace picker: open Free, then open (or create) the named project. */
+async function enterProject(p, name) {
+  await pickerReady(p)
+  await p.getByRole('button', { name: 'Open Free workspace' }).click()
+  await p.getByText(/No projects yet|All projects/).first().waitFor({ timeout: 15000 })
+  const card = p.getByRole('button', { name: `Open ${name}`, exact: true }).first()
+  if (await card.count()) await card.click()
+  else {
+    await p.getByRole('button', { name: /Create (New|your first) Project/i }).first().click()
+    await p.getByLabel('Project name').fill(name)
+    await p.getByRole('button', { name: 'Create project' }).click()
+  }
+  await appReady(p)
+}
 
 ;(async () => {
   const browser = await chromium.launch()
@@ -59,7 +74,7 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
   await p.getByLabel('Password', { exact: true }).fill(pw1)
   await p.getByLabel('Confirm password', { exact: true }).fill(pw1)
   await p.getByRole('button', { name: 'Create account' }).click()
-  await Promise.race([p.getByText('Check your email').first().waitFor(), appReady(p)])
+  await Promise.race([p.getByText('Check your email').first().waitFor(), pickerReady(p)])
   const needsVerify = (await p.getByText('Check your email').count()) > 0
   ok(`account registered${needsVerify ? ' (verification required)' : ' (verification off: no SMTP)'}`)
 
@@ -67,14 +82,16 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
     const link = await mailLink(p, email, 'Confirm your OpenNote email', 'Confirm email')
     link ? ok('verification email received in local inbox') : die('verification email')
     await p.goto(link)
-    await appReady(p)
+    await enterProject(p, 'Journey')
     ok('verification link signs the user in')
   } else {
     ok('verification email step skipped (no SMTP configured)')
     ok('signed in after sign-up')
+    await enterProject(p, 'Journey')
   }
 
-  ok('dashboard opens')
+  ok('workspace picker → project dashboard → new project calendar opens')
+  ;(await p.getByText(/Team stand-up|Morning yoga|Sprint planning/).count()) === 0 ? ok('the new project has no demo events') : die('demo events in a new project')
 
   await p.getByRole('button', { name: 'New event' }).click()
   await p.getByPlaceholder('Add a title').fill(eventTitle)
@@ -109,7 +126,7 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
   await p.getByLabel('Email address', { exact: true }).fill(email)
   await p.getByLabel('Password', { exact: true }).fill(pw1)
   await p.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await appReady(p)
+  await enterProject(p, 'Journey')
   ok('logged back in')
   ;(await p.getByText(eventTitle).count()) && (await hasNote()) ? ok('saved data present after logging back in') : die('data missing after login')
 
@@ -141,7 +158,7 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
   await p.getByLabel('Email address', { exact: true }).fill(email)
   await p.getByLabel('Password', { exact: true }).fill(pw2)
   await p.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await appReady(p).catch(async (e) => {
+  await pickerReady(p).catch(async (e) => {
     console.log('    page says:', (await p.locator('body').innerText()).slice(0, 400).replace(/\s+/g, ' '))
     throw e
   })
@@ -156,7 +173,7 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
   await q.getByLabel('Confirm password', { exact: true }).fill(pw1)
   await q.getByRole('button', { name: 'Create account' }).click()
   await q.waitForTimeout(1500)
-  const theirs = await q.request.get(`${B}/api/workspace`)
+  const theirs = await q.request.get(`${B}/api/projects?workspace=free`)
   const body = await theirs.text()
   !body.includes(eventTitle) && !body.includes(noteTitle) ? ok('another account cannot see this account’s data') : die('data leaked to another account')
 

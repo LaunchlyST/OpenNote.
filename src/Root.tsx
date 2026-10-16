@@ -29,8 +29,20 @@ function screenForPath(path: string): Screen | undefined {
   return undefined
 }
 
+/** The workspace picker, project dashboards and project calendars share one mounted app. */
+function isWorkspaceRoute(path: string): boolean {
+  return (
+    path === '/app' ||
+    path === '/dashboard' ||
+    path === '/app/free' ||
+    path === '/app/pro' ||
+    /^\/app\/project\/[^/]+$/.test(path)
+  )
+}
+
 function isAppRoute(path: string): boolean {
   return (
+    isWorkspaceRoute(path) ||
     path === '/app' ||
     path === '/dashboard' ||
     path === '/app/signin' ||
@@ -108,7 +120,7 @@ function Routes() {
     // instead of being ignored by an already-mounted ScreenProvider.
     return (
       <Suspense fallback={<RouteFallback />}>
-        <App key={path} screen={screenForPath(path)} />
+        <App key={isWorkspaceRoute(path) ? 'workspace' : path} screen={screenForPath(path)} />
       </Suspense>
     )
   }

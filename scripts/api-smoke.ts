@@ -170,6 +170,97 @@ try {
   const pro = await req('GET', '/api/pro/anything', undefined, a.cookies)
   check('Pro-only endpoints refuse Free accounts', pro.status === 403, `got ${pro.status}`)
 
+  console.log('\n  Projects')
+  const listA = await req('GET', '/api/projects?workspace=free', undefined, a.cookies)
+  const imported = (listA.json?.projects as Array<{ id: string; name: string }>) ?? []
+  check('an existing calendar is kept as a “My Calendar” project', imported.length === 1 && imported[0].name === 'My Calendar', listA.text)
+  const importedData = await req('GET', `/api/projects/${imported[0]?.id}`, undefined, a.cookies)
+  check('the imported project holds the user’s real data', importedData.text.includes('alice note') && importedData.text.includes('alice event'))
+  const listAgain = await req('GET', '/api/projects?workspace=free', undefined, a.cookies)
+  check('the import runs only once', (listAgain.json?.projects as unknown[]).length === 1)
+
+  const c = await req('POST', '/api/auth/sign-up/email', { name: 'Cara', email: 'cara@opennote.test', password: PASSWORD })
+  const demoMixed = {
+    ...workspace('cara'),
+    events: [
+      ...workspace('cara').events,
+      { id: 'demo1', title: 'Team stand-up', start: '2026-10-20T09:00:00.000Z', end: '2026-10-20T09:30:00.000Z', calendarId: 'work', seeded: true },
+    ],
+    notes: [...workspace('cara').notes, { id: 'demo2', title: 'Grocery list', body: 'Oat milk\nSpinach\nCoffee beans\nRye bread', createdAt: 2 }],
+  }
+  await req('PUT', '/api/workspace', { data: demoMixed }, c.cookies)
+  const cList = await req('GET', '/api/projects?workspace=free', undefined, c.cookies)
+  const cId = (cList.json?.projects as Array<{ id: string }>)[0]?.id
+  const cData = await req('GET', `/api/projects/${cId}`, undefined, c.cookies)
+  check('import drops demo events and notes', !cData.text.includes('Team stand-up') && !cData.text.includes('Grocery list'))
+  check('import keeps the user’s own events and notes', cData.text.includes('cara event') && cData.text.includes('cara note'))
+
+  const d = await req('POST', '/api/auth/sign-up/email', { name: 'Dan', email: 'dan@opennote.test', password: PASSWORD })
+  await req('PUT', '/api/workspace', { data: { ...demoMixed, events: [demoMixed.events[1]], notes: [demoMixed.notes[1]] } }, d.cookies)
+  const dList = await req('GET', '/api/projects?workspace=free', undefined, d.cookies)
+  check('demo-only calendars are not imported', (dList.json?.projects as unknown[]).length === 0, dList.text)
+
+  const created = await req('POST', '/api/projects', { workspace: 'free', name: 'Business', color: 'blue', description: 'Work things' }, b.cookies)
+  const biz = created.json?.project as { id: string; name: string } | undefined
+  check('a project can be created', created.status === 201 && biz?.name === 'Business', created.text)
+  const bizData = await req('GET', `/api/projects/${biz?.id}`, undefined, b.cookies)
+  const bd = bizData.json?.data as { events: unknown[]; notes: unknown[] }
+  check('a new project starts completely empty', bd?.events.length === 0 && bd?.notes.length === 0, bizData.text)
+  const personal = (await req('POST', '/api/projects', { workspace: 'free', name: 'Personal', color: 'pink' }, b.cookies)).json?.project as { id: string }
+  check('project ids are unique', !!personal?.id && personal.id !== biz?.id)
+
+  const bizWork = { ...workspace('biz'), calendars: [{ id: 'work', name: 'Work', color: 'blue', visible: true }] }
+  const savedBiz = await req('PUT', `/api/projects/${biz?.id}/data`, { data: bizWork }, b.cookies)
+  await req('PUT', `/api/projects/${personal.id}/data`, { data: workspace('personal') }, b.cookies)
+  const readBiz = await req('GET', `/api/projects/${biz?.id}`, undefined, b.cookies)
+  const readPersonal = await req('GET', `/api/projects/${personal.id}`, undefined, b.cookies)
+  check('project data saves', savedBiz.status === 200)
+  check('Business holds only Business content', readBiz.text.includes('biz note') && !readBiz.text.includes('personal note'))
+  check('Personal holds only Personal content', readPersonal.text.includes('personal note') && !readPersonal.text.includes('biz note'))
+  const badSave = await req('PUT', `/api/projects/${biz?.id}/data`, { data: { settings: {} } }, b.cookies)
+  check('invalid project data is rejected', badSave.status === 400)
+
+  const renamed = await req('PATCH', `/api/projects/${biz?.id}`, { name: 'Business 2026', color: 'purple' }, b.cookies)
+  check('a project can be renamed', (renamed.json?.project as { name?: string })?.name === 'Business 2026')
+  const emptyName = await req('PATCH', `/api/projects/${biz?.id}`, { name: '   ' }, b.cookies)
+  check('an empty name is refused', emptyName.status === 400)
+  const dupe = await req('POST', `/api/projects/${biz?.id}/duplicate`, {}, b.cookies)
+  const copy = dupe.json?.project as { id: string; name: string }
+  const copyData = await req('GET', `/api/projects/${copy?.id}`, undefined, b.cookies)
+  check('a project can be duplicated with its content', dupe.status === 201 && copy.name === 'Business 2026 (copy)' && copyData.text.includes('biz note'))
+
+  console.log('\n  Project isolation')
+  for (const [m, p, body] of [
+    ['GET', `/api/projects/${biz?.id}`, undefined],
+    ['PATCH', `/api/projects/${biz?.id}`, { name: 'hacked' }],
+    ['PUT', `/api/projects/${biz?.id}/data`, { data: workspace('evil') }],
+    ['POST', `/api/projects/${biz?.id}/duplicate`, {}],
+    ['DELETE', `/api/projects/${biz?.id}`, undefined],
+  ] as const) {
+    const r = await req(m, p, body, a.cookies)
+    check(`Alice cannot ${m} Bob’s project (404)`, r.status === 404, `got ${r.status}`)
+  }
+  const bizStill = await req('GET', `/api/projects/${biz?.id}`, undefined, b.cookies)
+  check('Bob’s project is untouched', bizStill.text.includes('biz note') && bizStill.text.includes('Business 2026'))
+  const aliceList = await req('GET', '/api/projects?workspace=free', undefined, a.cookies)
+  check('Alice’s list never shows Bob’s projects', !aliceList.text.includes('Business'))
+  const anon = await req('GET', '/api/projects?workspace=free')
+  check('anonymous project listing → 401', anon.status === 401)
+
+  console.log('\n  Pro workspace')
+  const proList = await req('GET', '/api/projects?workspace=pro', undefined, b.cookies)
+  check('a Free account cannot list Pro projects', proList.status === 403, `got ${proList.status}`)
+  const proCreate = await req('POST', '/api/projects', { workspace: 'pro', name: 'X', color: 'lime' }, b.cookies)
+  check('a Free account cannot create Pro projects', proCreate.status === 403, `got ${proCreate.status}`)
+  const weird = await req('GET', '/api/projects?workspace=admin', undefined, b.cookies)
+  check('unknown workspaces are refused', weird.status === 400)
+
+  const del = await req('DELETE', `/api/projects/${copy?.id}`, undefined, b.cookies)
+  const delGone = await req('GET', `/api/projects/${copy?.id}`, undefined, b.cookies)
+  check('a project can be deleted', del.status === 200 && delGone.status === 404)
+  const origAfter = await req('GET', `/api/projects/${biz?.id}`, undefined, b.cookies)
+  check('deleting a copy leaves the original', origAfter.status === 200)
+
   console.log('\n  Admin-only routes')
   const mlog = await req('GET', '/api/admin/mail-log', undefined, a.cookies)
   check('the mail log refuses a normal user', mlog.status === 403, `got ${mlog.status}`)
@@ -182,6 +273,8 @@ try {
   const again = await req('GET', '/api/workspace', undefined, a.cookies)
   check('the session survives a restart', again.status === 200, `got ${again.status}`)
   check('the data survives a restart', again.text.includes('alice note'))
+  const projAgain = await req('GET', '/api/projects?workspace=free', undefined, b.cookies)
+  check('projects survive a restart', projAgain.text.includes('Business 2026') && projAgain.text.includes('Personal'))
   const login = await req('POST', '/api/auth/sign-in/email', { email: 'bob@opennote.test', password: PASSWORD })
   check('accounts survive a restart (Bob can sign in)', login.status === 200, `got ${login.status}`)
   const out = await req('POST', '/api/auth/sign-out', {}, a.cookies)
