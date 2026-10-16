@@ -1,0 +1,25 @@
+# Normalise line endings so Windows and non-Windows checkouts agree.
+#
+# core.autocrlf is true on this machine, which made git warn "LF will be
+# replaced by CRLF" on nearly every file and produced whole-file diffs when an
+# environment with different settings committed the same content. Storing LF in
+# the repository and checking out LF everywhere removes that class of noise
+# entirely.
+
+* text=auto eol=lf
+
+# Binary assets - never touch these.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.pdf   binary
+*.zip   binary
+*.db    binary
+*.sqlite binary
+*.sqlite-wal binary
+*.sqlite-shm binary
