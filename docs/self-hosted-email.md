@@ -42,6 +42,18 @@ npm run mail:test -- you@example.com
 Both options are **local tests**. They prove OpenNote builds, queues and sends
 mail correctly. They do not prove delivery to Gmail, Outlook, etc.
 
+## Ready-made tools
+
+| Command / file | Purpose |
+|---|---|
+| `npm run mail:dns -- --domain <domain> --ip <server IP>` | Creates the DKIM key (`data/dkim/`, never committed) and prints the exact MX, A, SPF, DKIM, DMARC and PTR records to add. |
+| `npm run mail:doctor` | Checks config, DNS (MX/SPF/DKIM/DMARC/PTR, and that the DKIM DNS key matches the private key), the SMTP login with TLS, and whether port 25 is reachable. Sends nothing. |
+| `npm run mail:doctor -- --send you@gmail.com` | Same, then sends one real test email. |
+| `deploy/mail/` | Docker Compose + config for **Maddy**, an established open-source mail server: TLS-only submission on 587/465 for OpenNote, DKIM signing with the same key, an outbound queue to recipients' MX servers, and an inbox for bounces and DMARC reports. |
+
+The outbox treats a 5xx reply (bad address, policy, authentication) as
+permanent and stops; 4xx and network errors are retried with backoff.
+
 ## What real delivery to outside inboxes needs
 
 Code cannot replace these; they are infrastructure and reputation:
@@ -66,6 +78,17 @@ Code cannot replace these; they are infrastructure and reputation:
 7. **Warm-up and monitoring.** A new IP starts with no reputation; send low
    volumes first, watch bounces, and check your IP on blocklists
    (e.g. <https://mxtoolbox.com/blacklists.aspx>).
+
+### Bringing up the mail server (on the VPS, with Docker)
+
+1. Point the DNS printed by `npm run mail:dns` at the VPS and set its PTR.
+2. Get a certificate: `certbot certonly --standalone -d mail.<domain>`.
+3. `cd deploy/mail && cp mail.env.example mail.env` and fill it in.
+4. Copy `data/dkim/opennote.private.pem` to the VPS (`DKIM_DIR`).
+5. `docker compose --env-file mail.env up -d`
+6. Create OpenNote's login: `docker compose exec maddy maddy creds create opennote@<domain>`.
+7. Put that login in OpenNote's `.env` (below) and run `npm run mail:doctor -- --send you@gmail.com`,
+   then repeat with an Outlook/Hotmail address.
 
 ### Connecting OpenNote to your own server
 

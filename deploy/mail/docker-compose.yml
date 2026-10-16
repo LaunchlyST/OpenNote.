@@ -1,0 +1,30 @@
+# OpenNote's own outbound mail server, using Maddy (https://maddy.email),
+# an established open-source mail server. NOT started by anything in this repo:
+# run it only on a server you control, after the DNS in docs/self-hosted-email.md.
+#
+#   cd deploy/mail
+#   cp mail.env.example mail.env      # fill in your domain + hostname
+#   docker compose --env-file mail.env up -d
+#   docker compose exec maddy maddy creds create opennote@$MAIL_DOMAIN
+#
+services:
+  maddy:
+    image: foxcpp/maddy:0.8.1
+    container_name: opennote-mail
+    restart: unless-stopped
+    environment:
+      MADDY_HOSTNAME: ${MAIL_HOSTNAME:?set MAIL_HOSTNAME in mail.env}
+      MADDY_DOMAIN: ${MAIL_DOMAIN:?set MAIL_DOMAIN in mail.env}
+    ports:
+      - "25:25"     # inbound bounces/replies from other servers
+      - "587:587"   # STARTTLS submission — where OpenNote connects
+      - "465:465"   # implicit-TLS submission (optional)
+    volumes:
+      - ./maddy.conf:/data/maddy.conf:ro
+      - maddy-data:/data
+      # TLS certificate for MAIL_HOSTNAME (e.g. from certbot) as fullchain.pem / privkey.pem
+      - ${TLS_DIR:?set TLS_DIR in mail.env}:/data/tls:ro
+      # The same DKIM key OpenNote's `npm run mail:dns` created
+      - ${DKIM_DIR:?set DKIM_DIR in mail.env}:/data/dkim:ro
+volumes:
+  maddy-data:

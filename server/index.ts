@@ -16,6 +16,9 @@ import { applyMigrations } from './schema.ts'
 await applyMigrations({ quiet: true })
 const { admins } = syncRoles()
 startMailWorker()
+if (env.isProduction && !env.baseURL.startsWith('https://')) {
+  console.warn(`[warn] BETTER_AUTH_URL is ${env.baseURL}. In production it must be your https:// domain — password reset and verification links are built from it.`)
+}
 
 const app = express()
 app.disable('x-powered-by')

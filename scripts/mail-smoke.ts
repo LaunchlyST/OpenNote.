@@ -114,6 +114,16 @@ try {
     check(`after ${env.mail.maxAttempts} attempts it is marked failed`, after3.status === 'failed' && after3.attempts === 3)
     check('a failed message has its body erased too', after3.html === null)
 
+    setTransport({
+      name: 'smtp',
+      async send() {
+        throw Object.assign(new Error('550 5.1.1 mailbox does not exist'), { responseCode: 550 })
+      },
+    })
+    const perm = enqueueEmail('verify-email', 'gone@example.com', { url: LINK })
+    await processOutbox()
+    check('a permanent 5xx refusal is not retried', perm.queued && row(perm.id).status === 'failed' && row(perm.id).attempts === 1)
+
     setTransport({ name: 'smtp', async send() {} })
     const ok = enqueueEmail('verify-email', 'recover@example.com', { url: LINK })
     await processOutbox()
@@ -159,7 +169,7 @@ try {
     setTransport(smtpTransport())
     const t = enqueueEmail('reset-password', 'tls@example.com', { url: LINK })
     await processOutbox()
-    check('without STARTTLS the send is refused (TLS is enforced)', t.queued && row(t.id).status === 'retrying', t.queued ? row(t.id).status : '')
+    check('without STARTTLS the send is refused (TLS is enforced)', t.queued && ['retrying', 'failed'].includes(row(t.id).status) && !caught.some((m) => m.to.join() === 'tls@example.com'), t.queued ? row(t.id).status : '')
     server.close()
   }
 

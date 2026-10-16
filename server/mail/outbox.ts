@@ -105,11 +105,15 @@ async function sendDue() {
     } catch (err) {
       const attempts = row.attempts + 1
       const reason = (err instanceof Error ? err.message : String(err)).slice(0, 300)
-      if (attempts >= env.mail.maxAttempts) {
+      // 5xx from the server is a permanent refusal (bad address, policy,
+      // authentication): retrying cannot help. 4xx and network errors can.
+      const code = (err as { responseCode?: number }).responseCode
+      const permanent = typeof code === 'number' && code >= 500 && code < 600
+      if (permanent || attempts >= env.mail.maxAttempts) {
         db.prepare(
           "UPDATE email_outbox SET status = 'failed', attempts = ?, lastError = ?, html = NULL, text = NULL WHERE id = ?",
         ).run(attempts, reason, row.id)
-        log(`gave up on ${row.kind} #${row.id} after ${attempts} attempts: ${reason}`)
+        log(`gave up on ${row.kind} #${row.id} after ${attempts} attempt(s)${permanent ? ' (permanent error)' : ''}: ${reason}`)
       } else {
         const delay = Math.min(HOUR, BASE_DELAY * 4 ** (attempts - 1))
         db.prepare(
