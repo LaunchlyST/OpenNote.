@@ -22,6 +22,7 @@
     "dev:api": "tsx watch server/index.ts",
     "db:migrate": "tsx server/migrate.ts",
     "admin:verify": "tsx scripts/grant-admin.ts",
+    "mail:test": "tsx scripts/mail-test.ts",
     "serve": "NODE_ENV=production tsx server/index.ts"
   },
   "dependencies": {

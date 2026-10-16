@@ -17,7 +17,7 @@ import express from 'express'
 const tmp = mkdtempSync(join(tmpdir(), 'opennote-auth-'))
 const ORIGIN = 'http://localhost:3001'
 
-process.env.NODE_ENV = 'test'
+process.env.NODE_ENV = 'development' // 'test' would switch off Better Auth's origin checks
 process.env.BETTER_AUTH_URL = ORIGIN
 process.env.BETTER_AUTH_SECRET = 'b'.repeat(64)
 process.env.DATABASE_PATH = join(tmp, 'test.db')
@@ -197,6 +197,20 @@ try {
     const link = mail.join('\n').match(/https?:\/\/\S+reset-password\/(\w+)\S*/)
     check('a reset email was produced', Boolean(link), mail.join(' | '))
     const token = link?.[1] ?? ''
+    check('the reset link points at the site URL (BETTER_AUTH_URL)', Boolean(link?.[0].startsWith(`${ORIGIN}/api/auth/reset-password/`)), link?.[0])
+    check('the link returns the user to the reset page', Boolean(link?.[0].includes(encodeURIComponent(`${ORIGIN}/app/reset-password`))), link?.[0])
+
+    // Better Auth checks redirectTo against trustedOrigins. Whether it refuses
+    // the request or the link, the browser must never land on another site.
+    mail.length = 0
+    const evil = await call('/request-password-reset', { email: 'sam@opennote.test', redirectTo: 'https://evil.example/steal' })
+    const evilLink = mail.join('\n').match(/https?:\/\/\S+reset-password\/\w+\S*/)?.[0]
+    let landed = ''
+    if (evil.status === 200 && evilLink) {
+      const r = await fetch(evilLink.replace(ORIGIN, BASE), { redirect: 'manual', headers: { origin: ORIGIN } })
+      landed = r.headers.get('location') ?? `status ${r.status}`
+    }
+    check('a reset link cannot send the user to another site', evil.status >= 400 || !landed.includes('evil.example'), `${evil.status} → ${landed}`)
 
     const ghost = await call('/request-password-reset', { email: 'nobody@opennote.test', redirectTo: `${ORIGIN}/app` })
     check('unknown emails get the same answer (no account probing)', ghost.status === 200)
