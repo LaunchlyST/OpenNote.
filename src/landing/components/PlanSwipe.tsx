@@ -91,16 +91,33 @@ function FeatureList({ items, planned }: { items: string[]; planned?: boolean })
   )
 }
 
+/** The hero's laptop frame: dark bezel around the window, with a base. */
+function Laptop({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-1 sm:px-4">
+      <div className="relative rounded-[18px] bg-lp-ink p-1.5 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:rounded-[22px] sm:p-2.5">
+        {children}
+      </div>
+      <div aria-hidden="true" className="mx-auto h-2.5 w-[106%] -translate-x-[2.8%] rounded-b-[16px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:h-3.5" />
+    </div>
+  )
+}
+
+function SlideHeading({ children }: { children: ReactNode }) {
+  return <div className="mb-4 flex flex-wrap items-center justify-center gap-2 sm:mb-5">{children}</div>
+}
+
 function FreeSlide() {
   return (
     <div>
-      <div className="relative">
-        <div className="absolute top-3 left-3 z-10 sm:top-4 sm:left-4">
-          <PlanLabel tone="free">Free plan</PlanLabel>
-        </div>
+      <SlideHeading>
+        <PlanLabel tone="free">Free plan</PlanLabel>
+        <span className="text-[13.5px] text-lp-muted">Available today</span>
+      </SlideHeading>
+      <Laptop>
         <AppWindow label="opennote — free" />
-      </div>
-      <div className="mt-6 px-1">
+      </Laptop>
+      <div className="mt-8 px-1">
         <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-lp-ink">Included in Free</h3>
         <FeatureList items={FREE_FEATURES} />
       </div>
@@ -109,7 +126,7 @@ function FreeSlide() {
 }
 
 /** Soft frosted blur, glow and "Coming Soon" card laid over a Pro preview. */
-export function ProOverlay() {
+export function ProOverlay({ showBadge = true }: { showBadge?: boolean }) {
   return (
     <>
       {/* Soft frost: the calendar stays recognisable underneath. */}
@@ -132,11 +149,11 @@ export function ProOverlay() {
         <span className="ml-2 h-2 w-14 rounded-full bg-[#d9d2f7]" />
       </div>
 
-      <div className="absolute top-3 left-3 z-10 sm:top-4 sm:left-4">
+      {showBadge && <div className="absolute top-3 right-3 z-10 sm:top-4 sm:right-4">
         <PlanLabel tone="pro">
           <Lock className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" /> Pro
         </PlanLabel>
-      </div>
+      </div>}
 
       <div className="absolute inset-0 grid place-items-center p-3 sm:p-6">
         <div className="lp-pro-card relative w-full max-w-[360px] rounded-[22px] p-[1px] sm:max-w-[400px]">
@@ -168,14 +185,22 @@ export function ProOverlay() {
 function ProSlide() {
   return (
     <div>
-      <div className="relative overflow-hidden rounded-[14px]">
-        {/* Preview only: blurred, non-interactive, hidden from assistive tech. */}
-        <div aria-hidden="true" inert className="pointer-events-none select-none">
-          <AppWindow label="opennote — pro" />
+      <SlideHeading>
+        <PlanLabel tone="pro">
+          <Lock className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" /> Pro plan
+        </PlanLabel>
+        <span className="text-[13.5px] text-lp-muted">Coming soon</span>
+      </SlideHeading>
+      <Laptop>
+        <div className="relative overflow-hidden rounded-[14px]">
+          {/* Preview only: blurred, non-interactive, hidden from assistive tech. */}
+          <div aria-hidden="true" inert className="pointer-events-none select-none">
+            <AppWindow label="opennote — pro" />
+          </div>
+          <ProOverlay showBadge={false} />
         </div>
-        <ProOverlay />
-      </div>
-      <div className="mt-6 px-1">
+      </Laptop>
+      <div className="mt-8 px-1">
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-lp-ink">Planned for Pro</h3>
           <span className="rounded-full bg-[#f1eefc] px-2 py-0.5 text-[11.5px] font-medium text-[#6b55c9]">Not yet available</span>
@@ -271,7 +296,7 @@ export function usePlanSwipe(tabIdPrefix: string) {
 }
 
 export function PlanSwipe() {
-  const { index, go, dragging, onKeyDown, trackStyle, viewportProps } = usePlanSwipe('plan-tab')
+  const { index, go, dragging, trackStyle, viewportProps } = usePlanSwipe('plan-tab')
 
   return (
     <Section id="plans">
@@ -283,40 +308,10 @@ export function PlanSwipe() {
       </Reveal>
 
       <Reveal>
-        <div className="mt-8 flex justify-center">
-          <div role="tablist" aria-label="OpenNote plans" className="relative grid w-full max-w-[380px] grid-cols-2 rounded-[12px] bg-[#ececea] p-1">
-            <span
-              aria-hidden="true"
-              className="absolute inset-y-1 left-1 w-[calc((100%-8px)/2)] rounded-[9px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] motion-safe:transition-transform motion-safe:duration-300"
-              style={{ transform: `translateX(${index * 100}%)` }}
-            />
-            {PLANS.map((plan, i) => (
-              <button
-                key={plan.key}
-                id={`plan-tab-${plan.key}`}
-                type="button"
-                role="tab"
-                aria-selected={index === i}
-                aria-controls={`plan-panel-${plan.key}`}
-                tabIndex={index === i ? 0 : -1}
-                onClick={() => go(i)}
-                onKeyDown={onKeyDown}
-                className={cn(
-                  'relative z-10 inline-flex items-center justify-center gap-1.5 rounded-[9px] py-2 text-[14px] font-medium transition-colors',
-                  index === i ? 'text-lp-ink' : 'text-lp-body hover:text-lp-ink',
-                )}
-              >
-                {plan.key === 'pro' && <Sparkles className="h-3.5 w-3.5 text-[#6b55c9]" aria-hidden="true" />}
-                {plan.tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="relative mt-8">
           <div
             {...viewportProps}
-            className={cn('overflow-hidden rounded-[22px] bg-lp-sunken select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
+            className={cn('overflow-hidden rounded-[22px] select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
           >
             <div
               className="flex"
@@ -326,11 +321,10 @@ export function PlanSwipe() {
                 <div
                   key={plan.key}
                   id={`plan-panel-${plan.key}`}
-                  role="tabpanel"
-                  aria-labelledby={`plan-tab-${plan.key}`}
+                  aria-label={plan.title}
                   aria-hidden={index !== i}
                   inert={index !== i}
-                  className="w-full shrink-0 p-3 sm:p-6"
+                  className="w-full shrink-0 px-1 py-3 sm:px-4 sm:py-4"
                 >
                   {plan.key === 'free' ? <FreeSlide /> : <ProSlide />}
                 </div>
@@ -381,7 +375,7 @@ export function PlanSwipe() {
           Showing {PLANS[index].title}
         </p>
         <p className="mt-3 text-center text-[13px] text-lp-muted">
-          Swipe, drag or use the arrow keys. Pro features are planned and not yet available.
+          Swipe, drag or use the arrows. Pro features are planned and not yet available.
         </p>
       </Reveal>
     </Section>
