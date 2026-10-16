@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { Minus, Plus, StickyNote } from 'lucide-react'
+import { StickyNote } from 'lucide-react'
 import { useApp } from '../store'
 import { colorOf } from '../lib/colors'
 import type { CalendarEvent } from '../lib/types'
@@ -273,8 +273,9 @@ export function TimeGrid({
     el.scrollTop = Math.max(0, (centreMin / 60) * hourHeight - el.clientHeight / 2)
   }, [hourHeight])
 
-  // Ctrl + wheel (and trackpad pinch, which browsers report the same way)
-  // zooms the calendar instead of the page.
+  // Zoom by gesture, never by the page: Ctrl/⌘ + wheel and trackpad pinch
+  // (reported as ctrl + wheel), Safari's trackpad gesture events, and a
+  // two-finger pinch on touch screens.
   const zoomRef = useRef(zoom)
   zoomRef.current = zoom
   const setZoomRef = useRef(setZoom)
@@ -284,8 +285,9 @@ export function TimeGrid({
     if (!el) return
     let acc = 0
     let last = 0
+    const step = (dir: number) => setZoomRef.current(zoomRef.current + dir)
     const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return
+      if (!e.ctrlKey && !e.metaKey) return
       e.preventDefault()
       acc += e.deltaY
       const now = Date.now()
@@ -294,8 +296,55 @@ export function TimeGrid({
       acc = 0
       last = now
     }
+    // Pinch: step one level each time the fingers spread or close by ~25%.
+    let base = 0
+    const ratio = (scale: number) => {
+      if (scale > 1.25) step(1)
+      else if (scale < 0.8) step(-1)
+      else return false
+      return true
+    }
+    const dist = (t: TouchList) =>
+      Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) base = dist(e.touches)
+    }
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length !== 2 || !base) return
+      e.preventDefault()
+      const d = dist(e.touches)
+      if (ratio(d / base)) base = d
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) base = 0
+    }
+    // Safari (macOS trackpad / iOS) reports pinches as gesture events.
+    let gestureBase = 1
+    const onGestureStart = (e: Event) => {
+      e.preventDefault()
+      gestureBase = 1
+    }
+    const onGestureChange = (e: Event) => {
+      e.preventDefault()
+      const scale = (e as Event & { scale: number }).scale
+      if (ratio(scale / gestureBase)) gestureBase = scale
+    }
     el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: false })
+    el.addEventListener('touchend', onTouchEnd)
+    el.addEventListener('touchcancel', onTouchEnd)
+    el.addEventListener('gesturestart', onGestureStart)
+    el.addEventListener('gesturechange', onGestureChange)
+    return () => {
+      el.removeEventListener('wheel', onWheel)
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+      el.removeEventListener('touchcancel', onTouchEnd)
+      el.removeEventListener('gesturestart', onGestureStart)
+      el.removeEventListener('gesturechange', onGestureChange)
+    }
   }, [])
 
   const slotNotes = useMemo(() => groupSlotNotes(notes), [notes])
@@ -531,29 +580,10 @@ export function TimeGrid({
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       {/* Day header */}
       <div className="flex h-[64px] shrink-0 border-b border-[#ececea] bg-white">
-        <div className="flex w-[62px] shrink-0 flex-col items-center justify-center gap-1" role="group" aria-label="Calendar zoom">
-          <div className="flex items-center rounded-lg border border-[#e3e3e0] bg-white p-[2px]">
-            <button
-              type="button"
-              aria-label="Zoom out"
-              title="Zoom out (Ctrl + scroll)"
-              disabled={zoom === 0}
-              onClick={() => setZoom(zoom - 1)}
-              className="grid h-5 w-5 place-items-center rounded-[5px] text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919] disabled:opacity-30 disabled:hover:bg-transparent"
-            >
-              <Minus className="h-3 w-3" />
-            </button>
-            <button
-              type="button"
-              aria-label="Zoom in"
-              title="Zoom in (Ctrl + scroll)"
-              disabled={zoom === ZOOM_LEVELS.length - 1}
-              onClick={() => setZoom(zoom + 1)}
-              className="grid h-5 w-5 place-items-center rounded-[5px] text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919] disabled:opacity-30 disabled:hover:bg-transparent"
-            >
-              <Plus className="h-3 w-3" />
-            </button>
-          </div>
+        <div
+          className="flex w-[62px] shrink-0 items-end justify-center pb-2"
+          title="Pinch, or hold Ctrl (⌘ on Mac) and scroll, to zoom the calendar"
+        >
           <span className="text-[9.5px] font-medium tabular-nums text-[#a3a29e]" data-testid="zoom-label">
             {ZOOM_LEVELS[zoom].label}
           </span>
@@ -618,6 +648,7 @@ export function TimeGrid({
       <div
         ref={scrollRef}
         className="scroll-area relative flex-1 overflow-y-auto overflow-x-hidden"
+        style={{ touchAction: 'pan-y' }}
       >
         <div className="relative flex" style={{ height: totalHeight }}>
           <div className="relative w-[62px] shrink-0 select-none">

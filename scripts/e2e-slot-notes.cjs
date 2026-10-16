@@ -48,6 +48,36 @@ async function clickSlot(p, minute) {
   return day
 }
 
+/** Ctrl + wheel over the calendar: dir 1 = in, -1 = out. */
+async function wheelZoom(p, dir) {
+  const box = await p.locator('[data-day]').first().boundingBox()
+  await p.mouse.move(box.x + 40, 400)
+  await p.keyboard.down('Control')
+  await p.mouse.wheel(0, dir > 0 ? -120 : 120)
+  await p.keyboard.up('Control')
+  await p.waitForTimeout(160)
+}
+
+/** A two-finger pinch on the calendar, dispatched as real touch events. */
+async function pinch(p, factor) {
+  await p.locator('[data-day]').first().evaluate((col, f) => {
+    const el = col.closest('.scroll-area')
+    const r = el.getBoundingClientRect()
+    const cx = r.left + r.width / 2
+    const cy = r.top + 300
+    const touches = (gap) => [
+      new Touch({ identifier: 1, target: el, clientX: cx, clientY: cy - gap }),
+      new Touch({ identifier: 2, target: el, clientX: cx, clientY: cy + gap }),
+    ]
+    const fire = (type, list) =>
+      el.dispatchEvent(new TouchEvent(type, { touches: list, targetTouches: list, changedTouches: list, bubbles: true, cancelable: true }))
+    fire('touchstart', touches(50))
+    fire('touchmove', touches(50 * f))
+    fire('touchend', [])
+  }, factor)
+  await p.waitForTimeout(100)
+}
+
 async function addNote(p, text) {
   await popover(p).getByRole('button', { name: /Add (another )?note/ }).click()
   const inputs = popover(p).getByRole('textbox')
@@ -105,14 +135,16 @@ async function addNote(p, text) {
   check(vals.join('|') === 'Call client|Send invoice #42|Review design', `+2 opens all three notes (${vals.join(', ')})`)
   await p.keyboard.press('Escape')
 
-  // 3. Zoom 1 h → 30 → 15 → 5 min with the + control.
+  // 3. Zoom 1 h → 30 → 15 → 5 min by gesture (no buttons).
+  check((await p.getByRole('button', { name: /Zoom (in|out)/ }).count()) === 0, 'there are no zoom buttons')
   const labels = [await zoomLabel(p)]
   for (let i = 0; i < 3; i++) {
-    await p.getByRole('button', { name: 'Zoom in' }).click()
+    await wheelZoom(p, 1)
     labels.push(await zoomLabel(p))
   }
-  check(labels.join(' → ') === '1 h → 30 min → 15 min → 5 min', `zoom steps: ${labels.join(' → ')}`)
-  check(await p.getByRole('button', { name: 'Zoom in' }).isDisabled(), 'zoom in stops at 5-minute intervals')
+  check(labels.join(' → ') === '1 h → 30 min → 15 min → 5 min', `Ctrl + scroll zooms in: ${labels.join(' → ')}`)
+  await wheelZoom(p, 1)
+  check((await zoomLabel(p)) === '5 min', 'zooming in stops at 5-minute intervals')
   const tall = await p.locator('[data-day]').first().evaluate((el) => el.getBoundingClientRect().height)
   check(tall > 24 * 56 * 5, `zoomed-in calendar is taller and scrolls (${Math.round(tall)}px)`)
 
@@ -135,16 +167,16 @@ async function addNote(p, text) {
 
   // Ctrl + wheel zooms the calendar, not the page.
   const before = await zoomLabel(p)
-  const box = await p.locator('[data-day]').first().boundingBox()
-  await p.mouse.move(box.x + 50, 400)
-  await p.keyboard.down('Control')
-  await p.mouse.wheel(0, 120)
-  await p.keyboard.up('Control')
-  await p.waitForTimeout(200)
+  await wheelZoom(p, -1)
   const pageZoom = await p.evaluate(() => window.visualViewport ? window.visualViewport.scale : 1)
-  check(before === '5 min' && (await zoomLabel(p)) === '15 min' && pageZoom === 1, 'Ctrl + wheel zooms the calendar out without browser zoom')
-  await p.getByRole('button', { name: 'Zoom out' }).click()
-  await p.getByRole('button', { name: 'Zoom out' }).click()
+  check(before === '5 min' && (await zoomLabel(p)) === '15 min' && pageZoom === 1, 'Ctrl + scroll zooms the calendar out without browser zoom')
+  await pinch(p, 0.6)
+  check((await zoomLabel(p)) === '30 min', 'two-finger pinch in zooms out')
+  await pinch(p, 1.6)
+  check((await zoomLabel(p)) === '15 min', 'two-finger pinch out zooms in')
+  await pinch(p, 0.6)
+  await pinch(p, 0.6)
+  check((await zoomLabel(p)) === '1 h', 'pinching back reaches 1-hour rows')
 
   // Several occupied slots in one visible hour stay reachable.
   await clickSlot(p, 9 * 60 + 20)
@@ -170,9 +202,9 @@ async function addNote(p, text) {
 
   // Day view zoom.
   await p.getByRole('button', { name: 'Day', exact: true }).click()
-  await p.getByRole('button', { name: 'Zoom in' }).click()
+  await wheelZoom(p, 1)
   check((await zoomLabel(p)) === '30 min', 'zoom works in Day view')
-  await p.getByRole('button', { name: 'Zoom out' }).click()
+  await wheelZoom(p, -1)
   await p.getByRole('button', { name: 'Full Week', exact: true }).click()
 
   // 8. Refresh.
