@@ -42,18 +42,29 @@ the two agents from diverging.
 If the tests fail, the script refuses to push. Report the failure; do not
 bypass it, and do not use `--force` under any circumstances.
 
-## Development server
+## The one preview
 
-Both agents share **one** dev server on <http://localhost:5173> (API on 3001).
-Vite hot-reloads from disk, so file edits are visible immediately with no
-restart and no second server.
+There is exactly **one** preview for OpenNote:
+
+> **http://localhost:5173**
+
+Both tools use that URL. It is the only thing that shows the landing page,
+dashboard, calendar, notes and settings, so it is the only place the two tools
+can be compared.
+
+- Never use a tool's built-in "artifact"/inline HTML preview for OpenNote. It
+  renders whatever that tool hands it, is not connected to this machine, and
+  will drift from `main`. It cannot be made to follow GitHub.
+- Never start a second server. `npm run dev:ensure` reuses the running one and
+  warns if a `vite preview` on :4173 is serving an older build.
+- Vite hot-reloads from disk, so file edits appear immediately with no restart,
+  and a `sync:pull` lands in the open preview within a second.
+- The API is proxied at the same origin (`/api/*` → :3001), so sign-in, notes
+  sync and the Deploy panel all work in the preview.
 
 ```sh
 npm run dev:ensure     # reuse the running server, or start one if none is up
 ```
-
-Never start a second `npm run dev` on the same port expecting it to work —
-`strictPort` makes it fail. Use `dev:ensure`.
 
 ## Hard rules
 

@@ -342,19 +342,34 @@ function watch() {
 
 /**
  * Vite is already strictPort, so a second `npm run dev` just fails with a
- * confusing "port in use". Reuse the running server instead.
+ * confusing "port in use". Reuse the running server instead, and warn if
+ * something is also serving the built site: two previews on two different
+ * commits is exactly the confusion this setup exists to prevent.
  */
+async function reachable(port, timeout = 2500) {
+  try {
+    const res = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(timeout) })
+    return res.status < 500
+  } catch {
+    return false
+  }
+}
+
 async function dev() {
   const port = 5173
-  try {
-    const res = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2500) })
-    if (res.ok) {
-      say(c.green(`Dev server already running at http://localhost:${port}`))
-      say(c.dim('  Reusing it. Stop it first if you meant to restart.'))
-      return 0
-    }
-  } catch {
-    /* nothing listening - fall through and start one */
+
+  // A `vite preview` on 4173 serves the last *build*, not the working tree, so
+  // it can silently show a different commit than the dev server.
+  if (await reachable(4173)) {
+    say(c.yellow('Warning: something is also serving the built site on http://localhost:4173'))
+    say(c.dim('  That is a static build of an older commit and will drift from the dev server.'))
+    say(c.dim('  Use http://localhost:5173 so both tools see the same code.'))
+  }
+
+  if (await reachable(port)) {
+    say(c.green(`Dev server already running at http://localhost:${port}`))
+    say(c.dim('  Reusing it. Stop it first if you meant to restart.'))
+    return 0
   }
 
   say(c.dim(`Starting the dev server at http://localhost:${port} …`))

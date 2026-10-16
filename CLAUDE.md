@@ -29,11 +29,19 @@ Do not hand-roll `git add` / `commit` / `push` for a "push it" request, and
 never force-push. If the tests fail the script refuses; report the failure
 rather than bypassing it.
 
-## Development server
+## The one preview
 
-One shared dev server on <http://localhost:5173> (API on 3001), hot-reloading
-from disk. Use `npm run dev:ensure` to start it only if it is not already up.
-Never start a competing server on the same port.
+There is exactly one preview for OpenNote: **http://localhost:5173** (API
+proxied from :3001). Both tools use it.
+
+- **Do not use Claude's artifact / inline HTML preview for OpenNote.** It
+  renders a copy handed over by Claude, runs on Claude's own machine, and has
+  no connection to GitHub or to this dev server. It cannot be made to follow
+  `main`, so it will drift. Point at http://localhost:5173 instead.
+- Never start a second server. `npm run dev:ensure` reuses the running one and
+  warns if an older static build is being served on :4173.
+- Vite hot-reloads from disk, so edits and `sync:pull` results appear in the
+  open preview immediately.
 
 ## Hard rules
 
