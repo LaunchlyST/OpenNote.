@@ -1,136 +1,137 @@
 # OpenNote
 
-A calendar and notes planner. Public landing page at `/`, the app at `/app`.
+A calendar and notes planner, plus a public landing page. React 19, TypeScript
+and Vite, with a Better Auth + SQLite backend in `server/`.
 
-Built with React 19, TypeScript and Vite. The whole client is static: every
-account, event and note lives in that browser's `localStorage`.
+```bash
+cp .env.example .env          # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
+npm install
+npm run db:migrate            # creates the auth + workspace tables (safe to re-run)
+npm run dev                   # web on :5173, API on :3001 (proxied at /api)
+```
 
-## Commands
-
-| Command             | What it does                                            |
-| ------------------- | ------------------------------------------------------- |
-| `npm run dev`       | Dev server on `:5173`, bound to `0.0.0.0`                |
-| `npm run build`     | Type-check (`tsc -b`, src + api + config) then build     |
-| `npm run preview`   | Serve the built `dist/`                                 |
-| `npm run lint`      | oxlint                                                  |
-| `npm test`          | SSR smoke test for the landing page and calendar         |
-| `npm run test:deploy` | Deployment API safety checks (no publishing)           |
-
-`npm run test:deploy` points the deploy hook at a throwaway HTTP server on
-localhost, so it exercises the real request path without contacting a hosting
-provider.
+| Command               | What it does                                 |
+| --------------------- | -------------------------------------------- |
+| `npm run dev`         | Web and API together                          |
+| `npm run build`       | Type-check, then build `dist/`                |
+| `npm run serve`       | One Node process serving `dist/` and `/api/*` |
+| `npm run db:migrate`  | Create or update the database schema          |
+| `npm run lint`        | oxlint                                       |
+| `npm test`            | SSR smoke test                               |
+| `npm run test:deploy` | Deployment API safety checks                  |
 
 ## Layout
 
 ```
-src/
-  landing/     public marketing site (excluded from tsconfig.app.json)
-  components/  calendar, settings and shared UI
-  deploy/      browser client for the deployment API
-api/           serverless deployment endpoints — never bundled into the client
-scripts/       smoke tests and the static landing render
+src/            React app (landing page + calendar)
+server/         Express API: auth, workspace sync, deployment
+scripts/        smoke tests
 ```
 
-`tsconfig.json` references three projects, all built by `npm run build`:
+`tsconfig.json` references `tsconfig.app.json` (src), `tsconfig.node.json`
+(`vite.config.ts`) and `tsconfig.server.json` (`server/`). All three are built
+by `npm run build`.
 
-- `tsconfig.app.json` — `src`
-- `tsconfig.node.json` — `vite.config.ts`
-- `tsconfig.api.json` — `api`
+## Accounts and sign-in (Better Auth)
+
+OpenNote uses [Better Auth](https://better-auth.com) with a free local SQLite
+database. No paid auth service is needed.
+
+```bash
+cp .env.example .env          # then set BETTER_AUTH_SECRET (openssl rand -base64 32)
+npm install
+npm run db:migrate            # creates the auth + workspace tables (safe to re-run)
+npm run dev                   # web on :5173, API on :3001 (proxied at /api)
+```
+
+Production: `npm run build && npm run serve` runs one Node server that serves
+the site and the API. Set `BETTER_AUTH_URL` to the public https URL.
+
+- **Email** (verification + password reset): set the `SMTP_*` and `EMAIL_FROM`
+  variables. Until then, links are printed to the API console in development
+  only, and email verification is not enforced.
+- **Google sign-in**: set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The
+  button appears automatically. Authorised redirect URI:
+  `<BETTER_AUTH_URL>/api/auth/callback/google`.
+- **Data**: each user's calendar is stored server-side and only returned to
+  that user's session (`/api/workspace`).
+
+## Tests
+
+```bash
+npm test           # SSR smoke test for the landing page and calendar
+npm run test:deploy # deployment API safety checks (never publishes anything)
+```
+
+`test:deploy` boots the real Express router against a throwaway SQLite database
+and a throwaway local HTTP server standing in for the provider's deploy hook. It
+proves the negative cases — anonymous access refused, non-administrators
+refused, and the `DEPLOY_ENABLED` kill switch holding — then confirms that an
+enabled administrator really does reach the provider.
 
 ---
 
 # Deployment
 
-Daytona is no longer used. Hosting is a static build plus a small set of
-serverless functions in `api/`.
+Daytona is no longer used anywhere in this project.
 
-## Recommended host: Vercel
+## Where it runs
 
-- **Fits the app exactly.** OpenNote is a static SPA, and Vercel serves it from
-  `dist/` as-is.
-- **The deploy API lives in the same project.** `api/` becomes `/api/*` on the
-  same origin, so there is no second service, no CORS, and no second hostname.
-- **Deploy hooks.** A deploy hook is a single URL that makes Vercel rebuild and
-  republish the latest commit. That is what makes a one-click Deploy button
-  possible without the server holding a full API token.
-- **Free** on the Hobby plan for a personal project, with no seat or card.
+The site is a Vite SPA **plus** a Node/Express API (`server/`) that handles
+accounts, workspace sync and deployment. They are served together, so the app
+needs a **Node host** (Render, Fly, Railway, or your own box) rather than a
+static-only host. A static host such as Cloudflare Pages or Vercel's static tier
+cannot run Better Auth and SQLite, so it cannot host OpenNote on its own.
 
-Cloudflare Pages is a good alternative and `public/_redirects` already provides
-the matching SPA fallback. The endpoint code is provider-agnostic — it only
-needs a deploy hook URL, so switching providers is a matter of pointing
-`DEPLOY_HOOK_URL` at the new project. Vercel is recommended because it hosts the
-functions and the site together with no extra wiring.
+- `npm run build` produces the static `dist/`.
+- `npm run serve` runs one Express process that serves `dist/` **and** `/api/*`.
+- Point the Node host's start command at `npm run serve` and its health check at
+  `/api/auth-config`.
 
-## Configuration
+## Deploying from inside the app
 
-Everything is server-side. Copy `.env.example` into the hosting provider's
-environment variables. **Nothing here belongs in `src/`** — everything under
-`api/` runs on the server only.
+With the app running, open **Settings (gear) → Admin → Deploy**. The panel shows
+the deployment status, the hosting provider and whether it is connected, the
+production URL, the last deployment, and a **Deploy Website** button.
 
-| Variable                  | Required | Purpose                                              |
-| ------------------------- | -------- | ---------------------------------------------------- |
-| `DEPLOY_PROVIDER`         | no       | `vercel` (default), `cloudflare-pages`, `netlify`, `custom` |
-| `DEPLOY_HOOK_URL`         | **yes**  | The provider's deploy hook. Can publish the site.    |
-| `DEPLOY_PRODUCTION_URL`   | **yes**  | The public `https://` address, shown in the UI       |
-| `DEPLOY_ENABLED`          | **yes**  | Kill switch. Deploys are refused unless exactly `true` |
-| `DEPLOY_ADMIN_PASSWORD`   | **yes**  | Passphrase that unlocks the Deploy page              |
-| `SESSION_SECRET`          | **yes**  | Signs the admin session cookie (`openssl rand -hex 32`) |
-| `DEPLOY_ADMIN_EMAILS`     | no       | Optional comma-separated account email allowlist     |
-| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | no | Durable "last deployment" record |
+The button makes a real deployment: the browser posts to `/api/deploy`, the
+server checks the signed-in account and then calls the provider's deploy hook.
+The provider rebuilds the latest commit and publishes it. It is not a simulated
+success.
 
-`DEPLOY_ENABLED` ships unset, so a fresh deployment cannot publish. Nothing
-happens until it is deliberately turned on.
+### Who may deploy
 
-## Where a deploy hook comes from
+`server/deploy.ts` requires a real signed-in Better Auth session whose email is
+listed in `DEPLOY_ADMIN_EMAILS`. That list is **empty by default**, so a fresh
+install cannot be deployed by whichever account signs up first. The browser is
+never trusted to decide this.
 
-- **Vercel** — Project → Settings → Git → Deploy Hooks → Create. Use the
-  production branch.
-- **Cloudflare Pages** — Workers & Pages → your project → Settings → Deploy hooks.
-- **Netlify** — Site configuration → Build & deploy → Deploy hooks.
+### The kill switch
 
-## Admin Settings → Deploy
+`POST /api/deploy` refuses everything unless `DEPLOY_ENABLED=true`. It ships as
+`false` in `.env.example`, so nothing publishes until you deliberately turn it
+on. The button reflects this: it stays disabled while the server reports
+deployments as switched off.
 
-Settings gains a **Deploy** section. It reports the deployment status, the
-hosting provider and its connection state, the production URL, the last
-recorded deployment, and a **Deploy Website** button with progress and error
-messages.
+### Configuration
 
-The button performs a real deployment: the browser posts to `/api/deploy`, the
-server authenticates the admin session and then calls the provider's deploy
-hook. The provider builds the latest commit and publishes it. It is not a
-simulated success.
+Everything lives in the server environment — see the deployment block at the
+bottom of `.env.example`. None of it is bundled into the browser; the status
+endpoint deliberately omits the hook URL.
 
-### Access control
+| Variable                | Purpose                                                |
+| ----------------------- | ------------------------------------------------------ |
+| `DEPLOY_PROVIDER`       | Label shown in the panel                                |
+| `DEPLOY_HOOK_URL`       | The provider's deploy hook. Can publish the site.        |
+| `DEPLOY_PRODUCTION_URL` | The public address, shown in the panel                   |
+| `DEPLOY_ENABLED`        | Kill switch. Must be exactly `true` to publish.          |
+| `DEPLOY_ADMIN_EMAILS`   | Accounts allowed to deploy. Empty means nobody can.      |
 
-OpenNote has no server-side account store — sign-up lives entirely in
-`localStorage` (see `src/auth.tsx`), so there is no role to check against on
-the server. Deployment controls are therefore gated by:
+The provider is contacted through a **deploy hook** — its own "rebuild and
+publish the latest commit" URL — rather than a full API token. That keeps the
+credential small and makes the integration provider-agnostic.
 
-1. **A passphrase held only in the server environment**
-   (`DEPLOY_ADMIN_PASSWORD`), compared in constant time and exchanged for an
-   HMAC-signed, `HttpOnly`, `SameSite=Strict` session cookie.
-2. **An optional email allowlist** (`DEPLOY_ADMIN_EMAILS`). When set, the
-   signed-in account's email must also appear in it.
+### Deployment record
 
-The browser is never trusted to decide who may deploy; `api/deploy.ts` refuses
-without a valid session, and refuses again while `DEPLOY_ENABLED` is unset.
-Both paths are covered by `npm run test:deploy`.
-
-## Running the API locally
-
-`npm run dev` serves only the client, so the Deploy page reports that the
-deployment API is unavailable. To exercise the real endpoints, run them through
-Vercel's local dev server:
-
-```sh
-npx vercel dev
-```
-
-That serves `dist/` and `api/` together. Set the variables from `.env.example`
-in a `.env.local` (git-ignored) first.
-
-## Deployment record
-
-Serverless instances are recycled, so without a store the "last deployment" row
-only survives while an instance stays warm. Configure Upstash Redis to make it
-durable; otherwise the page still works, it just forgets after a recycle.
+The last accepted deployment is stored in the `deployment` table in the same
+SQLite file as everything else, so it survives restarts.

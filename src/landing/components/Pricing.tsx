@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ArrowRight, Check, Clock, Lock, Sparkles } from 'lucide-react'
+import { Check, Clock, Lock, Tag } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { PRICING } from '../content'
 import type { Plan, PlanFeature } from '../content'
@@ -20,34 +20,34 @@ const THEME: Record<Plan['theme'], {
   mutedText: string
 }> = {
   neutral: {
-    card: 'border-lp-line bg-lp-surface hover:border-[#3a3f52] hover:shadow-[0_22px_48px_-28px_rgba(0,0,0,0.6)]',
+    card: 'border-lp-line bg-white',
     badge: '',
     price: 'text-lp-ink',
     period: 'text-lp-body',
     footnote: 'text-lp-muted',
-    divider: 'border-lp-line',
+    divider: 'bg-lp-line',
     featureText: 'text-lp-body',
     mutedText: 'text-lp-muted',
   },
   lime: {
-    card: 'border-[#f5c518]/30 bg-lp-surface ring-1 ring-[#f5c518]/15 shadow-[0_32px_64px_-28px_rgba(245,197,24,0.25)] hover:shadow-[0_40px_76px_-28px_rgba(245,197,24,0.35)]',
-    badge: 'bg-gradient-to-r from-[#f5c518] to-[#e5b800] text-[#1a1a2e]',
+    card: 'border-lp-ink bg-white shadow-[4px_4px_0_0_#191919]',
+    badge: 'bg-lp-ink text-white',
     price: 'text-lp-ink',
-    period: 'text-[#f5c518]',
+    period: 'text-lp-body',
     footnote: 'text-lp-muted',
-    divider: 'border-lp-line',
+    divider: 'bg-lp-line',
     featureText: 'text-lp-ink',
     mutedText: 'text-lp-muted',
   },
   charcoal: {
-    card: 'border-white/15 bg-gradient-to-b from-white/8 to-white/3 text-white shadow-[0_32px_64px_-30px_rgba(0,0,0,0.5)] backdrop-blur-sm',
-    badge: 'bg-[#f5c518]/15 text-[#f5c518] ring-1 ring-[#f5c518]/25',
-    price: 'text-white',
-    period: 'text-white/60',
-    footnote: 'text-white/45',
-    divider: 'border-white/10',
-    featureText: 'text-white/85',
-    mutedText: 'text-white/45',
+    card: 'border-lp-line bg-lp-sunken',
+    badge: 'bg-white text-lp-ink ring-1 ring-lp-line',
+    price: 'text-lp-ink',
+    period: 'text-lp-body',
+    footnote: 'text-lp-muted',
+    divider: 'bg-lp-line',
+    featureText: 'text-lp-body',
+    mutedText: 'text-lp-muted',
   },
 }
 
@@ -64,7 +64,8 @@ function FeatureRow({
 }) {
   const t = THEME[theme]
   const planned = feature.status === 'planned'
-  const isDark = theme === 'charcoal'
+  // Every plan now sits on a light card.
+  const isDark = false
 
   return (
     <li className="flex items-start gap-2.5">
@@ -78,7 +79,7 @@ function FeatureRow({
         <Check
           className={cn(
             'mt-[3px] h-4 w-4 shrink-0',
-            isDark ? 'text-[#f5c518]' : 'text-[#f5c518]',
+            'text-[#4b6410]',
           )}
           strokeWidth={2.8}
           aria-hidden="true"
@@ -100,7 +101,7 @@ function FeatureRow({
               'ml-2 inline-block translate-y-px rounded-full px-1.5 py-px text-[10px] font-semibold tracking-[0.04em] uppercase',
               isDark
                 ? 'bg-white/10 text-white/60'
-                : 'bg-lp-sunken text-lp-muted ring-1 ring-lp-line',
+                : 'bg-lp-sunken text-lp-muted',
             )}
           >
             Planned
@@ -123,7 +124,7 @@ function PriceBlock({ plan }: { plan: Plan }) {
       <div className="min-h-[92px]">
         <p
           className={cn(
-            'text-[clamp(1.5rem,3.4vw,1.9rem)] leading-tight font-bold tracking-[-0.03em]',
+            'text-[clamp(1.8rem,4vw,2.2rem)] leading-none font-semibold tracking-[-0.03em]',
             t.price,
           )}
         >
@@ -139,7 +140,7 @@ function PriceBlock({ plan }: { plan: Plan }) {
       <p className="flex items-baseline gap-1.5">
         <span
           className={cn(
-            'text-[clamp(2.6rem,6vw,3.4rem)] leading-none font-bold tracking-[-0.04em]',
+            'text-[clamp(2.8rem,6vw,3.4rem)] leading-none font-semibold tracking-[-0.04em]',
             t.price,
           )}
         >
@@ -161,31 +162,32 @@ function PriceBlock({ plan }: { plan: Plan }) {
 /* Card                                                                */
 /* ------------------------------------------------------------------ */
 
-function PlanCard({ plan, index }: { plan: Plan; index: number }) {
+function PlanCard({ plan }: { plan: Plan }) {
   const t = THEME[plan.theme]
-  const isDark = plan.theme === 'charcoal'
+  // Every plan now sits on a light card.
+  const isDark = false
   const [acknowledged, setAcknowledged] = useState(false)
 
   const hasPlanned = plan.features.some((f) => f.status === 'planned')
 
   return (
-    <Reveal delay={index * 110} className="h-full">
+    <Reveal data-anim-item="" className="h-full">
       <article
         className={cn(
-          'relative flex h-full flex-col rounded-[22px] border p-6 transition-all duration-300 sm:p-7',
+          'relative flex h-full flex-col rounded-[18px] border p-6 sm:p-7',
           t.card,
         )}
         aria-labelledby={`plan-${plan.id}`}
       >
+        {/* Badge */}
         {plan.badge && (
           <span
             className={cn(
-              'absolute -top-3 left-6 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-bold tracking-[0.03em] shadow-[0_6px_16px_-8px_rgba(0,0,0,0.5)]',
+              'absolute -top-3 right-6 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold',
               t.badge,
             )}
           >
-            {plan.featured && <Sparkles className="h-3 w-3" aria-hidden="true" />}
-            {plan.badge}
+                        {plan.badge}
           </span>
         )}
 
@@ -193,7 +195,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
           <h3
             id={`plan-${plan.id}`}
             className={cn(
-              'text-[19px] font-bold tracking-[-0.02em]',
+              'text-[19px] font-semibold tracking-[-0.02em]',
               isDark ? 'text-white' : 'text-lp-ink',
             )}
           >
@@ -201,8 +203,9 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
           </h3>
           <p
             className={cn(
-              'mt-1 text-[13px] font-semibold',
-              isDark ? 'text-[#f5c518]' : 'text-[#f5c518]',
+              'mt-2',
+              'text-[13px] font-medium',
+              'text-lp-muted',
             )}
           >
             {plan.tagline}
@@ -229,19 +232,21 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
           ))}
         </ul>
 
+        {/* Membership reassurance, only where it applies */}
         {plan.id === 'pro' && (
           <p
             className={cn(
               'mt-6 rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed',
               isDark
                 ? 'border-white/10 bg-white/5 text-white/65'
-                : 'border-[#f5c518]/25 bg-[#f5c518]/5 text-[#c49e00]',
+                : 'border-lp-line bg-lp-sunken text-lp-body',
             )}
           >
             {PRICING.membershipNote}
           </p>
         )}
 
+        {/* CTA */}
         <div className="mt-6">
           {plan.cta.kind === 'signup' && (
             <>
@@ -250,7 +255,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 variant="primary"
                 size="lg"
                 className="w-full"
-                icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
+                arrow
               >
                 {plan.cta.label}
               </Button>
@@ -264,15 +269,16 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 
           {plan.cta.kind === 'unavailable' && (
             <>
+              {/* Not a real purchase: no payment provider is wired up, so the
+                  control explains the state instead of starting a checkout. */}
               <button
                 type="button"
                 aria-disabled="true"
                 onClick={() => setAcknowledged(true)}
                 className={cn(
-                  'inline-flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full text-[15px] font-bold',
-                  'bg-gradient-to-r from-[#f5c518] to-[#e5b800] text-[#1a1a2e] shadow-[0_8px_28px_rgba(245,197,24,0.3)]',
-                  'transition-all duration-200 hover:shadow-[0_12px_36px_rgba(245,197,24,0.4)] hover:brightness-110',
-                  'aria-disabled:hover:brightness-100',
+                  'inline-flex h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] text-[15px] font-semibold',
+                  'bg-lp-ink text-white',
+                  'transition-all duration-200',
                 )}
               >
                 <Lock className="h-4 w-4" aria-hidden="true" />
@@ -283,7 +289,7 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 className={cn(
                   'mt-3 rounded-xl px-3.5 py-2.5 text-center text-[12.5px] leading-relaxed transition-colors',
                   acknowledged
-                    ? 'bg-[#f5c518]/10 text-[#f5c518] ring-1 ring-[#f5c518]/25'
+                    ? 'bg-lp-sunken text-lp-ink ring-1 ring-lp-line'
                     : 'bg-lp-sunken text-lp-muted',
                 )}
               >
@@ -298,9 +304,9 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
                 type="button"
                 disabled
                 className={cn(
-                  'inline-flex h-12 w-full cursor-not-allowed items-center justify-center gap-2 rounded-full text-[15px] font-bold',
+                  'inline-flex h-11 w-full cursor-not-allowed items-center justify-center gap-2 rounded-[10px] text-[15px] font-semibold',
                   isDark
-                    ? 'bg-white/8 text-white/40 ring-1 ring-white/10'
+                    ? 'bg-white/10 text-white/50 ring-1 ring-white/10'
                     : 'bg-lp-sunken text-lp-muted',
                 )}
               >
@@ -340,22 +346,21 @@ export function Pricing() {
     <Section id="pricing">
       <Reveal>
         <SectionHeading
-          eyebrow={PRICING.eyebrow}
+          icon={<Tag className="h-6 w-6" />}
+          tint="#fdf3ad"
           heading={PRICING.heading}
           description={PRICING.subtitle}
         />
       </Reveal>
 
-      <div className="mt-14 grid items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:gap-7">
-        {PRICING.plans.map((plan, i) => (
-          <PlanCard key={plan.id} plan={plan} index={i} />
+      <div data-anim="flip" className="mt-14 grid items-stretch gap-6 sm:mt-16 lg:grid-cols-3 lg:gap-5">
+        {PRICING.plans.map((plan) => (
+          <PlanCard key={plan.id} plan={plan} />
         ))}
       </div>
 
       <Reveal delay={120}>
-        <p className="mx-auto mt-10 max-w-[72ch] text-center text-[13.5px] leading-relaxed text-lp-muted">
-          {PRICING.billingNote}
-        </p>
+        <p className="mx-auto mt-10 max-w-[72ch] text-center text-[13.5px] leading-relaxed text-lp-muted">{PRICING.billingNote}</p>
       </Reveal>
     </Section>
   )

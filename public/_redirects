@@ -1,5 +1,0 @@
-/* SPA fallback for static hosts other than Vercel (Cloudflare Pages, Netlify).
-   The /api/* paths are excluded so the serverless deploy functions are never
-   rewritten to index.html. */
-/api/*  /api/:splat  200
-/*      /index.html  200

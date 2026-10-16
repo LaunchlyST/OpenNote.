@@ -15,7 +15,7 @@ export function Avatar({ name, src, size = 32, className }: AvatarProps) {
   return (
     <span
       className={cn(
-        'grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#eaf9bf] text-[#4b6410]',
+        'grid shrink-0 place-items-center overflow-hidden rounded-full bg-[linear-gradient(145deg,#3a3a37,#141414)] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]',
         className,
       )}
       style={{ width: size, height: size }}
@@ -31,7 +31,7 @@ export function Avatar({ name, src, size = 32, className }: AvatarProps) {
         </span>
       ) : (
         <UserRound
-          className="text-[#8b90a0]"
+          className="text-[#8f8e8a]"
           style={{ width: size * 0.52, height: size * 0.52 }}
         />
       )}

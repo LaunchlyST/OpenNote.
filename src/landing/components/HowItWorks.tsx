@@ -1,113 +1,150 @@
-import { CalendarDays, Clock, StickyNote } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { ChevronLeft, ChevronRight, Pin, Route } from 'lucide-react'
+import { COLORS } from '../../lib/colors'
 import { cn } from '../../lib/id'
 import { HOW_IT_WORKS } from '../content'
-import type { Step } from '../content'
-import {
-  MockMiniCalendar,
-  MockNotes,
-  MockWeekTimeline,
-} from './mock/AppChrome'
 import { Reveal, Section, SectionHeading } from './primitives'
 
-const STEP_ICONS: Record<Step['icon'], ReactNode> = {
-  calendar: <CalendarDays className="h-[18px] w-[18px]" strokeWidth={2.1} />,
-  clock: <Clock className="h-[18px] w-[18px]" strokeWidth={2.1} />,
-  notes: <StickyNote className="h-[18px] w-[18px]" strokeWidth={2.1} />,
-}
+/* ------------------------------------------------------------------ */
+/* Step visuals — each one a different moment in the real app          */
+/* ------------------------------------------------------------------ */
 
-const DEMO_NOTES_ONE = [
-  { title: 'Ideas', body: ['Add a focus timer to the planner.', 'Try a soft lime accent.'], tilt: '-rotate-[0.35deg]' },
-  { title: 'Call back', body: ['Sam — invoice question before Friday.'], tilt: 'rotate-[0.3deg]' },
-]
+/** October 2026 starts on a Thursday; Monday-first grid → 3 leading blanks. */
+const OCT_BLANKS = 3
+const OCT_DAYS = 31
+const SELECTED = 8
+const TODAY = 5
 
-function StepVisual({ icon }: { icon: Step['icon'] }) {
-  if (icon === 'calendar') {
-    return (
-      <div className="origin-top scale-[1.22] overflow-hidden rounded-2xl border border-lp-line bg-lp-surface shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-[1.26]">
-        <MockMiniCalendar showCurrent={false} />
-      </div>
-    )
-  }
-
-  if (icon === 'clock') {
-    return (
-      <div className="flex flex-col overflow-hidden rounded-2xl border border-lp-line bg-lp-surface shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)]">
-        <div className="h-[196px]">
-          <MockWeekTimeline hours={false} dense />
-        </div>
-      </div>
-    )
-  }
-
+function PickDayVisual() {
   return (
-    <div className="origin-top scale-[1.12] overflow-hidden rounded-2xl border border-lp-line bg-lp-surface shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-[1.16]">
-      <div className="h-[208px]">
-        <MockNotes count={2} notes={DEMO_NOTES_ONE} />
+    <div className="mx-auto w-full max-w-[280px] rounded-2xl bg-white p-4 ring-1 ring-black/[0.06]">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-[#1f2330]">October 2026</span>
+        <span className="flex gap-1 text-[#8b90a0]">
+          <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          <ChevronRight className="h-4 w-4" aria-hidden="true" />
+        </span>
+      </div>
+      <div className="mt-3 grid grid-cols-7 gap-y-1 text-center font-mono text-[10.5px]">
+        {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+          <span key={i} className="pb-1 text-[#a5aab8]">
+            {d}
+          </span>
+        ))}
+        {Array.from({ length: OCT_BLANKS }, (_, i) => (
+          <span key={`b${i}`} />
+        ))}
+        {Array.from({ length: OCT_DAYS }, (_, i) => {
+          const day = i + 1
+          const selected = day === SELECTED
+          const today = day === TODAY
+          return (
+            <span
+              key={day}
+              className={cn(
+                'mx-auto grid h-7 w-7 place-items-center rounded-full text-[11px]',
+                selected && 'bg-lp-ink font-semibold text-white ',
+                today && !selected && 'font-semibold text-[#1f2330] ring-1 ring-[#1f2330]/25',
+                !selected && !today && 'text-[#3d4354]',
+              )}
+            >
+              {day}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
 }
 
-const TINTS = [
-  'from-[#f5c518]/15',
-  'from-[#60a5fa]/15',
-  'from-[#fbbf24]/15',
-]
+function BlockTimeVisual() {
+  const lime = COLORS.lime
+  const hours = ['09:00', '10:00', '11:00', '12:00']
+  return (
+    <div className="mx-auto w-full max-w-[280px] rounded-2xl bg-white p-4 ring-1 ring-black/[0.06]">
+      <p className="text-[13px] font-semibold text-[#1f2330]">Mon 5 October</p>
+      <div className="relative mt-3 h-[216px]">
+        {hours.map((h, i) => (
+          <div key={h} className="absolute inset-x-0 flex items-start gap-2" style={{ top: i * 60 }}>
+            <span className="w-9 shrink-0 -translate-y-1.5 font-mono text-[10px] text-[#a5aab8]">{h}</span>
+            <span className="mt-0 h-px flex-1 bg-[#eceef2]" />
+          </div>
+        ))}
+        {/* Existing event */}
+        <div
+          className="absolute right-0 left-11 rounded-lg px-2.5 py-1 text-[11px]"
+          style={{ top: 0, height: 30, background: lime.bg, color: lime.text, boxShadow: `inset 3px 0 0 ${lime.dot}` }}
+        >
+          <span className="font-semibold">Morning planning</span>
+        </div>
+        {/* The one being created */}
+        <div
+          className="absolute right-0 left-11 rounded-lg px-2.5 py-1.5 text-[11px] ring-2 ring-lp-ink/70"
+          style={{ top: 150, height: 60, background: lime.bg, color: lime.text, boxShadow: `inset 3px 0 0 ${lime.dot}` }}
+        >
+          <span className="block font-semibold">Design review</span>
+          <span className="font-mono text-[10px] opacity-80">11:30 – 12:30</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PinNoteVisual() {
+  return (
+    <div className="relative mx-auto w-full max-w-[280px] pt-2">
+      <div className="rotate-[-2deg] rounded-2xl bg-[#fdf6ab] p-4 shadow-[0_20px_40px_-22px_rgba(90,70,0,0.5)] ring-1 ring-[#eeda5c]/50">
+        <p className="text-[14px] font-semibold text-[#2b2a14]">Ideas</p>
+        <p className="mt-1.5 text-[12.5px] leading-snug text-[#3d3a1e]">Add a focus timer to the planner.</p>
+        <p className="mt-1 text-[12.5px] leading-snug text-[#3d3a1e]">Try a softer accent for highlights.</p>
+        <span className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/75 px-2.5 py-1 text-[10.5px] font-semibold text-[#7a6410]">
+          <Pin className="h-3 w-3" aria-hidden="true" />
+          Pin to day
+        </span>
+      </div>
+      <div className="mt-4 flex items-center gap-2 rounded-xl bg-white px-3 py-2.5 shadow-[0_14px_30px_-20px_rgba(40,30,10,0.4)] ring-1 ring-black/[0.05]">
+        <span className="grid h-8 w-8 place-items-center rounded-lg bg-lp-ink font-mono text-[11px] text-white">8</span>
+        <span className="text-[12px] text-[#3d4354]">
+          <span className="font-semibold text-[#1f2330]">Thursday</span> · 1 note pinned
+        </span>
+        
+      </div>
+    </div>
+  )
+}
+
+const VISUALS: ReactNode[] = [<PickDayVisual key="a" />, <BlockTimeVisual key="b" />, <PinNoteVisual key="c" />]
+
+/* ------------------------------------------------------------------ */
+/* Section                                                             */
+/* ------------------------------------------------------------------ */
 
 export function HowItWorks() {
   return (
-    <Section id="how-it-works" tone="muted">
+    <Section id="how-it-works" className="pt-6 md:pt-10">
       <Reveal>
         <SectionHeading
-          eyebrow={HOW_IT_WORKS.eyebrow}
+          icon={<Route className="h-6 w-6" />}
+          tint="#e8f7b5"
           heading={HOW_IT_WORKS.heading}
           description={HOW_IT_WORKS.description}
         />
       </Reveal>
 
-      <div
-        aria-hidden="true"
-        className="relative mt-14 hidden lg:block"
-      >
-        <span className="absolute top-[86px] left-[16%] right-[16%] h-px bg-gradient-to-r from-transparent via-lp-line to-transparent" />
-      </div>
-
-      <ol className="relative mt-14 grid gap-6 sm:grid-cols-2 lg:mt-16 lg:grid-cols-3 lg:gap-7">
+      <ol data-anim="unfold" className="mt-14 grid gap-4 md:mt-16 lg:grid-cols-3">
         {HOW_IT_WORKS.steps.map((step, i) => (
-          <Reveal as="li" key={step.number} delay={i * 110}>
-            <article
-              className={cn(
-                'group relative flex h-full flex-col rounded-[22px] border border-lp-line bg-lp-surface p-5',
-                'shadow-[0_1px_2px_rgba(0,0,0,0.3)] transition-all duration-300',
-                'hover:-translate-y-1 hover:border-[#3a3f52] hover:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.5)]',
-              )}
-            >
-              <span className="absolute -top-3.5 left-5 z-10 grid h-8 min-w-8 place-items-center rounded-full bg-gradient-to-r from-[#f5c518] to-[#e5b800] px-2 text-[12px] font-bold tracking-[0.04em] text-[#1a1a2e] shadow-[0_6px_14px_-6px_rgba(245,197,24,0.5)]">
-                {step.number}
-              </span>
-
-              <div
-                className={cn(
-                  'relative mt-3 h-[210px] overflow-hidden rounded-2xl bg-gradient-to-br to-transparent p-4',
-                  TINTS[i],
-                )}
-              >
-                <StepVisual icon={step.icon} />
-              </div>
-
-              <div className="mt-5 flex items-center gap-2.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#f5c518]/10 text-[#f5c518] ring-1 ring-[#f5c518]/25">
-                  {STEP_ICONS[step.icon]}
+          <Reveal as="li" key={step.number} delay={i * 90} className="h-full">
+            <article data-anim-item="" className="flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken">
+              <div className="p-6 sm:p-7">
+                <span className="grid h-7 w-7 place-items-center rounded-full bg-lp-ink text-[13px] font-semibold text-white">
+                  {i + 1}
                 </span>
-                <h3 className="text-[19px] font-semibold tracking-[-0.02em] text-lp-ink">
-                  {step.title}
-                </h3>
+                <h3 className="mt-4 text-[16px] font-semibold tracking-[-0.01em] text-lp-ink">{step.title}</h3>
+                <p className="mt-1.5 text-[15px] leading-relaxed text-lp-body">{step.description}</p>
               </div>
-
-              <p className="mt-3 text-[15px] leading-relaxed text-lp-body">
-                {step.description}
-              </p>
+              <div aria-hidden="true" className="mt-auto px-6 pb-7 sm:px-7">
+                {VISUALS[i]}
+              </div>
             </article>
           </Reveal>
         ))}

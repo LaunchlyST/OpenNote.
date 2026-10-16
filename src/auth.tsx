@@ -1,34 +1,14 @@
-import { createContext, useCallback, useContext, useMemo } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { uid } from './lib/id'
-import { DEFAULT_PLAN, type PlanId } from './lib/plan'
-import { useLocalStorage } from './hooks'
+import { authClient } from './lib/auth-client'
 
 /**
- * Local, self-contained authentication for OpenNote.
+ * Authentication for OpenNote, backed by Better Auth.
  *
- * Accounts are stored in this browser. Passwords are never persisted in
- * plain text — each is hashed with PBKDF2 (SHA-256) using a per-account
- * random salt, so only a one-way digest is ever written to storage.
+ * Accounts, password hashes and sessions live on the server (see `server/`).
+ * The browser only holds an httpOnly session cookie. This module keeps the
+ * same `useAuth()` shape the UI already used, so screens did not change.
  */
-
-interface Account {
-  id: string
-  fullName: string
-  email: string
-  /** ISO timestamp of when the account was first created. */
-  createdAt: string
-  avatar?: string
-  /**
-   * Subscription entitlement stored on the account. There is no billing
-   * backend yet, so nothing ever writes a paid value — every account reads
-   * back as `free` until a checkout exists. See `lib/plan.ts`.
-   */
-  plan?: PlanId
-  passwordHash: string
-  salt: string
-  iterations: number
-}
 
 /** The public shape of the signed-in user (never includes secrets). */
 export interface AuthUser {
@@ -37,85 +17,7 @@ export interface AuthUser {
   email: string
   createdAt: string
   avatar?: string
-  plan: PlanId
-}
-
-const ACCOUNTS_KEY = 'opennote.accounts.v1'
-const SESSION_KEY = 'opennote.session.v1'
-const PBKDF2_ITERATIONS = 150_000
-
-const encoder = new TextEncoder()
-
-function randomSalt(): Uint8Array<ArrayBuffer> {
-  const salt = new Uint8Array(16)
-  crypto.getRandomValues(salt)
-  return salt
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = ''
-  for (let i = 0; i < bytes.length; i += 1) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
-  const binary = atob(value)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) {
-    bytes[i] = binary.charCodeAt(i)
-  }
-  return bytes
-}
-
-async function deriveHash(
-  password: string,
-  salt: Uint8Array<ArrayBuffer>,
-  iterations: number,
-): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    'raw',
-    encoder.encode(password),
-    'PBKDF2',
-    false,
-    ['deriveBits'],
-  )
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
-    key,
-    256,
-  )
-  return bytesToBase64(new Uint8Array(bits))
-}
-
-/** Length-constant comparison so a wrong password can't be timed. */
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false
-  let diff = 0
-  for (let i = 0; i < a.length; i += 1) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
-  }
-  return diff === 0
-}
-
-function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase()
-}
-
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)
-}
-
-function toUser(account: Account): AuthUser {
-  return {
-    id: account.id,
-    fullName: account.fullName,
-    email: account.email,
-    createdAt: account.createdAt,
-    avatar: account.avatar,
-    plan: account.plan ?? DEFAULT_PLAN,
-  }
+  emailVerified: boolean
 }
 
 export interface SignUpInput {
@@ -125,149 +27,210 @@ export interface SignUpInput {
   avatar?: string
 }
 
+export interface AuthConfig {
+  google: boolean
+  emailVerificationRequired: boolean
+  emailEnabled: boolean
+}
+
+export interface SignUpResult {
+  /** True when the account exists but the email must be verified first. */
+  needsVerification: boolean
+}
+
 interface AuthContextValue {
   user: AuthUser | null
-  signUp: (input: SignUpInput) => Promise<void>
+  /** True while the session is first being checked. */
+  loading: boolean
+  config: AuthConfig
+  signUp: (input: SignUpInput) => Promise<SignUpResult>
   signIn: (email: string, password: string) => Promise<void>
-  signOut: () => void
-  updateProfile: (patch: { fullName?: string; avatar?: string | null }) => void
+  signInWithGoogle: () => Promise<void>
+  signOut: () => Promise<void>
+  updateProfile: (patch: { fullName?: string; avatar?: string | null }) => Promise<void>
   changePassword: (current: string, next: string) => Promise<void>
+  requestPasswordReset: (email: string) => Promise<void>
+  resetPassword: (token: string, password: string) => Promise<void>
+  resendVerification: (email: string) => Promise<void>
+}
+
+const DEFAULT_CONFIG: AuthConfig = { google: false, emailVerificationRequired: false, emailEnabled: false }
+
+const MESSAGES: Record<string, string> = {
+  INVALID_EMAIL_OR_PASSWORD: 'Incorrect email or password. Please try again.',
+  USER_ALREADY_EXISTS: 'An account with that email already exists.',
+  USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'An account with that email already exists.',
+  EMAIL_NOT_VERIFIED: 'Please verify your email first. We have sent you a new verification link.',
+  PASSWORD_TOO_SHORT: 'Your password must be at least 8 characters.',
+  PASSWORD_TOO_LONG: 'Your password is too long.',
+  INVALID_EMAIL: 'Please enter a valid email address.',
+  INVALID_PASSWORD: 'Your current password is incorrect.',
+  INVALID_TOKEN: 'This reset link is invalid or has expired. Please request a new one.',
+}
+
+type ClientError = { code?: string; message?: string; status?: number } | null | undefined
+
+function fail(error: ClientError, fallback = 'Something went wrong. Please try again.'): never {
+  if (error?.status === 429) throw new Error('Too many attempts. Please wait a moment and try again.')
+  throw new Error((error?.code && MESSAGES[error.code]) || error?.message || fallback)
+}
+
+function origin(): string {
+  return typeof window !== 'undefined' ? window.location.origin : ''
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [accounts, setAccounts] = useLocalStorage<Account[]>(ACCOUNTS_KEY, [])
-  const [sessionId, setSessionId] = useLocalStorage<string | null>(
-    SESSION_KEY,
-    null,
-  )
+  const { data, isPending, refetch } = authClient.useSession()
+  const [config, setConfig] = useState<AuthConfig>(DEFAULT_CONFIG)
+
+  useEffect(() => {
+    let alive = true
+    fetch('/api/auth-config')
+      .then((r) => (r.ok ? r.json() : DEFAULT_CONFIG))
+      .then((c: AuthConfig) => alive && setConfig(c))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const user = useMemo<AuthUser | null>(() => {
-    if (!sessionId) return null
-    const account = accounts.find((a) => a.id === sessionId)
-    return account ? toUser(account) : null
-  }, [accounts, sessionId])
+    const u = data?.user
+    if (!u) return null
+    return {
+      id: u.id,
+      fullName: u.name,
+      email: u.email,
+      createdAt: new Date(u.createdAt).toISOString(),
+      avatar: u.image ?? undefined,
+      emailVerified: u.emailVerified,
+    }
+  }, [data])
 
-  const signUp = useCallback(
-    async ({ fullName, email, password, avatar }: SignUpInput) => {
-      const name = fullName.trim()
-      const mail = normalizeEmail(email)
+  const signUp = useCallback(async ({ fullName, email, password, avatar }: SignUpInput) => {
+    const name = fullName.trim()
+    if (name.length < 2) throw new Error('Please enter your full name.')
+    const { data: res, error } = await authClient.signUp.email({
+      name,
+      email: email.trim().toLowerCase(),
+      password,
+      image: avatar,
+      callbackURL: `${origin()}/app`,
+    })
+    if (error) fail(error)
+    await refetch()
+    return { needsVerification: !res?.token }
+  }, [refetch])
 
-      if (name.length < 2) throw new Error('Please enter your full name.')
-      if (!isValidEmail(mail)) {
-        throw new Error('Please enter a valid email address.')
-      }
-      if (password.length < 8) {
-        throw new Error('Your password must be at least 8 characters.')
-      }
-      if (accounts.some((a) => a.email === mail)) {
-        throw new Error('An account with that email already exists.')
-      }
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await authClient.signIn.email({
+      email: email.trim().toLowerCase(),
+      password,
+      callbackURL: `${origin()}/app`,
+    })
+    if (error) fail(error)
+    await refetch()
+  }, [refetch])
 
-      const salt = randomSalt()
-      const passwordHash = await deriveHash(
-        password,
-        salt,
-        PBKDF2_ITERATIONS,
-      )
-      const account: Account = {
-        id: uid('usr'),
-        fullName: name,
-        email: mail,
-        createdAt: new Date().toISOString(),
-        avatar,
-        // New accounts start on the free tier. Checkout does not exist yet,
-        // so there is no code path that would change this later.
-        plan: DEFAULT_PLAN,
-        passwordHash,
-        salt: bytesToBase64(salt),
-        iterations: PBKDF2_ITERATIONS,
-      }
-      setAccounts((list) => [...list, account])
-      setSessionId(account.id)
-    },
-    [accounts, setAccounts, setSessionId],
-  )
+  const signInWithGoogle = useCallback(async () => {
+    const { error } = await authClient.signIn.social({
+      provider: 'google',
+      callbackURL: `${origin()}/app`,
+      errorCallbackURL: `${origin()}/app/signin`,
+    })
+    if (error) fail(error)
+  }, [])
 
-  const signIn = useCallback(
-    async (email: string, password: string) => {
-      const mail = normalizeEmail(email)
-      const account = accounts.find((a) => a.email === mail)
-      if (!account) throw new Error('No account matches that email address.')
+  const signOut = useCallback(async () => {
+    await authClient.signOut()
+    await refetch()
+  }, [refetch])
 
-      const hash = await deriveHash(
-        password,
-        base64ToBytes(account.salt),
-        account.iterations,
-      )
-      if (!safeEqual(hash, account.passwordHash)) {
-        throw new Error('Incorrect password. Please try again.')
-      }
-      setSessionId(account.id)
-    },
-    [accounts, setSessionId],
-  )
+  const updateProfile = useCallback(async (patch: { fullName?: string; avatar?: string | null }) => {
+    const body: { name?: string; image?: string | null } = {}
+    if (patch.fullName !== undefined) body.name = patch.fullName.trim()
+    if (patch.avatar !== undefined) body.image = patch.avatar
+    const { error } = await authClient.updateUser(body)
+    if (error) fail(error)
+    await refetch()
+  }, [refetch])
 
-  const signOut = useCallback(() => setSessionId(null), [setSessionId])
+  const changePassword = useCallback(async (current: string, next: string) => {
+    if (next.length < 8) throw new Error('Your new password must be at least 8 characters.')
+    const { error } = await authClient.changePassword({
+      currentPassword: current,
+      newPassword: next,
+      revokeOtherSessions: true,
+    })
+    if (error) fail(error)
+  }, [])
 
-  const updateProfile = useCallback(
-    (patch: { fullName?: string; avatar?: string | null }) => {
-      if (!sessionId) return
-      setAccounts((list) =>
-        list.map((account) => {
-          if (account.id !== sessionId) return account
-          const next: Account = { ...account }
-          if (patch.fullName !== undefined) next.fullName = patch.fullName.trim()
-          if (patch.avatar !== undefined) next.avatar = patch.avatar ?? undefined
-          return next
-        }),
-      )
-    },
-    [sessionId, setAccounts],
-  )
+  const requestPasswordReset = useCallback(async (email: string) => {
+    const { error } = await authClient.requestPasswordReset({
+      email: email.trim().toLowerCase(),
+      redirectTo: `${origin()}/app/reset-password`,
+    })
+    if (error) fail(error)
+  }, [])
 
-  const changePassword = useCallback(
-    async (current: string, next: string) => {
-      if (!sessionId) throw new Error('You are not signed in.')
-      const account = accounts.find((a) => a.id === sessionId)
-      if (!account) throw new Error('Account not found.')
+  const resetPassword = useCallback(async (token: string, password: string) => {
+    const { error } = await authClient.resetPassword({ token, newPassword: password })
+    if (error) fail(error)
+  }, [])
 
-      const currentHash = await deriveHash(
-        current,
-        base64ToBytes(account.salt),
-        account.iterations,
-      )
-      if (!safeEqual(currentHash, account.passwordHash)) {
-        throw new Error('Your current password is incorrect.')
-      }
-      if (next.length < 8) {
-        throw new Error('Your new password must be at least 8 characters.')
-      }
-
-      const salt = randomSalt()
-      const passwordHash = await deriveHash(next, salt, PBKDF2_ITERATIONS)
-      setAccounts((list) =>
-        list.map((a) =>
-          a.id === account.id
-            ? {
-                ...a,
-                passwordHash,
-                salt: bytesToBase64(salt),
-                iterations: PBKDF2_ITERATIONS,
-              }
-            : a,
-        ),
-      )
-    },
-    [accounts, sessionId, setAccounts],
-  )
+  const resendVerification = useCallback(async (email: string) => {
+    const { error } = await authClient.sendVerificationEmail({
+      email: email.trim().toLowerCase(),
+      callbackURL: `${origin()}/app`,
+    })
+    if (error) fail(error)
+  }, [])
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, signUp, signIn, signOut, updateProfile, changePassword }),
-    [user, signUp, signIn, signOut, updateProfile, changePassword],
+    () => ({
+      user,
+      loading: isPending,
+      config,
+      signUp,
+      signIn,
+      signInWithGoogle,
+      signOut,
+      updateProfile,
+      changePassword,
+      requestPasswordReset,
+      resetPassword,
+      resendVerification,
+    }),
+    [user, isPending, config, signUp, signIn, signInWithGoogle, signOut, updateProfile, changePassword, requestPasswordReset, resetPassword, resendVerification],
   )
 
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+/**
+ * Supplies a fixed auth state without a server. Used by the SSR smoke test to
+ * render signed-in and signed-out screens.
+ */
+export function StaticAuthProvider({ user, children }: { user: AuthUser | null; children: ReactNode }) {
+  const value = useMemo<AuthContextValue>(() => {
+    const noop = async () => {}
+    return {
+      user,
+      loading: false,
+      config: DEFAULT_CONFIG,
+      signUp: async () => ({ needsVerification: false }),
+      signIn: noop,
+      signInWithGoogle: noop,
+      signOut: noop,
+      updateProfile: noop,
+      changePassword: noop,
+      requestPasswordReset: noop,
+      resetPassword: noop,
+      resendVerification: noop,
+    }
+  }, [user])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

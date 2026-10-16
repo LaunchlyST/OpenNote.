@@ -1,60 +1,43 @@
 /**
- * State for the Deploy page.
+ * State for the Deploy panel.
  *
- * Everything here is a thin wrapper over `api/` — the browser never decides
- * whether a deployment is allowed, it only asks the server and shows the
- * answer. A 401 from the server is treated as "show the sign-in card" rather
- * than as an error, because it is the normal state for a signed-out browser.
+ * A thin wrapper over `server/deploy.ts` — the browser never decides whether
+ * a deployment is allowed, it asks the server and shows the answer. A 401 or
+ * 403 from the server is the normal state for a non-administrator, so it is
+ * reported as `forbidden` rather than as an error.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   DeployApiError,
-  endSession,
   getDeployStatus,
-  getSession,
   requestDeployment,
-  startSession,
   type DeployStatus,
-  type SessionInfo,
 } from './client'
-
-export type DeployPhase = 'idle' | 'signing-in' | 'deploying' | 'done'
 
 export interface UseDeployResult {
   /** False until the first check has finished. */
   loading: boolean
-  session: SessionInfo | null
   status: DeployStatus | null
-  phase: DeployPhase
-  /** Ordered progress log shown under the Deploy button. */
+  /** The server refused because this account may not deploy. */
+  forbidden: boolean
+  deploying: boolean
+  /** Ordered progress log shown under the button. */
   steps: string[]
   error: string | null
-  /** The deploy API could not be reached at all. */
-  unavailable: boolean
   canDeploy: boolean
-  signIn: (passphrase: string, email?: string) => Promise<boolean>
-  signOut: () => Promise<void>
   deploy: () => Promise<void>
   refresh: () => Promise<void>
-  clearError: () => void
 }
 
-function messageOf(error: unknown, fallback: string): string {
-  if (error instanceof DeployApiError) return error.message
-  if (error instanceof Error && error.message) return error.message
-  return fallback
-}
-
-export function useDeploy(email?: string): UseDeployResult {
+export function useDeploy(): UseDeployResult {
   const [loading, setLoading] = useState(true)
-  const [session, setSession] = useState<SessionInfo | null>(null)
   const [status, setStatus] = useState<DeployStatus | null>(null)
-  const [phase, setPhase] = useState<DeployPhase>('idle')
+  const [forbidden, setForbidden] = useState(false)
+  const [deploying, setDeploying] = useState(false)
   const [steps, setSteps] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [unavailable, setUnavailable] = useState(false)
 
-  // Guards against setting state after the section unmounts mid-request.
+  // Avoids setting state after the panel unmounts mid-request.
   const alive = useRef(true)
   useEffect(() => {
     alive.current = true
@@ -63,129 +46,65 @@ export function useDeploy(email?: string): UseDeployResult {
     }
   }, [])
 
-  const loadStatus = useCallback(async () => {
-    const next = await getDeployStatus()
-    if (alive.current) setStatus(next)
-  }, [])
-
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     setError(null)
-    setUnavailable(false)
     try {
-      const info = await getSession()
+      const next = await getDeployStatus()
       if (!alive.current) return
-      setSession(info)
-      if (info.authenticated && info.authConfigured) {
-        await loadStatus()
-      } else {
-        setStatus(null)
-      }
+      setStatus(next)
+      setForbidden(false)
     } catch (err) {
       if (!alive.current) return
-      setUnavailable(err instanceof Error && err.name === 'DeployApiUnavailableError')
-      setError(messageOf(err, 'Could not reach the deployment service.'))
+      setStatus(null)
+      const denied = err instanceof DeployApiError && (err.status === 401 || err.status === 403)
+      setForbidden(denied)
+      if (!denied) {
+        setError(err instanceof Error ? err.message : 'Could not reach the deployment service.')
+      }
     } finally {
       if (alive.current) setLoading(false)
     }
-  }, [loadStatus])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  const signIn = useCallback(
-    async (passphrase: string, accountEmail?: string) => {
-      setPhase('signing-in')
-      setError(null)
-      setSteps(['Checking the administrator passphrase…'])
-      try {
-        const info = await startSession(passphrase, accountEmail ?? email)
-        if (!alive.current) return false
-        setSession(info)
-        await loadStatus()
-        setSteps([])
-        setPhase('idle')
-        return true
-      } catch (err) {
-        if (!alive.current) return false
-        setUnavailable(err instanceof Error && err.name === 'DeployApiUnavailableError')
-        setError(messageOf(err, 'Could not sign in.'))
-        setSteps([])
-        setPhase('idle')
-        return false
-      }
-    },
-    [email, loadStatus],
-  )
-
-  const signOut = useCallback(async () => {
-    setError(null)
-    try {
-      await endSession()
-      if (!alive.current) return
-      setSession(null)
-      setStatus(null)
-      setSteps([])
-      setPhase('idle')
-    } catch (err) {
-      if (alive.current) setError(messageOf(err, 'Could not sign out.'))
-    }
   }, [])
 
+  useEffect(() => {
+    void load()
+  }, [load])
+
   const deploy = useCallback(async () => {
-    setPhase('deploying')
+    setDeploying(true)
     setError(null)
     setSteps([
-      'Sending an authenticated deployment request to the server…',
-      'Asking the hosting provider to rebuild the site…',
+      'Sending an authenticated request to the OpenNote server…',
+      `Asking ${status?.providerLabel ?? 'the host'} to rebuild the site…`,
     ])
     try {
       const result = await requestDeployment()
       if (!alive.current) return
       setStatus(result)
-      setSteps((prev) => [
-        ...prev,
-        result.message ?? 'The hosting provider accepted the deployment.',
-      ])
-      setPhase('done')
+      setSteps((prev) => [...prev, result.message ?? 'The host accepted the deployment.'])
     } catch (err) {
       if (!alive.current) return
-      setError(messageOf(err, 'The deployment could not be started.'))
+      setError(err instanceof Error ? err.message : 'The deployment could not be started.')
       setSteps([])
-      setPhase('idle')
-      // A 401 means the session expired; re-read it so the card flips back.
-      if (err instanceof DeployApiError && err.status === 401) {
-        try {
-          const info = await getSession()
-          if (alive.current) setSession(info)
-        } catch {
-          /* leave the previous session state in place */
-        }
+      const denied = err instanceof DeployApiError && (err.status === 401 || err.status === 403)
+      if (denied) {
+        setForbidden(true)
+        setStatus(null)
       }
+    } finally {
+      if (alive.current) setDeploying(false)
     }
-  }, [])
-
-  const clearError = useCallback(() => setError(null), [])
-
-  const canDeploy =
-    Boolean(session?.authenticated) &&
-    Boolean(status?.ready) &&
-    phase !== 'deploying' &&
-    phase !== 'signing-in'
+  }, [status?.providerLabel])
 
   return {
     loading,
-    session,
     status,
-    phase,
+    forbidden,
+    deploying,
     steps,
     error,
-    unavailable,
-    canDeploy,
-    signIn,
-    signOut,
+    canDeploy: Boolean(status?.ready) && !deploying,
     deploy,
-    refresh,
-    clearError,
+    refresh: load,
   }
 }

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowRight, Menu, X } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
 import { HERO, NAV_LINKS } from '../content'
@@ -8,11 +7,15 @@ import { useActiveSection, useLandingNav } from '../hooks'
 
 const SECTION_IDS = NAV_LINKS.map((l) => l.section)
 
+/**
+ * A floating pill bar. It sits on the paper at the top of the page and tightens
+ * into a frosted capsule once the visitor scrolls. Below `lg` the links move
+ * into a full-height sheet with large, thumb-friendly targets.
+ */
 export function Nav() {
   const { user } = useAuth()
   const { goSection } = useLandingNav()
   const [scrolled, setScrolled] = useState(false)
-  const [progress, setProgress] = useState(0)
   const [open, setOpen] = useState(false)
 
   const active = useActiveSection(useMemo(() => SECTION_IDS, []))
@@ -23,10 +26,7 @@ export function Nav() {
       if (frame) return
       frame = window.requestAnimationFrame(() => {
         frame = 0
-        const y = window.scrollY
-        setScrolled(y > 12)
-        const max = document.documentElement.scrollHeight - window.innerHeight
-        setProgress(max > 0 ? Math.min(1, Math.max(0, y / max)) : 0)
+        setScrolled(window.scrollY > 16)
       })
     }
     onScroll()
@@ -37,15 +37,19 @@ export function Nav() {
     }
   }, [])
 
-  // Close the mobile menu on Escape and when the viewport grows past the
-  // breakpoint where it is shown.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
     }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Lock page scroll behind the sheet.
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prev
+    }
   }, [open])
 
   useEffect(() => {
@@ -58,25 +62,26 @@ export function Nav() {
   }, [])
 
   const authed = Boolean(user)
-
   const primary = authed ? HERO.authenticatedCta : HERO.primaryCta
-  const secondary = authed ? HERO.signInCta : HERO.secondaryCta
 
   return (
     <header
       data-landing-header
       className={cn(
-        'fixed inset-x-0 top-0 z-50 transition-all duration-300',
-        scrolled
-          ? 'border-b border-lp-line/80 bg-[#0f1117]/90 backdrop-blur-xl backdrop-saturate-150'
-          : 'border-b border-transparent bg-transparent',
+        'fixed inset-x-0 top-0 z-50 border-b bg-white/90 backdrop-blur-md transition-colors duration-300',
+        scrolled || open ? 'border-lp-line' : 'border-transparent',
       )}
     >
-      <div className="mx-auto flex h-[68px] w-full max-w-[1180px] items-center gap-4 px-5 sm:px-8">
+      <div
+        className={cn(
+          'relative mx-auto flex h-[60px] w-full max-w-[1200px] items-center gap-3 px-5 sm:px-8',
+        )}
+      >
         <a
           href="#top"
           onClick={(e) => {
             e.preventDefault()
+            setOpen(false)
             window.scrollTo({ top: 0, behavior: 'smooth' })
           }}
           className="rounded-lg"
@@ -85,9 +90,8 @@ export function Nav() {
           <Logo />
         </a>
 
-        {/* Centre navigation */}
-        <nav aria-label="Sections" className="mx-auto hidden lg:block">
-          <ul className="flex items-center gap-1">
+        <nav aria-label="Sections" className="absolute left-1/2 hidden -translate-x-1/2 lg:block">
+          <ul className="flex items-center gap-0.5">
             {NAV_LINKS.map((link) => {
               const isActive = active === link.section
               return (
@@ -100,19 +104,11 @@ export function Nav() {
                     }}
                     aria-current={isActive ? 'true' : undefined}
                     className={cn(
-                      'relative block rounded-full px-3.5 py-2 text-[14.5px] font-medium transition-colors duration-200',
-                      isActive
-                        ? 'text-lp-ink'
-                        : 'text-lp-body hover:text-lp-ink',
+                      'relative flex items-center rounded-lg px-3 py-1.5 text-[14px] transition-colors duration-200',
+                      isActive ? 'bg-lp-sunken text-lp-ink' : 'text-lp-body hover:bg-lp-sunken hover:text-lp-ink',
                     )}
                   >
                     {link.label}
-                    <span
-                      className={cn(
-                        'absolute inset-x-3.5 -bottom-0.5 h-[2px] rounded-full bg-lp-lime-600 transition-all duration-300',
-                        isActive ? 'opacity-100' : 'scale-x-0 opacity-0',
-                      )}
-                    />
                   </a>
                 </li>
               )
@@ -120,33 +116,12 @@ export function Nav() {
           </ul>
         </nav>
 
-        {/* Actions */}
-        <div className="ml-auto flex items-center gap-2 lg:ml-0">
-          {!authed && (
-            <Button
-              href={HERO.signInCta.href}
-              variant="ghost"
-              size="md"
-              className="hidden sm:inline-flex"
-            >
-              Sign In
-            </Button>
-          )}
-
-          {!authed && (
-            <Button
-              href={HERO.dashboardCta.href}
-              variant="ghost"
-              size="md"
-              className="hidden md:inline-flex"
-            >
-              {HERO.dashboardCta.label}
-            </Button>
-          )}
-
-          <Button href={primary.href} variant="primary" size="md" className="hidden sm:inline-flex">
+        <div className="ml-auto flex items-center gap-1.5">
+          <Button href={HERO.signInCta.href} variant="ghost" size="md" className="max-sm:hidden">
+            Sign In
+          </Button>
+          <Button href={primary.href} variant="primary" size="md" className="max-sm:hidden" arrow>
             {primary.label}
-            <ArrowRight className="h-4 w-4" aria-hidden="true" />
           </Button>
 
           <button
@@ -155,91 +130,59 @@ export function Nav() {
             aria-expanded={open}
             aria-controls="landing-mobile-menu"
             aria-label={open ? 'Close menu' : 'Open menu'}
-            className="grid h-10 w-10 place-items-center rounded-xl border border-lp-line bg-white text-lp-ink shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:bg-lp-sunken lg:hidden"
+            className="relative grid h-10 w-10 place-items-center rounded-[10px] border border-lp-line bg-white text-lp-ink transition active:scale-95 lg:hidden"
           >
-            {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            <span
+              aria-hidden="true"
+              className={cn(
+                'absolute h-[1.5px] w-[18px] rounded-full bg-current transition-transform duration-300',
+                open ? 'rotate-45' : '-translate-y-[4px]',
+              )}
+            />
+            <span
+              aria-hidden="true"
+              className={cn(
+                'absolute h-[1.5px] w-[18px] rounded-full bg-current transition-transform duration-300',
+                open ? '-rotate-45' : 'translate-y-[4px]',
+              )}
+            />
           </button>
         </div>
       </div>
 
-      {/* Reading-progress hairline */}
-      <div
-        aria-hidden="true"
-        className="h-px origin-left bg-lp-lime-600 transition-transform duration-150 ease-out"
-        style={{ transform: `scaleX(${progress})` }}
-      />
-
-      {/* Mobile menu */}
+      {/* Mobile sheet */}
       <div
         id="landing-mobile-menu"
         hidden={!open}
-        className="lg:hidden"
+        className="fixed inset-x-0 top-[61px] bottom-0 overflow-y-auto bg-white px-5 pt-4 pb-8 sm:px-8 lg:hidden"
       >
-        <div className="border-t border-lp-line bg-lp-bg/95 px-5 pt-3 pb-6 shadow-[0_24px_48px_-24px_rgba(16,24,40,0.3)] backdrop-blur-xl sm:px-8">
-          <nav aria-label="Sections">
-            <ul className="space-y-0.5">
-              {NAV_LINKS.map((link) => (
-                <li key={link.section}>
-                  <a
-                    href={`#${link.section}`}
-                    onClick={(e) => {
-                      e.preventDefault()
-                      setOpen(false)
-                      goSection(link.section)
-                    }}
-                    className={cn(
-                      'flex items-center justify-between rounded-xl px-3 py-3 text-[16px] font-medium transition-colors',
-                      active === link.section
-                        ? 'bg-white text-lp-ink shadow-[0_1px_2px_rgba(16,24,40,0.06)] ring-1 ring-black/[0.04]'
-                        : 'text-lp-body hover:bg-white/70 hover:text-lp-ink',
-                    )}
-                  >
-                    {link.label}
-                    <ArrowRight
-                      className="h-4 w-4 text-lp-muted"
-                      aria-hidden="true"
-                    />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </nav>
+        <nav aria-label="Sections (mobile)">
+          <ul>
+            {NAV_LINKS.map((link) => (
+              <li key={link.section} className="border-b border-lp-line last:border-b-0">
+                <a
+                  href={`#${link.section}`}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setOpen(false)
+                    goSection(link.section)
+                  }}
+                  className="flex items-baseline gap-4 py-4"
+                >
+                  <span className="text-[22px] font-semibold tracking-[-0.02em] text-lp-ink">{link.label}</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </nav>
 
-          <div className="mt-5 space-y-2.5">
-            <Button
-              href={primary.href}
-              variant="primary"
-              size="lg"
-              className="w-full"
-              icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
-            >
-              {primary.label}
-            </Button>
-            {authed ? (
-              <Button href={HERO.signInCta.href} variant="secondary" size="lg" className="w-full">
-                {secondary.label}
-              </Button>
-            ) : (
-              <Button
-                section={HERO.secondaryCta.section}
-                variant="secondary"
-                size="lg"
-                className="w-full"
-              >
-                {secondary.label}
-              </Button>
-            )}
-            {!authed && (
-              <Button
-                href={HERO.dashboardCta.href}
-                variant="ghost"
-                size="lg"
-                className="w-full"
-              >
-                {HERO.dashboardCta.label}
-              </Button>
-            )}
-          </div>
+        <div className="mt-8 grid gap-2.5">
+          <Button href={primary.href} variant="primary" size="lg" className="w-full" arrow>
+            {primary.label}
+          </Button>
+          <Button href={HERO.signInCta.href} variant="secondary" size="lg" className="w-full">
+            {authed ? 'Switch account' : 'Sign In'}
+          </Button>
         </div>
       </div>
     </header>

@@ -68,7 +68,7 @@ function EventModalBody({
 
   return (
     <div
-      className="animate-scrim fixed inset-0 z-[60] flex items-start justify-end bg-black/10 p-4 backdrop-blur-[2px] sm:p-6"
+      className="animate-scrim fixed inset-0 z-[60] flex items-center justify-center bg-[#0b0f19]/30 p-4 backdrop-blur-[2px]"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) closeModal()
       }}
@@ -78,19 +78,18 @@ function EventModalBody({
           e.preventDefault()
           handleSubmit()
         }}
-        className="animate-sheet flex max-h-[92vh] w-full max-w-[400px] flex-col overflow-hidden rounded-3xl border border-line bg-white shadow-[0_32px_64px_-16px_rgba(16,24,40,0.32)] sm:mt-2"
+        className="animate-sheet flex max-h-[92vh] w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-[#ececea] bg-white shadow-[0_28px_70px_rgba(16,24,40,0.24),0_8px_20px_rgba(16,24,40,0.08)]"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
-          <h2 className="text-[13px] font-bold uppercase tracking-[0.08em] text-muted">
-            {mode === 'create' ? 'New Event' : 'Edit Event'}
+        <div className="flex items-center justify-between border-b border-[#f1f1ef] px-5 py-3.5">
+          <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#191919]">
+            {mode === 'create' ? 'New event' : 'Edit event'}
           </h2>
           <div className="flex items-center gap-1">
             {mode === 'edit' && (
               <button
                 type="button"
                 onClick={() => deleteEvent(event.id)}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] font-medium text-red-500 transition hover:bg-red-50"
+                className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11.5px] font-medium text-[#b4453c] transition hover:bg-[#fdf1f1]"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete
@@ -102,20 +101,17 @@ function EventModalBody({
           </div>
         </div>
 
-        {/* Body */}
         <div className="scroll-area flex-1 space-y-4 overflow-y-auto px-5 py-4">
-          {/* Title */}
           <input
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Add a title"
-            className="w-full rounded-xl border border-transparent bg-transparent px-3 py-2.5 text-[19px] font-bold tracking-[-0.02em] text-ink transition placeholder:font-medium placeholder:text-ghost hover:bg-surface focus:border-line focus:bg-white focus:shadow-[0_0_0_3px_rgba(190,242,100,0.3)]"
+            className="w-full rounded-xl border border-transparent bg-transparent px-3 py-2 text-[17px] font-semibold tracking-[-0.01em] text-[#191919] transition placeholder:font-medium placeholder:text-[#b4b3ae] hover:bg-[#fbfbfa] focus:border-[#e9e9e7] focus:bg-white focus:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]"
           />
 
-          {/* Calendar selection */}
           <div>
-            <span className="mb-2 block px-1 text-[10px] font-bold uppercase tracking-[0.1em] text-faint">
+            <span className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a3a29e]">
               Calendar
             </span>
             <div className="flex flex-wrap gap-1.5">
@@ -130,8 +126,8 @@ function EventModalBody({
                     className={cn(
                       'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all duration-150',
                       active
-                        ? 'border-transparent font-semibold shadow-sm'
-                        : 'border-line text-ink-soft hover:border-border-strong hover:bg-surface',
+                        ? 'border-transparent shadow-[0_1px_2px_rgba(16,24,40,0.1)]'
+                        : 'border-[#e9e9e7] text-[#5f5e5b] hover:border-[#dcdbd7] hover:bg-[#fbfbfa]',
                     )}
                     style={
                       active
@@ -154,77 +150,73 @@ function EventModalBody({
             </div>
           </div>
 
-          {/* Date & Time */}
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2.5 rounded-xl border border-line px-3.5 py-2.5 transition focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.3)]">
-              <CalendarDays className="h-4 w-4 shrink-0 text-faint" />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5 rounded-xl border border-[#e9e9e7] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
+              <CalendarDays className="h-4 w-4 shrink-0 text-[#a3a29e]" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-transparent py-0.5 text-[13px] font-medium text-ink"
+                className="w-full bg-transparent py-1 text-[13px] font-medium text-[#191919]"
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2.5 transition focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.3)]">
-                <Clock className="h-4 w-4 shrink-0 text-faint" />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center gap-2 rounded-xl border border-[#e9e9e7] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
+                <Clock className="h-4 w-4 shrink-0 text-[#a3a29e]" />
                 <input
                   type="time"
                   step={900}
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-transparent py-0.5 text-[13px] font-medium text-ink"
+                  className="w-full bg-transparent py-1 text-[13px] font-medium text-[#191919]"
                 />
               </div>
-              <div className="flex items-center gap-2 rounded-xl border border-line px-3.5 py-2.5 transition focus-within:border-accent focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.3)]">
-                <Clock className="h-4 w-4 shrink-0 text-faint" />
+              <div className="flex items-center gap-2 rounded-xl border border-[#e9e9e7] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
+                <Clock className="h-4 w-4 shrink-0 text-[#a3a29e]" />
                 <input
                   type="time"
                   step={900}
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-transparent py-0.5 text-[13px] font-medium text-ink"
+                  className="w-full bg-transparent py-1 text-[13px] font-medium text-[#191919]"
                 />
               </div>
             </div>
           </div>
 
-          {/* Duration indicator */}
-          <div className="flex items-center justify-between rounded-xl bg-surface px-4 py-3 text-[12px] text-ink-soft">
+          <div className="flex items-center justify-between rounded-xl bg-[#f7f7f5] px-3.5 py-2.5 text-[11.5px] text-[#6b6a66]">
             <span className="flex items-center gap-1.5 font-medium">
-              <Clock className="h-3.5 w-3.5 text-faint" />
+              <Clock className="h-3.5 w-3.5 text-[#a3a29e]" />
               {relativeDayLabel(parsedDate)}
             </span>
-            <span className="rounded-full bg-accent-soft px-2.5 py-0.5 text-[11px] font-bold text-accent-text">
+            <span className="rounded-full bg-[#eaf9bf] px-2 py-0.5 font-semibold text-[#4b6410]">
               {durationLabel}
             </span>
           </div>
 
-          {/* Notes */}
           <textarea
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes (optional)"
-            className="w-full resize-none rounded-xl border border-line px-3.5 py-2.5 text-[12.5px] text-ink transition placeholder:text-ghost focus:border-accent focus:shadow-[0_0_0_3px_rgba(190,242,100,0.3)]"
+            placeholder="Notes (optional)"
+            className="w-full resize-none rounded-xl border border-[#e9e9e7] px-3 py-2 text-[12.5px] text-[#191919] transition placeholder:text-[#b4b3ae] focus:border-[#c3e56a] focus:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]"
           />
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center gap-2 border-t border-line px-5 py-3.5">
-          <button
-            type="submit"
-            className="flex-1 rounded-xl bg-charcoal px-5 py-2.5 text-[12.5px] font-semibold text-white shadow-[0_8px_20px_-8px_rgba(45,49,66,0.7)] transition hover:bg-charcoal-light active:scale-[0.98]"
-          >
-            {mode === 'create' ? 'Add Event' : 'Save Changes'}
-          </button>
+        <div className="flex items-center justify-end gap-2 border-t border-[#f1f1ef] px-5 py-3.5">
           <button
             type="button"
             onClick={closeModal}
-            className="rounded-xl border border-line px-4 py-2.5 text-[12.5px] font-medium text-ink-soft transition hover:bg-surface active:scale-[0.98]"
+            className="rounded-lg px-3 py-2 text-[12.5px] font-medium text-[#5f5e5b] transition hover:bg-[#f5f5f3]"
           >
             Cancel
+          </button>
+          <button
+            type="submit"
+            className="rounded-lg px-4 py-2 text-[12.5px] font-semibold transition bg-[#191919] text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:bg-[#37352f] active:scale-[0.98]"
+          >
+            {mode === 'create' ? 'Add event' : 'Save changes'}
           </button>
         </div>
       </form>

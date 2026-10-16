@@ -1,8 +1,7 @@
-import { useRef } from 'react'
-import type { CSSProperties, ElementType, ReactNode } from 'react'
-import { StickyNote } from 'lucide-react'
+import { useState } from 'react'
+import type { ElementType, ReactNode } from 'react'
 import { cn } from '../../lib/id'
-import { useLandingNav, useRevealEffect } from '../hooks'
+import { useLandingNav } from '../hooks'
 
 /* ------------------------------------------------------------------ */
 /* Scroll reveal                                                       */
@@ -16,18 +15,20 @@ export interface RevealProps {
   as?: ElementType
 }
 
-export function Reveal({ children, delay = 0, className, as }: RevealProps) {
+/**
+ * Fades content up the first time it scrolls into view.
+ *
+ * Content is only ever hidden via CSS, and the reduced-motion rules in
+ * `index.css` force it visible again — so the page degrades to fully readable
+ * if the observer never fires.
+ */
+export function Reveal({ children, className, as, delay, ...rest }: RevealProps & Record<`data-${string}`, string>) {
+  void delay // kept for call-site compatibility; GSAP handles staggering
   const Tag = (as ?? 'div') as ElementType
-  const ref = useRef<HTMLElement | null>(null)
-
-  useRevealEffect(ref)
-
+  // Motion is choreographed per section by `useScrollMotion` (GSAP); this
+  // wrapper only keeps the grouping, so content is always visible at rest.
   return (
-    <Tag
-      ref={ref}
-      className={cn('lp-reveal', className)}
-      style={delay ? ({ animationDelay: `${delay}ms` } as CSSProperties) : undefined}
-    >
+    <Tag className={className} {...rest}>
       {children}
     </Tag>
   )
@@ -43,33 +44,40 @@ interface LogoProps {
   size?: 'sm' | 'md' | 'lg'
   /** Hide the wordmark and render the mark alone. */
   markOnly?: boolean
+  tone?: 'ink' | 'paper'
 }
 
-export function Logo({ className, size = 'md', markOnly = false }: LogoProps) {
-  const mark = {
-    sm: 'h-7 w-7 rounded-lg',
-    md: 'h-9 w-9 rounded-[10px]',
-    lg: 'h-11 w-11 rounded-xl',
-  }[size]
-  const icon = { sm: 15, md: 17, lg: 20 }[size]
-  const word = {
-    sm: 'text-[15px]',
-    md: 'text-[17px]',
-    lg: 'text-[20px]',
-  }[size]
+/** The OpenNote app icon: a calendar page with a folded note corner. */
+export function AppIcon({ className, day }: { className?: string; day?: string }) {
+  // Today's date, in the visitor's own time zone.
+  const [today] = useState(() => String(new Date().getDate()))
+  const label = day ?? today
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'relative inline-flex flex-col overflow-hidden rounded-[22%] border-[1.5px] border-lp-ink bg-white',
+        className,
+      )}
+    >
+      <span className="h-[26%] w-full bg-lp-ink" />
+      <span className="grid flex-1 place-items-center font-semibold leading-none tracking-[-0.04em] text-lp-ink" style={{ fontSize: label.length > 1 ? '0.4em' : '0.5em', paddingRight: label.length > 1 ? '0.08em' : 0 }}>
+        {label}
+      </span>
+      <span className="absolute right-0 bottom-0 h-[30%] w-[30%] rounded-tl-[30%] border-t-[1.5px] border-l-[1.5px] border-lp-ink bg-[#bef264]" />
+    </span>
+  )
+}
+
+export function Logo({ className, size = 'md', markOnly = false, tone = 'ink' }: LogoProps) {
+  const mark = { sm: 'h-6 w-6 text-[24px]', md: 'h-7 w-7 text-[28px]', lg: 'h-9 w-9 text-[36px]' }[size]
+  const word = { sm: 'text-[15px]', md: 'text-[16.5px]', lg: 'text-[19px]' }[size]
 
   return (
-    <span className={cn('inline-flex items-center gap-2.5', className)}>
-      <span
-        className={cn(
-          'grid shrink-0 place-items-center bg-gradient-to-br from-[#f5c518] to-[#e5b800] text-[#1a1a2e] shadow-[0_4px_16px_rgba(245,197,24,0.35)]',
-          mark,
-        )}
-      >
-        <StickyNote style={{ width: icon, height: icon }} strokeWidth={2.3} />
-      </span>
+    <span className={cn('inline-flex items-center gap-2', className)}>
+      <AppIcon className={mark} />
       {!markOnly && (
-        <span className={cn('font-bold tracking-[-0.03em] text-lp-ink', word)}>
+        <span className={cn('font-semibold tracking-[-0.02em]', tone === 'paper' ? 'text-white' : 'text-lp-ink', word)}>
           OpenNote
         </span>
       )}
@@ -81,26 +89,47 @@ export function Logo({ className, size = 'md', markOnly = false }: LogoProps) {
 /* Buttons                                                             */
 /* ------------------------------------------------------------------ */
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'dark'
+export type ButtonVariant = 'primary' | 'signal' | 'secondary' | 'ghost' | 'inverse' | 'outline-dark'
 export type ButtonSize = 'sm' | 'md' | 'lg'
 
 const BUTTON_BASE =
-  'inline-flex select-none items-center justify-center gap-2 rounded-full font-semibold whitespace-nowrap transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-3 disabled:cursor-not-allowed'
+  'group/btn relative inline-flex select-none items-center justify-center gap-2 rounded-[10px] font-medium whitespace-nowrap transition-[background-color,color,box-shadow,transform,border-color] duration-200 ease-out active:translate-y-px disabled:cursor-not-allowed'
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
-  primary:
-    'bg-gradient-to-r from-[#f5c518] to-[#e5b800] text-[#1a1a2e] shadow-[0_8px_32px_rgba(245,197,24,0.35),inset_0_-1px_0_rgba(180,150,0,0.3)] hover:shadow-[0_12px_40px_rgba(245,197,24,0.45),inset_0_-1px_0_rgba(180,150,0,0.3)] hover:brightness-110 active:scale-[0.985] disabled:bg-lp-line disabled:text-lp-muted disabled:shadow-none',
+  primary: 'bg-lp-ink text-white hover:bg-lp-ink-3',
+  signal:
+    'bg-lp-signal text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_10px_24px_-10px_rgba(255,77,28,0.7)] hover:bg-lp-signal-600',
   secondary:
-    'border border-lp-line bg-lp-surface text-lp-ink shadow-[0_1px_2px_rgba(0,0,0,0.3)] hover:border-[#3a3f52] hover:bg-lp-sunken hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)] active:scale-[0.985] disabled:border-lp-line disabled:bg-lp-surface disabled:text-lp-muted disabled:shadow-none',
-  ghost:
-    'text-lp-body hover:bg-lp-sunken hover:text-lp-ink active:scale-[0.985]',
-  dark: 'bg-lp-charcoal text-[#1a1a2e] shadow-[0_8px_22px_rgba(240,242,248,0.15)] hover:bg-lp-charcoal-2 hover:shadow-[0_12px_28px_rgba(240,242,248,0.2)] active:scale-[0.985] disabled:bg-lp-line disabled:text-lp-muted disabled:shadow-none',
+    'border border-lp-line bg-white text-lp-ink hover:bg-lp-sunken',
+  ghost: 'text-lp-body hover:bg-lp-ink/[0.06] hover:text-lp-ink',
+  inverse:
+    'bg-lp-surface text-lp-ink shadow-[0_10px_24px_-12px_rgba(0,0,0,0.6)] hover:bg-white',
+  'outline-dark':
+    'border border-white/20 text-white hover:border-white/45 hover:bg-white/[0.06]',
 }
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
-  sm: 'h-9 px-4 text-[14px]',
-  md: 'h-11 px-5 text-[15px]',
-  lg: 'h-[52px] px-7 text-[16px]',
+  sm: 'h-8 px-3 text-[13.5px]',
+  md: 'h-9 px-3.5 text-[14px]',
+  lg: 'h-11 px-5 text-[15px]',
+}
+
+/** Arrow that nudges forward on hover — the only flourish buttons get. */
+export function ButtonArrow() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="h-4 w-4 transition-transform duration-300 ease-out group-hover/btn:translate-x-[3px]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 8h10M9 4l4 4-4 4" />
+    </svg>
+  )
 }
 
 interface CommonButtonProps {
@@ -110,6 +139,8 @@ interface CommonButtonProps {
   className?: string
   /** Leading icon. */
   icon?: ReactNode
+  /** Trailing arrow. */
+  arrow?: boolean
 }
 
 type ButtonProps =
@@ -134,20 +165,20 @@ type ButtonProps =
       disabled?: boolean
     })
 
+/**
+ * A link when it navigates, a button when it acts. Keeps keyboard and
+ * screen-reader semantics correct without duplicating markup at call sites.
+ */
 export function Button(props: ButtonProps) {
-  const { children, variant = 'primary', size = 'md', className, icon } = props
+  const { children, variant = 'primary', size = 'md', className, icon, arrow } = props
   const { go, goSection } = useLandingNav()
 
-  const classes = cn(
-    BUTTON_BASE,
-    BUTTON_VARIANTS[variant],
-    BUTTON_SIZES[size],
-    className,
-  )
+  const classes = cn(BUTTON_BASE, BUTTON_VARIANTS[variant], BUTTON_SIZES[size], className)
   const content = (
     <>
       {icon}
       {children}
+      {arrow && <ButtonArrow />}
     </>
   )
 
@@ -185,12 +216,7 @@ export function Button(props: ButtonProps) {
   const disabled = 'disabled' in props ? Boolean(props.disabled) : false
 
   return (
-    <button
-      type="button"
-      className={classes}
-      onClick={onClick}
-      disabled={disabled}
-    >
+    <button type="button" className={classes} onClick={onClick} disabled={disabled}>
       {content}
     </button>
   )
@@ -200,58 +226,60 @@ export function Button(props: ButtonProps) {
 /* Section furniture                                                   */
 /* ------------------------------------------------------------------ */
 
-export function Eyebrow({ children }: { children: ReactNode }) {
+/** Small square icon tile that sits above a section heading. */
+export function IconTile({ children, tint = '#f1f1ef', className }: { children: ReactNode; tint?: string; className?: string }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-lp-line bg-lp-surface/80 px-3.5 py-1.5 text-[12.5px] font-semibold tracking-[0.08em] text-[#f5c518] uppercase shadow-[0_1px_2px_rgba(0,0,0,0.3)] backdrop-blur-sm">
-      <span className="h-1.5 w-1.5 rounded-full bg-[#f5c518]" aria-hidden="true" />
+    <span
+      aria-hidden="true"
+      data-anim="tile"
+      className={cn('grid h-12 w-12 place-items-center rounded-[12px] border border-lp-ink/[0.08] text-lp-ink', className)}
+      style={{ background: tint }}
+    >
       {children}
     </span>
   )
 }
 
+/** Small uppercase label. Kept for compatibility with older call sites. */
+export function Eyebrow({ children }: { children: ReactNode; index?: string; tone?: 'light' | 'dark' }) {
+  return <span className="text-[13px] font-semibold text-lp-muted">{children}</span>
+}
+
 export function SectionHeading({
-  eyebrow,
+  icon,
+  tint,
   heading,
   description,
   align = 'center',
-  tone = 'light',
   className,
 }: {
-  eyebrow?: string
-  heading: string
-  description?: string
+  icon?: ReactNode
+  tint?: string
+  heading: ReactNode
+  description?: ReactNode
   align?: 'center' | 'left'
-  tone?: 'light' | 'dark'
   className?: string
+  eyebrow?: string
+  index?: string
+  tone?: 'light' | 'dark'
 }) {
   return (
-    <div
-      className={cn(
-        'flex flex-col gap-4',
-        align === 'center' && 'items-center text-center',
-        className,
+    <div className={cn('flex flex-col gap-4', align === 'center' && 'items-center text-center', className)}>
+      {icon && (
+        <IconTile tint={tint} className="mb-2">
+          {icon}
+        </IconTile>
       )}
-    >
-      {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
       <h2
+        data-anim="mask"
         className={cn(
-          'max-w-[18ch] text-[clamp(1.9rem,4.4vw,3.1rem)] leading-[1.06] font-bold',
-          tone === 'dark' ? 'text-[#1a1a2e]' : 'text-lp-ink',
+          'max-w-[20ch] text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink',
           align === 'center' && 'mx-auto',
         )}
       >
         {heading}
       </h2>
-      {description && (
-        <p
-          className={cn(
-            'max-w-[58ch] text-[17px] leading-relaxed',
-            tone === 'dark' ? 'text-[#1a1a2e]/70' : 'text-lp-body',
-          )}
-        >
-          {description}
-        </p>
-      )}
+      {description && <p className="max-w-[52ch] text-[17px] leading-relaxed text-lp-body">{description}</p>}
     </div>
   )
 }
@@ -261,35 +289,45 @@ export function Section({
   id,
   children,
   className,
-  tone = 'light',
+  innerClassName,
 }: {
   id?: string
   children: ReactNode
   className?: string
+  innerClassName?: string
   tone?: 'light' | 'muted' | 'dark'
 }) {
   return (
-    <section
-      id={id}
-      className={cn(
-        'relative scroll-mt-24 px-5 py-20 sm:px-8 md:py-28',
-        tone === 'light' && 'bg-lp-bg',
-        tone === 'muted' && 'bg-[#0c0e13]',
-        tone === 'dark' && 'bg-[#0c0e13]',
-        className,
-      )}
-    >
-      <div className="mx-auto w-full max-w-[1180px]">{children}</div>
+    <section id={id} className={cn('relative scroll-mt-24 bg-white px-5 py-20 sm:px-8 md:py-28', className)}>
+      <div className={cn('mx-auto w-full max-w-[1080px]', innerClassName)}>{children}</div>
     </section>
   )
 }
 
-/** Thin hairline used between major blocks. */
-export function Hairline({ className }: { className?: string }) {
+/** A soft grey feature card: heading top-left, interface below. */
+export function FeatureCard({
+  icon,
+  title,
+  body,
+  children,
+  className,
+  visualClassName,
+}: {
+  icon?: ReactNode
+  title: string
+  body: string
+  children?: ReactNode
+  className?: string
+  visualClassName?: string
+}) {
   return (
-    <div
-      aria-hidden="true"
-      className={cn('mx-auto h-px w-full max-w-[1180px] bg-lp-line', className)}
-    />
+    <article className={cn('flex h-full flex-col overflow-hidden rounded-[18px] bg-lp-sunken', className)}>
+      <div className="p-6 sm:p-7">
+        {icon && <span className="mb-3 block text-lp-ink">{icon}</span>}
+        <h3 className="text-[16px] font-semibold tracking-[-0.01em] text-lp-ink">{title}</h3>
+        <p className="mt-1.5 max-w-[46ch] text-[15px] leading-relaxed text-lp-body">{body}</p>
+      </div>
+      {children && <div className={cn('mt-auto px-6 sm:px-7', visualClassName)}>{children}</div>}
+    </article>
   )
 }

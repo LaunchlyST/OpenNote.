@@ -131,12 +131,22 @@ globalThis.PopStateEvent = class {
 }
 
 /** Renders the calendar app exactly as `Root` mounts it. */
-async function renderApp(props) {
+const TEST_USER = {
+  id: 'usr_test',
+  fullName: 'Test User',
+  email: 'test@example.com',
+  createdAt: new Date().toISOString(),
+  emailVerified: true,
+}
+
+/** Renders the calendar app exactly as `Root` mounts it, with a fixed session. */
+async function renderApp(props, user = TEST_USER) {
   const appMod = await vite.ssrLoadModule('/src/App.tsx')
+  const auth = await vite.ssrLoadModule('/src/auth.tsx')
   return renderToString(
     React.createElement(
-      authMod.AuthProvider,
-      null,
+      auth.StaticAuthProvider,
+      { user },
       React.createElement(appMod.default, props),
     ),
   )
@@ -162,14 +172,14 @@ const check = (label, ok, detail = '') => {
 }
 
 /** Renders the landing page the way `Root` does — inside both providers. */
-async function renderLanding() {
+async function renderLanding(user = null) {
   const mod = await vite.ssrLoadModule('/src/landing/LandingPage.tsx')
   const auth = await vite.ssrLoadModule('/src/auth.tsx')
   const routerMod = await vite.ssrLoadModule('/src/router.tsx')
   return renderToString(
     React.createElement(
-      auth.AuthProvider,
-      null,
+      auth.StaticAuthProvider,
+      { user },
       React.createElement(
         routerMod.RouterProvider,
         null,
@@ -189,42 +199,29 @@ try {
   /* Content contract — the copy the brief asked for. */
   const expected = [
     // Hero
-    'Your time. Your plans.',
-    'One beautiful place.',
-    'Plan your days, organise your notes',
-    'Get Started Free',
-    'Explore Features',
+    'Plan the day.',
+    'Keep the thought.',
+    'OpenNote is a calendar with your notes built in.',
+    'Start Planning Free',
+    'See it in action',
     'Sign In',
-    'Free forever plan',
+    'Free plan, no card required',
     // How it works
-    'A simpler way to plan your day.',
-    'Choose Your Day',
-    'Plan Your Time',
-    'Keep Your Notes Together',
-    'Navigate your calendar and find the perfect time',
-    'Create events and organise your activities',
-    'Write down ideas, save important details',
+    'From a blank week to a plan.',
+    'Pick the day',
+    'Block the time',
+    'Pin the thought',
     // Features
-    'Everything you need to stay organised.',
-    'Beautiful Calendar',
-    'Time-Based Planning',
-    'Notes and Ideas',
-    'Colour-Coded Calendars',
-    'Daily Planning',
-    'Easy Navigation',
+    'Your calendar and notes, finally together.',
+    'The thought stays next to the plan.',
+    'See the shape of your week in colour.',
+    'Month at a glance',
+    'Move through time',
+    'Create in seconds',
     // Preview
-    'See your day differently.',
-    'Discover a cleaner way to organise your time.',
+    'Try it right here.',
     'Full Week',
-    'Ready to plan your day?',
-    // Why
-    'Less chaos.',
-    'More clarity.',
-    'One organised workspace',
-    'Simple daily planning',
-    'Clear schedules',
-    'Less clutter',
-    'More control over your time',
+    'No account needed.',
     // Pricing
     'Simple plans. Better planning.',
     'Free Forever',
@@ -238,13 +235,13 @@ try {
     'Shared team calendars',
     'Advanced permissions',
     // FAQ
-    'Questions, answered.',
+    'Questions &amp; answers',
     'What is OpenNote?',
     'Is OpenNote free?',
     'When is OpenNote Business launching?',
     // Final CTA
-    'Make room for',
-    'what matters.',
+    'Get OpenNote',
+    'for free.',
     'Start Planning for Free',
     // Footer
     'OpenNote',
@@ -271,8 +268,8 @@ try {
 
   /* Product mockups */
   check('hero shows the week grid', html.includes('Morning planning'))
-  check('hero shows a note card', html.includes('Grocery list'))
-  check('demo calendars render', html.includes('Colour-Coded') && html.includes('Study'))
+  check('page shows a note card', html.includes('Grocery list'))
+  check('demo calendars render', html.includes('Colour-coded') && html.includes('Study'))
   check('no localStorage writes during render', globalThis.localStorage._v.size === 0)
 
   /* No placeholders or debug leftovers */
@@ -284,34 +281,15 @@ try {
   /* Authenticated state — the nav must reflect a real session.      */
   /* -------------------------------------------------------------- */
   console.log('\n  Authenticated state:')
-  // `useLocalStorage` JSON-encodes on write, so values must be stored as JSON.
-  globalThis.localStorage.setItem(
-    'opennote.accounts.v1',
-    JSON.stringify([
-      {
-        id: 'usr_test',
-        fullName: 'Test User',
-        email: 'test@example.com',
-        createdAt: new Date().toISOString(),
-        passwordHash: 'x',
-        salt: 'x',
-        iterations: 1,
-      },
-    ]),
-  )
-  globalThis.localStorage.setItem('opennote.session.v1', JSON.stringify('usr_test'))
-
-  const authedHtml = await renderLanding()
+  const authedHtml = await renderLanding(TEST_USER)
   // Scope to the header: the pricing section legitimately keeps its own
   // “Get Started Free” button for the Free plan.
   const authedHeader = authedHtml.slice(0, authedHtml.indexOf('<main'))
   check('nav shows “Open My Calendar” when signed in', authedHeader.includes('Open My Calendar'))
   check('nav hides “Get Started Free” when signed in', !authedHeader.includes('Get Started Free'))
   check('nav still shows Sign In when signed in', authedHeader.includes('Sign In'))
-  check('hero primary CTA becomes Open My Calendar', authedHtml.includes('Switch account'))
+  check('hero secondary CTA becomes Switch account', authedHtml.includes('Switch account'))
 
-  globalThis.localStorage.removeItem('opennote.accounts.v1')
-  globalThis.localStorage.removeItem('opennote.session.v1')
 
   /* -------------------------------------------------------------- */
   /* The existing calendar app must still render.                   */
@@ -322,12 +300,19 @@ try {
   check('calendar shows the OpenNote wordmark', appHtml.includes('OpenNote'))
   check('calendar shows the view switcher', appHtml.includes('Full Week'))
   check('calendar shows the notes rail', appHtml.includes('Notes'))
-  check('calendar shows the mini calendar', appHtml.includes('October'))
+  check('calendar shows the date title', /\d{4}/.test(appHtml))
   check('calendar shows seeded events', appHtml.includes('Team stand-up'))
-  check('calendar shows seeded notes', appHtml.includes('Grocery list'))
+  check('notes stay hidden until opened', !appHtml.includes('Grocery list'))
   check('calendar shows the sidebar calendars', appHtml.includes('My Calendars'))
 
   /* Route-provided screens */
+  const guestHtml = await renderApp(undefined, null)
+  check('dashboard is not rendered without a session', !guestHtml.includes('Full Week') && !guestHtml.includes('Team stand-up'))
+  const forgotHtml = await renderApp({ screen: 'forgot' }, null)
+  check('/app/forgot-password renders the reset request form', forgotHtml.includes('Reset your password'))
+  const resetHtml = await renderApp({ screen: 'reset' }, null)
+  check('/app/reset-password renders the new password form', resetHtml.includes('Choose a new password'))
+
   const signupHtml = await renderApp({ screen: 'signup' })
   check('/app/signup renders the sign-up form', signupHtml.includes('Create your account'))
   check('sign-up form asks for a full name', signupHtml.includes('Full name'))

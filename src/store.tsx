@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -19,38 +18,12 @@ import {
 import { addDays, addMonths, dateKey, startOfDay, startOfWeek } from './lib/date'
 import { uid } from './lib/id'
 import { useLocalStorage } from './hooks'
+import { useWorkspaceSync } from './sync'
 
 export interface ModalState {
   mode: 'create' | 'edit'
   event: CalendarEvent
 }
-
-/**
- * Which sidebar navigation group is active.
- *
- * These are views onto the existing workspace rather than separate pages —
- * `dashboard` is the calendar itself, `calendar` is the month grid, and the
- * rest either move the selected date or focus the notes rail.
- */
-export type NavSection =
-  | 'dashboard'
-  | 'calendar'
-  | 'notes'
-  | 'today'
-  | 'upcoming'
-
-/** The sections of the Settings page, in the order they appear in its nav. */
-export type SettingsSectionId =
-  | 'profile'
-  | 'account'
-  | 'general'
-  | 'appearance'
-  | 'notifications'
-  | 'calendar'
-  | 'security'
-  | 'billing'
-  /** Admin-only. Gated by the server, not by this list. */
-  | 'deploy'
 
 interface AppContextValue {
   events: CalendarEvent[]
@@ -69,33 +42,12 @@ interface AppContextValue {
   navigate: (delta: number) => void
   goToToday: () => void
 
-  /** Active sidebar navigation group. */
-  section: NavSection
-  setSection: (section: NavSection) => void
-  openDashboard: () => void
-  openCalendar: () => void
-  openNotes: () => void
-  openToday: () => void
-  openUpcoming: () => void
-
   modal: ModalState | null
   openCreate: (start: Date, durationMin?: number, calendarId?: string) => void
   openEdit: (event: CalendarEvent) => void
   closeModal: () => void
   saveEvent: (event: CalendarEvent) => void
   deleteEvent: (id: string) => void
-
-  /** Whether the Settings page is open in the main content area. */
-  settingsOpen: boolean
-  /** Which section of the Settings page is showing. */
-  settingsSection: SettingsSectionId
-  setSettingsSection: (section: SettingsSectionId) => void
-  openSettings: (section?: SettingsSectionId) => void
-  closeSettings: () => void
-
-  /** Whether the left sidebar starts collapsed. Persisted with the settings. */
-  sidebarCollapsed: boolean
-  setSidebarCollapsed: (collapsed: boolean) => void
 
   addCalendar: () => void
   updateCalendar: (id: string, patch: Partial<Omit<Calendar, 'id'>>) => void
@@ -151,60 +103,53 @@ function syncStoredEvents() {
 
 syncStoredEvents()
 
-export function AppProvider({ children }: { children: ReactNode }) {
+export function AppProvider({
+  children,
+  userId,
+}: {
+  children: ReactNode
+  /** Signed-in user. Their workspace is cached under their own keys and synced to the server. */
+  userId?: string
+}) {
+  // Each account gets its own local cache, so two people sharing a browser
+  // never see each other's calendar.
+  const key = (base: string) => (userId ? `${base}:${userId}` : base)
   const [events, setEvents] = useLocalStorage<CalendarEvent[]>(
-    STORAGE.events,
+    key(STORAGE.events),
     seedEvents,
   )
   const [calendars, setCalendars] = useLocalStorage<Calendar[]>(
-    STORAGE.calendars,
+    key(STORAGE.calendars),
     seedCalendars,
   )
-  const [notes, setNotes] = useLocalStorage<Note[]>(STORAGE.notes, seedNotes)
-  const [storedSettings, setSettings] = useLocalStorage<Partial<Settings>>(
-    STORAGE.settings,
+  const [notes, setNotes] = useLocalStorage<Note[]>(key(STORAGE.notes), seedNotes)
+  const [settings, setSettings] = useLocalStorage<Settings>(
+    key(STORAGE.settings),
     DEFAULT_SETTINGS,
   )
-  /**
-   * Settings gained keys over time (`defaultView`, `reduceMotion`, …). A value
-   * stored by an older build is merged over the defaults on read so a missing
-   * key never comes back as `undefined`.
-   */
-  const settings = useMemo<Settings>(
-    () => ({ ...DEFAULT_SETTINGS, ...storedSettings }),
-    [storedSettings],
-  )
 
-  const [view, setViewState] = useState<ViewMode>(settings.defaultView)
+  const workspace = useMemo(
+    () => ({ events, calendars, notes, settings }),
+    [events, calendars, notes, settings],
+  )
+  useWorkspaceSync(userId, workspace, (saved) => {
+    setEvents(saved.events)
+    setCalendars(saved.calendars)
+    setNotes(saved.notes)
+    setSettings({ ...DEFAULT_SETTINGS, ...saved.settings })
+  })
+
+  const [view, setViewState] = useState<ViewMode>('week')
   const [focusDay, setFocusDay] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
     startOfDay(new Date()),
   )
   const [modal, setModal] = useState<ModalState | null>(null)
-  const [section, setSection] = useState<NavSection>('dashboard')
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsSection, setSettingsSection] =
-    useState<SettingsSectionId>('profile')
 
   const updateSettings = useCallback(
     (patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })),
     [setSettings],
   )
-
-  const openSettings = useCallback((target?: SettingsSectionId) => {
-    if (target) setSettingsSection(target)
-    setSettingsOpen(true)
-  }, [])
-
-  const closeSettings = useCallback(() => setSettingsOpen(false), [])
-
-  /**
-   * `reduceMotion` is a whole-document preference rather than a prop, so it is
-   * mirrored onto `<html>` where the animation classes can be neutralised.
-   */
-  useEffect(() => {
-    document.documentElement.classList.toggle('reduce-motion', settings.reduceMotion)
-  }, [settings.reduceMotion])
 
   const selectDate = useCallback((date: Date) => setSelectedDate(startOfDay(date)), [])
 
@@ -212,9 +157,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setView = useCallback((next: ViewMode) => {
     setViewState(next)
     setFocusDay(false)
-    // The month grid is what the "Calendar" nav item means; everything else
-    // is the workspace itself.
-    setSection(next === 'month' ? 'calendar' : 'dashboard')
   }, [])
 
   /**
@@ -239,42 +181,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const goToToday = useCallback(() => setSelectedDate(startOfDay(new Date())), [])
-
-  /** The main workspace: a full week with the notes rail alongside it. */
-  const openDashboard = useCallback(() => {
-    setViewState('week')
-    setFocusDay(false)
-    setSection('dashboard')
-    setSettingsOpen(false)
-  }, [])
-
-  /** The month grid — the existing calendar overview. */
-  const openCalendar = useCallback(() => {
-    setViewState('month')
-    setFocusDay(false)
-    setSection('calendar')
-    setSettingsOpen(false)
-  }, [])
-
-  /** Focuses the notes rail without moving the calendar off the workspace. */
-  const openNotes = useCallback(() => setSection('notes'), [])
-
-  /** Today as a single-day agenda. */
-  const openToday = useCallback(() => {
-    setSelectedDate(startOfDay(new Date()))
-    setViewState('day')
-    setFocusDay(false)
-    setSection('today')
-  }, [])
-
-  /** The upcoming-events list. */
-  const openUpcoming = useCallback(() => setSection('upcoming'), [])
-
-  const sidebarCollapsed = settings.sidebarCollapsed
-  const setSidebarCollapsed = useCallback(
-    (collapsed: boolean) => updateSettings({ sidebarCollapsed: collapsed }),
-    [updateSettings],
-  )
 
   const openCreate = useCallback(
     (start: Date, durationMin = 60, calendarId?: string) => {
@@ -430,26 +336,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectDate,
       navigate,
       goToToday,
-      section,
-      setSection,
-      openDashboard,
-      openCalendar,
-      openNotes,
-      openToday,
-      openUpcoming,
       modal,
       openCreate,
       openEdit,
       closeModal,
       saveEvent,
       deleteEvent,
-      settingsOpen,
-      settingsSection,
-      setSettingsSection,
-      openSettings,
-      closeSettings,
-      sidebarCollapsed,
-      setSidebarCollapsed,
       addCalendar,
       updateCalendar,
       deleteCalendar,
@@ -473,26 +365,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       selectDate,
       navigate,
       goToToday,
-      section,
-      setSection,
-      openDashboard,
-      openCalendar,
-      openNotes,
-      openToday,
-      openUpcoming,
       modal,
       openCreate,
       openEdit,
       closeModal,
       saveEvent,
       deleteEvent,
-      settingsOpen,
-      settingsSection,
-      setSettingsSection,
-      openSettings,
-      closeSettings,
-      sidebarCollapsed,
-      setSidebarCollapsed,
       addCalendar,
       updateCalendar,
       deleteCalendar,

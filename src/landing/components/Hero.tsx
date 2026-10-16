@@ -1,93 +1,65 @@
-import { useState } from 'react'
-import { ArrowRight, Check, Compass } from 'lucide-react'
+import { useRef } from 'react'
+import type { ReactNode } from 'react'
+import { useTilt } from '../motion'
+import { RollingHeadline } from './RollingHeadline'
+import { BookOpen, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
 import { HERO } from '../content'
-import { COLORS } from '../../lib/colors'
-import { DEMO_NOTES } from '../demo'
 import { ResponsiveAppWindow } from './mock/AppWindow'
-import { Button, Eyebrow } from './primitives'
+import { AppIcon, Button } from './primitives'
+
+/** Small line-icon tiles scattered around the hero, each in a product colour. */
+function Doodle({ children, tint, className }: { children: ReactNode; tint: string; className: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        'lp-float absolute hidden h-11 w-11 place-items-center rounded-[11px] border-[1.5px] border-lp-ink text-lp-ink shadow-[3px_3px_0_0_#191919] xl:grid',
+        className,
+      )}
+      style={{ background: tint }}
+    >
+      {children}
+    </span>
+  )
+}
 
 export function Hero() {
   const { user } = useAuth()
   const authed = Boolean(user)
   const primary = authed ? HERO.authenticatedCta : HERO.primaryCta
+  const icon = 'h-5 w-5'
+  const laptopRef = useRef<HTMLDivElement | null>(null)
+  useTilt(laptopRef, 5)
 
   return (
-    <section id="top" className="relative overflow-hidden px-5 pt-[112px] pb-16 sm:px-8 sm:pt-[128px] lg:pb-24">
-      {/* Ambient background — rich gradient mesh */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,#1a1f2e_0%,#0f1117_45%,#0a0c10_100%)]" />
-        <div
-          className="lp-drift absolute -top-40 left-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(245,197,24,0.15),transparent_68%)] blur-3xl"
-        />
-        <div
-          className="lp-drift absolute -top-24 right-[4%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.12),transparent_68%)] blur-3xl"
-          style={{ animationDelay: '-9s' }}
-        />
-        <div
-          className="lp-drift absolute top-[38%] left-1/2 h-[320px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(96,165,250,0.1),transparent_70%)] blur-3xl"
-          style={{ animationDelay: '-17s' }}
-        />
-        {/* Faint dotted grid, fading out toward the edges */}
-        <div
-          className="absolute inset-x-0 top-0 h-[560px] opacity-[0.3]"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 1px 1px, rgba(240,242,248,0.06) 1px, transparent 0)',
-            backgroundSize: '22px 22px',
-            maskImage: 'radial-gradient(70% 60% at 50% 20%, #000 0%, transparent 78%)',
-            WebkitMaskImage:
-              'radial-gradient(70% 60% at 50% 20%, #000 0%, transparent 78%)',
-          }}
-        />
-      </div>
+    <section id="top" className="relative overflow-hidden bg-white px-5 pt-[120px] pb-8 sm:px-8 sm:pt-[140px]">
+      <div className="relative mx-auto w-full max-w-[1200px]">
+        {/* Doodles — desktop only, never over the copy */}
+        <Doodle tint="#d8ebff" className="top-2 left-[6%] -rotate-6"><CalendarDays className={icon} /></Doodle>
+        <Doodle tint="#ffdce9" className="top-[150px] left-[1%] rotate-6" ><Coffee className={icon} /></Doodle>
+        <Doodle tint="#fdf3ad" className="top-[290px] left-[11%] -rotate-3"><StickyNote className={icon} /></Doodle>
+        <Doodle tint="#e8f7b5" className="top-0 right-[7%] rotate-6"><Sun className={icon} /></Doodle>
+        <Doodle tint="#ffe6cc" className="top-[160px] right-[1%] -rotate-6"><Clock className={icon} /></Doodle>
+        <Doodle tint="#e6ddff" className="top-[300px] right-[12%] rotate-3"><BookOpen className={icon} /></Doodle>
 
-      <div className="mx-auto w-full max-w-[1180px]">
-        {/* Copy */}
         <div className="flex flex-col items-center text-center">
           <div className="lp-bob" style={{ animationDelay: '40ms' }}>
-            <Eyebrow>{HERO.eyebrow}</Eyebrow>
+            <AppIcon className="h-[68px] w-[68px] text-[68px] shadow-[4px_4px_0_0_#191919]" />
           </div>
-
-          <h1
-            className="lp-bob mt-6 max-w-[16ch] text-[clamp(2.4rem,6.4vw,4.35rem)] leading-[1.03] font-bold text-lp-ink"
-            style={{ animationDelay: '110ms' }}
-          >
-            Your day, beautifully{' '}
-            <span className="relative inline-block">
-              <span className="relative z-10">under control.</span>
-              <span
-                aria-hidden="true"
-                className="absolute inset-x-0 bottom-[0.08em] -z-0 h-[0.34em] rounded-full bg-gradient-to-r from-[#f5c518]/30 to-[#e5b800]/30"
-              />
-            </span>
-          </h1>
-
+          <RollingHeadline
+            lines={[HERO.titleLead, HERO.titleEmphasis]}
+            className="mt-8 text-[clamp(2.6rem,7vw,5rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-lp-ink"
+          />
           <p
-            className="lp-bob mt-6 max-w-[54ch] text-[clamp(1rem,1.5vw,1.15rem)] leading-relaxed text-lp-body"
+            className="lp-bob mt-5 max-w-[46ch] text-[clamp(1.02rem,1.6vw,1.2rem)] leading-relaxed text-lp-body"
             style={{ animationDelay: '180ms' }}
           >
             {HERO.description}
           </p>
-
-          <div
-            className="lp-bob mt-9 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row"
-            style={{ animationDelay: '250ms' }}
-          >
-            <Button
-              href={primary.href}
-              variant="primary"
-              size="lg"
-              className="w-full sm:w-auto"
-              icon={
-                authed ? (
-                  <Compass className="h-4.5 w-4.5" aria-hidden="true" />
-                ) : (
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                )
-              }
-            >
+          <div className="lp-bob mt-8 flex w-full flex-col items-center justify-center gap-2.5 sm:w-auto sm:flex-row" style={{ animationDelay: '240ms' }}>
+            <Button href={primary.href} variant="primary" size="lg" className="w-full sm:w-auto" arrow>
               {primary.label}
             </Button>
             {authed ? (
@@ -95,130 +67,34 @@ export function Hero() {
                 Switch account
               </Button>
             ) : (
-              <Button
-                section={HERO.secondaryCta.section}
-                variant="secondary"
-                size="lg"
-                className="w-full sm:w-auto"
-              >
+              <Button section={HERO.secondaryCta.section} variant="secondary" size="lg" className="w-full sm:w-auto">
                 {HERO.secondaryCta.label}
               </Button>
             )}
           </div>
-
-          <ul
-            className="lp-bob mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2"
-            style={{ animationDelay: '310ms' }}
-          >
-            {HERO.reassurance.map((item) => (
-              <li key={item} className="flex items-center gap-1.5 text-[14px] text-lp-muted">
-                <Check className="h-3.5 w-3.5 text-[#f5c518]" strokeWidth={3} aria-hidden="true" />
+          <p className="lp-bob mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[13.5px] text-lp-muted" style={{ animationDelay: '300ms' }}>
+            {HERO.reassurance.map((item, i) => (
+              <span key={item} className="flex items-center gap-4">
+                {i > 0 && <span aria-hidden="true" className="h-1 w-1 rounded-full bg-lp-line" />}
                 {item}
-              </li>
+              </span>
             ))}
-          </ul>
+          </p>
         </div>
 
-        {/* Showcase */}
-        <div
-          className="lp-bob relative mt-14 sm:mt-16 lg:mt-20"
-          style={{ animationDelay: '380ms' }}
-        >
-          <div
-            aria-hidden="true"
-            className="absolute inset-x-[6%] -bottom-6 -z-10 h-24 rounded-[50%] bg-[#f5c518]/8 blur-3xl"
-          />
-
-          <ResponsiveAppWindow view="week" />
-
-          {/* Floating layers — hidden on small screens so they never cover content */}
-          <FloatingTodayChip className="absolute -top-7 left-2 hidden xl:block" />
-          <FloatingPinnedTask className="absolute -bottom-6 left-6 hidden xl:block" />
-          <FloatingNoteCard className="absolute -right-7 top-1/4 hidden 2xl:block" />
+        {/* The real interface, in a laptop */}
+        <div className="lp-settle relative mx-auto mt-14 max-w-[1040px] sm:mt-16" style={{ animationDelay: '380ms' }}>
+          <div data-anim="tilt">
+          <div ref={laptopRef} className="rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
+            <ResponsiveAppWindow view="week" label="opennote — week of October 5" />
+          </div>
+          <div aria-hidden="true" className="mx-auto hidden h-3.5 w-[108%] -translate-x-[3.7%] rounded-b-[18px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:block" />
+          <span aria-hidden="true" className="absolute -bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full border border-lp-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-lp-body shadow-sm sm:inline-flex">
+            <PenLine className="h-3.5 w-3.5" /> Notes on the right <Pin className="ml-1 h-3.5 w-3.5" /> pinned to days
+          </span>
+          </div>
         </div>
       </div>
     </section>
-  )
-}
-
-/* ------------------------------------------------------------------ */
-/* Floating detail cards                                               */
-/* ------------------------------------------------------------------ */
-
-function FloatingTodayChip({ className }: { className?: string }) {
-  const [today] = useState(() => new Date())
-  const weekday = today.toLocaleDateString('en-US', { weekday: 'long' })
-  const month = today.toLocaleDateString('en-US', { month: 'long' })
-
-  return (
-    <div
-      className={cn(
-        'rounded-2xl border border-lp-line bg-lp-surface/95 px-4 py-3 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.6)] backdrop-blur-sm',
-        className,
-      )}
-      style={{ animation: 'lp-float 8s ease-in-out infinite' }}
-    >
-      <p className="text-[10px] font-semibold tracking-[0.1em] text-lp-muted uppercase">
-        Today
-      </p>
-      <p className="mt-1.5 flex items-center gap-2.5">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#f5c518] to-[#e5b800] text-[14px] font-bold text-[#1a1a2e] ring-1 ring-inset ring-[#f5c518]/30">
-          {today.getDate()}
-        </span>
-        <span className="text-[12.5px] leading-tight font-medium text-lp-body">
-          {weekday}
-          <span className="block text-[11.5px] text-lp-muted">{month}</span>
-        </span>
-      </p>
-    </div>
-  )
-}
-
-function FloatingPinnedTask({ className }: { className?: string }) {
-  const c = COLORS.pink
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2.5 rounded-xl border px-3 py-2 shadow-[0_14px_32px_-16px_rgba(0,0,0,0.6)]',
-        className,
-      )}
-      style={{
-        background: c.bg,
-        borderColor: c.border,
-        animation: 'lp-float 9s ease-in-out -3s infinite',
-      }}
-    >
-      <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: c.dot }} />
-      <span className="leading-tight">
-        <span className="block text-[11.5px] font-semibold" style={{ color: c.text }}>
-          Dinner with friends
-        </span>
-        <span className="block text-[10.5px]" style={{ color: c.text, opacity: 0.7 }}>
-          19:00 – 21:00
-        </span>
-      </span>
-    </div>
-  )
-}
-
-function FloatingNoteCard({ className }: { className?: string }) {
-  const note = DEMO_NOTES[1]
-  return (
-    <div
-      className={cn(
-        'w-[196px] rounded-2xl border border-[#f2e79c] bg-[#fdf6ab] p-3.5 shadow-[0_20px_44px_-20px_rgba(0,0,0,0.7)]',
-        className,
-      )}
-      style={{ animation: 'lp-float 10s ease-in-out -6s infinite' }}
-    >
-      <p className="text-[12.5px] font-semibold text-[#6b5b12]">{note.title}</p>
-      <p className="mt-1.5 space-y-1 text-[11.5px] leading-[1.5] text-[#7d6c1c]">
-        {note.body.map((line) => (
-          <span key={line} className="block">
-            {line}
-          </span>
-        ))}
-      </p>
-    </div>
   )
 }

@@ -4,27 +4,41 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev": "concurrently -k -n web,api -c cyan,magenta \"npm:dev:web\" \"npm:dev:api\"",
     "start": "npm run dev",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview --host 0.0.0.0 --port 5173 --strictPort",
     "test": "node scripts/ssr-smoke.mjs",
-    "test:deploy": "node scripts/deploy-api-smoke.mjs"
+    "test:deploy": "tsx scripts/deploy-smoke.ts",
+    "dev:web": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "dev:api": "tsx watch server/index.ts",
+    "db:migrate": "tsx server/migrate.ts",
+    "serve": "NODE_ENV=production tsx server/index.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "better-auth": "^1.7.7",
+    "better-sqlite3": "^12.11.1",
+    "express": "^5.3.0",
+    "gsap": "^3.12.5",
     "lucide-react": "^1.55.0",
+    "nodemailer": "^10.0.13",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^24.13.3",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^9.2.5",
     "oxlint": "^1.81.0",
+    "tsx": "^4.20.6",
     "typescript": "~6.0.2",
     "vite": "^8.3.0"
   }

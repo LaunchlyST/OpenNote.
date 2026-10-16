@@ -25,9 +25,9 @@ export function IconButton({
       title={label}
       onClick={onClick}
       className={cn(
-        'grid h-8 w-8 place-items-center rounded-lg text-ink-soft transition',
-        'hover:bg-surface hover:text-ink active:scale-95',
-        active && 'bg-accent-soft text-accent-text hover:bg-accent-soft hover:text-accent-text',
+        'grid h-8 w-8 place-items-center rounded-lg text-[#565d70] transition',
+        'hover:bg-[#f3f3f1] hover:text-[#191919] active:scale-95',
+        active && 'bg-[#191919] text-white hover:bg-[#37352f] hover:text-white',
         className,
       )}
     >
@@ -51,12 +51,12 @@ export function Section({
 }: SectionProps) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section className="border-b border-line px-3 py-3 last:border-b-0">
+    <section className="border-b border-[#ececea] px-3 py-3.5 last:border-b-0">
       <div className="flex items-center justify-between gap-1">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
-          className="group flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.1em] text-faint transition hover:text-ink-soft"
+          className="group flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a3a29e] transition hover:text-[#5f5e5b]"
         >
           <ChevronDown
             className={cn(
@@ -69,7 +69,7 @@ export function Section({
         </button>
         {action}
       </div>
-      {open && <div className="mt-2">{children}</div>}
+      {open && <div className="mt-2.5">{children}</div>}
     </section>
   )
 }
@@ -98,7 +98,7 @@ export function Drawer({
         type="button"
         aria-label="Close panel"
         onClick={onClose}
-        className="animate-fade absolute inset-0 bg-black/20"
+        className="animate-fade absolute inset-0 bg-[#0b0f19]/25"
       />
       <div
         className={cn(
@@ -113,5 +113,5 @@ export function Drawer({
 }
 
 export function Divider() {
-  return <div className="h-px w-full bg-line" />
+  return <div className="h-px w-full bg-[#ececea]" />
 }

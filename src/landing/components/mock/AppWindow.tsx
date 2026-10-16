@@ -20,8 +20,8 @@ import { DEMO_WEEK_TITLE } from '../../demo'
  * and makes horizontal overflow impossible.
  */
 
-const BASE_W = 1080
-const BASE_H = 592
+const BASE_W = 980
+const BASE_H = 600
 const CHROME_H = 34
 
 function useFitScale(baseWidth: number) {
@@ -34,7 +34,7 @@ function useFitScale(baseWidth: number) {
 
     const measure = () => {
       const width = el.clientWidth
-      if (width > 0) setScale(Math.min(1, width / baseWidth))
+      if (width > 0) setScale(Math.min(1.25, width / baseWidth))
     }
 
     measure()
@@ -113,13 +113,14 @@ export function AppWindow({
           transform: `scale(${scale})`,
           transformOrigin: 'top left',
         }}
-        className="overflow-hidden rounded-[14px] border border-[#e4e5e9] bg-white shadow-[0_40px_90px_-30px_rgba(16,24,40,0.28),0_12px_32px_-12px_rgba(16,24,40,0.14)]"
+        className="overflow-hidden rounded-[14px] border border-black/10 bg-white shadow-[0_60px_120px_-50px_rgba(40,30,10,0.45),0_24px_48px_-24px_rgba(40,30,10,0.25)]"
       >
-        <div className="flex h-[34px] items-center gap-1.5 border-b border-[#eef0f3] bg-[#fbfbfc] px-3">
-          <span className="h-[7px] w-[7px] rounded-full bg-[#e9eaee]" />
-          <span className="h-[7px] w-[7px] rounded-full bg-[#e9eaee]" />
-          <span className="h-[7px] w-[7px] rounded-full bg-[#e9eaee]" />
-          <span className="ml-2 truncate text-[9.5px] font-medium text-[#a5aab8]">{label}</span>
+        <div className="flex h-[34px] items-center gap-1.5 border-b border-[#ecebe6] bg-[#f8f7f3] px-3.5">
+          <span className="h-[9px] w-[9px] rounded-full bg-[#dedcd4]" />
+          <span className="h-[9px] w-[9px] rounded-full bg-[#dedcd4]" />
+          <span className="h-[9px] w-[9px] rounded-full bg-[#dedcd4]" />
+          <span className="mx-auto truncate rounded-md bg-[#efede7] px-3 py-0.5 font-mono text-[10px] text-[#8d8a80]">{label}</span>
+          <span className="w-[38px]" aria-hidden="true" />
         </div>
         <div style={{ height: BASE_H }}>
           <AppBody view={view} onViewChange={onViewChange} dateLabel={dateLabel} />
@@ -143,14 +144,12 @@ export function AppWindowMobile({
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-[18px] border border-[#e4e5e9] bg-white shadow-[0_28px_60px_-26px_rgba(16,24,40,0.3)]',
+        'overflow-hidden rounded-[22px] border border-black/10 bg-white shadow-[0_36px_70px_-30px_rgba(40,30,10,0.45)]',
         className,
       )}
     >
-      <div className="flex h-[34px] items-center gap-1.5 border-b border-[#eef0f3] bg-[#fbfbfc] px-3">
-        <span className="h-[7px] w-[7px] rounded-full bg-[#e9eaee]" />
-        <span className="h-[7px] w-[7px] rounded-full bg-[#e9eaee]" />
-        <span className="h-[7px] w-[7px] rounded-full bg-[#e9eaee]" />
+      <div className="flex h-7 items-center justify-center border-b border-[#ecebe6] bg-[#f8f7f3]">
+        <span className="h-1 w-12 rounded-full bg-[#dedcd4]" />
       </div>
 
       <MockTopBar view={view} activeDateLabel={DEMO_WEEK_TITLE} />
@@ -200,14 +199,11 @@ export function ResponsiveAppWindow({
   label?: string
   className?: string
 }) {
+  // OpenNote is desktop-only, so every screen size shows the desktop app,
+  // scaled to fit.
   return (
-    <>
-      <div className={cn('hidden sm:block', className)}>
-        <AppWindow view={view} onViewChange={onViewChange} dateLabel={dateLabel} label={label} />
-      </div>
-      <div className={cn('sm:hidden', className)}>
-        <AppWindowMobile view={view} />
-      </div>
-    </>
+    <div className={className}>
+      <AppWindow view={view} onViewChange={onViewChange} dateLabel={dateLabel} label={label} />
+    </div>
   )
 }

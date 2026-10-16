@@ -1,12 +1,12 @@
-import { useState } from 'react'
-import { ArrowRight, Info } from 'lucide-react'
-import { cn } from '../../lib/id'
-import { useAuth } from '../../auth'
-import { HERO } from '../content'
+import { useEffect, useRef, useState } from 'react'
+import { gsap } from 'gsap'
+import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useTilt } from '../motion'
+import { MousePointerClick } from 'lucide-react'
 import { DEMO_WEEK_TITLE } from '../demo'
 import { ResponsiveAppWindow } from './mock/AppWindow'
 import type { MockView } from './mock/AppChrome'
-import { Button, Reveal, Section, SectionHeading } from './primitives'
+import { Reveal, Section, SectionHeading } from './primitives'
 
 const VIEW_OPTIONS: Array<{ value: MockView; label: string; hint: string }> = [
   { value: 'day', label: 'Day', hint: 'One day, hour by hour.' },
@@ -15,102 +15,98 @@ const VIEW_OPTIONS: Array<{ value: MockView; label: string; hint: string }> = [
 ]
 
 const DATE_LABELS: Record<MockView, string> = {
-  day: 'Wednesday, October 8, 2026',
+  day: 'Thursday, October 8, 2026',
   week: `${DEMO_WEEK_TITLE}, 2026`,
   month: 'October 2026',
 }
 
 export function ProductPreview() {
-  const { user } = useAuth()
   const [view, setView] = useState<MockView>('week')
-  const active = VIEW_OPTIONS.find((o) => o.value === view) ?? VIEW_OPTIONS[1]
+  const stageRef = useRef<HTMLDivElement | null>(null)
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const touched = useRef(false)
+  useTilt(frameRef, 4)
+
+  // As the demo scrolls through the viewport it walks Day → Full Week → Month,
+  // until the visitor takes the controls themselves.
+  useEffect(() => {
+    const el = stageRef.current
+    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    gsap.registerPlugin(ScrollTrigger)
+    const st = ScrollTrigger.create({
+      trigger: el,
+      start: 'top 75%',
+      end: 'bottom 40%',
+      onUpdate: (self) => {
+        if (touched.current) return
+        const p = self.progress
+        setView(p < 0.3 ? 'day' : p < 0.65 ? 'week' : 'month')
+      },
+    })
+    return () => st.kill()
+  }, [])
+
+  const choose = (next: MockView) => {
+    touched.current = true
+    setView(next)
+  }
+  const index = Math.max(0, VIEW_OPTIONS.findIndex((o) => o.value === view))
+  const active = VIEW_OPTIONS[index]
 
   return (
-    <Section id="preview" tone="muted">
+    <Section id="preview">
       <Reveal>
         <SectionHeading
-          eyebrow="Preview"
-          heading="See your whole day. Clearly."
-          description="Discover a cleaner way to organise your time."
+          icon={<MousePointerClick className="h-6 w-6" />}
+          tint="#ffdce9"
+          heading="Try it right here."
+          description="This is the real OpenNote layout with a sample week. Switch views below or with the tabs inside the window. No account needed."
         />
       </Reveal>
 
-      <Reveal delay={90}>
-        <div className="mt-10 flex flex-col items-center gap-4 sm:mt-12">
-          {/* Primary view switcher — drives the same state as the in-app control */}
-          <div
-            role="group"
-            aria-label="Calendar view"
-            className="inline-flex flex-wrap items-center justify-center gap-1 rounded-full border border-lp-line bg-white p-1.5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
-          >
+      <Reveal delay={100}>
+        <div className="mt-10 flex flex-col items-center gap-3">
+          <div role="group" aria-label="Calendar view" className="relative grid w-full max-w-[340px] grid-cols-3 rounded-[12px] bg-[#ececea] p-1">
+            <span
+              aria-hidden="true"
+              className="absolute inset-y-1 left-1 w-[calc((100%-8px)/3)] rounded-[9px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              style={{ transform: `translateX(${index * 100}%)` }}
+            />
             {VIEW_OPTIONS.map((option) => {
               const selected = view === option.value
               return (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setView(option.value)}
+                  onClick={() => choose(option.value)}
                   aria-pressed={selected}
-                  className={cn(
-                    'rounded-full px-4 py-2 text-[14px] font-medium transition-all duration-200',
-                    selected
-                      ? 'bg-lp-lime text-[#2c3608] shadow-[0_2px_8px_rgba(140,185,20,0.28)]'
-                      : 'text-lp-body hover:bg-lp-sunken hover:text-lp-ink',
-                  )}
+                  className={
+                    'relative z-10 rounded-[9px] py-2 text-[14px] font-medium transition-colors duration-300 ' +
+                    (selected ? 'text-lp-ink' : 'text-lp-body hover:text-lp-ink')
+                  }
                 >
                   {option.label}
                 </button>
               )
             })}
           </div>
-
-          <p
-            key={active.hint}
-            aria-live="polite"
-            className="lp-bob text-[14.5px] text-lp-muted"
-          >
-            {active.hint}
+          <p aria-live="polite" className="text-[13.5px] text-lp-muted">
+            {DATE_LABELS[view]} · {active.hint}
           </p>
         </div>
       </Reveal>
 
-      <Reveal delay={140}>
-        <div className="mt-8">
-          <ResponsiveAppWindow
-            view={view}
-            onViewChange={setView}
-            dateLabel={DATE_LABELS[view]}
-            label="OpenNote — demonstration"
-          />
+      <Reveal delay={150}>
+        <div ref={stageRef} className="mt-8 rounded-[22px] bg-lp-sunken p-2 sm:p-6">
+          <div ref={frameRef}>
+          <div key={view} className="lp-viewswap">
+          <ResponsiveAppWindow view={view} onViewChange={choose} dateLabel={DATE_LABELS[view]} label="opennote — sample data" />
+          </div>
+          </div>
         </div>
-      </Reveal>
-
-      <Reveal delay={180}>
-        <p className="mx-auto mt-5 flex max-w-[62ch] items-start justify-center gap-2 rounded-xl border border-lp-line bg-white/70 px-4 py-3 text-left text-[13.5px] leading-relaxed text-lp-muted">
-          <Info className="mt-[2px] h-4 w-4 shrink-0 text-lp-lime-700" aria-hidden="true" />
-          <span>
-            This is an interactive demonstration using sample data. It is not
-            connected to an account and nothing here can change your own
-            calendar.
-          </span>
+        <p className="mt-4 text-center text-[13px] text-lp-muted">
+          Sample data only. This demo isn’t connected to an account and can’t change your calendar.
         </p>
-      </Reveal>
-
-      {/* Closing CTA */}
-      <Reveal delay={220}>
-        <div className="mt-14 flex flex-col items-center gap-5 text-center sm:mt-16">
-          <h3 className="max-w-[20ch] text-[clamp(1.5rem,3vw,2.1rem)] leading-tight font-semibold tracking-[-0.03em] text-lp-ink">
-            Ready to plan your day?
-          </h3>
-          <Button
-            href={user ? '/app' : HERO.primaryCta.href}
-            variant="primary"
-            size="lg"
-            icon={<ArrowRight className="h-4 w-4" aria-hidden="true" />}
-          >
-            {user ? 'Open My Calendar' : 'Get Started Free'}
-          </Button>
-        </div>
       </Reveal>
     </Section>
   )
