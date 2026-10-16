@@ -18,6 +18,8 @@ export interface AuthUser {
   createdAt: string
   avatar?: string
   emailVerified: boolean
+  /** 'admin' or 'user', assigned by the server. Display only — the API enforces it. */
+  role: 'admin' | 'user'
 }
 
 export interface SignUpInput {
@@ -28,7 +30,6 @@ export interface SignUpInput {
 }
 
 export interface AuthConfig {
-  google: boolean
   emailVerificationRequired: boolean
   emailEnabled: boolean
 }
@@ -44,8 +45,8 @@ interface AuthContextValue {
   loading: boolean
   config: AuthConfig
   signUp: (input: SignUpInput) => Promise<SignUpResult>
-  signIn: (email: string, password: string) => Promise<void>
-  signInWithGoogle: () => Promise<void>
+  /** `rememberMe: false` gives a session that ends when the browser closes. */
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>
   signOut: () => Promise<void>
   updateProfile: (patch: { fullName?: string; avatar?: string | null }) => Promise<void>
   changePassword: (current: string, next: string) => Promise<void>
@@ -54,7 +55,7 @@ interface AuthContextValue {
   resendVerification: (email: string) => Promise<void>
 }
 
-const DEFAULT_CONFIG: AuthConfig = { google: false, emailVerificationRequired: false, emailEnabled: false }
+const DEFAULT_CONFIG: AuthConfig = { emailVerificationRequired: false, emailEnabled: false }
 
 const MESSAGES: Record<string, string> = {
   INVALID_EMAIL_OR_PASSWORD: 'Incorrect email or password. Please try again.',
@@ -106,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       createdAt: new Date(u.createdAt).toISOString(),
       avatar: u.image ?? undefined,
       emailVerified: u.emailVerified,
+      role: (u as { role?: string | null }).role === 'admin' ? 'admin' : 'user',
     }
   }, [data])
 
@@ -124,24 +126,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { needsVerification: !res?.token }
   }, [refetch])
 
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string, rememberMe = true) => {
     const { error } = await authClient.signIn.email({
       email: email.trim().toLowerCase(),
       password,
+      rememberMe,
       callbackURL: `${origin()}/app`,
     })
     if (error) fail(error)
     await refetch()
   }, [refetch])
-
-  const signInWithGoogle = useCallback(async () => {
-    const { error } = await authClient.signIn.social({
-      provider: 'google',
-      callbackURL: `${origin()}/app`,
-      errorCallbackURL: `${origin()}/app/signin`,
-    })
-    if (error) fail(error)
-  }, [])
 
   const signOut = useCallback(async () => {
     await authClient.signOut()
@@ -195,7 +189,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       config,
       signUp,
       signIn,
-      signInWithGoogle,
       signOut,
       updateProfile,
       changePassword,
@@ -203,7 +196,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       resendVerification,
     }),
-    [user, isPending, config, signUp, signIn, signInWithGoogle, signOut, updateProfile, changePassword, requestPasswordReset, resetPassword, resendVerification],
+    [user, isPending, config, signUp, signIn, signOut, updateProfile, changePassword, requestPasswordReset, resetPassword, resendVerification],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -222,7 +215,6 @@ export function StaticAuthProvider({ user, children }: { user: AuthUser | null; 
       config: DEFAULT_CONFIG,
       signUp: async () => ({ needsVerification: false }),
       signIn: noop,
-      signInWithGoogle: noop,
       signOut: noop,
       updateProfile: noop,
       changePassword: noop,

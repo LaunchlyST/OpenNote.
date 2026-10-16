@@ -11,7 +11,7 @@
     "preview": "vite preview --host 0.0.0.0 --port 5173 --strictPort",
     "test": "node scripts/ssr-smoke.mjs",
     "test:deploy": "tsx scripts/deploy-smoke.ts",
-    "test:google": "tsx scripts/google-auth-smoke.ts && tsx scripts/oauth-error-smoke.ts",
+    "test:auth": "tsx scripts/auth-smoke.ts",
     "sync": "node scripts/sync.mjs status",
     "sync:status": "node scripts/sync.mjs status",
     "sync:pull": "node scripts/sync.mjs pull",
@@ -21,6 +21,7 @@
     "dev:web": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "dev:api": "tsx watch server/index.ts",
     "db:migrate": "tsx server/migrate.ts",
+    "admin:verify": "tsx scripts/grant-admin.ts",
     "serve": "NODE_ENV=production tsx server/index.ts"
   },
   "dependencies": {

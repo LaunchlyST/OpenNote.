@@ -27,13 +27,11 @@ process.env.BETTER_AUTH_URL = 'http://localhost:3001'
 process.env.BETTER_AUTH_SECRET = SECRET
 process.env.DATABASE_PATH = join(tmp, 'test.db')
 process.env.SMTP_HOST = ''
-process.env.GOOGLE_CLIENT_ID = ''
-process.env.GOOGLE_CLIENT_SECRET = ''
 process.env.DEPLOY_PROVIDER = 'vercel'
 process.env.DEPLOY_PRODUCTION_URL = 'https://opennote.example.com'
 process.env.DEPLOY_HOOK_URL = ''
 process.env.DEPLOY_ENABLED = 'false'
-process.env.DEPLOY_ADMIN_EMAILS = 'owner@opennote.test'
+process.env.ADMIN_EMAILS = 'owner@opennote.test'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -158,7 +156,14 @@ try {
 
   console.log('\n  The administrator is served, but the kill switch holds')
   {
-    const cookie = await signUp('owner@opennote.test')
+    // On ADMIN_EMAILS but not yet verified: still refused.
+    const unverified = await signUp('owner@opennote.test')
+    const early = await api('/api/deploy', { headers: { cookie: unverified } })
+    check('an unverified admin email is refused', early.status === 403, `got ${early.status}`)
+
+    const { verifyEmail } = await import('../server/roles.ts')
+    verifyEmail('owner@opennote.test')
+    const cookie = await signIn('owner@opennote.test')
     const before = hookHits.length
 
     const read = await api('/api/deploy', { headers: { cookie } })

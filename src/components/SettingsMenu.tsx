@@ -10,6 +10,7 @@ import {
   Sun,
 } from 'lucide-react'
 import { useApp } from '../store'
+import { useAuth } from '../auth'
 import type { Settings } from '../lib/types'
 import { cn } from '../lib/id'
 import { useClickOutside } from '../hooks'
@@ -65,6 +66,8 @@ export function SettingsMenu() {
   const { settings, updateSettings } = useApp()
   const [open, setOpen] = useState(false)
   const [deployOpen, setDeployOpen] = useState(false)
+  // Only administrators see the entry; the server re-checks the role anyway.
+  const isAdmin = useAuth().user?.role === 'admin'
   const ref = useClickOutside<HTMLDivElement>(open, () => setOpen(false))
 
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
@@ -170,6 +173,8 @@ export function SettingsMenu() {
             Reset sample data
           </button>
 
+          {isAdmin && (
+          <>
           <div className="my-2 h-px bg-[#f1f1ef]" />
 
           <button
@@ -183,10 +188,12 @@ export function SettingsMenu() {
             <Rocket className="h-3.5 w-3.5 text-[#8f8e8a]" />
             Admin &rarr; Deploy
           </button>
+          </>
+          )}
         </div>
       )}
 
-      {deployOpen && <DeployPanel onClose={() => setDeployOpen(false)} />}
+      {isAdmin && deployOpen && <DeployPanel onClose={() => setDeployOpen(false)} />}
     </div>
   )
 }

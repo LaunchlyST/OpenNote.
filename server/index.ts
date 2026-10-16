@@ -4,11 +4,15 @@ import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db, ensureAppTables } from './db.ts'
+import { db } from './db.ts'
 import { deployRouter } from './deploy.ts'
-import { env, googleConfigured, requireEmailVerification, smtpConfigured } from './env.ts'
+import { env, requireEmailVerification, smtpConfigured } from './env.ts'
+import { syncRoles } from './roles.ts'
+import { applyMigrations } from './schema.ts'
 
-ensureAppTables()
+// Additive only: adds missing tables/columns (e.g. user.role), never drops data.
+await applyMigrations({ quiet: true })
+const { admins } = syncRoles()
 
 const app = express()
 app.disable('x-powered-by')
@@ -24,7 +28,7 @@ app.use(express.json({ limit: '2mb' }))
 
 /** Which sign-in options the UI should offer. Contains no secrets. */
 app.get('/api/auth-config', (_req, res) => {
-  res.json({ google: googleConfigured, emailVerificationRequired: requireEmailVerification, emailEnabled: smtpConfigured })
+  res.json({ emailVerificationRequired: requireEmailVerification, emailEnabled: smtpConfigured })
 })
 
 interface AuthedRequest extends Request {
@@ -80,8 +84,7 @@ app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
   res.json({ ok: true, updatedAt })
 })
 
-// Deployment controls. Gated on a signed-in account on the administrator
-// allowlist, and inert while DEPLOY_ENABLED is not "true".
+// Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())
 
 // In production the same server also serves the built single-page app.
@@ -98,7 +101,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 
 app.listen(env.apiPort, () => {
   console.log(`OpenNote API listening on http://localhost:${env.apiPort}`)
-  console.log(`  Google sign-in: ${googleConfigured ? 'on' : 'off (no credentials)'}`)
+  console.log(`  Administrators: ${admins.length ? admins.join(', ') : 'none (set ADMIN_EMAILS and verify the address)'}`)
   console.log(`  Email delivery: ${smtpConfigured ? 'SMTP' : 'off (links printed to this console in development)'}`)
   console.log(`  Email verification required: ${requireEmailVerification ? 'yes' : 'no'}`)
 })

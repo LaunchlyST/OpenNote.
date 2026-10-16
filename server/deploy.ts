@@ -6,7 +6,7 @@
  * one place secrets live.
  *
  * Access is gated on a real signed-in Better Auth account whose email is in
- * `DEPLOY_ADMIN_EMAILS`. That list is empty by default, which means nobody is
+ * `ADMIN_EMAILS` (and verified). That list is empty by default, which means nobody is
  * an administrator until you name someone — the fail-closed default.
  *
  * Publishing additionally requires `DEPLOY_ENABLED=true`. Without it this
@@ -73,7 +73,7 @@ export function publicStatus() {
   const missing: string[] = []
   if (!env.deploy.hookUrl) missing.push('DEPLOY_HOOK_URL — create a deploy hook for your host and set it in the server environment.')
   if (!env.deploy.productionUrl) missing.push('DEPLOY_PRODUCTION_URL — the public https:// address the site is served from.')
-  if (env.deploy.adminEmails.length === 0) missing.push('DEPLOY_ADMIN_EMAILS — comma-separated emails that are allowed to deploy.')
+  if (env.adminEmails.length === 0) missing.push('ADMIN_EMAILS — comma-separated administrator emails (must be verified).')
 
   const connected = Boolean(env.deploy.hookUrl)
   return {
@@ -83,7 +83,7 @@ export function publicStatus() {
     enabled: env.deploy.enabled,
     productionUrl: env.deploy.productionUrl || null,
     missing,
-    ready: connected && env.deploy.enabled && env.deploy.adminEmails.length > 0,
+    ready: connected && env.deploy.enabled && env.adminEmails.length > 0,
   }
 }
 
@@ -94,7 +94,7 @@ function readLastDeployment(): DeploymentRecord | null {
 }
 
 /**
- * Requires a signed-in account on the administrator allowlist. Runs after
+ * Requires a signed-in account with the admin role. Runs after
  * Better Auth has had a chance to establish the session cookie.
  */
 async function requireAdmin(req: AuthedRequest, res: Res, next: NextFunction) {
@@ -105,12 +105,13 @@ async function requireAdmin(req: AuthedRequest, res: Res, next: NextFunction) {
   }
 
   const email = session.user.email.toLowerCase()
-  if (!env.deploy.adminEmails.includes(email)) {
+  // The role is assigned server-side by syncRoles(): on ADMIN_EMAILS and verified.
+  if ((session.user as { role?: string | null }).role !== 'admin') {
     res.status(403).json({
       error:
-        env.deploy.adminEmails.length === 0
-          ? 'No deployment administrator is configured. Set DEPLOY_ADMIN_EMAILS in the server environment.'
-          : 'This account is not allowed to deploy.',
+        env.adminEmails.length === 0
+          ? 'No administrator is configured. Set ADMIN_EMAILS in the server environment.'
+          : 'This account is not an administrator.',
     })
     return
   }

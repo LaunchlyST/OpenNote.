@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -17,7 +17,6 @@ import {
 import { useAuth } from '../auth'
 import { useScreen } from '../screens'
 import { cn } from '../lib/id'
-import { takeOAuthErrorFromUrl } from '../lib/oauth-error'
 import { AppIcon } from '../landing/components/primitives'
 
 /* ------------------------------------------------------------------ */
@@ -136,20 +135,9 @@ function readResetToken(): { token: string | null; invalid: boolean } {
   return { token: params.get('token'), invalid: params.get('error') === 'INVALID_TOKEN' }
 }
 
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z" />
-      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24Z" />
-      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
-      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9Z" />
-    </svg>
-  )
-}
-
 export function AuthPage() {
   const { screen, goTo, close } = useScreen()
-  const { user, config, signIn, signUp, signInWithGoogle, requestPasswordReset, resetPassword, resendVerification } =
+  const { user, signIn, signUp, requestPasswordReset, resetPassword, resendVerification } =
     useAuth()
   const mode: Mode = screen === 'signup' || screen === 'forgot' || screen === 'reset' ? screen : 'signin'
   const isSignup = mode === 'signup'
@@ -169,19 +157,8 @@ export function AuthPage() {
   const [busy, setBusy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-
-  /**
-   * A failed Google round trip sends the browser back here with `?error=...`.
-   * Surface it in the existing error slot instead of dropping the user on a
-   * blank login form with no explanation.
-   */
-  useEffect(() => {
-    const fromOAuth = takeOAuthErrorFromUrl()
-    if (fromOAuth) {
-      setError(fromOAuth)
-      setNotice(null)
-    }
-  }, [])
+  /** Checked: stay signed in for 30 days. Unchecked: until the browser closes. */
+  const [rememberMe, setRememberMe] = useState(true)
 
   const switchTo = (next: Mode) => {
     setError(null)
@@ -214,7 +191,7 @@ export function AuthPage() {
         }
         close()
       } else if (mode === 'signin') {
-        await signIn(email, password)
+        await signIn(email, password, rememberMe)
         close()
       } else if (mode === 'forgot') {
         await requestPasswordReset(email)
@@ -340,7 +317,16 @@ export function AuthPage() {
                           trailing={<RevealToggle shown={showPassword} onToggle={() => setShowPassword((s) => !s)} />}
                         />
                         {mode === 'signin' && (
-                          <div className="mt-2 flex justify-end">
+                          <div className="mt-2.5 flex items-center justify-between">
+                            <label className="flex cursor-pointer items-center gap-2 text-[12.5px] font-medium text-[#4a5265] select-none">
+                              <input
+                                type="checkbox"
+                                checked={rememberMe}
+                                onChange={(e) => setRememberMe(e.target.checked)}
+                                className="h-4 w-4 cursor-pointer rounded-[5px] accent-[#141a26]"
+                              />
+                              Remember me
+                            </label>
                             <button
                               type="button"
                               onClick={() => switchTo('forgot')}
@@ -384,27 +370,6 @@ export function AuthPage() {
                       {primaryLabel}
                     </button>
 
-                    {(mode === 'signin' || mode === 'signup') && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setError(null)
-                          // The button is always offered; it only works once the
-                          // server has Google credentials (GOOGLE_CLIENT_ID/SECRET).
-                          if (!config.google) {
-                            setError('Google sign-in isn’t available yet. Please use your email for now.')
-                            return
-                          }
-                          signInWithGoogle().catch((err: unknown) =>
-                            setError(err instanceof Error ? err.message : 'Google sign-in failed.'),
-                          )
-                        }}
-                        className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[12px] border border-[#dfe7f0] bg-white/80 text-[14px] font-semibold text-[#1b2232] shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-[#c6d6e6] hover:bg-white"
-                      >
-                        <GoogleIcon />
-                        Continue with Google
-                      </button>
-                    )}
                   </form>
                 )}
 

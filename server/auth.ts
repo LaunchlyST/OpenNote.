@@ -1,7 +1,9 @@
 import { betterAuth } from 'better-auth'
+import { admin } from 'better-auth/plugins'
 import { db } from './db.ts'
-import { env, googleConfigured, requireEmailVerification } from './env.ts'
+import { env, requireEmailVerification } from './env.ts'
 import { sendActionEmail } from './mail.ts'
+import { syncRoles } from './roles.ts'
 
 export const auth = betterAuth({
   appName: 'OpenNote',
@@ -48,12 +50,24 @@ export const auth = betterAuth({
     },
   },
 
-  socialProviders: googleConfigured
-    ? { google: { clientId: env.google.clientId, clientSecret: env.google.clientSecret } }
-    : {},
+  plugins: [
+    // Adds user.role (and ban fields). Roles are assigned by syncRoles() from
+    // ADMIN_EMAILS — never by the sign-up request itself.
+    admin({ defaultRole: 'user', adminRoles: ['admin'] }),
+  ],
+
+  databaseHooks: {
+    user: {
+      // Re-evaluate roles when an account is created or its email is verified.
+      create: { after: async () => { syncRoles() } },
+      update: { after: async () => { syncRoles() } },
+    },
+  },
 
   session: {
-    // Stay signed in for 30 days; the expiry slides forward once a day of use.
+    // "Remember me" sessions last 30 days and slide forward once a day of use.
+    // Without it, Better Auth issues a browser-session cookie that ends when
+    // the browser closes.
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
   },

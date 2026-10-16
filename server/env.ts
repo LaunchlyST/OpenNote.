@@ -71,10 +71,14 @@ export const env = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
-  google: {
-    clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-  },
+  /**
+   * Accounts that become administrators once their email is verified. Empty
+   * means nobody. DEPLOY_ADMIN_EMAILS is still read for older .env files.
+   */
+  adminEmails: (process.env.ADMIN_EMAILS ?? process.env.DEPLOY_ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean),
   smtp: {
     host: process.env.SMTP_HOST ?? '',
     port: Number(process.env.SMTP_PORT ?? 587),
@@ -97,15 +101,6 @@ export const env = {
     productionUrl: process.env.DEPLOY_PRODUCTION_URL ?? '',
     /** Kill switch. Deploys are refused unless this is exactly "true". */
     enabled: process.env.DEPLOY_ENABLED === 'true',
-    /**
-     * Accounts allowed to deploy. Empty means *nobody* — there is no
-     * open-by-default state, so a fresh install cannot be triggered by
-     * whichever account signs up first.
-     */
-    adminEmails: (process.env.DEPLOY_ADMIN_EMAILS ?? '')
-      .split(',')
-      .map((entry) => entry.trim().toLowerCase())
-      .filter(Boolean),
   },
 }
 
@@ -119,7 +114,6 @@ export const PROVIDER_LABELS: Record<string, string> = {
 }
 
 export const smtpConfigured = Boolean(env.smtp.host && env.smtp.from)
-export const googleConfigured = Boolean(env.google.clientId && env.google.clientSecret)
 
 /**
  * Verification is only enforced when mail can actually be delivered — otherwise

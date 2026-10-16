@@ -118,9 +118,9 @@ export function DeployPanel({ onClose }: { onClose: () => void }) {
               <ShieldAlert className="mt-[1px] h-4 w-4 shrink-0 text-[#8f8e8a]" />
               <p className="text-[11.5px] leading-snug text-[#5f5e5b]">
                 This account is not allowed to deploy. Deployment controls are
-                limited to the accounts listed in{' '}
+                limited to verified administrator accounts listed in{' '}
                 <code className="rounded bg-white px-1 py-0.5 text-[10.5px]">
-                  DEPLOY_ADMIN_EMAILS
+                  ADMIN_EMAILS
                 </code>{' '}
                 on the server.
               </p>
