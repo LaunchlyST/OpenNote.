@@ -90,7 +90,7 @@ export function Hero() {
           </div>
           <div aria-hidden="true" className="mx-auto hidden h-3.5 w-[108%] -translate-x-[3.7%] rounded-b-[18px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:block" />
           <span aria-hidden="true" className="absolute -bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full border border-lp-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-lp-body shadow-sm sm:inline-flex">
-            <PenLine className="h-3.5 w-3.5" /> Notes on the right <Pin className="ml-1 h-3.5 w-3.5" /> pinned to days
+            <PenLine className="h-3.5 w-3.5" /> Notes one click away <Pin className="ml-1 h-3.5 w-3.5" /> pinned to days
           </span>
           </div>
         </div>

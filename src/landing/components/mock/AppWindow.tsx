@@ -4,12 +4,11 @@ import {
   MockDayTimeline,
   MockMiniCalendar,
   MockMonthGrid,
-  MockNotes,
-  MockSidebar,
   MockTopBar,
   MockWeekTimeline,
 } from './AppChrome'
 import type { MockView } from './AppChrome'
+import { MockDashboard } from './Dashboard'
 import { DEMO_WEEK_TITLE } from '../../demo'
 
 /**
@@ -20,8 +19,8 @@ import { DEMO_WEEK_TITLE } from '../../demo'
  * and makes horizontal overflow impossible.
  */
 
-const BASE_W = 980
-const BASE_H = 600
+const BASE_W = 1280
+const BASE_H = 800
 const CHROME_H = 34
 
 function useFitScale(baseWidth: number) {
@@ -50,38 +49,16 @@ function useFitScale(baseWidth: number) {
   return { ref, scale }
 }
 
-/** The full three-column OpenNote layout. */
+/** The current dashboard layout: sidebar, top bar and calendar. */
 function AppBody({
   view,
   onViewChange,
-  dateLabel,
 }: {
   view: MockView
   onViewChange?: (view: MockView) => void
   dateLabel: string
 }) {
-  return (
-    <div className="flex h-full w-full flex-col bg-[#f4f5f7]">
-      <MockTopBar view={view} activeDateLabel={dateLabel} onViewChange={onViewChange} />
-      <div className="flex min-h-0 flex-1 gap-1.5 p-1.5">
-        <div className="hidden overflow-hidden rounded-xl border border-[#e9eaee] bg-white md:block">
-          <MockSidebar view={view} />
-        </div>
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-[#e9eaee] bg-white">
-          {view === 'month' ? (
-            <MockMonthGrid />
-          ) : view === 'day' ? (
-            <MockDayTimeline dateLabel={dateLabel} />
-          ) : (
-            <MockWeekTimeline />
-          )}
-        </div>
-        <div className="hidden overflow-hidden rounded-xl border border-[#e9eaee] bg-white xl:block">
-          <MockNotes />
-        </div>
-      </div>
-    </div>
-  )
+  return <MockDashboard view={view} onViewChange={onViewChange} />
 }
 
 /* ------------------------------------------------------------------ */
