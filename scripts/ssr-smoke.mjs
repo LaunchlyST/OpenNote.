@@ -227,10 +227,8 @@ try {
     'Free Forever',
     'Introductory Price',
     'Coming Soon',
-    'Most Popular',
     'Built for Teams',
-    'Get OpenNote Pro',
-    'Payments coming soon',
+    'isn’t available yet. Nothing can be purchased',
     'Already a member of our main platform?',
     'Shared team calendars',
     'Advanced permissions',
@@ -265,6 +263,8 @@ try {
   check('preview switcher uses aria-pressed', html.includes('aria-pressed'))
   check('Business CTA is a real disabled button', /disabled[^>]*>[^<]*Coming Soon/.test(html.replace(/\s+/g, ' ')))
   check('Pro CTA is not a link', !/href="\/app\/signup"[^>]*>[^<]*Get OpenNote Pro/.test(html))
+  check('Pro is not offered for purchase', !html.includes('Get OpenNote Pro') && !html.includes('Most Popular'))
+  check('no checkout or payment links', !/href="[^"]*(checkout|stripe|billing)/i.test(html))
 
   /* Product mockups */
   check('hero shows the week grid', html.includes('Morning planning'))

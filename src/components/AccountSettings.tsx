@@ -8,6 +8,7 @@ import {
   Loader2,
   Lock,
   Mail,
+  Sparkles,
   Trash2,
   UserRound,
 } from 'lucide-react'
@@ -236,6 +237,15 @@ export function AccountSettings() {
               <CalendarDays className="h-4 w-4 shrink-0 text-[#8f8e8a]" />
               <span className="min-w-0 flex-1 truncate">
                 Account created {formatJoined(user.createdAt)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2 rounded-xl bg-[#fbfbfa] px-3 py-2.5 text-[12.5px] text-[#37352f]">
+              <Sparkles className="h-4 w-4 shrink-0 text-[#8f8e8a]" />
+              <span className="min-w-0 flex-1 truncate">
+                {user.plan === 'pro' ? 'OpenNote Pro' : 'OpenNote Free'}
+              </span>
+              <span className="shrink-0 text-[10.5px] text-[#b4b3ae]">
+                {user.plan === 'pro' ? 'Plan' : 'Plan · Pro coming soon'}
               </span>
             </div>
           </div>

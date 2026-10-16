@@ -240,7 +240,7 @@ export const PRICING = {
         footnote:
           'This price is temporary. Billing period and terms will be confirmed before launch.',
       },
-      badge: 'Most Popular',
+      badge: 'Coming Soon',
       features: [
         { label: 'Everything in Free', status: 'available' },
         { label: 'Unlimited notes', status: 'planned' },
@@ -251,9 +251,9 @@ export const PRICING = {
         { label: 'Priority access to future Pro features', status: 'planned' },
       ],
       cta: {
-        label: 'Get OpenNote Pro',
+        label: 'Coming Soon',
         kind: 'unavailable',
-        note: 'Payments coming soon — checkout is not switched on yet.',
+        note: 'OpenNote Pro isn’t available yet. Nothing can be purchased and you won’t be charged.',
       },
       featured: true,
       theme: 'lime',

@@ -13,6 +13,8 @@
     "test:deploy": "tsx scripts/deploy-smoke.ts",
     "test:auth": "tsx scripts/auth-smoke.ts",
     "test:mail": "tsx scripts/mail-smoke.ts",
+    "test:api": "tsx scripts/api-smoke.ts",
+    "test:e2e": "node scripts/e2e-journey.cjs",
     "mail:catcher": "tsx scripts/mail-catcher.ts",
     "mail:dns": "tsx scripts/mail-dns.ts",
     "mail:doctor": "tsx scripts/mail-doctor.ts",

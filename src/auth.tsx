@@ -20,6 +20,8 @@ export interface AuthUser {
   emailVerified: boolean
   /** 'admin' or 'user', assigned by the server. Display only — the API enforces it. */
   role: 'admin' | 'user'
+  /** Subscription plan, set by the server only. Pro is not on sale yet. */
+  plan: 'free' | 'pro'
 }
 
 export interface SignUpInput {
@@ -108,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       avatar: u.image ?? undefined,
       emailVerified: u.emailVerified,
       role: (u as { role?: string | null }).role === 'admin' ? 'admin' : 'user',
+      plan: (u as { plan?: string | null }).plan === 'pro' ? 'pro' : 'free',
     }
   }, [data])
 

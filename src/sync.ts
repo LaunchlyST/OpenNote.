@@ -50,13 +50,38 @@ export function useWorkspaceSync<E, C, N, S>(
     }
   }, [userId])
 
+  // Changes not yet saved when the debounce is cut short (refresh, tab close).
+  const dirty = useRef(false)
+
   useEffect(() => {
     if (!userId || !ready) return
+    dirty.current = true
     const timer = window.setTimeout(() => {
+      dirty.current = false
       void save(workspace)
     }, 600)
     return () => window.clearTimeout(timer)
   }, [userId, ready, workspace])
+
+  // Leaving the page within the debounce window must not drop the last edit:
+  // flush it with a keepalive request, which the browser completes after unload.
+  useEffect(() => {
+    if (!userId || !ready) return
+    const flush = () => {
+      if (!dirty.current) return
+      dirty.current = false
+      void save(latest.current)
+    }
+    const onHidden = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onHidden)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onHidden)
+    }
+  }, [userId, ready])
 }
 
 async function save(workspace: Workspace) {

@@ -38,6 +38,14 @@ export const auth = betterAuth({
     },
   },
 
+  user: {
+    additionalFields: {
+      // Subscription plan. input: false — a sign-up or profile update can
+      // never set it; only the server can.
+      plan: { type: 'string', required: false, defaultValue: 'free', input: false },
+    },
+  },
+
   plugins: [
     // Adds user.role (and ban fields). Roles are assigned by syncRoles() from
     // ADMIN_EMAILS — never by the sign-up request itself.

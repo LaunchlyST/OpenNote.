@@ -18,4 +18,6 @@ export async function applyMigrations({ quiet = false } = {}) {
     console.log('Auth tables are up to date.')
   }
   ensureAppTables()
+  const { backfillPlans } = await import('./plans.ts')
+  backfillPlans()
 }

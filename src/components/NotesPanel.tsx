@@ -176,13 +176,13 @@ function NoteCard({
 }
 
 export function NotesPanel() {
-  const { notes, addNote, moveNote, selectedDate, events } = useApp()
+  const { notes, addNote, moveNote, selectedDate } = useApp()
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
 
-  const pinnedForSelected = events.filter(
-    (e) => dateKey(new Date(e.start)) === dateKey(selectedDate),
-  ).length
+  // Notes pinned to the selected day (not events — this labels the pin button).
+  const selectedKey = dateKey(selectedDate)
+  const pinnedForSelected = notes.filter((n) => n.date === selectedKey).length
 
   useEffect(() => {
     if (dragIndex === null) setDropIndex(null)

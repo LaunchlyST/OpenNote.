@@ -11,6 +11,8 @@ import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
 import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
 import { applyMigrations } from './schema.ts'
+import { PLANS, planOf, requirePlan } from './plans.ts'
+import { validateWorkspace } from './workspace.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
@@ -71,18 +73,10 @@ app.get('/api/workspace', requireUser, (req: AuthedRequest, res) => {
 })
 
 app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
-  const body = req.body as { data?: Record<string, unknown> } | undefined
-  const data = body?.data
-  const valid =
-    data &&
-    typeof data === 'object' &&
-    Array.isArray(data.events) &&
-    Array.isArray(data.calendars) &&
-    Array.isArray(data.notes) &&
-    data.settings !== null &&
-    typeof data.settings === 'object'
-  if (!valid) {
-    res.status(400).json({ error: 'Invalid workspace.' })
+  const data = (req.body as { data?: unknown } | undefined)?.data
+  const problem = validateWorkspace(data)
+  if (problem) {
+    res.status(400).json({ error: `Invalid workspace: ${problem}.` })
     return
   }
   const updatedAt = new Date().toISOString()
@@ -92,6 +86,25 @@ app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
 
 // Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())
+
+/** The signed-in user's plan and what it includes. */
+app.get('/api/plan', requireUser, async (req: AuthedRequest, res) => {
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
+  const plan = planOf(session?.user as { plan?: string })
+  res.set('Cache-Control', 'no-store').json({ plan, name: PLANS[plan].name, features: PLANS[plan].features, proAvailable: PLANS.pro.available })
+})
+
+// Upgrading is not open: Pro is "coming soon". Any attempt to start a
+// purchase is refused here, whatever the browser sends.
+app.post('/api/billing/checkout', requireUser, (_req, res) => {
+  res.status(403).json({ error: 'OpenNote Pro is coming soon and cannot be purchased yet. You have not been charged.' })
+})
+
+// Pro-only API surface. Nothing lives here yet; the guard is in place so a
+// Free account can never reach Pro functionality once it does.
+app.use('/api/pro', requirePlan('pro'), (_req, res) => {
+  res.status(404).json({ error: 'Not found.' })
+})
 
 // Email delivery log for administrators: status only, never bodies or links.
 app.get('/api/admin/mail-log', requireUser, async (req: AuthedRequest, res) => {
@@ -109,6 +122,11 @@ if (!env.isProduction) app.use('/api/dev/mail', devMailRouter())
 
 // In production the same server also serves the built single-page app.
 const dist = resolve('dist')
+// Unknown API paths are a 404, never the single-page app's HTML.
+app.use('/api', (_req, res) => {
+  res.status(404).json({ error: 'Not found.' })
+})
+
 if (env.isProduction && existsSync(dist)) {
   app.use(express.static(dist, { index: false, maxAge: '1h' }))
   app.get('*splat', (_req, res) => res.sendFile(resolve(dist, 'index.html')))
