@@ -78,121 +78,85 @@ function EventModalBody({
           e.preventDefault()
           handleSubmit()
         }}
-        className="animate-sheet flex max-h-[92vh] w-full max-w-[440px] flex-col overflow-hidden rounded-2xl border border-[#ececea] bg-white shadow-[0_28px_70px_rgba(16,24,40,0.24),0_8px_20px_rgba(16,24,40,0.08)]"
+        className="animate-sheet flex max-h-[92vh] w-full max-w-[400px] flex-col overflow-hidden rounded-[22px] bg-white shadow-[0_30px_80px_-20px_rgba(16,24,40,0.35),0_0_0_1px_rgba(16,24,40,0.05)]"
       >
-        <div className="flex items-center justify-between border-b border-[#f1f1ef] px-5 py-3.5">
-          <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#191919]">
-            {mode === 'create' ? 'New event' : 'Edit event'}
-          </h2>
-          <div className="flex items-center gap-1">
-            {mode === 'edit' && (
-              <button
-                type="button"
-                onClick={() => deleteEvent(event.id)}
-                className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11.5px] font-medium text-[#b4453c] transition hover:bg-[#fdf1f1]"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete
-              </button>
-            )}
-            <IconButton label="Close" onClick={closeModal}>
-              <X className="h-4 w-4" />
-            </IconButton>
-          </div>
-        </div>
-
-        <div className="scroll-area flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="flex items-start gap-2 px-5 pt-5">
           <input
             autoFocus
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Add a title"
-            className="w-full rounded-xl border border-transparent bg-transparent px-3 py-2 text-[17px] font-semibold tracking-[-0.01em] text-[#191919] transition placeholder:font-medium placeholder:text-[#b4b3ae] hover:bg-[#fbfbfa] focus:border-[#e9e9e7] focus:bg-white focus:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]"
+            style={{ outline: 'none' }}
+            className="min-w-0 flex-1 bg-transparent text-[20px] font-semibold tracking-[-0.02em] text-[#191919] outline-none placeholder:text-[#c4c3be]"
           />
+          <IconButton label="Close" onClick={closeModal}>
+            <X className="h-4 w-4" />
+          </IconButton>
+        </div>
 
-          <div>
-            <span className="mb-1.5 block px-1 text-[10px] font-semibold uppercase tracking-[0.09em] text-[#a3a29e]">
-              Calendar
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {calendars.map((c) => {
-                const color = colorOf(c.color)
-                const active = calendarId === c.id
-                return (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => setCalendarId(c.id)}
-                    className={cn(
-                      'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium transition-all duration-150',
-                      active
-                        ? 'border-transparent shadow-[0_1px_2px_rgba(16,24,40,0.1)]'
-                        : 'border-[#e9e9e7] text-[#5f5e5b] hover:border-[#dcdbd7] hover:bg-[#fbfbfa]',
-                    )}
-                    style={
-                      active
-                        ? {
-                            background: color.bg,
-                            color: color.text,
-                            boxShadow: `inset 0 0 0 1px ${color.border}`,
-                          }
-                        : undefined
-                    }
-                  >
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{ background: color.dot }}
-                    />
-                    {c.name}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2.5 rounded-xl border border-[#e9e9e7] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
-              <CalendarDays className="h-4 w-4 shrink-0 text-[#a3a29e]" />
+        <div className="scroll-area flex-1 space-y-3 overflow-y-auto px-5 pb-2 pt-4">
+          <div className="flex items-center gap-3">
+            <CalendarDays className="h-[18px] w-[18px] shrink-0 text-[#6b6a66]" />
+            <div className="flex items-center gap-2.5 rounded-xl bg-[#f5f5f3] px-3 py-2 transition focus-within:bg-white focus-within:shadow-[0_0_0_1.5px_#191919] flex-1">
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-transparent py-1 text-[13px] font-medium text-[#191919]"
+                className="w-full bg-transparent text-[13px] font-medium text-[#191919] outline-none"
               />
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-2 rounded-xl border border-[#e9e9e7] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
-                <Clock className="h-4 w-4 shrink-0 text-[#a3a29e]" />
+          <div className="flex items-center gap-3">
+            <Clock className="h-[18px] w-[18px] shrink-0 text-[#6b6a66]" />
+            <div className="grid flex-1 grid-cols-2 gap-2">
+              <div className="flex items-center gap-2.5 rounded-xl bg-[#f5f5f3] px-3 py-2 transition focus-within:bg-white focus-within:shadow-[0_0_0_1.5px_#191919]">
                 <input
                   type="time"
                   step={900}
+                  aria-label="Start time"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
-                  className="w-full bg-transparent py-1 text-[13px] font-medium text-[#191919]"
+                  className="w-full bg-transparent text-[13px] font-medium text-[#191919] outline-none"
                 />
               </div>
-              <div className="flex items-center gap-2 rounded-xl border border-[#e9e9e7] px-3 py-1.5 transition focus-within:border-[#c3e56a] focus-within:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]">
-                <Clock className="h-4 w-4 shrink-0 text-[#a3a29e]" />
+              <div className="flex items-center gap-2.5 rounded-xl bg-[#f5f5f3] px-3 py-2 transition focus-within:bg-white focus-within:shadow-[0_0_0_1.5px_#191919]">
                 <input
                   type="time"
                   step={900}
+                  aria-label="End time"
                   value={endTime}
                   onChange={(e) => setEndTime(e.target.value)}
-                  className="w-full bg-transparent py-1 text-[13px] font-medium text-[#191919]"
+                  className="w-full bg-transparent text-[13px] font-medium text-[#191919] outline-none"
                 />
               </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between rounded-xl bg-[#f7f7f5] px-3.5 py-2.5 text-[11.5px] text-[#6b6a66]">
-            <span className="flex items-center gap-1.5 font-medium">
-              <Clock className="h-3.5 w-3.5 text-[#a3a29e]" />
-              {relativeDayLabel(parsedDate)}
-            </span>
-            <span className="rounded-full bg-[#eaf9bf] px-2 py-0.5 font-semibold text-[#4b6410]">
-              {durationLabel}
-            </span>
+          <p className="pl-[30px] text-[11.5px] text-[#8f8e8a]">
+            {relativeDayLabel(parsedDate)} · {durationLabel}
+          </p>
+
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {calendars.map((c) => {
+              const color = colorOf(c.color)
+              const active = calendarId === c.id
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => setCalendarId(c.id)}
+                  className={cn(
+                    'rounded-[10px] px-3 py-1.5 text-[12px] font-medium transition-all duration-150',
+                    active ? 'shadow-[0_0_0_1.5px_currentColor]' : 'opacity-70 hover:opacity-100',
+                  )}
+                  style={{ background: color.bg, color: color.text }}
+                >
+                  {c.name}
+                </button>
+              )
+            })}
           </div>
 
           <textarea
@@ -200,24 +164,36 @@ function EventModalBody({
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Notes (optional)"
-            className="w-full resize-none rounded-xl border border-[#e9e9e7] px-3 py-2 text-[12.5px] text-[#191919] transition placeholder:text-[#b4b3ae] focus:border-[#c3e56a] focus:shadow-[0_0_0_3px_rgba(190,242,100,0.35)]"
+            className="w-full resize-none rounded-xl bg-[#f5f5f3] px-3 py-2.5 text-[12.5px] text-[#191919] outline-none transition placeholder:text-[#a3a29e] focus:bg-white focus:shadow-[0_0_0_1.5px_#191919]"
           />
         </div>
 
-        <div className="flex items-center justify-end gap-2 border-t border-[#f1f1ef] px-5 py-3.5">
-          <button
-            type="button"
-            onClick={closeModal}
-            className="rounded-lg px-3 py-2 text-[12.5px] font-medium text-[#5f5e5b] transition hover:bg-[#f5f5f3]"
-          >
-            Cancel
-          </button>
+        <div className="flex items-center gap-2 px-5 pb-5 pt-3">
           <button
             type="submit"
-            className="rounded-lg px-4 py-2 text-[12.5px] font-semibold transition bg-[#191919] text-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] hover:bg-[#37352f] active:scale-[0.98]"
+            className="h-11 flex-1 rounded-[12px] bg-[#191919] text-[13.5px] font-semibold text-white shadow-[0_6px_16px_-6px_rgba(0,0,0,0.45)] transition hover:bg-[#37352f] active:scale-[0.99]"
           >
             {mode === 'create' ? 'Add event' : 'Save changes'}
           </button>
+          {mode === 'edit' ? (
+            <button
+              type="button"
+              aria-label="Delete event"
+              title="Delete event"
+              onClick={() => deleteEvent(event.id)}
+              className="grid h-11 w-11 place-items-center rounded-[12px] bg-[#191919] text-white transition hover:bg-[#b4453c]"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={closeModal}
+              className="h-11 rounded-[12px] px-3.5 text-[13px] font-medium text-[#5f5e5b] transition hover:bg-[#f5f5f3]"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       </form>
     </div>
