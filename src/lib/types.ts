@@ -44,6 +44,8 @@ export interface Settings {
   defaultView: ViewMode
   /** Suppresses the interface's entry animations for the whole app. */
   reduceMotion: boolean
+  /** Calendar vertical zoom: index into ZOOM_LEVELS (0 = 1-hour rows). */
+  zoomLevel?: number
   /** Whether the left sidebar starts collapsed. */
   sidebarCollapsed: boolean
   /**

@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { StickyNote } from 'lucide-react'
+import { Minus, Plus, StickyNote } from 'lucide-react'
 import { useApp } from '../store'
 import { colorOf } from '../lib/colors'
 import type { CalendarEvent } from '../lib/types'
@@ -18,6 +18,21 @@ import {
 } from '../lib/date'
 import { cn } from '../lib/id'
 import { useNow } from '../hooks'
+import { colorOf as noteColor } from '../lib/colors'
+import type { Note } from '../lib/types'
+import {
+  SLOT_MINUTES,
+  ZOOM_LEVELS,
+  clampZoom,
+  groupSlotNotes,
+  hourPxFor,
+  minutesToTime,
+} from '../lib/slots'
+import { SlotNotesPopover } from './SlotNotesPopover'
+import type { SlotTarget } from './SlotNotesPopover'
+
+const NOTE_CARD = 18
+const NOTE_GAP = 2
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const SNAP = 15
@@ -119,7 +134,7 @@ export function TimeGrid({
     calendars,
     notes,
     settings,
-    openCreate,
+    updateSettings,
     openEdit,
     saveEvent,
     selectDate,
@@ -128,7 +143,17 @@ export function TimeGrid({
     focusOnDate,
   } = useApp()
   const now = useNow(30_000)
-  const { hourHeight, hour12 } = settings
+  const { hourHeight: baseHourHeight, hour12 } = settings
+  // Vertical zoom only changes how many pixels an hour gets; times, dates and
+  // saved data are untouched.
+  const zoom = clampZoom(settings.zoomLevel)
+  const interval = ZOOM_LEVELS[zoom].interval
+  const hourHeight = hourPxFor(zoom, baseHourHeight)
+  const setZoom = (next: number) => {
+    const z = clampZoom(next)
+    if (z !== zoom) updateSettings({ zoomLevel: z })
+  }
+  const [slotTarget, setSlotTarget] = useState<SlotTarget | null>(null)
 
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
@@ -237,6 +262,44 @@ export function TimeGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Zooming keeps the time at the middle of the viewport in place.
+  const prevHourPx = useRef(hourHeight)
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    const prev = prevHourPx.current
+    prevHourPx.current = hourHeight
+    if (!el || prev === hourHeight) return
+    const centreMin = ((el.scrollTop + el.clientHeight / 2) / prev) * 60
+    el.scrollTop = Math.max(0, (centreMin / 60) * hourHeight - el.clientHeight / 2)
+  }, [hourHeight])
+
+  // Ctrl + wheel (and trackpad pinch, which browsers report the same way)
+  // zooms the calendar instead of the page.
+  const zoomRef = useRef(zoom)
+  zoomRef.current = zoom
+  const setZoomRef = useRef(setZoom)
+  setZoomRef.current = setZoom
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    let acc = 0
+    let last = 0
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return
+      e.preventDefault()
+      acc += e.deltaY
+      const now = Date.now()
+      if (Math.abs(acc) < 40 || now - last < 120) return
+      setZoomRef.current(zoomRef.current + (acc < 0 ? 1 : -1))
+      acc = 0
+      last = now
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
+
+  const slotNotes = useMemo(() => groupSlotNotes(notes), [notes])
+
   useEffect(() => {
     if (!drag) return
     document.body.style.userSelect = 'none'
@@ -323,23 +386,178 @@ export function TimeGrid({
     })
   }
 
+  /** Clicking the grid opens the slot popover (notes, or a new event). */
   const createAt = (e: ReactMouseEvent<HTMLDivElement>, day: Date) => {
     if (drag) return
     const rect = e.currentTarget.getBoundingClientRect()
     const y = e.clientY - rect.top
-    const minutes = clamp(
-      Math.floor(((y / hourHeight) * 60) / 30) * 30,
-      0,
-      DAY_MINUTES - 30,
-    )
-    openCreate(fromMinutes(day, minutes), 60)
+    const minute = clamp(Math.floor((y / hourHeight) * 60), 0, DAY_MINUTES - 1)
+    const rangeStart = Math.floor(minute / interval) * interval
+    setSlotTarget({
+      day,
+      rangeStart,
+      rangeEnd: rangeStart + interval,
+      slot: Math.floor(minute / SLOT_MINUTES) * SLOT_MINUTES,
+      x: e.clientX + 8,
+      y: e.clientY + 8,
+    })
+  }
+
+  const openSlot = (
+    e: ReactMouseEvent<HTMLElement>,
+    day: Date,
+    rangeStart: number,
+    slot: number,
+  ) => {
+    e.stopPropagation()
+    const r = e.currentTarget.getBoundingClientRect()
+    setSlotTarget({ day, rangeStart, rangeEnd: rangeStart + interval, slot, x: r.left, y: r.bottom + 4 })
+  }
+
+  /** Note cards for one day column, confined to their own rows. */
+  const renderNotes = (day: Date, placed: Placed[]) => {
+    const bySlot = slotNotes.get(dateKey(day))
+    if (!bySlot) return null
+    const rows = new Map<number, number[]>()
+    for (const slot of [...bySlot.keys()].sort((a, b) => a - b)) {
+      const row = Math.floor(slot / interval) * interval
+      const list = rows.get(row)
+      if (list) list.push(slot)
+      else rows.set(row, [slot])
+    }
+    const rowPx = (interval / 60) * hourHeight
+    const fits = Math.max(1, Math.floor((rowPx - NOTE_GAP) / (NOTE_CARD + NOTE_GAP)))
+    const color = noteColor('yellow')
+    const card =
+      'pointer-events-auto flex w-full items-center gap-1 overflow-hidden rounded-[6px] px-1.5 text-left text-[10.5px] font-medium leading-none transition hover:brightness-[0.97]'
+    const cardStyle = {
+      height: NOTE_CARD,
+      background: color.bg,
+      color: color.text,
+      boxShadow: `inset 2px 0 0 ${color.dot}, inset 0 0 0 1px ${color.border}`,
+    }
+    const label = (n: Note) => n.title.trim() || 'Untitled note'
+
+    return [...rows.entries()].map(([row, slots]) => {
+      // Share the column with events in the same row instead of covering them.
+      const busy = placed.some((p) => p.startMin < row + interval && p.endMin > row)
+      const items: React.ReactNode[] = []
+      if (interval === SLOT_MINUTES) {
+        // Fully zoomed in: every note of the slot, as its own card.
+        const list = bySlot.get(slots[0]) ?? []
+        list.forEach((n, i) =>
+          items.push(
+            <button
+              key={n.id}
+              type="button"
+              data-note-card
+              className={card}
+              style={cardStyle}
+              title={label(n)}
+              onClick={(e) => openSlot(e, day, row, slots[0])}
+            >
+              <span className="shrink-0 opacity-60">{i + 1}.</span>
+              <span className="truncate">{label(n)}</span>
+            </button>,
+          ),
+        )
+      } else {
+        // Zoomed out: the first note of each occupied slot, with +N for the rest.
+        const overflow = slots.length > fits
+        const shown = overflow ? slots.slice(0, fits - 1) : slots
+        for (const slot of shown) {
+          const list = bySlot.get(slot) ?? []
+          items.push(
+            <div key={slot} data-note-card className={card} style={cardStyle} title={list.map(label).join(' · ')}>
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                onClick={(e) => openSlot(e, day, row, slot)}
+              >
+                {slots.length > 1 || slot !== row ? (
+                  <span className="shrink-0 tabular-nums opacity-60">{minutesToTime(slot)}</span>
+                ) : null}
+                <span className="truncate">{label(list[0])}</span>
+              </button>
+              {list.length > 1 && (
+                <button
+                  type="button"
+                  aria-label={`Show all ${list.length} notes`}
+                  onClick={(e) => openSlot(e, day, row, slot)}
+                  className="shrink-0 rounded-[4px] bg-white/70 px-1 py-[2px] text-[9.5px] font-bold"
+                >
+                  +{list.length - 1}
+                </button>
+              )}
+            </div>,
+          )
+        }
+        if (overflow) {
+          const hidden = slots.slice(fits - 1)
+          const count = hidden.reduce((t, s) => t + (bySlot.get(s)?.length ?? 0), 0)
+          items.push(
+            <button
+              key="more"
+              type="button"
+              data-note-card
+              className={cn(card, 'justify-center font-semibold')}
+              style={cardStyle}
+              onClick={(e) => openSlot(e, day, row, hidden[0])}
+            >
+              +{count} more note{count === 1 ? '' : 's'}
+            </button>,
+          )
+        }
+      }
+      return (
+        <div
+          key={`notes-${row}`}
+          className="pointer-events-none absolute z-[25] flex flex-col overflow-hidden"
+          style={{
+            top: (row / 60) * hourHeight + NOTE_GAP,
+            height: rowPx - NOTE_GAP * 2,
+            left: busy ? '50%' : 4,
+            right: 4,
+            gap: NOTE_GAP,
+          }}
+        >
+          {items}
+        </div>
+      )
+    })
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
       {/* Day header */}
       <div className="flex h-[64px] shrink-0 border-b border-[#ececea] bg-white">
-        <div className="w-[62px] shrink-0" />
+        <div className="flex w-[62px] shrink-0 flex-col items-center justify-center gap-1" role="group" aria-label="Calendar zoom">
+          <div className="flex items-center rounded-lg border border-[#e3e3e0] bg-white p-[2px]">
+            <button
+              type="button"
+              aria-label="Zoom out"
+              title="Zoom out (Ctrl + scroll)"
+              disabled={zoom === 0}
+              onClick={() => setZoom(zoom - 1)}
+              className="grid h-5 w-5 place-items-center rounded-[5px] text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919] disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <Minus className="h-3 w-3" />
+            </button>
+            <button
+              type="button"
+              aria-label="Zoom in"
+              title="Zoom in (Ctrl + scroll)"
+              disabled={zoom === ZOOM_LEVELS.length - 1}
+              onClick={() => setZoom(zoom + 1)}
+              className="grid h-5 w-5 place-items-center rounded-[5px] text-[#6b6a66] transition hover:bg-[#f3f3f1] hover:text-[#191919] disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <Plus className="h-3 w-3" />
+            </button>
+          </div>
+          <span className="text-[9.5px] font-medium tabular-nums text-[#a3a29e]" data-testid="zoom-label">
+            {ZOOM_LEVELS[zoom].label}
+          </span>
+        </div>
         <div
           className="flex border-l border-[#ececea]"
           style={
@@ -415,6 +633,18 @@ export function TimeGrid({
                 {hourLabel(h, hour12)}
               </div>
             ))}
+            {interval < 60 &&
+              HOURS.flatMap((h) =>
+                Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval).map((m) => (
+                  <div
+                    key={`m${h}-${m}`}
+                    className="absolute right-2.5 -translate-y-1/2 text-[9.5px] tabular-nums text-[#c4c3be]"
+                    style={{ top: ((h * 60 + m) / 60) * hourHeight }}
+                  >
+                    :{String(m).padStart(2, '0')}
+                  </div>
+                )),
+              )}
           </div>
 
           <div
@@ -430,6 +660,19 @@ export function TimeGrid({
                   style={{ top: h * hourHeight }}
                 />
               ))}
+              {interval < 60 &&
+                HOURS.flatMap((h) =>
+                  Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval).map((m) => (
+                    <div
+                      key={`m${h}-${m}`}
+                      className={cn(
+                        'absolute inset-x-0 border-t',
+                        m % 30 === 0 ? 'border-[#f0f0ee]' : 'border-dashed border-[#f3f3f1]',
+                      )}
+                      style={{ top: ((h * 60 + m) / 60) * hourHeight }}
+                    />
+                  )),
+                )}
               {days.some((d) => isSameDay(d, now)) && (
                 <div
                   className="absolute inset-x-0 border-t border-[#ffd6d7]"
@@ -444,6 +687,7 @@ export function TimeGrid({
               return (
                 <div
                   key={day.toISOString()}
+                  data-day={dateKey(day)}
                   onClick={(e) => createAt(e, day)}
                   className="relative border-l border-[#ececea] first:border-l-0"
                   style={{
@@ -548,6 +792,8 @@ export function TimeGrid({
                     )
                   })}
 
+                  {renderNotes(day, placed)}
+
                   {isToday && (
                     <div
                       className="pointer-events-none absolute inset-x-0 z-30"
@@ -564,6 +810,9 @@ export function TimeGrid({
           </div>
         </div>
       </div>
+      {slotTarget && (
+        <SlotNotesPopover target={slotTarget} onClose={() => setSlotTarget(null)} />
+      )}
     </div>
   )
 }
