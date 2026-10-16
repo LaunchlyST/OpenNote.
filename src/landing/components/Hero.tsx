@@ -1,12 +1,13 @@
-import { useRef } from 'react'
+import { createContext, useContext, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useTilt } from '../motion'
 import { RollingHeadline } from './RollingHeadline'
-import { BookOpen, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Sparkles, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
 import { HERO } from '../content'
 import { ResponsiveAppWindow } from './mock/AppWindow'
+import { PLANS, ProOverlay, usePlanSwipe } from './PlanSwipe'
 import { AppIcon, Button } from './primitives'
 
 /** Small line-icon tiles scattered around the hero, each in a product colour. */
@@ -34,6 +35,7 @@ export function Hero() {
   useTilt(laptopRef, 5)
 
   return (
+    <HeroSwipeProvider>
     <section id="top" className="relative overflow-hidden bg-white px-5 pt-[120px] pb-8 sm:px-8 sm:pt-[140px]">
       <div className="relative mx-auto w-full max-w-[1200px]">
         {/* Doodles — desktop only, never over the copy */}
@@ -82,11 +84,13 @@ export function Hero() {
           </p>
         </div>
 
+        <HeroPlanTabs />
+
         {/* The real interface, in a laptop */}
-        <div className="lp-settle relative mx-auto mt-14 max-w-[1040px] sm:mt-16" style={{ animationDelay: '380ms' }}>
+        <div className="lp-settle relative mx-auto mt-6 max-w-[1040px] sm:mt-8" style={{ animationDelay: '380ms' }}>
           <div data-anim="tilt">
-          <div ref={laptopRef} className="rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
-            <ResponsiveAppWindow view="week" label="opennote — week of October 5" />
+          <div ref={laptopRef} className="relative rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
+            <HeroPlanScreens />
           </div>
           <div aria-hidden="true" className="mx-auto hidden h-3.5 w-[108%] -translate-x-[3.7%] rounded-b-[18px] bg-gradient-to-b from-[#d9d9d6] to-[#bdbdb9] sm:block" />
           <span aria-hidden="true" className="absolute -bottom-6 left-1/2 hidden -translate-x-1/2 items-center gap-1.5 rounded-full border border-lp-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-lp-body shadow-sm sm:inline-flex">
@@ -94,7 +98,126 @@ export function Hero() {
           </span>
           </div>
         </div>
+        <HeroPlanDots />
       </div>
     </section>
+    </HeroSwipeProvider>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Free / Pro swipe on the hero laptop                                 */
+/* ------------------------------------------------------------------ */
+
+const HeroSwipeContext = createContext<ReturnType<typeof usePlanSwipe> | null>(null)
+
+function HeroSwipeProvider({ children }: { children: ReactNode }) {
+  const swipe = usePlanSwipe('hero-plan-tab')
+  return <HeroSwipeContext.Provider value={swipe}>{children}</HeroSwipeContext.Provider>
+}
+
+function useHeroSwipe() {
+  const swipe = useContext(HeroSwipeContext)
+  if (!swipe) throw new Error('HeroSwipeProvider missing')
+  return swipe
+}
+
+function HeroPlanTabs() {
+  const { index, go, onKeyDown } = useHeroSwipe()
+  return (
+    <div className="mt-12 flex justify-center sm:mt-14">
+      <div role="tablist" aria-label="OpenNote plans" className="relative grid w-full max-w-[340px] grid-cols-2 rounded-[12px] bg-[#ececea] p-1">
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-1 left-1 w-[calc((100%-8px)/2)] rounded-[9px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] motion-safe:transition-transform motion-safe:duration-300"
+          style={{ transform: `translateX(${index * 100}%)` }}
+        />
+        {PLANS.map((plan, i) => (
+          <button
+            key={plan.key}
+            id={`hero-plan-tab-${plan.key}`}
+            type="button"
+            role="tab"
+            aria-selected={index === i}
+            aria-controls={`hero-plan-panel-${plan.key}`}
+            tabIndex={index === i ? 0 : -1}
+            onClick={() => go(i)}
+            onKeyDown={onKeyDown}
+            className={cn(
+              'relative z-10 inline-flex items-center justify-center gap-1.5 rounded-[9px] py-2 text-[13.5px] font-medium transition-colors',
+              index === i ? 'text-lp-ink' : 'text-lp-body hover:text-lp-ink',
+            )}
+          >
+            {plan.key === 'pro' && <Sparkles className="h-3.5 w-3.5 text-[#6b55c9]" aria-hidden="true" />}
+            {plan.tab}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function HeroPlanScreens() {
+  const { index, go, dragging, trackStyle, viewportProps } = useHeroSwipe()
+  return (
+    <>
+      <div {...viewportProps} className={cn('overflow-hidden rounded-[14px] select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}>
+        <div className="flex" style={trackStyle}>
+          {PLANS.map((plan, i) => (
+            <div
+              key={plan.key}
+              id={`hero-plan-panel-${plan.key}`}
+              role="tabpanel"
+              aria-labelledby={`hero-plan-tab-${plan.key}`}
+              aria-hidden={index !== i}
+              inert={index !== i}
+              className="relative w-full shrink-0"
+            >
+              {plan.key === 'free' ? (
+                <ResponsiveAppWindow view="week" label="opennote — week of October 5" />
+              ) : (
+                <>
+                  <div aria-hidden="true" className="pointer-events-none select-none">
+                    <ResponsiveAppWindow view="week" label="opennote pro — coming soon" />
+                  </div>
+                  <ProOverlay />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        aria-label="Show Free plan"
+        onClick={() => go(index - 1)}
+        disabled={index === 0}
+        className="absolute top-1/2 -left-4 z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-lp-line bg-white text-lp-ink shadow-[0_6px_18px_-8px_rgba(0,0,0,0.35)] transition-opacity disabled:pointer-events-none disabled:opacity-0 sm:grid"
+      >
+        <ChevronLeft className="h-5 w-5" aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        aria-label="Show Pro plan preview"
+        onClick={() => go(index + 1)}
+        disabled={index === PLANS.length - 1}
+        className="absolute top-1/2 -right-4 z-20 hidden h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-lp-line bg-white text-lp-ink shadow-[0_6px_18px_-8px_rgba(0,0,0,0.35)] transition-opacity disabled:pointer-events-none disabled:opacity-0 sm:grid"
+      >
+        <ChevronRight className="h-5 w-5" aria-hidden="true" />
+      </button>
+    </>
+  )
+}
+
+function HeroPlanDots() {
+  const { index, go } = useHeroSwipe()
+  return (
+    <div className="mt-10 flex items-center justify-center gap-2">
+      {PLANS.map((plan, i) => (
+        <button key={plan.key} type="button" aria-label={`Go to ${plan.title}`} aria-current={index === i} onClick={() => go(i)} className="grid h-6 w-6 place-items-center">
+          <span className={cn('block h-2 rounded-full motion-safe:transition-all motion-safe:duration-300', index === i ? 'w-6 bg-lp-ink' : 'w-2 bg-[#cfcdc6]')} />
+        </button>
+      ))}
+    </div>
   )
 }

@@ -14,7 +14,7 @@ import { Reveal, Section } from './primitives'
 
 type PlanKey = 'free' | 'pro'
 
-const PLANS: Array<{ key: PlanKey; tab: string; title: string }> = [
+export const PLANS: Array<{ key: PlanKey; tab: string; title: string }> = [
   { key: 'free', tab: 'Free', title: 'OpenNote Free' },
   { key: 'pro', tab: 'Pro — Coming Soon', title: 'OpenNote Pro (coming soon)' },
 ]
@@ -108,6 +108,41 @@ function FreeSlide() {
   )
 }
 
+/** Soft frosted blur, glow and "Coming Soon" card laid over a Pro preview. */
+export function ProOverlay() {
+  return (
+    <>
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/45 to-white/70 backdrop-blur-[5px]"
+    />
+    <div aria-hidden="true" className="lp-pro-glow pointer-events-none absolute inset-0" />
+    <div className="absolute top-3 left-3 z-10 sm:top-4 sm:left-4">
+      <PlanLabel tone="pro">
+        <Lock className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" /> Pro
+      </PlanLabel>
+    </div>
+    <div className="absolute inset-0 grid place-items-center p-3 sm:p-6">
+      <div className="w-full max-w-[420px] rounded-[20px] border border-white/80 bg-white/70 px-5 py-5 text-center shadow-[0_30px_60px_-30px_rgba(40,30,80,0.45),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl sm:px-8 sm:py-8">
+        <div className="mx-auto flex w-fit items-center gap-2">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-lp-ink text-white sm:h-10 sm:w-10">
+            <Lock className="h-4 w-4" aria-hidden="true" />
+          </span>
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-[#f1eefc] text-[#6b55c9] sm:h-10 sm:w-10">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+          </span>
+        </div>
+        <p className="mt-3 text-[20px] font-semibold tracking-[-0.02em] text-lp-ink sm:mt-4 sm:text-[26px]">OpenNote Pro</p>
+        <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#6b55c9] sm:text-[13px]">Coming Soon</p>
+        <p className="mt-2 hidden text-[14.5px] leading-relaxed text-lp-body sm:block">
+          Unlock more powerful tools to manage your business, organise your work, and stay productive.
+        </p>
+      </div>
+    </div>
+    </>
+  )
+}
+
 function ProSlide() {
   return (
     <div>
@@ -116,33 +151,7 @@ function ProSlide() {
         <div aria-hidden="true" inert className="pointer-events-none select-none">
           <AppWindow label="opennote — pro" />
         </div>
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 bg-gradient-to-b from-white/30 via-white/45 to-white/70 backdrop-blur-[5px]"
-        />
-        <div aria-hidden="true" className="lp-pro-glow pointer-events-none absolute inset-0" />
-        <div className="absolute top-3 left-3 z-10 sm:top-4 sm:left-4">
-          <PlanLabel tone="pro">
-            <Lock className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" /> Pro
-          </PlanLabel>
-        </div>
-        <div className="absolute inset-0 grid place-items-center p-3 sm:p-6">
-          <div className="w-full max-w-[420px] rounded-[20px] border border-white/80 bg-white/70 px-5 py-5 text-center shadow-[0_30px_60px_-30px_rgba(40,30,80,0.45),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl sm:px-8 sm:py-8">
-            <div className="mx-auto flex w-fit items-center gap-2">
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-lp-ink text-white sm:h-10 sm:w-10">
-                <Lock className="h-4 w-4" aria-hidden="true" />
-              </span>
-              <span className="grid h-8 w-8 place-items-center rounded-full bg-[#f1eefc] text-[#6b55c9] sm:h-10 sm:w-10">
-                <Sparkles className="h-4 w-4" aria-hidden="true" />
-              </span>
-            </div>
-            <p className="mt-3 text-[20px] font-semibold tracking-[-0.02em] text-lp-ink sm:mt-4 sm:text-[26px]">OpenNote Pro</p>
-            <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.14em] text-[#6b55c9] sm:text-[13px]">Coming Soon</p>
-            <p className="mt-2 hidden text-[14.5px] leading-relaxed text-lp-body sm:block">
-              Unlock more powerful tools to manage your business, organise your work, and stay productive.
-            </p>
-          </div>
-        </div>
+        <ProOverlay />
       </div>
       <div className="mt-6 px-1">
         <div className="flex flex-wrap items-center gap-2">
@@ -158,7 +167,8 @@ function ProSlide() {
   )
 }
 
-export function PlanSwipe() {
+/** Drag / swipe / keyboard state for a two-slide plan carousel. */
+export function usePlanSwipe(tabIdPrefix: string) {
   const [index, setIndex] = useState(0)
   const [dragPx, setDragPx] = useState(0)
   const [dragging, setDragging] = useState(false)
@@ -216,10 +226,30 @@ export function PlanSwipe() {
     e.preventDefault()
     const next = Math.max(0, Math.min(PLANS.length - 1, target))
     go(next)
-    document.getElementById(`plan-tab-${PLANS[next].key}`)?.focus()
+    document.getElementById(`${tabIdPrefix}-${PLANS[next].key}`)?.focus()
   }
 
   const transition = dragging || reduced ? 'none' : 'transform 350ms cubic-bezier(0.22, 1, 0.36, 1)'
+
+  const trackStyle = { transform: `translateX(calc(${-index * 100}% + ${dragPx}px))`, transition }
+  const viewportProps = {
+    ref: viewportRef,
+    style: { touchAction: 'pan-y' } as const,
+    'aria-roledescription': 'carousel',
+    onPointerDown,
+    onPointerMove,
+    onPointerUp: endDrag,
+    onPointerCancel: endDrag,
+    onClickCapture: (e: { preventDefault(): void; stopPropagation(): void }) => {
+      if (suppressClick.current) { e.preventDefault(); e.stopPropagation(); suppressClick.current = false }
+    },
+    onDragStart: (e: { preventDefault(): void }) => e.preventDefault(),
+  }
+  return { index, go, dragging, onKeyDown, trackStyle, viewportProps }
+}
+
+export function PlanSwipe() {
+  const { index, go, dragging, onKeyDown, trackStyle, viewportProps } = usePlanSwipe('plan-tab')
 
   return (
     <Section id="plans">
@@ -263,22 +293,12 @@ export function PlanSwipe() {
 
         <div className="relative mt-8">
           <div
-            ref={viewportRef}
+            {...viewportProps}
             className={cn('overflow-hidden rounded-[22px] bg-lp-sunken select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
-            style={{ touchAction: 'pan-y' }}
-            aria-roledescription="carousel"
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onClickCapture={(e) => {
-              if (suppressClick.current) { e.preventDefault(); e.stopPropagation(); suppressClick.current = false }
-            }}
-            onDragStart={(e) => e.preventDefault()}
           >
             <div
               className="flex"
-              style={{ transform: `translateX(calc(${-index * 100}% + ${dragPx}px))`, transition }}
+              style={trackStyle}
             >
               {PLANS.map((plan, i) => (
                 <div
