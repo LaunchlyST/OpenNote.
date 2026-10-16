@@ -200,6 +200,41 @@ async function addNote(p, text) {
   check((await popover(p).getByTestId('slot-count').innerText()).startsWith('0 of 3'), 'a note can be deleted')
   await p.keyboard.press('Escape')
 
+  // Double-click creates a note in that exact slot.
+  const dbl = async (minute) => {
+    const col = p.locator('[data-day]').nth(2)
+    await col.evaluate((el, m) => {
+      el.closest('.scroll-area').scrollTop = (m / 1440) * el.getBoundingClientRect().height - 120
+    }, minute)
+    const b = await col.boundingBox()
+    await p.mouse.dblclick(b.x + b.width * 0.3, b.y + (minute / 1440) * b.height + 1)
+    await popover(p).waitFor()
+  }
+  const slotCount = () => popover(p).getByTestId('slot-count').innerText()
+  await dbl(14 * 60)
+  check((await slotCount()).startsWith('1 of 3'), 'double-click creates a note in that slot')
+  check(await popover(p).getByLabel('Note 1', { exact: true }).evaluate((el) => el === document.activeElement), 'the new note is ready to type into')
+  await p.keyboard.type('Gym')
+  await p.keyboard.press('Escape')
+  await dbl(14 * 60)
+  await p.keyboard.type('Stretch')
+  await p.keyboard.press('Escape')
+  await dbl(14 * 60)
+  await p.keyboard.type('Shower')
+  await p.keyboard.press('Escape')
+  await dbl(14 * 60)
+  check((await slotCount()).startsWith('3 of 3') && (await popover(p).getByRole('button', { name: /Slot full/ }).isDisabled()), 'a 4th double-click does not create a note')
+  await p.keyboard.press('Escape')
+  await dbl(15 * 60)
+  await p.keyboard.press('Escape')
+  await p.waitForTimeout(150)
+  const at15 = await p.locator('[data-day]').nth(2).locator('[data-note-card]').allInnerTexts()
+  check(at15.length === 1 && at15[0].includes('Gym') && at15[0].includes('+2'), 'a double-click closed without text leaves no empty note')
+  const evt = p.locator('[data-day]').nth(2).locator('[data-note-card]').first()
+  await evt.dblclick()
+  await p.keyboard.press('Escape')
+  check((await p.locator('[data-day]').nth(2).locator('[data-note-card]').allInnerTexts())[0].includes('+2'), 'double-clicking an existing note card does not add another')
+
   // Day view zoom.
   await p.getByRole('button', { name: 'Day', exact: true }).click()
   await wheelZoom(p, 1)
@@ -211,6 +246,9 @@ async function addNote(p, text) {
   await p.waitForTimeout(1000)
   await p.reload()
   await appReady(p)
+  check((await zoomLabel(p)) === '1 h', 'the calendar always reopens at the normal 1-hour layout')
+  await p.locator('[data-note-card]').first().scrollIntoViewIfNeeded()
+  await shot(p, 'normal-1h')
   const afterReload = await p.locator('[data-note-card]').allInnerTexts()
   check(afterReload.some((t) => t.includes('Call client') && t.includes('+2')) && afterReload.some((t) => t.includes('Prep slides')) && !afterReload.some((t) => t.includes('Book room')), `notes are still saved after a refresh (${afterReload.join(' / ').replace(/\n/g, ' ')})`)
 

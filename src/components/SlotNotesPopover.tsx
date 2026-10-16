@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CalendarPlus, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { useApp } from '../store'
@@ -23,6 +23,8 @@ export interface SlotTarget {
   /** Viewport point to anchor the popover at. */
   x: number
   y: number
+  /** A note to focus on open (e.g. one just created by double-click). */
+  focusId?: string
 }
 
 /**
@@ -32,14 +34,24 @@ export interface SlotTarget {
  */
 export function SlotNotesPopover({
   target,
-  onClose,
+  onClose: close,
 }: {
   target: SlotTarget
   onClose: () => void
 }) {
   const { notes, addNote, updateNote, deleteNote, openCreate, settings } = useApp()
   const [slot, setSlot] = useState(target.slot)
-  const [focusId, setFocusId] = useState<string | null>(null)
+  // A note made by double-click and closed without any text is discarded,
+  // so stray double-clicks never leave empty notes behind.
+  const notesRef = useRef(notes)
+  notesRef.current = notes
+  const onClose = useCallback(() => {
+    const id = target.focusId
+    const created = id ? notesRef.current.find((n) => n.id === id) : undefined
+    if (created && !created.title.trim() && !created.body.trim()) deleteNote(created.id)
+    close()
+  }, [target.focusId, deleteNote, close])
+  const [focusId, setFocusId] = useState<string | null>(target.focusId ?? null)
   const ref = useRef<HTMLDivElement | null>(null)
   const [pos, setPos] = useState({ left: target.x, top: target.y })
 

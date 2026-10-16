@@ -16,11 +16,12 @@ import {
   startOfDay,
   weekdayShort,
 } from '../lib/date'
-import { cn } from '../lib/id'
+import { cn, uid } from '../lib/id'
 import { useNow } from '../hooks'
 import { colorOf as noteColor } from '../lib/colors'
 import type { Note } from '../lib/types'
 import {
+  MAX_SLOT_NOTES,
   SLOT_MINUTES,
   ZOOM_LEVELS,
   clampZoom,
@@ -134,7 +135,7 @@ export function TimeGrid({
     calendars,
     notes,
     settings,
-    updateSettings,
+    addNote,
     openEdit,
     saveEvent,
     selectDate,
@@ -146,12 +147,13 @@ export function TimeGrid({
   const { hourHeight: baseHourHeight, hour12 } = settings
   // Vertical zoom only changes how many pixels an hour gets; times, dates and
   // saved data are untouched.
-  const zoom = clampZoom(settings.zoomLevel)
+  // The calendar always opens at the normal 1-hour layout; zooming is for
+  // the current visit only.
+  const [zoom, setZoomState] = useState(0)
   const interval = ZOOM_LEVELS[zoom].interval
   const hourHeight = hourPxFor(zoom, baseHourHeight)
   const setZoom = (next: number) => {
-    const z = clampZoom(next)
-    if (z !== zoom) updateSettings({ zoomLevel: z })
+    setZoomState(clampZoom(next))
   }
   const [slotTarget, setSlotTarget] = useState<SlotTarget | null>(null)
 
@@ -452,6 +454,31 @@ export function TimeGrid({
     })
   }
 
+  /** Double-click: create a note in that exact 5-minute slot and edit it. */
+  const createNoteAt = (e: ReactMouseEvent<HTMLDivElement>, day: Date) => {
+    if (drag) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const minute = clamp(Math.floor(((e.clientY - rect.top) / hourHeight) * 60), 0, DAY_MINUTES - 1)
+    const slot = Math.floor(minute / SLOT_MINUTES) * SLOT_MINUTES
+    const rangeStart = Math.floor(minute / interval) * interval
+    const count = slotNotes.get(dateKey(day))?.get(slot)?.length ?? 0
+    let focusId: string | undefined
+    if (count < MAX_SLOT_NOTES) {
+      focusId = uid('note')
+      addNote({ id: focusId, date: dateKey(day), time: minutesToTime(slot), title: '', body: '' })
+    }
+    // Opens on the slot either way, so a full slot shows "Slot full (3/3)".
+    setSlotTarget({
+      day,
+      rangeStart,
+      rangeEnd: rangeStart + interval,
+      slot,
+      x: e.clientX + 8,
+      y: e.clientY + 8,
+      focusId,
+    })
+  }
+
   const openSlot = (
     e: ReactMouseEvent<HTMLElement>,
     day: Date,
@@ -561,6 +588,7 @@ export function TimeGrid({
       return (
         <div
           key={`notes-${row}`}
+          onDoubleClick={(e) => e.stopPropagation()}
           className="pointer-events-none absolute z-[25] flex flex-col overflow-hidden"
           style={{
             top: (row / 60) * hourHeight + NOTE_GAP,
@@ -656,7 +684,7 @@ export function TimeGrid({
               <div
                 key={h}
                 className={cn(
-                  'absolute right-2.5 text-[10.5px] font-medium tabular-nums text-[#9aa0b0]',
+                  'absolute inset-x-0 text-center text-[10.5px] font-medium tabular-nums text-[#9aa0b0]',
                   h === 0 ? 'top-0.5' : '-translate-y-1/2',
                 )}
                 style={{ top: h * hourHeight }}
@@ -666,10 +694,12 @@ export function TimeGrid({
             ))}
             {interval < 60 &&
               HOURS.flatMap((h) =>
-                Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval).map((m) => (
+                Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval)
+                  .filter((m) => m % 15 === 0)
+                  .map((m) => (
                   <div
                     key={`m${h}-${m}`}
-                    className="absolute right-2.5 -translate-y-1/2 text-[9.5px] tabular-nums text-[#c4c3be]"
+                    className="absolute inset-x-0 -translate-y-1/2 text-center text-[9.5px] tabular-nums text-[#c4c3be]"
                     style={{ top: ((h * 60 + m) / 60) * hourHeight }}
                   >
                     :{String(m).padStart(2, '0')}
@@ -720,6 +750,7 @@ export function TimeGrid({
                   key={day.toISOString()}
                   data-day={dateKey(day)}
                   onClick={(e) => createAt(e, day)}
+                  onDoubleClick={(e) => createNoteAt(e, day)}
                   className="relative border-l border-[#ececea] first:border-l-0"
                   style={{
                     ...(colWidths
@@ -771,6 +802,7 @@ export function TimeGrid({
                           )
                         }
                         onClick={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
                         className={cn(
                           'absolute overflow-hidden rounded-[8px] text-left transition-[box-shadow,transform] duration-150',
                           isDragging
@@ -842,7 +874,10 @@ export function TimeGrid({
         </div>
       </div>
       {slotTarget && (
-        <SlotNotesPopover target={slotTarget} onClose={() => setSlotTarget(null)} />
+        <SlotNotesPopover
+          key={`${dateKey(slotTarget.day)}-${slotTarget.slot}-${slotTarget.focusId ?? ''}`}
+          target={slotTarget}
+          onClose={() => setSlotTarget(null)} />
       )}
     </div>
   )
