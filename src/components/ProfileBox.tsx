@@ -115,16 +115,16 @@ export function ProfileBox() {
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'flex w-full items-center gap-2.5 rounded-[14px] px-2 py-2 text-left transition hover:bg-white hover:shadow-[0_1px_3px_rgba(0,0,0,0.08)]',
-          open && 'bg-white shadow-[0_1px_3px_rgba(0,0,0,0.08)]',
+          'group flex w-full items-center gap-3 rounded-[14px] border border-[#ececea] bg-white px-2.5 py-2 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:border-[#dcdbd7] hover:shadow-[0_4px_14px_-6px_rgba(0,0,0,0.18)]',
+          open && 'border-[#dcdbd7] shadow-[0_4px_14px_-6px_rgba(0,0,0,0.18)]',
         )}
       >
-        <Avatar size={34} name={user.fullName} src={user.avatar} />
+        <Avatar size={36} name={user.fullName} src={user.avatar} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold text-[#191919]">{user.fullName}</span>
           <span className="block truncate text-[11px] text-[#8f8e8a]">{user.email}</span>
         </span>
-        <ChevronUp className={cn('h-4 w-4 shrink-0 text-[#b4b3ae] transition-transform', open && 'rotate-180')} />
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg text-[#8f8e8a] transition group-hover:bg-[#f3f3f1] group-hover:text-[#191919]"><ChevronUp className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} /></span>
       </button>
     </div>
   )
