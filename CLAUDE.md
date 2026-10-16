@@ -48,3 +48,10 @@ Never start a competing server on the same port.
 ## Checks
 
 `npm run build`, `npm test`, `npm run test:deploy` must pass before a push.
+
+## Claude cloud sessions only
+
+Claude on claude.ai runs in its own cloud copy of the repo, not in the folder
+above. The SessionStart hook pulls `origin/main` automatically. After a
+successful "push it", rebuild the claude.ai preview artifact from the new
+`main` — it is a static snapshot and cannot refresh itself.
