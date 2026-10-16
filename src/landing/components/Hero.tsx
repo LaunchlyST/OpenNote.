@@ -2,7 +2,7 @@ import { createContext, useContext, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { useTilt } from '../motion'
 import { RollingHeadline } from './RollingHeadline'
-import { BookOpen, ChevronLeft, ChevronRight, Sparkles, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, CalendarDays, Clock, Coffee, PenLine, Pin, StickyNote, Sun } from 'lucide-react'
 import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
 import { HERO } from '../content'
@@ -84,10 +84,8 @@ export function Hero() {
           </p>
         </div>
 
-        <HeroPlanTabs />
-
         {/* The real interface, in a laptop */}
-        <div className="lp-settle relative mx-auto mt-6 max-w-[1040px] sm:mt-8" style={{ animationDelay: '380ms' }}>
+        <div className="lp-settle relative mx-auto mt-14 max-w-[1040px] sm:mt-16" style={{ animationDelay: '380ms' }}>
           <div data-anim="tilt">
           <div ref={laptopRef} className="relative rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
             <HeroPlanScreens />
@@ -122,41 +120,6 @@ function useHeroSwipe() {
   return swipe
 }
 
-function HeroPlanTabs() {
-  const { index, go, onKeyDown } = useHeroSwipe()
-  return (
-    <div className="mt-12 flex justify-center sm:mt-14">
-      <div role="tablist" aria-label="OpenNote plans" className="relative grid w-full max-w-[340px] grid-cols-2 rounded-[12px] bg-[#ececea] p-1">
-        <span
-          aria-hidden="true"
-          className="absolute inset-y-1 left-1 w-[calc((100%-8px)/2)] rounded-[9px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] motion-safe:transition-transform motion-safe:duration-300"
-          style={{ transform: `translateX(${index * 100}%)` }}
-        />
-        {PLANS.map((plan, i) => (
-          <button
-            key={plan.key}
-            id={`hero-plan-tab-${plan.key}`}
-            type="button"
-            role="tab"
-            aria-selected={index === i}
-            aria-controls={`hero-plan-panel-${plan.key}`}
-            tabIndex={index === i ? 0 : -1}
-            onClick={() => go(i)}
-            onKeyDown={onKeyDown}
-            className={cn(
-              'relative z-10 inline-flex items-center justify-center gap-1.5 rounded-[9px] py-2 text-[13.5px] font-medium transition-colors',
-              index === i ? 'text-lp-ink' : 'text-lp-body hover:text-lp-ink',
-            )}
-          >
-            {plan.key === 'pro' && <Sparkles className="h-3.5 w-3.5 text-[#6b55c9]" aria-hidden="true" />}
-            {plan.tab}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function HeroPlanScreens() {
   const { index, go, dragging, trackStyle, viewportProps } = useHeroSwipe()
   return (
@@ -167,8 +130,7 @@ function HeroPlanScreens() {
             <div
               key={plan.key}
               id={`hero-plan-panel-${plan.key}`}
-              role="tabpanel"
-              aria-labelledby={`hero-plan-tab-${plan.key}`}
+              aria-label={plan.title}
               aria-hidden={index !== i}
               inert={index !== i}
               className="relative w-full shrink-0"

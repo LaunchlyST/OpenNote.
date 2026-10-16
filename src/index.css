@@ -443,5 +443,17 @@ html.lp-cursor-on * {
 
 /* Free vs Pro swipe: soft premium glow behind the Pro "coming soon" card. */
 .lp-pro-glow {
-  background: radial-gradient(60% 50% at 50% 50%, rgba(139, 115, 230, 0.18), transparent 70%);
+  background:
+    radial-gradient(45% 40% at 50% 50%, rgba(139, 115, 230, 0.22), transparent 70%),
+    radial-gradient(30% 30% at 75% 30%, rgba(190, 242, 100, 0.18), transparent 70%);
+}
+.lp-pro-card {
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.9), rgba(255, 255, 255, 0.9) 45%, rgba(190, 242, 100, 0.9));
+  box-shadow: 0 30px 70px -30px rgba(76, 52, 170, 0.55), 0 0 0 6px rgba(255, 255, 255, 0.35);
+}
+.lp-pro-text {
+  background: linear-gradient(90deg, #6b55c9, #a78bfa);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
