@@ -233,12 +233,11 @@ function push(message) {
   }
 
   // Bring in anything remote before committing, so we never push from behind.
-  const outcome = pull()
-  if (outcome === 'blocked' && dirtyFiles().length === 0) return 1
-  if (dirtyFiles().length === 0) {
-    say(c.green('Nothing to commit - working tree is clean.'))
+  const dirtyAtStart = dirtyFiles().length
+  if (dirtyAtStart === 0) {
+    if (pull() === 'blocked') return 1
     if (syncState().ahead === 0) {
-      say(c.dim('  Already in sync with origin/main.'))
+      say(c.green('Nothing to push - working tree is clean and in sync with origin/main.'))
       return 0
     }
   }
@@ -255,8 +254,31 @@ function push(message) {
     say(c.dim('  Nothing new to commit.'))
   }
 
-  const { ahead } = syncState()
-  if (ahead === 0) {
+  // The remote may have moved while the checks were running. Now that the
+  // tree is clean, integrate it - but only by fast-forward. If both sides have
+  // commits, that is a real divergence and needs a human decision.
+  let state = syncState()
+  if (state.behind > 0 && state.ahead > 0) {
+    say(c.red(`Push blocked: main has diverged - ${state.ahead} local, ${state.behind} remote.`))
+    say(c.dim('  Your commit is saved. Nothing was force-pushed.'))
+    say(c.dim('  Resolve it deliberately, e.g.:  git pull --rebase origin main'))
+    return 1
+  }
+  if (state.behind > 0) {
+    say(c.dim(`  origin/main moved ${state.behind} commit(s) ahead; fast-forwarding first…`))
+    const result = spawnSync('git', ['merge', '--ff-only', `origin/${BRANCH}`], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: 'inherit',
+    })
+    if (result.status !== 0) {
+      say(c.red('  Could not fast-forward. Nothing was force-changed.'))
+      return 1
+    }
+    state = syncState()
+  }
+
+  if (state.ahead === 0) {
     say(c.green('Already in sync with origin/main.'))
     return 0
   }
@@ -269,7 +291,7 @@ function push(message) {
   })
   if (result.status !== 0) {
     say(c.red('Push rejected by GitHub. Nothing was force-pushed.'))
-    say(c.dim('  Usually this means someone else pushed first - run: npm run sync:pull'))
+    say(c.dim('  Someone else pushed first - run: npm run sync:pull'))
     return 1
   }
 
