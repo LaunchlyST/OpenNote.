@@ -8,7 +8,9 @@
  * refusal) and the real SMTP client path, delivered to OpenNote's built-in
  * loopback SMTP catcher. Nothing here reaches a real inbox.
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync, mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs'
+import { createServer as createTlsServer } from 'node:tls'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -37,7 +39,7 @@ const { db, ensureAppTables } = await import('../server/db.ts')
 ensureAppTables()
 const { env } = await import('../server/env.ts')
 const { renderEmail, enqueueEmail, processOutbox, setTransport, outboxLog, maskEmail } = await import('../server/mail/index.ts')
-const { localTransport, smtpTransport } = await import('../server/mail/transport.ts')
+const { localTransport, smtpTransport, productionMailProblem, createTransport } = await import('../server/mail/transport.ts')
 const { startSmtpCatcher } = await import('../server/mail/smtp-catcher.ts')
 const { readMailbox } = await import('../server/mail/dev-inbox.ts')
 
@@ -171,6 +173,64 @@ try {
     await processOutbox()
     check('without STARTTLS the send is refused (TLS is enforced)', t.queued && ['retrying', 'failed'].includes(row(t.id).status) && !caught.some((m) => m.to.join() === 'tls@example.com'), t.queued ? row(t.id).status : '')
     server.close()
+  }
+
+  console.log('\n  Certificate validation')
+  {
+    // A mail server presenting a self-signed (untrusted) certificate must be refused.
+    const key = join(tmp, 'k.pem')
+    const cert = join(tmp, 'c.pem')
+    execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', key, '-out', cert, '-days', '1', '-subj', '/CN=evil.mail.test'], { stdio: 'ignore' })
+    let handshakes = 0
+    const fake = createTlsServer({ key: readFileSync(key), cert: readFileSync(cert) }, (sock) => {
+      handshakes += 1
+      sock.write('220 fake ESMTP\r\n')
+    })
+    await new Promise<void>((r) => fake.listen(0, '127.0.0.1', () => r()))
+    env.smtp.host = '127.0.0.1'
+    env.smtp.port = (fake.address() as AddressInfo).port
+    env.smtp.secure = true
+    setTransport(smtpTransport())
+    const r = enqueueEmail('reset-password', 'cert@example.com', { url: LINK })
+    await processOutbox()
+    const st = r.queued ? row(r.id) : null
+    check('an untrusted certificate is refused (nothing sent)', st?.status !== 'sent', `${st?.status}: ${st?.lastError}`)
+    check('the refusal names the certificate problem', /certificate|self[- ]signed/i.test(st?.lastError ?? ''), st?.lastError ?? '')
+    check('no SMTP conversation took place over the untrusted link', handshakes === 0)
+    fake.close()
+    env.smtp.secure = false
+  }
+
+  console.log('\n  Production never fakes delivery')
+  {
+    const saved = { ...env.smtp, isProd: env.isProduction, base: env.baseURL, transport: env.mail.transport }
+    env.isProduction = true
+    env.baseURL = 'https://app.opennote.test'
+    env.mail.transport = 'local'
+    env.smtp.host = ''
+    check('production without SMTP_HOST is reported', /no mail server/i.test(productionMailProblem() ?? ''))
+    check('production never uses the dev inbox', createTransport().name === 'none')
+    env.mail.transport = 'smtp'
+    env.smtp.host = '127.0.0.1'
+    env.smtp.requireTLS = false
+    env.smtp.secure = false
+    check('production refuses the plaintext local-catcher setting', /SMTP_REQUIRE_TLS/.test(productionMailProblem() ?? '') && createTransport().name === 'none')
+    env.smtp.requireTLS = true
+    env.baseURL = 'http://app.opennote.test'
+    check('production refuses http:// links', /https/.test(productionMailProblem() ?? ''))
+    env.baseURL = 'https://app.opennote.test'
+    check('a correct production setup has no problems', productionMailProblem() === null && createTransport().name === 'smtp')
+    setTransport(createTransport())
+    env.mail.transport = 'local'
+    env.smtp.host = ''
+    setTransport(createTransport())
+    const r = enqueueEmail('reset-password', 'prod@example.com', { url: LINK })
+    await processOutbox()
+    check('a misconfigured production email is marked failed, not silently dropped', r.queued && row(r.id).status === 'failed', r.queued ? row(r.id).status : '')
+    Object.assign(env.smtp, saved)
+    env.isProduction = saved.isProd
+    env.baseURL = saved.base
+    env.mail.transport = saved.transport
   }
 
   console.log('\n  Secrets stay on the server')

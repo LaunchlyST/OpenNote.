@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { authClient } from './lib/auth-client'
+import { blockCacheWrites, clearAllUserCaches, clearOtherUserCaches } from './lib/local-cache'
+import { flushPendingSave, stopSync } from './sync'
+
+/** Set while a sign-out has not been confirmed by the server. */
+const SIGNOUT_PENDING = 'opennote.signout-pending'
 
 /**
  * Authentication for OpenNote, backed by Better Auth.
@@ -85,7 +90,47 @@ function origin(): string {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { data, isPending, refetch } = authClient.useSession()
+  const { data: liveData, isPending: livePending, refetch } = authClient.useSession()
+
+  // A previous sign-out that the server never confirmed (offline, server
+  // down): finish it before showing anything, so the old session cannot
+  // quietly bring the workspace back.
+  const [finishingSignOut, setFinishingSignOut] = useState(() => {
+    try {
+      return typeof window !== 'undefined' && window.sessionStorage.getItem(SIGNOUT_PENDING) === '1'
+    } catch {
+      return false
+    }
+  })
+  useEffect(() => {
+    if (!finishingSignOut) return
+    clearAllUserCaches()
+    authClient
+      .signOut()
+      .then(({ error }) => {
+        if (!error) window.sessionStorage.removeItem(SIGNOUT_PENDING)
+      })
+      .catch(() => {})
+      .finally(() => {
+        void refetch()
+        setFinishingSignOut(false)
+      })
+  }, [finishingSignOut, refetch])
+  // While a sign-out is unconfirmed, nobody is treated as signed in.
+  let pendingFlag = false
+  try {
+    pendingFlag = typeof window !== 'undefined' && window.sessionStorage.getItem(SIGNOUT_PENDING) === '1'
+  } catch {
+    /* ignore */
+  }
+  const data = finishingSignOut || pendingFlag ? null : liveData
+  const isPending = finishingSignOut || livePending
+
+  // Whoever is signed in now, no other account's cached copy stays in this browser.
+  const currentId = data?.user?.id
+  useEffect(() => {
+    if (currentId) clearOtherUserCaches(currentId)
+  }, [currentId])
   const [config, setConfig] = useState<AuthConfig>(DEFAULT_CONFIG)
 
   useEffect(() => {
@@ -125,6 +170,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       callbackURL: `${origin()}/app`,
     })
     if (error) fail(error)
+    try {
+      window.sessionStorage.removeItem(SIGNOUT_PENDING)
+    } catch {
+      /* ignore */
+    }
     await refetch()
     return { needsVerification: !res?.token }
   }, [refetch])
@@ -137,13 +187,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       callbackURL: `${origin()}/app`,
     })
     if (error) fail(error)
+    try {
+      window.sessionStorage.removeItem(SIGNOUT_PENDING)
+    } catch {
+      /* ignore */
+    }
     await refetch()
   }, [refetch])
 
+  /**
+   * Sign-out, in an order that leaves nothing behind:
+   * 1. push any edit still waiting to be saved (it belongs to this user),
+   * 2. stop syncing and block cache writes, so no late save restores data,
+   * 3. wipe this browser's cached workspaces,
+   * 4. end the session on the server (remembered and retried if it fails),
+   * 5. reload onto the sign-in page, dropping everything held in memory and
+   *    replacing the history entry so Back cannot return to the workspace.
+   */
   const signOut = useCallback(async () => {
-    await authClient.signOut()
-    await refetch()
-  }, [refetch])
+    await flushPendingSave().catch(() => {})
+    stopSync()
+    blockCacheWrites()
+    try {
+      window.sessionStorage.setItem(SIGNOUT_PENDING, '1')
+    } catch {
+      /* ignore */
+    }
+    clearAllUserCaches()
+    try {
+      const { error } = await authClient.signOut()
+      if (!error) window.sessionStorage.removeItem(SIGNOUT_PENDING)
+    } catch {
+      /* stays pending; finished on the next load */
+    }
+    window.location.replace('/app/signin')
+  }, [])
 
   const updateProfile = useCallback(async (patch: { fullName?: string; avatar?: string | null }) => {
     const body: { name?: string; image?: string | null } = {}

@@ -10,6 +10,7 @@ import { env, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
 import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
+import { productionMailProblem } from './mail/transport.ts'
 import { applyMigrations } from './schema.ts'
 import { PLANS, planOf, requirePlan } from './plans.ts'
 import { validateWorkspace } from './workspace.ts'
@@ -18,8 +19,9 @@ import { validateWorkspace } from './workspace.ts'
 await applyMigrations({ quiet: true })
 const { admins } = syncRoles()
 startMailWorker()
-if (env.isProduction && !env.baseURL.startsWith('https://')) {
-  console.warn(`[warn] BETTER_AUTH_URL is ${env.baseURL}. In production it must be your https:// domain — password reset and verification links are built from it.`)
+{
+  const problem = productionMailProblem()
+  if (problem) console.error(`[mail] EMAIL IS OFF: ${problem} Verification and reset emails will be marked failed, not sent.`)
 }
 
 const app = express()
@@ -129,7 +131,8 @@ app.use('/api', (_req, res) => {
 
 if (env.isProduction && existsSync(dist)) {
   app.use(express.static(dist, { index: false, maxAge: '1h' }))
-  app.get('*splat', (_req, res) => res.sendFile(resolve(dist, 'index.html')))
+  // The app shell is never cached, so Back after sign-out re-checks the session.
+  app.get('*splat', (_req, res) => res.set('Cache-Control', 'no-store').sendFile(resolve(dist, 'index.html')))
 }
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {

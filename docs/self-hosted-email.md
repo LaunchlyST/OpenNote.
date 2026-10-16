@@ -54,6 +54,16 @@ mail correctly. They do not prove delivery to Gmail, Outlook, etc.
 The outbox treats a 5xx reply (bad address, policy, authentication) as
 permanent and stops; 4xx and network errors are retried with backoff.
 
+## Production safety rules (enforced in code, tested)
+
+- Production never uses the dev inbox or a plaintext connection: with no
+  `SMTP_HOST`, with `SMTP_REQUIRE_TLS=false`, or with a non-https
+  `BETTER_AUTH_URL`, email is switched **off** and each message is marked
+  `failed` in the log — never silently dropped or faked. The server prints
+  `EMAIL IS OFF: <reason>` at startup.
+- The mail server's TLS certificate is always verified (TLS 1.2+); a
+  self-signed or mismatched certificate is refused.
+
 ## What real delivery to outside inboxes needs
 
 Code cannot replace these; they are infrastructure and reputation:

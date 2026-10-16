@@ -1,3 +1,4 @@
+import { cacheWritesAllowed } from '../lib/local-cache'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 
@@ -22,6 +23,8 @@ export function useLocalStorage<T>(
       first.current = false
       return
     }
+    // During sign-out nothing may be written back into the cache.
+    if (!cacheWritesAllowed()) return
     try {
       window.localStorage.setItem(key, JSON.stringify(value))
     } catch {

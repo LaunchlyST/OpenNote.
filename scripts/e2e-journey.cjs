@@ -112,6 +112,7 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
 
   await p.getByText('Journey Tester').first().click()
   await p.getByRole('menuitem', { name: /sign out/i }).first().click()
+  await p.getByRole('heading', { name: 'Welcome back' }).waitFor()
   await p.goto(`${B}/app/forgot-password`, { waitUntil: 'networkidle' })
   await p.getByLabel('Email address', { exact: true }).fill(email)
   await p.getByRole('button', { name: 'Send reset link' }).click()
