@@ -155,7 +155,7 @@ export function ProOverlay({ showBadge = true }: { showBadge?: boolean }) {
       </div>}
 
       <div className="absolute inset-0 grid place-items-center p-3 sm:p-6">
-        <div className="w-full max-w-[340px] rounded-[18px] border-[1.5px] border-lp-ink bg-white px-5 py-4 text-center shadow-[4px_4px_0_0_#191919] sm:max-w-[380px] sm:px-7 sm:py-6">
+        <div className="w-full max-w-[360px] rounded-[18px] border-[1.5px] border-lp-ink bg-white px-5 py-4 text-center shadow-[4px_4px_0_0_#191919] sm:max-w-[420px] sm:px-7 sm:py-6">
           <span className="mx-auto grid h-10 w-10 place-items-center rounded-[11px] border-[1.5px] border-lp-ink bg-lime-bright text-lp-ink shadow-[2px_2px_0_0_#191919] sm:h-11 sm:w-11">
             <Lock className="h-[18px] w-[18px]" strokeWidth={2.4} aria-hidden="true" />
           </span>
