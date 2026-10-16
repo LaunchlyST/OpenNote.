@@ -347,14 +347,17 @@ const [command = 'status', ...rest] = process.argv.slice(2)
 quiet = rest.includes('--quiet')
 const message = rest.find((a) => !a.startsWith('--'))
 
+/** Long-running commands hold the process open; one-shot commands exit. */
+let keepAlive = false
+
 let code = 0
 try {
   switch (command) {
     case 'status': status(); break
     case 'pull': code = pull() === 'blocked' ? 1 : 0; break
     case 'push': code = push(message); break
-    case 'watch': watch(); break
-    case 'dev': code = await dev(); break
+    case 'watch': watch(); keepAlive = true; break
+    case 'dev': code = await dev(); keepAlive = true; break
     default:
       say(c.red(`Unknown command "${command}".`))
       say(c.dim('  Try: status | pull | push | watch | dev'))
@@ -365,4 +368,6 @@ try {
   code = 1
 }
 
-process.exit(code)
+// `watch` and `dev` keep running until interrupted. Calling process.exit()
+// here would kill the watcher the instant its timers were armed.
+if (!keepAlive) process.exit(code)
