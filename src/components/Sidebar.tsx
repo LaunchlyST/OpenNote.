@@ -209,9 +209,13 @@ export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {})
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-[#ececea] bg-[#fbfbfa]">
+      <div className="flex h-[64px] shrink-0 items-center gap-2.5 px-4">
+        <AppIcon className="h-[30px] w-[30px] text-[30px]" />
+        <span className="text-[16px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
+      </div>
+
       <div className="scroll-area flex-1 overflow-y-auto">
-        {/* Month at a glance sits first; everything else follows below it. */}
-        <div className="px-3 pt-3">
+        <div className="px-3">
           <MiniCalendar />
         </div>
 
@@ -289,10 +293,6 @@ export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {})
       </div>
 
       <div className="shrink-0 border-t border-[#ececea] px-3 py-3">
-        <div className="mb-2.5 flex items-center gap-2 px-1">
-          <AppIcon className="h-6 w-6 text-[24px]" />
-          <span className="text-[14px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
-        </div>
         <ProfileBox />
       </div>
     </aside>
