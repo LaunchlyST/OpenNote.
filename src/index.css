@@ -440,3 +440,8 @@ html.lp-cursor-on * {
     animation: none;
   }
 }
+
+/* Free vs Pro swipe: soft premium glow behind the Pro "coming soon" card. */
+.lp-pro-glow {
+  background: radial-gradient(60% 50% at 50% 50%, rgba(139, 115, 230, 0.18), transparent 70%);
+}
