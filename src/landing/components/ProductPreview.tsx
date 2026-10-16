@@ -3,7 +3,7 @@ import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { useTilt } from '../motion'
 import { MousePointerClick } from 'lucide-react'
-import { DEMO_WEEK_TITLE } from '../demo'
+import { PREVIEW_TODAY } from '../today'
 import { ResponsiveAppWindow } from './mock/AppWindow'
 import type { MockView } from './mock/AppChrome'
 import { Reveal, Section, SectionHeading } from './primitives'
@@ -15,9 +15,9 @@ const VIEW_OPTIONS: Array<{ value: MockView; label: string; hint: string }> = [
 ]
 
 const DATE_LABELS: Record<MockView, string> = {
-  day: 'Thursday, October 8, 2026',
-  week: `${DEMO_WEEK_TITLE}, 2026`,
-  month: 'October 2026',
+  day: `${PREVIEW_TODAY.dayTitle}, ${PREVIEW_TODAY.year}`,
+  week: `${PREVIEW_TODAY.weekTitle}, ${PREVIEW_TODAY.year}`,
+  month: `${PREVIEW_TODAY.monthName} ${PREVIEW_TODAY.year}`,
 }
 
 export function ProductPreview() {

@@ -15,7 +15,8 @@ import {
 import { COLORS } from '../../../lib/colors'
 import { cn } from '../../../lib/id'
 import { AppIcon } from '../primitives'
-import { DEMO_CALENDARS, DEMO_DAY_NUMBERS, DEMO_EVENTS, DEMO_WEEKDAYS, demoClock } from '../../demo'
+import { DEMO_CALENDARS, DEMO_EVENTS, DEMO_WEEKDAYS, demoClock } from '../../demo'
+import { PREVIEW_TODAY as T } from '../../today'
 import type { MockView } from './AppChrome'
 
 /**
@@ -26,8 +27,8 @@ import type { MockView } from './AppChrome'
  */
 
 const LINE = '#ececea'
-/** Thursday the 8th is "today" in the sample week. */
-const TODAY = 3
+/** The visitor's real weekday (Monday = 0) is "today" in the sample week. */
+const TODAY = T.todayIndex
 const HOUR_H = 56
 const FIRST_HOUR = 8
 const LAST_HOUR = 21
@@ -40,28 +41,25 @@ const VIEWS: Array<{ value: MockView; label: string }> = [
 ]
 
 const HEADINGS: Record<MockView, [string, string]> = {
-  day: ['Thursday, October 8', '2026'],
-  week: ['October 5 – 11', '2026'],
-  month: ['October', '2026'],
+  day: [T.dayTitle, T.year],
+  week: [T.weekTitle, T.year],
+  month: [T.monthName, T.year],
 }
 
 /* ------------------------------------------------------------------ */
 /* Sidebar                                                             */
 /* ------------------------------------------------------------------ */
 
-/** Monday-first October 2026 grid, as the real mini calendar draws it. */
-const MINI_DAYS: Array<{ n: number; inMonth: boolean }> = [
-  ...[28, 29, 30].map((n) => ({ n, inMonth: false })),
-  ...Array.from({ length: 31 }, (_, i) => ({ n: i + 1, inMonth: true })),
-  ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ n, inMonth: false })),
-]
+/** Monday-first grid of the current month, as the real mini calendar draws it. */
+const MINI_DAYS = T.miniCells
+const WEEK_KEYS = new Set(T.weekKeys)
 
 function MiniCalendar() {
   return (
     <div className="rounded-2xl border bg-white px-3 pt-3.5 pb-3 shadow-[0_1px_3px_rgba(0,0,0,0.05)]" style={{ borderColor: LINE }}>
       <div className="mb-3 flex items-center justify-between px-0.5">
         <span className="text-[13px] font-semibold tracking-[-0.01em] text-[#191919]">
-          October <span className="font-normal text-[#8f8e8a]">2026</span>
+          {T.monthName} <span className="font-normal text-[#8f8e8a]">{T.year}</span>
         </span>
         <span className="flex items-center gap-2 text-[#8f8e8a]">
           <ChevronLeft className="h-4 w-4" />
@@ -77,8 +75,8 @@ function MiniCalendar() {
       </div>
       <div className="grid grid-cols-7 gap-y-0.5">
         {MINI_DAYS.map((d, i) => {
-          const isToday = d.inMonth && d.n === 8
-          const hasEvents = d.inMonth && DEMO_DAY_NUMBERS.includes(d.n)
+          const isToday = d.key === T.todayKey
+          const hasEvents = WEEK_KEYS.has(d.key)
           return (
             <span key={i} className="grid h-8 place-items-center">
               <span
@@ -137,7 +135,7 @@ function Sidebar() {
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r bg-[#fbfbfa]" style={{ borderColor: LINE }}>
       <div className="flex h-[64px] shrink-0 items-center gap-2.5 px-4">
-        <AppIcon day="8" className="h-[30px] w-[30px] text-[30px]" />
+        <AppIcon day={String(T.dayNumber)} className="h-[30px] w-[30px] text-[30px]" />
         <span className="text-[16px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
       </div>
 
@@ -284,7 +282,7 @@ function TimeGrid({ days }: { days: number[] }) {
                   i === TODAY ? 'bg-[#191919] text-white shadow-[0_2px_6px_-1px_rgba(0,0,0,0.35)]' : 'text-[#191919]',
                 )}
               >
-                {DEMO_DAY_NUMBERS[i]}
+                {T.weekNumbers[i]}
               </span>
             </span>
           ))}
@@ -363,14 +361,13 @@ function TimeGrid({ days }: { days: number[] }) {
 /* ------------------------------------------------------------------ */
 
 /** Sample events by date, mirroring the demo week plus a few later ones. */
-const MONTH_EVENTS: Record<number, Array<{ time: string; title: string; color: keyof typeof COLORS }>> = {}
+const MONTH_EVENTS: Record<string, Array<{ time: string; title: string; color: keyof typeof COLORS }>> = {}
 for (const e of DEMO_EVENTS) {
-  const n = DEMO_DAY_NUMBERS[e.day]
-  ;(MONTH_EVENTS[n] ??= []).push({ time: demoClock(e.start), title: e.title, color: e.color })
+  ;(MONTH_EVENTS[T.weekKeys[e.day]] ??= []).push({ time: demoClock(e.start), title: e.title, color: e.color })
 }
-MONTH_EVENTS[14] = [{ time: '10:00', title: 'Team sync', color: 'lime' }]
-MONTH_EVENTS[16] = [{ time: '15:30', title: 'Dentist', color: 'blue' }]
-MONTH_EVENTS[21] = [{ time: '11:00', title: 'Roadmap review', color: 'purple' }]
+MONTH_EVENTS[T.keyAfterMonday(9)] = [{ time: '10:00', title: 'Team sync', color: 'lime' }]
+MONTH_EVENTS[T.keyAfterMonday(11)] = [{ time: '15:30', title: 'Dentist', color: 'blue' }]
+MONTH_EVENTS[T.keyAfterMonday(16)] = [{ time: '11:00', title: 'Roadmap review', color: 'purple' }]
 
 function MonthGrid() {
   return (
@@ -387,9 +384,9 @@ function MonthGrid() {
         ))}
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-7" style={{ gridAutoRows: 'minmax(0, 1fr)' }}>
-        {MINI_DAYS.slice(0, 35).map((d, i) => {
-          const isToday = d.inMonth && d.n === 8
-          const events = d.inMonth ? (MONTH_EVENTS[d.n] ?? []) : []
+        {T.monthCells.map((d, i) => {
+          const isToday = d.key === T.todayKey
+          const events = d.inMonth ? (MONTH_EVENTS[d.key] ?? []) : []
           return (
             <div
               key={i}

@@ -7,6 +7,7 @@ import { useAuth } from '../../auth'
 import { cn } from '../../lib/id'
 import { HERO } from '../content'
 import { ResponsiveAppWindow } from './mock/AppWindow'
+import { PREVIEW_TODAY } from '../today'
 import { PLANS, ProOverlay, usePlanSwipe } from './PlanSwipe'
 import { AppIcon, Button } from './primitives'
 
@@ -136,7 +137,7 @@ function HeroPlanScreens() {
               className="relative w-full shrink-0"
             >
               {plan.key === 'free' ? (
-                <ResponsiveAppWindow view="week" label="opennote — week of October 5" />
+                <ResponsiveAppWindow view="week" label={`opennote — week of ${PREVIEW_TODAY.weekTitle.split(' –')[0]}`} />
               ) : (
                 <>
                   <div aria-hidden="true" className="pointer-events-none select-none">
