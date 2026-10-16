@@ -1,15 +1,17 @@
 /**
- * Sends one real test email through the SMTP settings in .env, so you can
- * confirm delivery before relying on password reset emails.
+ * Sends one test email right now through whatever .env configures, and says
+ * honestly where it went.
  *
  *   npm run mail:test -- you@example.com
  *
- * Prints whether the SMTP server accepted the login and the message. It never
- * prints the password.
+ * - No SMTP_HOST: written to the local dev inbox (never leaves this computer).
+ * - SMTP_HOST=127.0.0.1 + the catcher: goes over real SMTP to the local catcher.
+ * - SMTP_HOST=<your mail server>: handed to that server. "Accepted" means the
+ *   server took it — check the real inbox (and spam) to confirm delivery.
  */
-import nodemailer from 'nodemailer'
-import { env, smtpConfigured } from '../server/env.ts'
-import { sendActionEmail } from '../server/mail.ts'
+import { env } from '../server/env.ts'
+import { renderEmail } from '../server/mail/templates.ts'
+import { createTransport } from '../server/mail/transport.ts'
 
 const to = process.argv[2]?.trim()
 if (!to) {
@@ -17,38 +19,23 @@ if (!to) {
   process.exit(1)
 }
 
-const missing = [
-  !env.smtp.host && 'SMTP_HOST',
-  !env.smtp.user && 'SMTP_USER',
-  !env.smtp.pass && 'SMTP_PASS',
-  !env.smtp.from && 'EMAIL_FROM',
-].filter(Boolean)
-if (!smtpConfigured || missing.length) {
-  console.error(`SMTP is not configured. Missing in .env: ${missing.join(', ') || 'SMTP_HOST / EMAIL_FROM'}`)
-  process.exit(1)
-}
+const transport = createTransport()
+const email = renderEmail('test', { url: `${env.baseURL}/app` })
+const where =
+  transport.name === 'local'
+    ? `the local dev inbox (${env.mail.mailboxDir}) — open http://localhost:5173/api/dev/mail`
+    : `${env.smtp.host}:${env.smtp.port}`
 
-console.log(`Connecting to ${env.smtp.host}:${env.smtp.port} as ${env.smtp.user}…`)
+console.log(`Sending a test email to ${to} via ${where}…`)
 try {
-  await nodemailer
-    .createTransport({
-      host: env.smtp.host,
-      port: env.smtp.port,
-      secure: env.smtp.port === 465,
-      auth: { user: env.smtp.user, pass: env.smtp.pass },
-    })
-    .verify()
-  console.log('  Login accepted.')
-
-  await sendActionEmail({
-    to,
-    subject: 'OpenNote test email',
-    heading: 'Your email setup works',
-    body: 'This is a test from your OpenNote server. Password reset and verification emails will be sent the same way. You can ignore this message.',
-    action: 'Open OpenNote',
-    url: `${env.baseURL}/app`,
-  })
-  console.log(`  Sent to ${to}. Check the inbox (and the spam folder).`)
+  await transport.send({ id: 0, to, ...email })
+  if (transport.name === 'local') {
+    console.log('  Saved to the local dev inbox. This is a LOCAL test: nothing was sent to a real inbox.')
+  } else if (['127.0.0.1', 'localhost', '::1'].includes(env.smtp.host)) {
+    console.log('  Accepted by the local SMTP server. This is a LOCAL test: nothing was sent to a real inbox.')
+  } else {
+    console.log(`  Accepted by ${env.smtp.host}. Now check ${to} (and its spam folder) to confirm real delivery.`)
+  }
 } catch (err) {
   console.error(`  Failed: ${err instanceof Error ? err.message : String(err)}`)
   process.exit(1)

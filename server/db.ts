@@ -34,5 +34,25 @@ export function ensureAppTables() {
       requestedBy TEXT,
       accepted INTEGER NOT NULL
     );
+
+    -- OpenNote's own email outbox: a durable queue and delivery log. Message
+    -- bodies (which hold one-time links) are erased once a message is sent or
+    -- given up on; the row stays as the log entry.
+    CREATE TABLE IF NOT EXISTS email_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind TEXT NOT NULL,
+      recipient TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      html TEXT,
+      text TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      nextAttemptAt INTEGER NOT NULL,
+      lastError TEXT,
+      createdAt INTEGER NOT NULL,
+      sentAt INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS email_outbox_due ON email_outbox (status, nextAttemptAt);
+    CREATE INDEX IF NOT EXISTS email_outbox_recipient ON email_outbox (recipient, createdAt);
   `)
 }

@@ -34,12 +34,9 @@ function check(label: string, ok: boolean, detail = '') {
   }
 }
 
-// Without SMTP, development mail is printed to the console. Capture it.
-const mail: string[] = []
-const realInfo = console.info
-console.info = (...args: unknown[]) => {
-  mail.push(args.join(' '))
-}
+// Without SMTP, OpenNote's outbox delivers to a local dev mailbox folder.
+const MAILBOX = join(tmp, 'mailbox')
+process.env.MAILBOX_DIR = MAILBOX
 
 const { applyMigrations } = await import('../server/schema.ts')
 await applyMigrations({ quiet: true })
@@ -47,6 +44,17 @@ const { toNodeHandler } = await import('better-auth/node')
 const { auth } = await import('../server/auth.ts')
 const { db } = await import('../server/db.ts')
 const { syncRoles, verifyEmail } = await import('../server/roles.ts')
+const { processOutbox } = await import('../server/mail/index.ts')
+const { readMailbox } = await import('../server/mail/dev-inbox.ts')
+
+/** Runs the outbox worker once and returns the plain text of every delivered message. */
+async function inboxText() {
+  await processOutbox()
+  return readMailbox().map((m) => m.text).join('\n')
+}
+function clearInbox() {
+  rmSync(MAILBOX, { recursive: true, force: true })
+}
 
 const app = express()
 app.all('/api/auth/*splat', toNodeHandler(auth))
@@ -191,20 +199,21 @@ try {
   console.log('\n  Password reset')
   {
     const oldCookie = jar(await call('/sign-in/email', { email: 'sam@opennote.test', password: PASSWORD }))
-    mail.length = 0
+    clearInbox()
     const req = await call('/request-password-reset', { email: 'sam@opennote.test', redirectTo: `${ORIGIN}/app/reset-password` })
+    const mailText = await inboxText()
     check('a reset can be requested', req.status === 200, `got ${req.status}`)
-    const link = mail.join('\n').match(/https?:\/\/\S+reset-password\/(\w+)\S*/)
-    check('a reset email was produced', Boolean(link), mail.join(' | '))
+    const link = mailText.match(/https?:\/\/\S+reset-password\/(\w+)\S*/)
+    check('a reset email was delivered to the local inbox', Boolean(link), mailText.slice(0, 200))
     const token = link?.[1] ?? ''
     check('the reset link points at the site URL (BETTER_AUTH_URL)', Boolean(link?.[0].startsWith(`${ORIGIN}/api/auth/reset-password/`)), link?.[0])
     check('the link returns the user to the reset page', Boolean(link?.[0].includes(encodeURIComponent(`${ORIGIN}/app/reset-password`))), link?.[0])
 
     // Better Auth checks redirectTo against trustedOrigins. Whether it refuses
     // the request or the link, the browser must never land on another site.
-    mail.length = 0
+    clearInbox()
     const evil = await call('/request-password-reset', { email: 'sam@opennote.test', redirectTo: 'https://evil.example/steal' })
-    const evilLink = mail.join('\n').match(/https?:\/\/\S+reset-password\/\w+\S*/)?.[0]
+    const evilLink = (await inboxText()).match(/https?:\/\/\S+reset-password\/\w+\S*/)?.[0]
     let landed = ''
     if (evil.status === 200 && evilLink) {
       const r = await fetch(evilLink.replace(ORIGIN, BASE), { redirect: 'manual', headers: { origin: ORIGIN } })
@@ -237,7 +246,6 @@ try {
     check('a forged token is rejected', forged.status === 400, `got ${forged.status}`)
   }
 } finally {
-  console.info = realInfo
   server.close()
   db.close()
   rmSync(tmp, { recursive: true, force: true })

@@ -12,6 +12,8 @@
     "test": "node scripts/ssr-smoke.mjs",
     "test:deploy": "tsx scripts/deploy-smoke.ts",
     "test:auth": "tsx scripts/auth-smoke.ts",
+    "test:mail": "tsx scripts/mail-smoke.ts",
+    "mail:catcher": "tsx scripts/mail-catcher.ts",
     "sync": "node scripts/sync.mjs status",
     "sync:status": "node scripts/sync.mjs status",
     "sync:pull": "node scripts/sync.mjs pull",

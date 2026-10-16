@@ -48,9 +48,9 @@ npm run dev                   # web on :5173, API on :3001 (proxied at /api)
 Production: `npm run build && npm run serve` runs one Node server that serves
 the site and the API. Set `BETTER_AUTH_URL` to the public https URL.
 
-- **Email** (verification + password reset): set the `SMTP_*` and `EMAIL_FROM`
-  variables — see *Email setup* below. Until then, links are printed to the API
-  console in development only, and email verification is not enforced.
+- **Email** (verification + password reset): OpenNote's own outbox — see
+  *Email* below. Without `SMTP_HOST`, mail goes to a local dev inbox and email
+  verification is not enforced.
 - **Administrators**: set `ADMIN_EMAILS` (comma separated). An account becomes
   `admin` only once that email is verified; everyone else is `user`. Without
   SMTP, confirm your own address from the server terminal with
@@ -61,43 +61,19 @@ the site and the API. Set `BETTER_AUTH_URL` to the public https URL.
 - **Data**: each user's calendar is stored server-side and only returned to
   that user's session (`/api/workspace`).
 
-### Email setup (password reset + verification)
+### Email (password reset + verification)
 
-OpenNote sends mail over plain SMTP, so any provider works. **Brevo** is the
-easiest free option: 300 emails/day, and you can send from an address you
-already own (e.g. your Gmail) without buying a domain.
+OpenNote has its own email system: branded templates, a durable outbox with
+retries and rate limiting, and an SMTP client — no third-party email service.
 
-1. Create a free account at <https://www.brevo.com>.
-2. **Add your sender**: *Senders, Domains & Dedicated IPs → Senders → Add a
-   sender*. Use the address you want emails to come from and confirm the
-   message Brevo sends to it.
-3. **Get SMTP details**: *SMTP & API → SMTP tab → Generate a new SMTP key*.
-   Copy the key straight away — Brevo only shows it once. The same page shows
-   the server, port and your SMTP **login** (it looks like
-   `xxxxxx@smtp-brevo.com`, not your account email).
-4. Put them in `.env` (never in `src/`, never committed):
-   ```
-   SMTP_HOST=smtp-relay.brevo.com
-   SMTP_PORT=587
-   SMTP_USER=<your SMTP login>
-   SMTP_PASS=<your SMTP key>
-   EMAIL_FROM="OpenNote <the-sender-you-verified@example.com>"
-   ```
-5. Restart `npm run dev`. The API prints `Email delivery: SMTP`.
-6. Send a real test: `npm run mail:test -- you@example.com`. It reports whether
-   the login and the send were accepted; then check the inbox and spam folder.
+- **Development, no setup:** leave `SMTP_HOST` empty. Emails land in a local
+  inbox at <http://localhost:5173/api/dev/mail> (never leaves your computer).
+- **Test the real SMTP path locally:** `npm run mail:catcher`, then set
+  `SMTP_HOST=127.0.0.1`, `SMTP_PORT=2525`, `SMTP_REQUIRE_TLS=false`.
+- **Real inboxes:** point `SMTP_*` at your own mail server.
 
-Notes:
-- **Resend** also works (`smtp.resend.com`, port 465, user `resend`, password =
-  API key), but on the free plan it only delivers to your own address until you
-  verify a domain you own.
-- Reset links are built from `BETTER_AUTH_URL`, so set it to the address people
-  actually use (`http://localhost:5173` locally, your https URL in production).
-- Links expire after one hour, work once, and sign out other devices.
-- Sending from a free mailbox (Gmail, Outlook) through a third-party service can
-  land in spam. A domain you own, verified in Brevo, fixes that later.
-- Once SMTP is set, email verification is switched on automatically, so new
-  accounts (including the admin) must confirm their address.
+Full details, and what infrastructure real delivery needs (domain, port 25,
+reverse DNS, SPF/DKIM/DMARC), are in [docs/self-hosted-email.md](docs/self-hosted-email.md).
 
 ## Tests
 
@@ -105,7 +81,8 @@ Notes:
 npm test           # SSR smoke test for the landing page and calendar
 npm run test:deploy # deployment API safety checks (never publishes anything)
 npm run test:auth  # sign-in/out, Remember Me, admin roles, password reset
-npm run mail:test -- you@example.com  # one real email through your SMTP settings
+npm run test:mail  # templates, outbox, retries, rate limits, SMTP path (local)
+npm run mail:test -- you@example.com  # send one test email via current settings
 ```
 
 `test:deploy` boots the real Express router against a throwaway SQLite database

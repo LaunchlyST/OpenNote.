@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth'
 import { admin } from 'better-auth/plugins'
 import { db } from './db.ts'
 import { env, requireEmailVerification } from './env.ts'
-import { sendActionEmail } from './mail.ts'
+import { enqueueEmail } from './mail/index.ts'
 import { syncRoles } from './roles.ts'
 
 export const auth = betterAuth({
@@ -21,15 +21,10 @@ export const auth = betterAuth({
     resetPasswordTokenExpiresIn: 60 * 60,
     // A password reset signs every other device out.
     revokeSessionsOnPasswordReset: true,
+    // Queued, not sent inline: the response time is the same whether or not
+    // the account exists, and a slow mail server never blocks the request.
     sendResetPassword: async ({ user, url }) => {
-      await sendActionEmail({
-        to: user.email,
-        subject: 'Reset your OpenNote password',
-        heading: 'Reset your password',
-        body: 'We received a request to reset the password for your OpenNote account. This link expires in one hour. If you did not ask for this, you can ignore this email.',
-        action: 'Choose a new password',
-        url,
-      })
+      enqueueEmail('reset-password', user.email, { url, name: user.name })
     },
   },
 
@@ -39,14 +34,7 @@ export const auth = betterAuth({
     sendOnSignIn: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      await sendActionEmail({
-        to: user.email,
-        subject: 'Verify your OpenNote email',
-        heading: 'Confirm your email address',
-        body: 'Thanks for signing up for OpenNote. Confirm your email address to finish creating your account.',
-        action: 'Verify email',
-        url,
-      })
+      enqueueEmail('verify-email', user.email, { url, name: user.name })
     },
   },
 

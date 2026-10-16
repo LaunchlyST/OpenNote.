@@ -85,6 +85,29 @@ export const env = {
     user: process.env.SMTP_USER ?? '',
     pass: process.env.SMTP_PASS ?? '',
     from: process.env.EMAIL_FROM ?? '',
+    /** Implicit TLS (port 465). Defaults to true on 465, false otherwise. */
+    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : Number(process.env.SMTP_PORT ?? 587) === 465,
+    /** Refuse to send unless STARTTLS succeeds. On by default; off only for a local catcher. */
+    requireTLS: process.env.SMTP_REQUIRE_TLS !== 'false',
+  },
+
+  mail: {
+    /**
+     * smtp  – deliver through SMTP_HOST (your own server, or the local catcher)
+     * local – write each message to MAILBOX_DIR and show it at /api/dev/mail
+     *         (development only; never used in production)
+     */
+    transport: (process.env.MAIL_TRANSPORT ?? (process.env.SMTP_HOST ? 'smtp' : 'local')) as 'smtp' | 'local',
+    mailboxDir: process.env.MAILBOX_DIR ?? 'data/mailbox',
+    /** Max emails one address can be sent per hour (all kinds together). */
+    perRecipientPerHour: Number(process.env.MAIL_RATE_PER_HOUR ?? 5),
+    maxAttempts: Number(process.env.MAIL_MAX_ATTEMPTS ?? 5),
+    /** Optional DKIM signing for a self-hosted sender domain. */
+    dkim: {
+      domain: process.env.DKIM_DOMAIN ?? '',
+      selector: process.env.DKIM_SELECTOR ?? '',
+      privateKeyPath: process.env.DKIM_PRIVATE_KEY_PATH ?? '',
+    },
   },
 
   /**

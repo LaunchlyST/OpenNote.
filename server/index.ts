@@ -8,11 +8,14 @@ import { db } from './db.ts'
 import { deployRouter } from './deploy.ts'
 import { env, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
+import { devMailRouter } from './mail/dev-inbox.ts'
+import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
 import { applyMigrations } from './schema.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
 const { admins } = syncRoles()
+startMailWorker()
 
 const app = express()
 app.disable('x-powered-by')
@@ -87,6 +90,20 @@ app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
 // Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())
 
+// Email delivery log for administrators: status only, never bodies or links.
+app.get('/api/admin/mail-log', requireUser, async (req: AuthedRequest, res) => {
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
+  if ((session?.user as { role?: string } | undefined)?.role !== 'admin') {
+    res.status(403).json({ error: 'Administrators only.' })
+    return
+  }
+  res.set('Cache-Control', 'no-store').json({ transport: transportName(), messages: outboxLog(100) })
+})
+
+// Development inbox: read what OpenNote "sent", without any mail server.
+// Never mounted in production.
+if (!env.isProduction) app.use('/api/dev/mail', devMailRouter())
+
 // In production the same server also serves the built single-page app.
 const dist = resolve('dist')
 if (env.isProduction && existsSync(dist)) {
@@ -102,6 +119,6 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(env.apiPort, () => {
   console.log(`OpenNote API listening on http://localhost:${env.apiPort}`)
   console.log(`  Administrators: ${admins.length ? admins.join(', ') : 'none (set ADMIN_EMAILS and verify the address)'}`)
-  console.log(`  Email delivery: ${smtpConfigured ? 'SMTP' : 'off (links printed to this console in development)'}`)
+  console.log(`  Email delivery: ${transportName() === 'smtp' ? `SMTP via ${env.smtp.host}:${env.smtp.port}` : transportName() === 'local' ? 'local dev inbox → http://localhost:5173/api/dev/mail' : 'OFF — set SMTP_HOST'}`)
   console.log(`  Email verification required: ${requireEmailVerification ? 'yes' : 'no'}`)
 })
