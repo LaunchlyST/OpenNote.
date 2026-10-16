@@ -40,4 +40,15 @@ export interface Settings {
   showWeekends: boolean
   /** pixel height of one hour row */
   hourHeight: number
+  /** The view the calendar opens on. */
+  defaultView: ViewMode
+  /** Suppresses the interface's entry animations for the whole app. */
+  reduceMotion: boolean
+  /** Whether the left sidebar starts collapsed. */
+  sidebarCollapsed: boolean
+  /**
+   * Two-step sign-in preference. Remembered per browser; sign-in runs locally
+   * so there is no second factor to verify against yet.
+   */
+  twoFactor: boolean
 }

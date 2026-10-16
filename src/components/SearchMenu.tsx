@@ -40,27 +40,27 @@ export function SearchMenu() {
       </IconButton>
 
       {open && (
-        <div className="animate-pop absolute right-0 z-50 mt-2 w-[320px] rounded-xl border border-[#e8eaef] bg-white p-2 shadow-[0_12px_32px_rgba(16,24,40,0.14)]">
-          <div className="flex items-center gap-2 rounded-lg bg-[#f4f5f8] px-2.5 py-1.5">
-            <Search className="h-3.5 w-3.5 text-[#8b90a0]" />
+        <div className="animate-pop absolute right-0 z-50 mt-2 w-[320px] rounded-2xl border border-line bg-white p-2 shadow-xl">
+          <div className="flex items-center gap-2 rounded-xl bg-surface px-2.5 py-1.5">
+            <Search className="h-3.5 w-3.5 text-muted" />
             <input
               autoFocus
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search events…"
-              className="w-full bg-transparent text-[12.5px] placeholder:text-[#a5aab8]"
+              className="w-full bg-transparent text-[12.5px] placeholder:text-faint"
             />
           </div>
 
           <div className="mt-1.5 max-h-[280px] overflow-y-auto scroll-area">
             {query.trim() === '' && (
-              <p className="px-2 py-3 text-[11.5px] text-[#a5aab8]">
+              <p className="px-2 py-3 text-[11.5px] text-faint">
                 Type to find an event by name.
               </p>
             )}
             {query.trim() !== '' && results.length === 0 && (
-              <p className="px-2 py-3 text-[11.5px] text-[#a5aab8]">
-                No events match “{query}”.
+              <p className="px-2 py-3 text-[11.5px] text-faint">
+                No events match "{query}".
               </p>
             )}
             {results.map((ev) => {
@@ -76,16 +76,16 @@ export function SearchMenu() {
                     setOpen(false)
                     setQuery('')
                   }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-[#f7f8fa]"
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition hover:bg-surface"
                 >
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"
                     style={{ background: color.dot }}
                   />
-                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">
+                  <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink">
                     {ev.title || 'Untitled'}
                   </span>
-                  <span className="shrink-0 text-[10.5px] text-[#8b90a0]">
+                  <span className="shrink-0 text-[10.5px] text-muted">
                     {weekdayShort(start)} {monthShort(start)} {start.getDate()},{' '}
                     {formatClock(start, settings.hour12)}
                   </span>
@@ -94,7 +94,7 @@ export function SearchMenu() {
             })}
           </div>
 
-          <div className="mt-1 flex items-center gap-1.5 border-t border-[#f0f1f4] px-2 pt-2 text-[10.5px] text-[#a5aab8]">
+          <div className="mt-1 flex items-center gap-1.5 border-t border-line px-2 pt-2 text-[10.5px] text-faint">
             <StickyNote className="h-3 w-3" />
             Notes live in the right-hand panel.
           </div>

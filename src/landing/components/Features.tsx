@@ -38,7 +38,7 @@ const ICONS: Record<string, ReactNode> = {
 
 function WeekVisual() {
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+    <div className="flex flex-col overflow-hidden rounded-xl border border-lp-line bg-lp-surface shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
       <div className="h-[150px]">
         <MockWeekTimeline hours={false} dense />
       </div>
@@ -48,7 +48,7 @@ function WeekVisual() {
 
 function EventVisual() {
   return (
-    <div className="rounded-xl border border-lp-line bg-white p-3 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+    <div className="rounded-xl border border-lp-line bg-lp-surface p-3 shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
       <p className="mb-1.5 text-[9px] font-semibold tracking-[0.08em] text-lp-muted uppercase">
         Title
       </p>
@@ -75,13 +75,13 @@ function EventVisual() {
             key={id}
             className={cn(
               'h-[13px] w-[13px] rounded-full ring-2 ring-white',
-              id === 'lime' && 'ring-lp-lime-600',
+              id === 'lime' && 'ring-[#a3d922]',
             )}
             style={{ background: COLORS[id].dot }}
           />
         ))}
       </div>
-      <p className="mt-3 rounded-lg bg-lp-lime py-1.5 text-center text-[10.5px] font-semibold text-[#2c3608]">
+      <p className="mt-3 rounded-lg bg-[#f5c518] py-1.5 text-center text-[10.5px] font-semibold text-[#1a1a2e]">
         Save event
       </p>
     </div>
@@ -90,7 +90,7 @@ function EventVisual() {
 
 function NotesVisual() {
   return (
-    <div className="flex h-full origin-top-left scale-[0.86] flex-col overflow-hidden rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+    <div className="flex h-full origin-top-left scale-[0.86] flex-col overflow-hidden rounded-xl border border-lp-line bg-lp-surface shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
       <div className="h-[176px]">
         <MockNotes count={3} />
       </div>
@@ -100,7 +100,7 @@ function NotesVisual() {
 
 function ColoursVisual() {
   return (
-    <div className="rounded-xl border border-lp-line bg-white p-3 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+    <div className="rounded-xl border border-lp-line bg-lp-surface p-3 shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
       <div className="mb-2 flex items-center justify-between">
         <p className="text-[8.5px] font-semibold tracking-[0.08em] text-lp-muted uppercase">
           My Calendars
@@ -132,7 +132,7 @@ function ColoursVisual() {
 
 function DayVisual() {
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+    <div className="flex flex-col overflow-hidden rounded-xl border border-lp-line bg-lp-surface shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
       <div className="h-[150px]">
         <MockDayTimeline dayIndex={3} dateLabel="Wednesday" dense />
       </div>
@@ -143,11 +143,11 @@ function DayVisual() {
 function NavVisual() {
   return (
     <div className="flex flex-col gap-2.5 sm:flex-row sm:items-stretch">
-      <div className="flex-1 rounded-xl border border-lp-line bg-white shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+      <div className="flex-1 rounded-xl border border-lp-line bg-lp-surface shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
         <MockMiniCalendar showCurrent />
       </div>
       <div className="flex flex-1 flex-col gap-2.5">
-        <div className="flex items-center gap-2 rounded-xl border border-lp-line bg-white px-3 py-2.5 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+        <div className="flex items-center gap-2 rounded-xl border border-lp-line bg-lp-surface px-3 py-2.5 shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
           <ChevronLeft className="h-3.5 w-3.5 text-lp-muted" />
           <span className="rounded-md border border-lp-line px-2 py-1 text-[10px] font-medium text-lp-body">
             Today
@@ -155,7 +155,7 @@ function NavVisual() {
           <span className="text-[11px] font-semibold text-lp-ink">October 5 – 11, 2026</span>
           <ChevronRight className="ml-auto h-3.5 w-3.5 text-lp-muted" />
         </div>
-        <div className="flex flex-1 flex-col justify-center gap-1.5 rounded-xl border border-lp-line bg-white p-3 shadow-[0_10px_24px_-16px_rgba(16,24,40,0.35)]">
+        <div className="flex flex-1 flex-col justify-center gap-1.5 rounded-xl border border-lp-line bg-lp-surface p-3 shadow-[0_10px_24px_-16px_rgba(0,0,0,0.6)]">
           <div className="grid grid-cols-4 gap-1.5">
             {(['Day', 'Full Week', 'Month'] as const).map((label, i) => (
               <span
@@ -163,7 +163,7 @@ function NavVisual() {
                 className={cn(
                   'rounded-md px-2 py-1.5 text-center text-[10px] font-medium',
                   i === 1
-                    ? 'bg-[#bef264] text-[#33400f]'
+                    ? 'bg-[#f5c518] text-[#1a1a2e]'
                     : 'bg-lp-sunken text-lp-body',
                 )}
               >
@@ -221,9 +221,9 @@ export function Features() {
           <Reveal key={feature.id} delay={(i % 3) * 90} className={feature.colClass}>
             <article
               className={cn(
-                'group relative flex h-full flex-col overflow-hidden rounded-[22px] border border-lp-line bg-white',
-                'shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300',
-                'hover:-translate-y-1 hover:border-[#dcdcd4] hover:shadow-[0_24px_52px_-28px_rgba(16,24,40,0.32)]',
+                'group relative flex h-full flex-col overflow-hidden rounded-[22px] border border-lp-line bg-lp-surface',
+                'shadow-[0_1px_2px_rgba(0,0,0,0.3)] transition-all duration-300',
+                'hover:-translate-y-1 hover:border-[#3a3f52] hover:shadow-[0_24px_52px_-28px_rgba(0,0,0,0.6)]',
               )}
             >
               {/* Wash */}
@@ -236,7 +236,7 @@ export function Features() {
               />
 
               <div className="relative flex items-start gap-3 p-5 pb-4">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-lp-lime-50 text-lp-lime-700 ring-1 ring-lp-lime/45 transition-transform duration-300 group-hover:scale-105">
+                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-[#f5c518]/10 text-[#f5c518] ring-1 ring-[#f5c518]/25 transition-transform duration-300 group-hover:scale-105">
                   {ICONS[feature.icon]}
                 </span>
                 <div className="min-w-0">

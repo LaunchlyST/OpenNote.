@@ -11,8 +11,26 @@ import {
 } from '../lib/date'
 import { cn } from '../lib/id'
 
-const ARROW =
-  'grid h-7 w-7 place-items-center rounded-lg text-[#8b90a0] transition hover:bg-[#eef0f4] hover:text-[#1f2330] active:scale-95'
+function Arrow({
+  label,
+  onClick,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onClick}
+      className="grid h-7 w-7 place-items-center rounded-lg text-muted transition-all duration-150 hover:bg-surface hover:text-ink hover:shadow-sm active:scale-95"
+    >
+      {children}
+    </button>
+  )
+}
 
 export function MiniCalendar() {
   const { selectedDate, selectDate, events, calendars, settings } = useApp()
@@ -20,7 +38,6 @@ export function MiniCalendar() {
     () => new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1),
   )
 
-  // Follow the main calendar when the selected month changes.
   useEffect(() => {
     setCursor((prev) =>
       prev.getFullYear() === selectedDate.getFullYear() &&
@@ -57,57 +74,52 @@ export function MiniCalendar() {
   const today = new Date()
 
   return (
-    <div className="border-b border-[#eceef2] px-3 pb-4 pt-4">
-      <div className="mb-3 flex items-center justify-between px-0.5">
-        <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#1f2330]">
+    <div className="rounded-2xl border border-line bg-white p-3 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="min-w-0 truncate text-[13px] font-bold tracking-[-0.01em] text-ink">
           {monthLong(cursor)}{' '}
-          <span className="font-normal text-[#8b90a0]">{cursor.getFullYear()}</span>
+          <span className="font-medium text-muted">{cursor.getFullYear()}</span>
         </h2>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            aria-label="Previous month"
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Arrow
+            label="Previous month"
             onClick={() =>
-              setCursor(
-                (c) => new Date(c.getFullYear(), c.getMonth() - 1, 1),
-              )
+              setCursor((c) => new Date(c.getFullYear(), c.getMonth() - 1, 1))
             }
-            className={ARROW}
           >
             <ChevronLeft className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Next month"
+          </Arrow>
+          <Arrow
+            label="Next month"
             onClick={() =>
-              setCursor(
-                (c) => new Date(c.getFullYear(), c.getMonth() + 1, 1),
-              )
+              setCursor((c) => new Date(c.getFullYear(), c.getMonth() + 1, 1))
             }
-            className={ARROW}
           >
             <ChevronRight className="h-4 w-4" />
-          </button>
+          </Arrow>
         </div>
       </div>
 
+      {/* Weekday headings */}
       <div className="mb-1 grid grid-cols-7">
         {cells.slice(0, 7).map((d, i) => (
           <span
             key={i}
-            className="grid h-6 place-items-center text-[10px] font-semibold uppercase tracking-[0.04em] text-[#a5aab8]"
+            className="grid h-6 place-items-center text-[10px] font-bold uppercase tracking-[0.06em] text-faint"
           >
             {weekdayShort(d).charAt(0)}
           </span>
         ))}
       </div>
 
+      {/* Days */}
       <div className="grid grid-cols-7 gap-y-0.5">
         {cells.map((d) => {
           const selected = isSameDay(d, selectedDate)
           const isToday = isSameDay(d, today)
           const inMonth = isSameMonth(d, cursor)
           const hasEvents = eventDays.has(dateKey(d))
+
           return (
             <button
               key={d.toISOString()}
@@ -115,18 +127,18 @@ export function MiniCalendar() {
               aria-label={d.toDateString()}
               aria-current={isToday ? 'date' : undefined}
               onClick={() => selectDate(d)}
-              className="group grid h-8 place-items-center"
+              className="group grid h-9 place-items-center"
             >
               <span
                 className={cn(
-                  'relative grid h-7 w-7 place-items-center rounded-full text-[12px] tabular-nums transition-all duration-150',
+                  'relative grid h-8 w-8 place-items-center rounded-full text-[12.5px] tabular-nums transition-all duration-200 ease-out',
                   selected
-                    ? 'bg-[#bef264] font-semibold text-[#33400f] shadow-[0_1px_3px_rgba(16,24,40,0.14)] ring-1 ring-inset ring-[#a3d922]/60'
+                    ? 'bg-accent-soft font-bold text-accent-text shadow-[0_3px_10px_-3px_rgba(103,138,20,0.55)] ring-2 ring-accent/70'
                     : isToday
-                      ? 'font-semibold text-[#5d7a0f] ring-1 ring-[#cbe98a] hover:bg-[#f2f8e0]'
+                      ? 'bg-white font-bold text-accent-text ring-1 ring-accent/60'
                       : inMonth
-                        ? 'font-medium text-[#3d4354] group-hover:bg-[#eef0f4] group-hover:text-[#1f2330]'
-                        : 'font-medium text-[#ccd0d9] group-hover:bg-[#f5f6f8]',
+                        ? 'font-medium text-ink group-hover:bg-surface group-hover:shadow-sm'
+                        : 'font-medium text-ghost group-hover:bg-surface',
                 )}
               >
                 {d.getDate()}
@@ -134,9 +146,12 @@ export function MiniCalendar() {
                   <span
                     className={cn(
                       'absolute bottom-[3px] h-[3px] w-[3px] rounded-full',
-                      inMonth ? 'bg-[#a3d922]' : 'bg-[#d4d8e0]',
+                      isToday ? 'bg-accent-deep' : inMonth ? 'bg-accent-deep/70' : 'bg-ghost',
                     )}
                   />
+                )}
+                {hasEvents && selected && (
+                  <span className="absolute bottom-[3px] h-[3px] w-[3px] rounded-full bg-accent-deep" />
                 )}
               </span>
             </button>

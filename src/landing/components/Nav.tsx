@@ -68,7 +68,7 @@ export function Nav() {
       className={cn(
         'fixed inset-x-0 top-0 z-50 transition-all duration-300',
         scrolled
-          ? 'border-b border-lp-line/80 bg-lp-bg/80 backdrop-blur-xl backdrop-saturate-150'
+          ? 'border-b border-lp-line/80 bg-[#0f1117]/90 backdrop-blur-xl backdrop-saturate-150'
           : 'border-b border-transparent bg-transparent',
       )}
     >
@@ -130,6 +130,17 @@ export function Nav() {
               className="hidden sm:inline-flex"
             >
               Sign In
+            </Button>
+          )}
+
+          {!authed && (
+            <Button
+              href={HERO.dashboardCta.href}
+              variant="ghost"
+              size="md"
+              className="hidden md:inline-flex"
+            >
+              {HERO.dashboardCta.label}
             </Button>
           )}
 
@@ -216,6 +227,16 @@ export function Nav() {
                 className="w-full"
               >
                 {secondary.label}
+              </Button>
+            )}
+            {!authed && (
+              <Button
+                href={HERO.dashboardCta.href}
+                variant="ghost"
+                size="lg"
+                className="w-full"
+              >
+                {HERO.dashboardCta.label}
               </Button>
             )}
           </div>

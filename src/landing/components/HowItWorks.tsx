@@ -16,17 +16,15 @@ const STEP_ICONS: Record<Step['icon'], ReactNode> = {
   notes: <StickyNote className="h-[18px] w-[18px]" strokeWidth={2.1} />,
 }
 
-/** Trimmed note list so the third panel stays legible when scaled up. */
 const DEMO_NOTES_ONE = [
   { title: 'Ideas', body: ['Add a focus timer to the planner.', 'Try a soft lime accent.'], tilt: '-rotate-[0.35deg]' },
   { title: 'Call back', body: ['Sam — invoice question before Friday.'], tilt: 'rotate-[0.3deg]' },
 ]
 
-/** Each step gets its own slice of the real interface, not a generic icon. */
 function StepVisual({ icon }: { icon: Step['icon'] }) {
   if (icon === 'calendar') {
     return (
-      <div className="origin-top scale-[1.22] overflow-hidden rounded-2xl border border-lp-line bg-white shadow-[0_12px_28px_-16px_rgba(16,24,40,0.3)] transition-transform duration-500 group-hover:scale-[1.26]">
+      <div className="origin-top scale-[1.22] overflow-hidden rounded-2xl border border-lp-line bg-lp-surface shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-[1.26]">
         <MockMiniCalendar showCurrent={false} />
       </div>
     )
@@ -34,7 +32,7 @@ function StepVisual({ icon }: { icon: Step['icon'] }) {
 
   if (icon === 'clock') {
     return (
-      <div className="flex flex-col overflow-hidden rounded-2xl border border-lp-line bg-white shadow-[0_12px_28px_-16px_rgba(16,24,40,0.3)]">
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-lp-line bg-lp-surface shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)]">
         <div className="h-[196px]">
           <MockWeekTimeline hours={false} dense />
         </div>
@@ -43,7 +41,7 @@ function StepVisual({ icon }: { icon: Step['icon'] }) {
   }
 
   return (
-    <div className="origin-top scale-[1.12] overflow-hidden rounded-2xl border border-lp-line bg-white shadow-[0_12px_28px_-16px_rgba(16,24,40,0.3)] transition-transform duration-500 group-hover:scale-[1.16]">
+    <div className="origin-top scale-[1.12] overflow-hidden rounded-2xl border border-lp-line bg-lp-surface shadow-[0_12px_28px_-16px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-[1.16]">
       <div className="h-[208px]">
         <MockNotes count={2} notes={DEMO_NOTES_ONE} />
       </div>
@@ -52,9 +50,9 @@ function StepVisual({ icon }: { icon: Step['icon'] }) {
 }
 
 const TINTS = [
-  'from-lp-lime/45',
-  'from-lp-blue/50',
-  'from-lp-yellow/50',
+  'from-[#f5c518]/15',
+  'from-[#60a5fa]/15',
+  'from-[#fbbf24]/15',
 ]
 
 export function HowItWorks() {
@@ -68,7 +66,6 @@ export function HowItWorks() {
         />
       </Reveal>
 
-      {/* Connecting rule sits behind the cards on wide screens */}
       <div
         aria-hidden="true"
         className="relative mt-14 hidden lg:block"
@@ -81,17 +78,15 @@ export function HowItWorks() {
           <Reveal as="li" key={step.number} delay={i * 110}>
             <article
               className={cn(
-                'group relative flex h-full flex-col rounded-[22px] border border-lp-line bg-white p-5',
-                'shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-all duration-300',
-                'hover:-translate-y-1 hover:border-[#dcdcd4] hover:shadow-[0_20px_44px_-24px_rgba(16,24,40,0.28)]',
+                'group relative flex h-full flex-col rounded-[22px] border border-lp-line bg-lp-surface p-5',
+                'shadow-[0_1px_2px_rgba(0,0,0,0.3)] transition-all duration-300',
+                'hover:-translate-y-1 hover:border-[#3a3f52] hover:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.5)]',
               )}
             >
-              {/* Numbered badge */}
-              <span className="absolute -top-3.5 left-5 z-10 grid h-8 min-w-8 place-items-center rounded-full bg-lp-charcoal px-2 text-[12px] font-semibold tracking-[0.04em] text-white shadow-[0_6px_14px_-6px_rgba(20,22,28,0.6)]">
+              <span className="absolute -top-3.5 left-5 z-10 grid h-8 min-w-8 place-items-center rounded-full bg-gradient-to-r from-[#f5c518] to-[#e5b800] px-2 text-[12px] font-bold tracking-[0.04em] text-[#1a1a2e] shadow-[0_6px_14px_-6px_rgba(245,197,24,0.5)]">
                 {step.number}
               </span>
 
-              {/* Visual */}
               <div
                 className={cn(
                   'relative mt-3 h-[210px] overflow-hidden rounded-2xl bg-gradient-to-br to-transparent p-4',
@@ -102,7 +97,7 @@ export function HowItWorks() {
               </div>
 
               <div className="mt-5 flex items-center gap-2.5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-lp-lime-50 text-lp-lime-700 ring-1 ring-lp-lime/45">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-[#f5c518]/10 text-[#f5c518] ring-1 ring-[#f5c518]/25">
                   {STEP_ICONS[step.icon]}
                 </span>
                 <h3 className="text-[19px] font-semibold tracking-[-0.02em] text-lp-ink">

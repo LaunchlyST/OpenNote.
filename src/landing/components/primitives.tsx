@@ -16,13 +16,6 @@ export interface RevealProps {
   as?: ElementType
 }
 
-/**
- * Fades content up the first time it scrolls into view.
- *
- * Content is only ever hidden via CSS, and the reduced-motion rules in
- * `index.css` force it visible again — so the page degrades to fully readable
- * if the observer never fires.
- */
 export function Reveal({ children, delay = 0, className, as }: RevealProps) {
   const Tag = (as ?? 'div') as ElementType
   const ref = useRef<HTMLElement | null>(null)
@@ -69,14 +62,14 @@ export function Logo({ className, size = 'md', markOnly = false }: LogoProps) {
     <span className={cn('inline-flex items-center gap-2.5', className)}>
       <span
         className={cn(
-          'grid shrink-0 place-items-center bg-lp-lime text-[#33400f] shadow-[0_2px_6px_rgba(120,160,20,0.28),inset_0_-1px_0_rgba(90,120,10,0.18)]',
+          'grid shrink-0 place-items-center bg-gradient-to-br from-[#f5c518] to-[#e5b800] text-[#1a1a2e] shadow-[0_4px_16px_rgba(245,197,24,0.35)]',
           mark,
         )}
       >
         <StickyNote style={{ width: icon, height: icon }} strokeWidth={2.3} />
       </span>
       {!markOnly && (
-        <span className={cn('font-semibold tracking-[-0.03em] text-lp-ink', word)}>
+        <span className={cn('font-bold tracking-[-0.03em] text-lp-ink', word)}>
           OpenNote
         </span>
       )}
@@ -96,12 +89,12 @@ const BUTTON_BASE =
 
 const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
   primary:
-    'bg-lp-lime text-[#2c3608] shadow-[0_6px_18px_rgba(140,185,20,0.28),inset_0_-1px_0_rgba(110,145,10,0.22)] hover:bg-[#b4ee56] hover:shadow-[0_10px_26px_rgba(140,185,20,0.34)] active:scale-[0.985] disabled:bg-lp-line disabled:text-lp-muted disabled:shadow-none',
+    'bg-gradient-to-r from-[#f5c518] to-[#e5b800] text-[#1a1a2e] shadow-[0_8px_32px_rgba(245,197,24,0.35),inset_0_-1px_0_rgba(180,150,0,0.3)] hover:shadow-[0_12px_40px_rgba(245,197,24,0.45),inset_0_-1px_0_rgba(180,150,0,0.3)] hover:brightness-110 active:scale-[0.985] disabled:bg-lp-line disabled:text-lp-muted disabled:shadow-none',
   secondary:
-    'border border-lp-line bg-white text-lp-ink shadow-[0_1px_2px_rgba(16,24,40,0.04)] hover:border-[#d9d9d2] hover:bg-lp-sunken hover:shadow-[0_6px_16px_rgba(16,24,40,0.07)] active:scale-[0.985] disabled:border-lp-line disabled:bg-white disabled:text-lp-muted disabled:shadow-none',
+    'border border-lp-line bg-lp-surface text-lp-ink shadow-[0_1px_2px_rgba(0,0,0,0.3)] hover:border-[#3a3f52] hover:bg-lp-sunken hover:shadow-[0_6px_20px_rgba(0,0,0,0.4)] active:scale-[0.985] disabled:border-lp-line disabled:bg-lp-surface disabled:text-lp-muted disabled:shadow-none',
   ghost:
     'text-lp-body hover:bg-lp-sunken hover:text-lp-ink active:scale-[0.985]',
-  dark: 'bg-lp-charcoal text-white shadow-[0_8px_22px_rgba(20,22,28,0.28)] hover:bg-lp-charcoal-2 hover:shadow-[0_12px_28px_rgba(20,22,28,0.34)] active:scale-[0.985] disabled:bg-lp-line disabled:text-lp-muted disabled:shadow-none',
+  dark: 'bg-lp-charcoal text-[#1a1a2e] shadow-[0_8px_22px_rgba(240,242,248,0.15)] hover:bg-lp-charcoal-2 hover:shadow-[0_12px_28px_rgba(240,242,248,0.2)] active:scale-[0.985] disabled:bg-lp-line disabled:text-lp-muted disabled:shadow-none',
 }
 
 const BUTTON_SIZES: Record<ButtonSize, string> = {
@@ -141,10 +134,6 @@ type ButtonProps =
       disabled?: boolean
     })
 
-/**
- * A link when it navigates, a button when it acts. Keeps keyboard and
- * screen-reader semantics correct without duplicating markup at call sites.
- */
 export function Button(props: ButtonProps) {
   const { children, variant = 'primary', size = 'md', className, icon } = props
   const { go, goSection } = useLandingNav()
@@ -213,8 +202,8 @@ export function Button(props: ButtonProps) {
 
 export function Eyebrow({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-lp-line bg-white/80 px-3.5 py-1.5 text-[12.5px] font-semibold tracking-[0.08em] text-lp-lime-700 uppercase shadow-[0_1px_2px_rgba(16,24,40,0.04)] backdrop-blur-sm">
-      <span className="h-1.5 w-1.5 rounded-full bg-lp-lime-600" aria-hidden="true" />
+    <span className="inline-flex items-center gap-2 rounded-full border border-lp-line bg-lp-surface/80 px-3.5 py-1.5 text-[12.5px] font-semibold tracking-[0.08em] text-[#f5c518] uppercase shadow-[0_1px_2px_rgba(0,0,0,0.3)] backdrop-blur-sm">
+      <span className="h-1.5 w-1.5 rounded-full bg-[#f5c518]" aria-hidden="true" />
       {children}
     </span>
   )
@@ -246,8 +235,8 @@ export function SectionHeading({
       {eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
       <h2
         className={cn(
-          'max-w-[18ch] text-[clamp(1.9rem,4.4vw,3.1rem)] leading-[1.06] font-semibold',
-          tone === 'dark' ? 'text-white' : 'text-lp-ink',
+          'max-w-[18ch] text-[clamp(1.9rem,4.4vw,3.1rem)] leading-[1.06] font-bold',
+          tone === 'dark' ? 'text-[#1a1a2e]' : 'text-lp-ink',
           align === 'center' && 'mx-auto',
         )}
       >
@@ -257,7 +246,7 @@ export function SectionHeading({
         <p
           className={cn(
             'max-w-[58ch] text-[17px] leading-relaxed',
-            tone === 'dark' ? 'text-white/70' : 'text-lp-body',
+            tone === 'dark' ? 'text-[#1a1a2e]/70' : 'text-lp-body',
           )}
         >
           {description}
@@ -285,8 +274,8 @@ export function Section({
       className={cn(
         'relative scroll-mt-24 px-5 py-20 sm:px-8 md:py-28',
         tone === 'light' && 'bg-lp-bg',
-        tone === 'muted' && 'bg-lp-sunken',
-        tone === 'dark' && 'bg-lp-charcoal',
+        tone === 'muted' && 'bg-[#0c0e13]',
+        tone === 'dark' && 'bg-[#0c0e13]',
         className,
       )}
     >

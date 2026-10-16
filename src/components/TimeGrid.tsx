@@ -22,6 +22,8 @@ import { useNow } from '../hooks'
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
 const SNAP = 15
 const DAY_MINUTES = 1440
+/** Gap between the week-header day cards. Must match the `gap-*` class used below. */
+const DAY_HEADER_GAP = 6
 
 interface Placed {
   event: CalendarEvent
@@ -45,7 +47,6 @@ interface DragState {
   moved: boolean
 }
 
-/** Minutes of this single day that the event covers, clipped to 0..1440. */
 function segment(event: CalendarEvent, day: Date) {
   const dayStart = startOfDay(day).getTime()
   const s = Math.max(new Date(event.start).getTime(), dayStart)
@@ -55,7 +56,6 @@ function segment(event: CalendarEvent, day: Date) {
   return { startMin, endMin }
 }
 
-/** Side-by-side columns for overlapping events. */
 function layoutDay(eventsIn: CalendarEvent[], day: Date): Placed[] {
   const items = eventsIn
     .map((ev) => ({ ev, ...segment(ev, day) }))
@@ -102,11 +102,6 @@ function layoutDay(eventsIn: CalendarEvent[], day: Date): Placed[] {
   return out
 }
 
-/**
- * `days` drives the day-name header; `gridDays` drives the timeline columns.
- * They differ while Full Week is focused on a single day: the header keeps all
- * seven names for context while the grid shows just that day, full width.
- */
 export function TimeGrid({
   days,
   gridDays = days,
@@ -137,17 +132,6 @@ export function TimeGrid({
 
   const isSingleDay = gridDays.length === 1
 
-  // Measure the grid so single-day event cards can keep the same
-  // width as one week-view column instead of stretching full-width.
-  // clientWidth keeps the measurement on whole pixels (the browser rounds
-  // it) and matches the column area that the day header must line up with.
-  //
-  // The columns are laid out at the width measured here, so the container
-  // must be allowed to shrink (`min-w-0`). Without that, the default
-  // `min-width: auto` keeps the container as wide as its own columns, the
-  // measurement never changes again, and a stale width clips the last days.
-  // The window listener re-measures in case the panel resizes without the
-  // grid itself changing (rail toggles, notes panel opening).
   useLayoutEffect(() => {
     const el = gridRef.current
     if (!el) return
@@ -162,19 +146,22 @@ export function TimeGrid({
     }
   }, [])
 
-  // Width of one week-view column at the current viewport size.
   const weekColumnWidth = gridWidth > 0 ? gridWidth / 7 : 0
 
-  // Integer-pixel column widths shared by the day header and the grid body.
-  // Distribution by a flexible row lands the 1px vertical separators on
-  // fractional coordinates, which makes the horizontal gridlines look
-  // broken or offset at each column join. Distribute the measured width in
-  // whole pixels instead so every separator sits on a clean pixel boundary.
-  const distribute = (count: number) => {
+  /**
+   * Splits `gridWidth` across `count` columns.
+   *
+   * `gaps` is the total gap the flex container inserts between columns. It has
+   * to come off the top before dividing, otherwise the widths plus the gaps
+   * overflow the container and the last column is clipped by the parent's
+   * `overflow-hidden`.
+   */
+  const distribute = (count: number, gaps = 0) => {
     if (gridWidth <= 0 || count <= 0) return null
-    const base = Math.floor(gridWidth / count)
+    const usable = gridWidth - gaps
+    const base = Math.floor(usable / count)
     if (base <= 0) return null
-    const rem = gridWidth - base * count
+    const rem = usable - base * count
     return Array.from({ length: count }, (_, i) => base + (i >= count - rem ? 1 : 0))
   }
 
@@ -184,10 +171,8 @@ export function TimeGrid({
     [gridWidth, gridDays.length],
   )
 
-  // The header can show a different number of cells than the grid, so it gets
-  // its own equally-distributed widths spanning the same measured area.
   const headerWidths = useMemo(
-    () => distribute(days.length),
+    () => distribute(days.length, DAY_HEADER_GAP * (days.length - 1)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [gridWidth, days.length],
   )
@@ -229,7 +214,6 @@ export function TimeGrid({
   const totalHeight = 24 * hourHeight
   const nowMin = minutesOfDay(now)
 
-  // Start the day at a sensible scroll offset.
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -336,15 +320,15 @@ export function TimeGrid({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white">
-      {/* Day header */}
-      <div className="flex h-[64px] shrink-0 border-b border-[#eceef2] bg-white">
-        <div className="w-[62px] shrink-0" />
+    <div className="flex min-h-0 flex-1 flex-col bg-canvas-warm">
+      {/* Day header — rounded cards */}
+      <div className="flex h-[84px] shrink-0 border-b border-line bg-white px-3 py-2.5">
+        <div className="w-[52px] shrink-0" />
         <div
-          className="flex border-l border-[#eceef2]"
+          className="flex gap-1.5"
           style={
             headerWidths
-              ? { width: gridWidth + 1, flex: '0 0 auto' }
+              ? { width: gridWidth, flex: '0 0 auto' }
               : { flex: '1 1 0%', minWidth: 0 }
           }
         >
@@ -357,35 +341,56 @@ export function TimeGrid({
                 key={day.toISOString()}
                 type="button"
                 onClick={() => {
-                  // In Full Week, a day click narrows the grid to that day.
-                  // In Day view it just moves the selected date.
                   if (view === 'week') {
                     focusOnDate(day)
                   } else {
                     selectDate(day)
                   }
                 }}
-                className="group flex flex-col items-center justify-center gap-1 py-2 transition-colors"
+                className={cn(
+                  'group relative flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl border px-1 py-2 transition-all duration-200 ease-out',
+                  isSelected
+                    ? 'border-transparent bg-accent-soft shadow-[0_6px_16px_-8px_rgba(103,138,20,0.5)] ring-2 ring-accent/70'
+                    : isToday
+                      ? 'border-accent/40 bg-white shadow-[0_2px_8px_-4px_rgba(103,138,20,0.3)]'
+                      : 'border-transparent hover:border-border-subtle hover:bg-surface hover:shadow-sm',
+                )}
                 style={
                   headerWidths
                     ? { width: headerWidths[di], flex: '0 0 auto' }
                     : undefined
                 }
               >
-                <span className="flex items-center gap-1 text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#a5aab8] transition-colors group-hover:text-[#6b7183]">
+                <span
+                  className={cn(
+                    'flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-[0.09em] transition-colors duration-200',
+                    isSelected
+                      ? 'text-accent-text/85'
+                      : isToday
+                        ? 'text-accent-text/70'
+                        : 'text-faint group-hover:text-muted',
+                  )}
+                >
                   {weekdayShort(day)}
                   {count > 0 && (
-                    <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />
+                    <StickyNote
+                      className={cn(
+                        'h-2.5 w-2.5',
+                        isSelected || isToday
+                          ? 'text-accent-deep/70'
+                          : 'text-[#d8b31a]',
+                      )}
+                    />
                   )}
                 </span>
                 <span
                   className={cn(
-                    'grid h-8 min-w-8 place-items-center rounded-xl px-2 text-[15px] font-semibold tabular-nums transition-all duration-150',
+                    'grid h-9 min-w-9 place-items-center rounded-full px-2.5 text-[17px] font-bold tabular-nums transition-all duration-200 ease-out',
                     isSelected
-                      ? 'bg-[#bef264] text-[#33400f] shadow-[0_1px_3px_rgba(16,24,40,0.16)] ring-1 ring-inset ring-[#a3d922]/50'
+                      ? 'bg-white text-accent-text shadow-[0_2px_6px_-1px_rgba(103,138,20,0.4)]'
                       : isToday
-                        ? 'bg-[#f4fbe0] text-[#5d7a0f] ring-1 ring-inset ring-[#d4f08a] group-hover:bg-[#eef8d4]'
-                        : 'text-[#1f2330] group-hover:bg-[#f2f3f6]',
+                        ? 'bg-accent-soft text-accent-text ring-1 ring-accent/50'
+                        : 'text-ink',
                   )}
                 >
                   {day.getDate()}
@@ -402,13 +407,15 @@ export function TimeGrid({
         className="scroll-area relative flex-1 overflow-y-auto overflow-x-hidden"
       >
         <div className="relative flex" style={{ height: totalHeight }}>
-          <div className="relative w-[62px] shrink-0 select-none">
+          {/* Time labels */}
+          <div className="relative w-[56px] shrink-0 select-none">
             {HOURS.map((h) => (
               <div
                 key={h}
                 className={cn(
-                  'absolute right-2.5 text-[10.5px] font-medium tabular-nums text-[#9aa0b0]',
+                  'absolute right-3 text-[10.5px] font-semibold tabular-nums',
                   h === 0 ? 'top-0.5' : '-translate-y-1/2',
+                  'text-faint',
                 )}
                 style={{ top: h * hourHeight }}
               >
@@ -417,22 +424,23 @@ export function TimeGrid({
             ))}
           </div>
 
+          {/* Grid */}
           <div
             ref={gridRef}
-            className="relative flex min-w-0 flex-1 border-l border-[#eceef2]"
+            className="relative flex min-w-0 flex-1 border-l border-line"
           >
-            {/* gridlines */}
+            {/* Gridlines */}
             <div className="pointer-events-none absolute inset-0">
               {HOURS.map((h) => (
                 <div
                   key={`h${h}`}
-                  className="absolute inset-x-0 border-t border-[#e9eaee]"
+                  className="absolute inset-x-0 border-t border-grid-line"
                   style={{ top: h * hourHeight }}
                 />
               ))}
               {days.some((d) => isSameDay(d, now)) && (
                 <div
-                  className="absolute inset-x-0 border-t border-[#ffd6d7]"
+                  className="absolute inset-x-0 border-t border-now-line"
                   style={{ top: (nowMin / 60) * hourHeight }}
                 />
               )}
@@ -445,7 +453,7 @@ export function TimeGrid({
                 <div
                   key={day.toISOString()}
                   onClick={(e) => createAt(e, day)}
-                  className="relative border-l border-[#eceef2] first:border-l-0"
+                  className="relative border-l border-grid-line first:border-l-0"
                   style={
                     colWidths
                       ? { width: colWidths[di], flex: '0 0 auto' }
@@ -495,19 +503,19 @@ export function TimeGrid({
                         }
                         onClick={(e) => e.stopPropagation()}
                         className={cn(
-                          'absolute overflow-hidden rounded-[10px] border text-left transition-shadow duration-150',
+                          'group absolute overflow-hidden rounded-xl border text-left transition-all duration-150',
                           isDragging
-                            ? 'z-40 cursor-grabbing shadow-[0_10px_24px_rgba(16,24,40,0.2)]'
-                            : 'cursor-grab shadow-[0_1px_2px_rgba(16,24,40,0.07)] hover:z-20 hover:shadow-[0_4px_12px_rgba(16,24,40,0.13)]',
+                            ? 'z-40 cursor-grabbing shadow-[0_18px_36px_-10px_rgba(16,24,40,0.45)]'
+                            : 'cursor-grab shadow-[0_1px_2px_rgba(16,24,40,0.06)] hover:z-20 hover:-translate-y-px hover:shadow-[0_10px_22px_-8px_rgba(16,24,40,0.28)]',
                         )}
                         style={{
                           top,
                           height: renderHeight,
-                          left: `calc(${p.col * widthPct}% + 5px)`,
-                          width: `calc(${widthPct}% - 9px)`,
+                          left: `calc(${p.col * widthPct}% + 4px)`,
+                          width: `calc(${widthPct}% - 8px)`,
                           maxWidth:
                             isSingleDay && weekColumnWidth > 0
-                              ? Math.max(120, weekColumnWidth - 9)
+                              ? Math.max(120, weekColumnWidth - 8)
                               : undefined,
                           background: color.bg,
                           borderColor: color.border,
@@ -517,12 +525,18 @@ export function TimeGrid({
                         }}
                         title={`${p.event.title || 'Untitled'} · ${formatClock(start, hour12)} – ${formatClock(end, hour12)}`}
                       >
-                        <div className="pointer-events-none px-2 py-[4px]">
+                        {/* Calendar colour stripe, so the category reads at a glance */}
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-y-0 left-0 w-[3px] rounded-l-xl opacity-70 transition-opacity group-hover:opacity-100"
+                          style={{ background: color.dot }}
+                        />
+                        <div className="pointer-events-none px-2.5 py-1.5 pl-3">
                           <div className="truncate text-[11.5px] font-semibold leading-tight tracking-[-0.005em]">
                             {p.event.title || 'Untitled'}
                           </div>
                           {height > 34 && (
-                            <div className="mt-[1px] truncate text-[10.5px] font-medium leading-tight opacity-75">
+                            <div className="mt-0.5 truncate text-[10.5px] font-medium leading-tight opacity-75">
                               {formatClock(start, hour12)} –{' '}
                               {formatClock(end, hour12)}
                             </div>
@@ -550,8 +564,8 @@ export function TimeGrid({
                       className="pointer-events-none absolute inset-x-0 z-30"
                       style={{ top: (nowMin / 60) * hourHeight }}
                     >
-                      <div className="relative border-t-[1.5px] border-[#ff5a5f]">
-                        <span className="absolute -left-[4px] -top-[4px] h-2 w-2 rounded-full bg-[#ff5a5f]" />
+                      <div className="relative border-t-[1.5px] border-now-indicator">
+                        <span className="absolute -left-[4px] -top-[4px] h-2 w-2 rounded-full bg-now-indicator" />
                       </div>
                     </div>
                   )}

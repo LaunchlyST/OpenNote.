@@ -14,10 +14,10 @@
   --color-hairline: #e9eaee;
 
   /* surfaces */
-  --color-canvas: #f4f5f7;
+  --color-canvas: #f8f9fa;
   --color-panel: #ffffff;
-  --color-rail: #fafbfc;
-  --color-well: #f7f8fa;
+  --color-rail: #fcfdfe;
+  --color-well: #f6f7f9;
 
   /* text */
   --color-muted: #8b90a0;
@@ -27,46 +27,85 @@
   /* lines */
   --color-line: #eceef2;
   --color-line-soft: #f0f1f4;
+
+  /* premium design tokens */
+  --color-charcoal: #2d3142;
+  --color-charcoal-light: #3d4257;
+  --color-surface: #f7f8fa;
+  --color-surface-hover: #f0f1f4;
+  --color-surface-active: #e8eaef;
+  --color-border-subtle: #e4e6ec;
+  --color-border-strong: #d4d8e0;
+  --color-shadow-color: rgba(16, 24, 40, 0.08);
+  --color-shadow-color-lg: rgba(16, 24, 40, 0.12);
+  --color-accent: #a3d922;
+  --color-accent-hover: #92c41e;
+  --color-accent-deep: #7fb312;
+  --color-accent-soft: #f0f9d9;
+  --color-accent-text: #4b6410;
+  --color-today-bg: #f0f9d9;
+  --color-today-ring: #c3e56a;
+  --color-selected-dark: #2d3142;
+  --color-selected-dark-text: #ffffff;
+  --color-event-selected: #2d3142;
+  --color-event-selected-text: #ffffff;
+  --color-now-indicator: #ef4444;
+  --color-now-line: #fca5a5;
+  --color-hover-overlay: rgba(16, 24, 40, 0.04);
+  --color-active-overlay: rgba(16, 24, 40, 0.06);
+
+  /* warm canvas used behind the calendar grid so day columns read as
+     sitting on a surface rather than as bare white */
+  --color-canvas-warm: #fafaf8;
+  --color-grid-line: #f0efec;
+  --color-grid-line-strong: #e8e6e1;
+
+  /* sticky-note palette — kept yellow, tuned for depth */
+  --color-note-bg: #fdf6ab;
+  --color-note-border: #f0e39a;
+  --color-note-title: #6b5b12;
+  --color-note-body: #7d6c1c;
+  --color-note-muted: #b3a344;
+  --color-note-well: #fbf4c6;
 }
 
 /* ---------- landing page palette ----------
- * Appended, never replacing anything above, so the calendar app keeps its
- * existing tokens. Pastel washes deliberately mirror the event colours in
- * `lib/colors.ts` so the marketing previews match the real product. */
+ * Premium SaaS palette: deep navy primary, warm amber accent, rich gradients.
+ * Distinct from the calendar app's lime-green identity. */
 @theme {
-  --color-lp-bg: #fbfbf9;
-  --color-lp-surface: #ffffff;
-  --color-lp-sunken: #f4f4f1;
-  --color-lp-line: #e8e8e3;
-  --color-lp-ink: #15171d;
-  --color-lp-body: #565b67;
-  --color-lp-muted: #868b97;
+  --color-lp-bg: #0f1117;
+  --color-lp-surface: #161922;
+  --color-lp-sunken: #1c1f2a;
+  --color-lp-line: #2a2e3d;
+  --color-lp-ink: #f0f2f8;
+  --color-lp-body: #b0b6c8;
+  --color-lp-muted: #6b7288;
 
-  --color-lp-lime: #bef264;
-  --color-lp-lime-600: #a3d922;
-  --color-lp-lime-700: #6f960a;
-  --color-lp-lime-50: #f3fce2;
+  --color-lp-lime: #f5c518;
+  --color-lp-lime-600: #e5b800;
+  --color-lp-lime-700: #c49e00;
+  --color-lp-lime-50: #fef9e7;
 
-  --color-lp-purple: #e6ddff;
-  --color-lp-blue: #d8ebff;
-  --color-lp-yellow: #fdf3ad;
-  --color-lp-pink: #ffdce9;
-  --color-lp-orange: #ffe6cc;
-  --color-lp-charcoal: #1b1e26;
-  --color-lp-charcoal-2: #242833;
+  --color-lp-purple: #a78bfa;
+  --color-lp-blue: #60a5fa;
+  --color-lp-yellow: #fbbf24;
+  --color-lp-pink: #f472b6;
+  --color-lp-orange: #fb923c;
+  --color-lp-charcoal: #f0f2f8;
+  --color-lp-charcoal-2: #e2e5ee;
 }
 
 :root {
   color-scheme: light;
 
-  /* elevation */
+  /* elevation - more dramatic */
   --shadow-xs: 0 1px 2px rgba(16, 24, 40, 0.05);
-  --shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.07), 0 1px 2px rgba(16, 24, 40, 0.04);
-  --shadow-md: 0 6px 16px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
-  --shadow-lg: 0 16px 40px rgba(16, 24, 40, 0.13), 0 4px 10px rgba(16, 24, 40, 0.05);
-  --shadow-xl: 0 28px 70px rgba(16, 24, 40, 0.22), 0 8px 20px rgba(16, 24, 40, 0.08);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.09), 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-md: 0 10px 25px rgba(15, 23, 42, 0.1), 0 4px 6px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 24px 48px rgba(15, 23, 42, 0.18), 0 12px 24px rgba(16, 24, 40, 0.08);
+  --shadow-xl: 0 40px 80px rgba(15, 23, 42, 0.25), 0 16px 32px rgba(16, 24, 40, 0.12);
 
-  --ring-brand: 0 0 0 3px rgba(190, 242, 100, 0.4);
+  --ring-brand: 0 0 0 3px rgba(190, 242, 100, 0.45);
 }
 
 html,
@@ -86,16 +125,31 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-button {
-  font: inherit;
-  color: inherit;
-}
+/* Form controls do not inherit typography or colour from the page by
+   default, so they need a nudge — but it has to live in `@layer base`.
 
-input,
-textarea,
-select {
-  font: inherit;
-  color: inherit;
+   Unlayered CSS outranks every Tailwind layer, so as plain top-level rules
+   these declarations beat `@layer utilities`: the `font` shorthand reset
+   `font-weight` (silently dropping `font-semibold`/`font-bold` on buttons)
+   and `color: inherit` beat every `text-*` colour utility on a button or
+   input. Declared in `base`, they yield to any utility that targets them. */
+@layer base {
+  button {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    font-weight: inherit;
+    color: inherit;
+  }
+
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
 }
 
 /* ---------- scrollbars ---------- */
@@ -143,6 +197,43 @@ input {
 ::selection {
   background: #d9f99d;
   color: #1f2330;
+}
+
+/* ---------- settings page transition ----------
+ * The Settings page slides in over the calendar it replaces. Both halves are
+ * short, small-distance moves: 10px of travel, ease-out, no scale or bounce.
+ * The exit is a touch quicker than the entrance so the calendar feels ready
+ * the moment you ask for it. */
+@keyframes settings-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes settings-out {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+/* No `fill-mode: both` here on purpose. With it, a frozen or throttled
+ * animation pins the panel at its `from` keyframe — opacity 0 — so a
+ * backgrounded tab could come back to an invisible Settings page. Without it
+ * the worst case is that the page simply appears without animating. */
+.settings-enter {
+  animation: settings-in 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.settings-exit {
+  animation: settings-out 0.18s cubic-bezier(0.4, 0, 1, 1);
+  pointer-events: none;
 }
 
 /* ---------- motion ---------- */
@@ -212,6 +303,30 @@ input {
 }
 .animate-scrim {
   animation: scrim-in 0.16s ease-out;
+}
+
+/* "Reduce motion" in Settings → Appearance. Applied as a class on <html> by
+   the store so it reaches every animation in the app, not just this file's.
+   Transitions are shortened rather than removed so state changes still read
+   as state changes. */
+.reduce-motion .animate-pop,
+.reduce-motion .animate-sheet,
+.reduce-motion .animate-rise,
+.reduce-motion .animate-fade,
+.reduce-motion .animate-scrim,
+.reduce-motion .settings-enter,
+.reduce-motion .settings-exit {
+  animation-duration: 0.01ms;
+  animation-iteration-count: 1;
+  transition-duration: 0.01ms;
+  scroll-behavior: auto;
+}
+
+/* The Settings page honours the preference outright rather than playing a
+   0.01ms animation. */
+.reduce-motion .settings-enter,
+.reduce-motion .settings-exit {
+  animation: none;
 }
 
 /* ---------- shared primitives ---------- */

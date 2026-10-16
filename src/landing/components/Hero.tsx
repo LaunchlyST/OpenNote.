@@ -15,24 +15,26 @@ export function Hero() {
 
   return (
     <section id="top" className="relative overflow-hidden px-5 pt-[112px] pb-16 sm:px-8 sm:pt-[128px] lg:pb-24">
-      {/* Ambient background */}
+      {/* Ambient background — rich gradient mesh */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,#ffffff_0%,#fbfbf9_45%,#f4f4f1_100%)]" />
-        <div className="lp-drift absolute -top-40 left-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(190,242,100,0.42),transparent_68%)] blur-3xl" />
+        <div className="absolute inset-0 bg-[radial-gradient(120%_80%_at_50%_-10%,#1a1f2e_0%,#0f1117_45%,#0a0c10_100%)]" />
         <div
-          className="lp-drift absolute -top-24 right-[4%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle,rgba(230,221,255,0.75),transparent_68%)] blur-3xl"
+          className="lp-drift absolute -top-40 left-[8%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(245,197,24,0.15),transparent_68%)] blur-3xl"
+        />
+        <div
+          className="lp-drift absolute -top-24 right-[4%] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle,rgba(167,139,250,0.12),transparent_68%)] blur-3xl"
           style={{ animationDelay: '-9s' }}
         />
         <div
-          className="lp-drift absolute top-[38%] left-1/2 h-[320px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(216,235,255,0.6),transparent_70%)] blur-3xl"
+          className="lp-drift absolute top-[38%] left-1/2 h-[320px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(96,165,250,0.1),transparent_70%)] blur-3xl"
           style={{ animationDelay: '-17s' }}
         />
         {/* Faint dotted grid, fading out toward the edges */}
         <div
-          className="absolute inset-x-0 top-0 h-[560px] opacity-[0.5]"
+          className="absolute inset-x-0 top-0 h-[560px] opacity-[0.3]"
           style={{
             backgroundImage:
-              'radial-gradient(circle at 1px 1px, rgba(21,23,29,0.07) 1px, transparent 0)',
+              'radial-gradient(circle at 1px 1px, rgba(240,242,248,0.06) 1px, transparent 0)',
             backgroundSize: '22px 22px',
             maskImage: 'radial-gradient(70% 60% at 50% 20%, #000 0%, transparent 78%)',
             WebkitMaskImage:
@@ -49,15 +51,15 @@ export function Hero() {
           </div>
 
           <h1
-            className="lp-bob mt-6 max-w-[16ch] text-[clamp(2.4rem,6.4vw,4.35rem)] leading-[1.03] font-semibold text-lp-ink"
+            className="lp-bob mt-6 max-w-[16ch] text-[clamp(2.4rem,6.4vw,4.35rem)] leading-[1.03] font-bold text-lp-ink"
             style={{ animationDelay: '110ms' }}
           >
-            Your time. Your plans.{' '}
+            Your day, beautifully{' '}
             <span className="relative inline-block">
-              <span className="relative z-10">One beautiful place.</span>
+              <span className="relative z-10">under control.</span>
               <span
                 aria-hidden="true"
-                className="absolute inset-x-0 bottom-[0.08em] -z-0 h-[0.34em] rounded-full bg-lp-lime/55"
+                className="absolute inset-x-0 bottom-[0.08em] -z-0 h-[0.34em] rounded-full bg-gradient-to-r from-[#f5c518]/30 to-[#e5b800]/30"
               />
             </span>
           </h1>
@@ -110,7 +112,7 @@ export function Hero() {
           >
             {HERO.reassurance.map((item) => (
               <li key={item} className="flex items-center gap-1.5 text-[14px] text-lp-muted">
-                <Check className="h-3.5 w-3.5 text-lp-lime-700" strokeWidth={3} aria-hidden="true" />
+                <Check className="h-3.5 w-3.5 text-[#f5c518]" strokeWidth={3} aria-hidden="true" />
                 {item}
               </li>
             ))}
@@ -124,7 +126,7 @@ export function Hero() {
         >
           <div
             aria-hidden="true"
-            className="absolute inset-x-[6%] -bottom-6 -z-10 h-24 rounded-[50%] bg-lp-charcoal/12 blur-3xl"
+            className="absolute inset-x-[6%] -bottom-6 -z-10 h-24 rounded-[50%] bg-[#f5c518]/8 blur-3xl"
           />
 
           <ResponsiveAppWindow view="week" />
@@ -143,7 +145,6 @@ export function Hero() {
 /* Floating detail cards                                               */
 /* ------------------------------------------------------------------ */
 
-/** Today's real date, styled after the mini calendar's lime "today" pill. */
 function FloatingTodayChip({ className }: { className?: string }) {
   const [today] = useState(() => new Date())
   const weekday = today.toLocaleDateString('en-US', { weekday: 'long' })
@@ -152,7 +153,7 @@ function FloatingTodayChip({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        'rounded-2xl border border-lp-line bg-white/95 px-4 py-3 shadow-[0_18px_40px_-18px_rgba(16,24,40,0.35)] backdrop-blur-sm',
+        'rounded-2xl border border-lp-line bg-lp-surface/95 px-4 py-3 shadow-[0_18px_40px_-18px_rgba(0,0,0,0.6)] backdrop-blur-sm',
         className,
       )}
       style={{ animation: 'lp-float 8s ease-in-out infinite' }}
@@ -161,7 +162,7 @@ function FloatingTodayChip({ className }: { className?: string }) {
         Today
       </p>
       <p className="mt-1.5 flex items-center gap-2.5">
-        <span className="grid h-9 w-9 place-items-center rounded-full bg-lp-lime text-[14px] font-semibold text-[#33400f] ring-1 ring-inset ring-[#a3d922]/60">
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#f5c518] to-[#e5b800] text-[14px] font-bold text-[#1a1a2e] ring-1 ring-inset ring-[#f5c518]/30">
           {today.getDate()}
         </span>
         <span className="text-[12.5px] leading-tight font-medium text-lp-body">
@@ -173,13 +174,12 @@ function FloatingTodayChip({ className }: { className?: string }) {
   )
 }
 
-/** A pinned event sitting on the timeline, as it appears in the real app. */
 function FloatingPinnedTask({ className }: { className?: string }) {
   const c = COLORS.pink
   return (
     <div
       className={cn(
-        'flex items-center gap-2.5 rounded-xl border px-3 py-2 shadow-[0_14px_32px_-16px_rgba(16,24,40,0.4)]',
+        'flex items-center gap-2.5 rounded-xl border px-3 py-2 shadow-[0_14px_32px_-16px_rgba(0,0,0,0.6)]',
         className,
       )}
       style={{
@@ -201,13 +201,12 @@ function FloatingPinnedTask({ className }: { className?: string }) {
   )
 }
 
-/** A note from the Notes rail, tilted like the sticky cards in the app. */
 function FloatingNoteCard({ className }: { className?: string }) {
   const note = DEMO_NOTES[1]
   return (
     <div
       className={cn(
-        'w-[196px] rounded-2xl border border-[#f2e79c] bg-[#fdf6ab] p-3.5 shadow-[0_20px_44px_-20px_rgba(120,100,20,0.5)]',
+        'w-[196px] rounded-2xl border border-[#f2e79c] bg-[#fdf6ab] p-3.5 shadow-[0_20px_44px_-20px_rgba(0,0,0,0.7)]',
         className,
       )}
       style={{ animation: 'lp-float 10s ease-in-out -6s infinite' }}

@@ -32,7 +32,7 @@ export function LandingPage() {
     <div className="relative min-h-full overflow-x-clip bg-lp-bg">
       <a
         href="#main"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-xl focus:bg-lp-lime focus:px-4 focus:py-2.5 focus:text-[14px] focus:font-semibold focus:text-[#2c3608]"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-xl focus:bg-lp-lime focus:px-4 focus:py-2.5 focus:text-[14px] focus:font-semibold focus:text-[#1a1a2e]"
       >
         Skip to content
       </a>

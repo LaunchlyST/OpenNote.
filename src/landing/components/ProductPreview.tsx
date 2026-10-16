@@ -30,7 +30,7 @@ export function ProductPreview() {
       <Reveal>
         <SectionHeading
           eyebrow="Preview"
-          heading="See your day differently."
+          heading="See your whole day. Clearly."
           description="Discover a cleaner way to organise your time."
         />
       </Reveal>

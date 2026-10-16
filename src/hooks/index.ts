@@ -75,6 +75,41 @@ export function useEscape(enabled: boolean, onEscape: () => void) {
   }, [enabled])
 }
 
+/** How long the Settings page takes to leave, matching `settings-out` in CSS. */
+const SETTINGS_EXIT_MS = 180
+
+/**
+ * Keeps the Settings page mounted for the length of its exit animation.
+ *
+ * Unmounting it the instant the route changes would drop the fade-out, so the
+ * panel stays in the tree until the animation finishes. `exiting` is what the
+ * caller animates on; `mounted` is what the caller renders on.
+ */
+export function useExitTransition(open: boolean, durationMs: number) {
+  const [mounted, setMounted] = useState(open)
+  const [exiting, setExiting] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      setExiting(false)
+      return
+    }
+    if (!mounted) return
+    setExiting(true)
+    const timer = window.setTimeout(() => {
+      setMounted(false)
+      setExiting(false)
+    }, durationMs)
+    return () => window.clearTimeout(timer)
+  }, [open, mounted, durationMs])
+
+  return { mounted, exiting }
+}
+
+/** The Settings page's open/close transition timing. */
+export const SETTINGS_TRANSITION_MS = SETTINGS_EXIT_MS
+
 /** Closes a popover when clicking outside of it. */
 export function useClickOutside<T extends HTMLElement>(
   active: boolean,

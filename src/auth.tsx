@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useMemo } from 'react'
 import type { ReactNode } from 'react'
 import { uid } from './lib/id'
+import { DEFAULT_PLAN, type PlanId } from './lib/plan'
 import { useLocalStorage } from './hooks'
 
 /**
@@ -18,6 +19,12 @@ interface Account {
   /** ISO timestamp of when the account was first created. */
   createdAt: string
   avatar?: string
+  /**
+   * Subscription entitlement stored on the account. There is no billing
+   * backend yet, so nothing ever writes a paid value — every account reads
+   * back as `free` until a checkout exists. See `lib/plan.ts`.
+   */
+  plan?: PlanId
   passwordHash: string
   salt: string
   iterations: number
@@ -30,6 +37,7 @@ export interface AuthUser {
   email: string
   createdAt: string
   avatar?: string
+  plan: PlanId
 }
 
 const ACCOUNTS_KEY = 'opennote.accounts.v1'
@@ -106,6 +114,7 @@ function toUser(account: Account): AuthUser {
     email: account.email,
     createdAt: account.createdAt,
     avatar: account.avatar,
+    plan: account.plan ?? DEFAULT_PLAN,
   }
 }
 
@@ -168,6 +177,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: mail,
         createdAt: new Date().toISOString(),
         avatar,
+        // New accounts start on the free tier. Checkout does not exist yet,
+        // so there is no code path that would change this later.
+        plan: DEFAULT_PLAN,
         passwordHash,
         salt: bytesToBase64(salt),
         iterations: PBKDF2_ITERATIONS,

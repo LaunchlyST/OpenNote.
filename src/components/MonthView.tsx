@@ -52,8 +52,6 @@ export function MonthView() {
   const columns = showWeekends ? 7 : 5
   const rows = Math.max(1, Math.ceil(cells.length / columns))
 
-  // Keep the month grid rows on whole pixels so the 1px row borders render as
-  // thin, continuous, evenly spaced lines instead of aliased/dotted ones.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -103,14 +101,15 @@ export function MonthView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
+      {/* Weekday header */}
       <div
-        className="grid h-9 shrink-0 border-b border-[#eceef2]"
+        className="grid h-10 shrink-0 border-b border-line bg-white"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
         {headerDays.map((d, i) => (
           <div
             key={i}
-            className="grid place-items-center border-l border-[#eceef2] text-[10.5px] font-semibold uppercase tracking-[0.07em] text-[#8b90a0] first:border-l-0"
+            className="grid place-items-center border-l border-line text-[10.5px] font-bold uppercase tracking-[0.07em] text-faint first:border-l-0"
           >
             {weekdayShort(d)}
           </div>
@@ -136,7 +135,7 @@ export function MonthView() {
                 key={d.toISOString()}
                 onClick={() => openCreate(fromMinutes(startOfDay(d), 9 * 60), 60)}
                 className={cn(
-                  'group/cell flex cursor-pointer flex-col gap-1 border-b border-l border-[#eceef2] p-1.5 transition first:border-l-0',
+                  'group/cell flex cursor-pointer flex-col gap-1 border-b border-l border-line p-2 transition first:border-l-0',
                   !inMonth && 'bg-[#fbfbfc]',
                 )}
               >
@@ -149,12 +148,12 @@ export function MonthView() {
                       setView('day')
                     }}
                     className={cn(
-                      'grid h-6 min-w-6 place-items-center rounded-[9px] px-1.5 text-[12px] font-semibold tabular-nums transition',
+                      'grid h-7 min-w-7 place-items-center rounded-full px-1.5 text-[12px] font-bold tabular-nums transition',
                       isToday
-                        ? 'bg-[#bef264] text-[#33400f] shadow-[0_1px_2px_rgba(16,24,40,0.14)] ring-1 ring-inset ring-[#a3d922]/50'
+                        ? 'bg-charcoal text-white shadow-sm'
                         : inMonth
-                          ? 'text-[#1f2330] hover:bg-[#f2f3f6]'
-                          : 'text-[#c3c7d1] hover:bg-[#f7f8fa]',
+                          ? 'text-ink hover:bg-surface'
+                          : 'text-ghost hover:bg-surface',
                     )}
                   >
                     {d.getDate()}
@@ -163,7 +162,7 @@ export function MonthView() {
                     {noteCount > 0 && (
                       <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />
                     )}
-                    <span className="grid h-5 w-5 place-items-center rounded-full text-[#b6bbc7] opacity-0 transition group-hover/cell:opacity-100">
+                    <span className="grid h-5 w-5 place-items-center rounded-full text-faint opacity-0 transition group-hover/cell:opacity-100">
                       <span className="text-[14px] leading-none">+</span>
                     </span>
                   </div>
@@ -182,7 +181,7 @@ export function MonthView() {
                           e.stopPropagation()
                           openEdit(ev)
                         }}
-                        className="flex w-full items-center gap-1 overflow-hidden rounded-[5px] px-1.5 py-[2px] text-left text-[10.5px] font-medium leading-tight transition hover:brightness-[0.965]"
+                        className="flex w-full items-center gap-1 overflow-hidden rounded-lg px-1.5 py-[2px] text-left text-[10.5px] font-medium leading-tight transition hover:brightness-[0.965]"
                         style={{ background: color.bg, color: color.text }}
                       >
                         <span className="shrink-0 tabular-nums opacity-70">
@@ -195,7 +194,7 @@ export function MonthView() {
                     )
                   })}
                   {dayEvents.length > 3 && (
-                    <span className="pl-1.5 text-[10px] font-medium text-[#8b90a0]">
+                    <span className="pl-1.5 text-[10px] font-medium text-muted">
                       +{dayEvents.length - 3} more
                     </span>
                   )}

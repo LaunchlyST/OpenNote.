@@ -7,6 +7,10 @@ export const DEFAULT_SETTINGS: Settings = {
   hour12: false,
   showWeekends: true,
   hourHeight: 56,
+  defaultView: 'week',
+  reduceMotion: false,
+  sidebarCollapsed: false,
+  twoFactor: false,
 }
 
 export function seedCalendars(): Calendar[] {

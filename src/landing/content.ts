@@ -31,13 +31,15 @@ export const NAV_LINKS: NavLink[] = [
 
 export const HERO = {
   eyebrow: 'Calendar + Notes, in one place',
-  title: 'Your time. Your plans. One beautiful place.',
+  title: 'Your day, beautifully under control.',
   description:
-    'Plan your days, organise your notes, and keep everything that matters in one simple calendar.',
-  primaryCta: { label: 'Get Started Free', href: '/app/signup' },
+    'One beautiful space for your calendar, notes, and daily plans. Organise your time, stay focused, and make every day feel effortless.',
+  primaryCta: { label: 'Start Planning Free', href: '/app/signup' },
   secondaryCta: { label: 'Explore Features', section: 'features' },
   authenticatedCta: { label: 'Open My Calendar', href: '/app' },
   signInCta: { label: 'Sign In', href: '/app/signin' },
+  /** Skips sign-up and drops straight into the calendar (works signed out). */
+  dashboardCta: { label: 'Open dashboard', href: '/app' },
   /** Small trust strip under the buttons. */
   reassurance: [
     'Free forever plan',
@@ -109,9 +111,9 @@ export interface FeatureItem {
  */
 export const FEATURES = {
   eyebrow: 'Features',
-  heading: 'Everything you need to stay organised.',
+  heading: "Everything you need. Nothing you don't.",
   description:
-    'One beautiful workspace for your calendar, schedule, and notes.',
+    'Your plans, calendar and notes — together in one beautifully simple workspace.',
   items: [
     {
       id: 'calendar',
@@ -283,13 +285,12 @@ export const PRICING = {
         footnote: 'Free for as long as you need it.',
       },
       features: [
-        { label: 'Personal calendar', status: 'available' },
-        { label: 'Day, week, and month views', status: 'available' },
+        { label: 'Personal calendar planning', status: 'available' },
+        { label: 'Day, Week and Month views', status: 'available' },
         { label: 'Create and manage events', status: 'available' },
-        { label: 'Basic notes', status: 'available' },
-        { label: 'Daily scheduling', status: 'available' },
-        { label: 'Colour-coded calendars', status: 'available' },
-        { label: 'Desktop and mobile access', status: 'available' },
+        { label: 'Organise your daily schedule', status: 'available' },
+        { label: 'Essential notes and planning', status: 'available' },
+        { label: 'Get started at no cost', status: 'available' },
       ],
       cta: { label: 'Get Started Free', kind: 'signup' },
       theme: 'neutral',
@@ -309,12 +310,11 @@ export const PRICING = {
       badge: 'Most Popular',
       features: [
         { label: 'Everything in Free', status: 'available' },
-        { label: 'Unlimited notes', status: 'planned' },
-        { label: 'Unlimited calendar events', status: 'planned' },
-        { label: 'Advanced event organisation', status: 'planned' },
-        { label: 'Custom calendar categories', status: 'planned' },
-        { label: 'Enhanced note management', status: 'planned' },
-        { label: 'Priority access to future Pro features', status: 'planned' },
+        { label: 'Enhanced calendar organisation', status: 'planned' },
+        { label: 'Plan work, study and personal life', status: 'planned' },
+        { label: 'Organise notes alongside your schedule', status: 'planned' },
+        { label: 'A more complete planning workspace', status: 'planned' },
+        { label: 'Access included for eligible website members', status: 'planned' },
       ],
       cta: {
         label: 'Get OpenNote Pro',
@@ -338,15 +338,12 @@ export const PRICING = {
       },
       badge: 'Built for Teams',
       features: [
-        { label: 'Everything in Pro', status: 'planned' },
-        { label: 'Shared team calendars', status: 'planned' },
-        { label: 'Team member management', status: 'planned' },
-        { label: 'Collaborative scheduling', status: 'planned' },
-        { label: 'Task assignments', status: 'planned' },
-        { label: 'Business workspace', status: 'planned' },
-        { label: 'Team productivity overview', status: 'planned' },
-        { label: 'Advanced permissions', status: 'planned' },
-        { label: 'More business tools coming soon', status: 'planned' },
+        { label: 'Designed for growing businesses', status: 'planned' },
+        { label: 'Team calendars and shared planning', status: 'planned' },
+        { label: 'Organise projects and deadlines', status: 'planned' },
+        { label: 'Business scheduling tools', status: 'planned' },
+        { label: 'Collaborative workspace features', status: 'planned' },
+        { label: 'More powerful productivity tools', status: 'planned' },
       ],
       cta: { label: 'Coming Soon', kind: 'disabled' },
       footnote: 'These capabilities are planned and not yet available.',
@@ -412,8 +409,8 @@ export const FAQ = {
 export const FINAL_CTA = {
   heading: 'Make room for what matters.',
   description:
-    'Bring your schedule, plans, and notes together in one beautiful workspace.',
-  primary: { label: 'Start Planning for Free', href: '/app/signup' },
+    'Spend less time figuring out your schedule and more time making the most of your day.',
+  primary: { label: 'Start Planning Free', href: '/app/signup' },
   secondary: { label: 'Explore OpenNote', section: 'preview' },
 } as const
 

@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Real deployment credentials never belong in the repo. `.env.example` is the
+# committed template; `.env*` is not.
+.env
+.env.*
+!.env.example
+.vercel
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
