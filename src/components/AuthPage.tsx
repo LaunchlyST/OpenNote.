@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../auth'
 import { useScreen } from '../screens'
 import { cn } from '../lib/id'
+import { takeOAuthErrorFromUrl } from '../lib/oauth-error'
 import { AppIcon } from '../landing/components/primitives'
 
 /* ------------------------------------------------------------------ */
@@ -168,6 +169,19 @@ export function AuthPage() {
   const [busy, setBusy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
+
+  /**
+   * A failed Google round trip sends the browser back here with `?error=...`.
+   * Surface it in the existing error slot instead of dropping the user on a
+   * blank login form with no explanation.
+   */
+  useEffect(() => {
+    const fromOAuth = takeOAuthErrorFromUrl()
+    if (fromOAuth) {
+      setError(fromOAuth)
+      setNotice(null)
+    }
+  }, [])
 
   const switchTo = (next: Mode) => {
     setError(null)

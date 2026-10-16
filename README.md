@@ -19,6 +19,7 @@ npm run dev                   # web on :5173, API on :3001 (proxied at /api)
 | `npm run lint`        | oxlint                                       |
 | `npm test`            | SSR smoke test                               |
 | `npm run test:deploy` | Deployment API safety checks                  |
+| `npm run test:google` | Google OAuth wiring and error messages        |
 
 ## Layout
 
@@ -51,10 +52,54 @@ the site and the API. Set `BETTER_AUTH_URL` to the public https URL.
   variables. Until then, links are printed to the API console in development
   only, and email verification is not enforced.
 - **Google sign-in**: set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The
-  button appears automatically. Authorised redirect URI:
-  `<BETTER_AUTH_URL>/api/auth/callback/google`.
+  button becomes active once both are present — the server refuses to
+  half-configure the provider. See the Google Cloud steps below.
 - **Data**: each user's calendar is stored server-side and only returned to
   that user's session (`/api/workspace`).
+
+### Google sign-in setup
+
+OpenNote uses Better Auth's Google social provider. To switch it on you need one
+OAuth client from Google Cloud. Nothing in the codebase needs changing.
+
+1. **Create or pick a project** at
+   <https://console.cloud.google.com/projectcreate>.
+2. **Enable the API**: *APIs & Services → Library → **Google People API*** →
+   Enable. (Sign-in also uses the Google Identity service, which is on by
+   default.)
+3. **Set up the consent screen**: *APIs & Services → **OAuth consent screen***.
+   Choose **External**, fill in app name, support email and developer email.
+   While the app is in *Testing*, add your own Google account under
+   **Test users** — otherwise Google returns `access_denied`.
+4. **Create the credentials**: *APIs & Services → **Credentials** → Create
+   credentials → **OAuth client ID** → Application type **Web application**.
+5. **Authorised JavaScript origins** (where the browser starts the flow):
+   ```
+   http://localhost:5173
+   ```
+6. **Authorised redirect URIs** (where Google sends the browser back):
+   ```
+   http://localhost:5173/api/auth/callback/google
+   ```
+   No trailing slashes. This is `BETTER_AUTH_URL` + `/api/auth/callback/google`,
+   so the two must always agree.
+7. **Copy the credentials** into `.env` — never into `src/`:
+   ```
+   GOOGLE_CLIENT_ID=xxxxx.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=GOCSPX-xxxxx
+   ```
+8. **Restart the API** (`npm run dev`) so it re-reads `.env`. The startup line
+   should change from `Google sign-in: off (no credentials)` to
+   `Google sign-in: on`.
+
+Verify the wiring at any time without contacting Google:
+
+```bash
+npm run test:google
+```
+
+When you later deploy, add `https://yourdomain.com` to the JavaScript origins and
+`https://yourdomain.com/api/auth/callback/google` to the redirect URIs.
 
 ## Tests
 
