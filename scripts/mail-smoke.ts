@@ -9,7 +9,7 @@
  * loopback SMTP catcher. Nothing here reaches a real inbox.
  */
 import { execFileSync } from 'node:child_process'
-import { readFileSync, mkdtempSync, rmSync, existsSync, readdirSync } from 'node:fs'
+import { readFileSync, mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync } from 'node:fs'
 import { createServer as createTlsServer } from 'node:tls'
 import type { AddressInfo } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -39,7 +39,8 @@ const { db, ensureAppTables } = await import('../server/db.ts')
 ensureAppTables()
 const { env } = await import('../server/env.ts')
 const { renderEmail, enqueueEmail, processOutbox, setTransport, outboxLog, maskEmail } = await import('../server/mail/index.ts')
-const { localTransport, smtpTransport, productionMailProblem, createTransport } = await import('../server/mail/transport.ts')
+const { localTransport, smtpTransport, productionMailProblem, createTransport, senderProblem, verifySmtp } = await import('../server/mail/transport.ts')
+const { smtpSettings } = await import('../server/env.ts')
 const { startSmtpCatcher } = await import('../server/mail/smtp-catcher.ts')
 const { readMailbox } = await import('../server/mail/dev-inbox.ts')
 
@@ -199,6 +200,84 @@ try {
     check('no SMTP conversation took place over the untrusted link', handshakes === 0)
     fake.close()
     env.smtp.secure = false
+  }
+
+  console.log('\n  Gmail/Outlook-style submission: port 587, STARTTLS, then AUTH')
+  {
+    // A private CA and a certificate for "localhost", so certificate checks
+    // run for real, exactly as they do against smtp.gmail.com.
+    const ca = (n: string) => join(tmp, n)
+    const ossl = (...a: string[]) => execFileSync('openssl', a, { stdio: 'ignore' })
+    ossl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', ca('ca.key'), '-out', ca('ca.pem'), '-days', '1', '-subj', '/CN=OpenNote Test CA')
+    ossl('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', ca('srv.key'), '-out', ca('srv.csr'), '-subj', '/CN=localhost')
+    writeFileSync(ca('ext'), 'subjectAltName=DNS:localhost\n')
+    ossl('x509', '-req', '-in', ca('srv.csr'), '-CA', ca('ca.pem'), '-CAkey', ca('ca.key'), '-CAcreateserial', '-out', ca('srv.pem'), '-days', '1', '-extfile', ca('ext'))
+
+    const logins: Array<{ user: string; ok: boolean; encrypted: boolean }> = []
+    const caught: Array<{ from: string; to: string[]; subject: string; text: string }> = []
+    const server = await startSmtpCatcher({
+      port: 0,
+      tls: { key: readFileSync(ca('srv.key'), 'utf8'), cert: readFileSync(ca('srv.pem'), 'utf8') },
+      auth: { user: 'opennote.sender@gmail.test', pass: 'abcdefghijklmnop' },
+      onAuth: (user, ok, encrypted) => logins.push({ user, ok, encrypted }),
+      onMessage: (m) => caught.push(m),
+    })
+    Object.assign(env.smtp, {
+      host: 'localhost',
+      port: (server.address() as AddressInfo).port,
+      secure: false,
+      requireTLS: true,
+      user: 'opennote.sender@gmail.test',
+      pass: 'abcdefghijklmnop',
+      from: 'OpenNote <opennote.sender@gmail.test>',
+      caFile: ca('ca.pem'),
+    })
+    env.mail.transport = 'smtp'
+
+    const v = await verifySmtp()
+    check('the startup login check succeeds with the right app password', v.ok, v.ok ? '' : v.error)
+    setTransport(smtpTransport())
+    const r = enqueueEmail('verify-email', 'new.user@outlook.test', { url: LINK, name: 'New User' })
+    await processOutbox()
+    check('the email is accepted by the server', r.queued && row(r.id).status === 'sent', r.queued ? String(row(r.id).lastError) : '')
+    check('the login happened only after encryption (STARTTLS)', logins.length > 0 && logins.every((l) => l.encrypted))
+    check('it reached the right recipient', caught.some((m) => m.to.includes('new.user@outlook.test')))
+    check('the sender is the authenticated mailbox', caught.some((m) => m.from === 'opennote.sender@gmail.test'))
+    check('the link inside is intact', caught.some((m) => m.text.includes(LINK)))
+
+    env.smtp.pass = 'wrong-app-password'
+    const bad = await verifySmtp()
+    check('a wrong app password is detected by the startup check', !bad.ok && /not accepted|535/i.test(bad.error), bad.ok ? '' : bad.error)
+    setTransport(smtpTransport())
+    const w = enqueueEmail('reset-password', 'someone@gmail.test', { url: LINK })
+    await processOutbox()
+    check('a rejected login fails visibly (status failed, 535 logged), not silently', w.queued && row(w.id).status === 'failed' && /535|not accepted/i.test(row(w.id).lastError ?? ''), w.queued ? `${row(w.id).status} ${row(w.id).lastError}` : '')
+
+    env.smtp.pass = 'abcdefghijklmnop'
+    env.smtp.caFile = ''
+    setTransport(smtpTransport())
+    const u = enqueueEmail('reset-password', 'untrusted@gmail.test', { url: LINK })
+    await processOutbox()
+    check('without trusting the CA the same server is refused (certificate checked)', u.queued && row(u.id).status !== 'sent')
+    server.close()
+  }
+
+  console.log('\n  Presets and sender rules')
+  {
+    const keep = { ...process.env }
+    Object.assign(process.env, { SMTP_PRESET: 'gmail', SMTP_HOST: '', SMTP_PORT: '', SMTP_USER: 'me@gmail.com', SMTP_PASS: 'abcd efgh ijkl mnop', EMAIL_FROM: '', SMTP_SECURE: '' })
+    const g = smtpSettings()
+    check('SMTP_PRESET=gmail → smtp.gmail.com:587 with STARTTLS', g.host === 'smtp.gmail.com' && g.port === 587 && !g.secure && g.requireTLS)
+    check('spaces in a Google app password are removed', g.pass === 'abcdefghijklmnop')
+    check('the sender defaults to the Gmail address', g.from === 'OpenNote <me@gmail.com>')
+    Object.assign(process.env, { SMTP_PRESET: 'outlook', SMTP_USER: 'me@outlook.com' })
+    const o = smtpSettings()
+    check('SMTP_PRESET=outlook → smtp-mail.outlook.com:587', o.host === 'smtp-mail.outlook.com' && o.port === 587)
+    process.env = keep
+    Object.assign(env.smtp, { host: 'smtp.gmail.com', user: 'me@gmail.com', from: 'OpenNote <no-reply@other.com>' })
+    check('a mismatched sender is flagged for Gmail', /must be the same address/.test(senderProblem() ?? ''))
+    env.smtp.from = 'OpenNote <me@gmail.com>'
+    check('a matching sender passes', senderProblem() === null)
   }
 
   console.log('\n  Production never fakes delivery')

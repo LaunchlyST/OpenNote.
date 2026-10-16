@@ -1,5 +1,40 @@
 # OpenNote email: what is built, and running your own mail server
 
+## Quickest real delivery: send through your own Gmail account (free)
+
+No new account, no domain, nothing to buy. OpenNote keeps its own queue,
+templates and links; Gmail just carries the message, signed by Google, so
+Gmail and Outlook inboxes accept it. Limit: about 500 emails a day.
+
+1. Turn on 2-Step Verification for the Gmail account:
+   <https://myaccount.google.com/signinoptions/twosv>
+2. Create an app password: <https://myaccount.google.com/apppasswords> —
+   name it `OpenNote`, then copy the 16-letter password Google shows (once).
+3. In `.env` (never committed):
+   ```
+   SMTP_PRESET=gmail
+   SMTP_USER=your.address@gmail.com
+   SMTP_PASS=the 16-letter app password
+   ```
+   `EMAIL_FROM` defaults to `OpenNote <your.address@gmail.com>`; Gmail only
+   sends as the signed-in address, so leave it or use that same address.
+4. Restart `npm run dev`. The API prints `[mail] SMTP login OK`, or
+   `SMTP LOGIN FAILED` with Google's reason.
+5. Send real tests and check each inbox (and spam):
+   ```
+   npm run mail:doctor -- --send your.address@gmail.com
+   npm run mail:doctor -- --send someone@outlook.com
+   ```
+
+Once SMTP is configured, email verification turns on automatically: new
+accounts get a confirmation email, and "Forgot password" sends a reset link.
+For production, also set `BETTER_AUTH_URL` to your `https://` address.
+
+`SMTP_PRESET=outlook` exists too, but Microsoft is removing password-based
+SMTP for personal Outlook.com accounts, so Gmail is the dependable choice.
+To move to your own domain later, follow the self-hosted sections below.
+
+
 OpenNote sends its own email. No third-party email service is used or needed
 by the code.
 

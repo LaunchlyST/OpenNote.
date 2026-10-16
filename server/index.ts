@@ -10,7 +10,7 @@ import { env, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
 import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
-import { productionMailProblem } from './mail/transport.ts'
+import { productionMailProblem, senderProblem, verifySmtp } from './mail/transport.ts'
 import { applyMigrations } from './schema.ts'
 import { PLANS, planOf, requirePlan } from './plans.ts'
 import { validateWorkspace } from './workspace.ts'
@@ -22,6 +22,16 @@ startMailWorker()
 {
   const problem = productionMailProblem()
   if (problem) console.error(`[mail] EMAIL IS OFF: ${problem} Verification and reset emails will be marked failed, not sent.`)
+  const sender = senderProblem()
+  if (sender) console.error(`[mail] ${sender}`)
+  // Prove the SMTP login works now, not when the first user signs up.
+  if (transportName() === 'smtp') {
+    void verifySmtp().then((r) =>
+      r.ok
+        ? console.log(`[mail] SMTP login OK (${env.smtp.host}:${env.smtp.port}, ${env.smtp.secure || env.smtp.requireTLS ? "encrypted" : "UNENCRYPTED — local catcher only"})`)
+        : console.error(`[mail] SMTP LOGIN FAILED (${env.smtp.host}:${env.smtp.port}): ${r.error} — emails will retry and then be marked failed.`),
+    )
+  }
 }
 
 const app = express()

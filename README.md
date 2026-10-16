@@ -70,7 +70,9 @@ retries and rate limiting, and an SMTP client — no third-party email service.
   inbox at <http://localhost:5173/api/dev/mail> (never leaves your computer).
 - **Test the real SMTP path locally:** `npm run mail:catcher`, then set
   `SMTP_HOST=127.0.0.1`, `SMTP_PORT=2525`, `SMTP_REQUIRE_TLS=false`.
-- **Real inboxes:** point `SMTP_*` at your own mail server.
+- **Real inboxes, quickest:** `SMTP_PRESET=gmail` with a Google app password
+  (free, no domain) — steps in the doc below.
+- **Real inboxes, your own server:** point `SMTP_*` at it.
 
 Full details, and what infrastructure real delivery needs (domain, port 25,
 reverse DNS, SPF/DKIM/DMARC), are in [docs/self-hosted-email.md](docs/self-hosted-email.md).

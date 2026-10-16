@@ -79,25 +79,14 @@ export const env = {
     .split(',')
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean),
-  smtp: {
-    host: process.env.SMTP_HOST ?? '',
-    port: Number(process.env.SMTP_PORT ?? 587),
-    user: process.env.SMTP_USER ?? '',
-    pass: process.env.SMTP_PASS ?? '',
-    from: process.env.EMAIL_FROM ?? '',
-    /** Implicit TLS (port 465). Defaults to true on 465, false otherwise. */
-    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : Number(process.env.SMTP_PORT ?? 587) === 465,
-    /** Refuse to send unless STARTTLS succeeds. On by default; off only for a local catcher. */
-    requireTLS: process.env.SMTP_REQUIRE_TLS !== 'false',
-  },
-
+  smtp: smtpSettings(),
   mail: {
     /**
      * smtp  – deliver through SMTP_HOST (your own server, or the local catcher)
      * local – write each message to MAILBOX_DIR and show it at /api/dev/mail
      *         (development only; never used in production)
      */
-    transport: (process.env.MAIL_TRANSPORT ?? (process.env.SMTP_HOST ? 'smtp' : 'local')) as 'smtp' | 'local',
+    transport: (process.env.MAIL_TRANSPORT ?? (process.env.SMTP_HOST || process.env.SMTP_PRESET ? 'smtp' : 'local')) as 'smtp' | 'local',
     mailboxDir: process.env.MAILBOX_DIR ?? 'data/mailbox',
     /** Max emails one address can be sent per hour (all kinds together). */
     perRecipientPerHour: Number(process.env.MAIL_RATE_PER_HOUR ?? 5),
@@ -125,6 +114,43 @@ export const env = {
     /** Kill switch. Deploys are refused unless this is exactly "true". */
     enabled: process.env.DEPLOY_ENABLED === 'true',
   },
+}
+
+/**
+ * SMTP settings, with presets for mail servers people already have:
+ *
+ *   SMTP_PRESET=gmail    smtp.gmail.com:587 (STARTTLS). SMTP_USER = the Gmail
+ *                        address, SMTP_PASS = a Google *app password*.
+ *   SMTP_PRESET=outlook  smtp-mail.outlook.com:587 (STARTTLS).
+ *
+ * Explicit SMTP_HOST / SMTP_PORT always win over a preset.
+ */
+export function smtpSettings() {
+  const presets: Record<string, { host: string; port: number }> = {
+    gmail: { host: 'smtp.gmail.com', port: 587 },
+    outlook: { host: 'smtp-mail.outlook.com', port: 587 },
+  }
+  const preset = presets[(process.env.SMTP_PRESET ?? '').toLowerCase()]
+  const host = process.env.SMTP_HOST || preset?.host || ''
+  const port = Number(process.env.SMTP_PORT || preset?.port || 587)
+  const user = (process.env.SMTP_USER ?? '').trim()
+  // Google shows app passwords as "abcd efgh ijkl mnop"; the spaces are not part of it.
+  const pass = host === 'smtp.gmail.com' ? (process.env.SMTP_PASS ?? '').replace(/\s+/g, '') : (process.env.SMTP_PASS ?? '')
+  // With a mailbox provider the sender must be that mailbox, so default to it.
+  const from = process.env.EMAIL_FROM || (preset && user ? `OpenNote <${user}>` : '')
+  return {
+    host,
+    port,
+    user,
+    pass,
+    from,
+    /** Implicit TLS (port 465). Defaults to true on 465, false otherwise. */
+    secure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465,
+    /** Refuse to send unless STARTTLS succeeds. On by default; off only for a local catcher. */
+    requireTLS: process.env.SMTP_REQUIRE_TLS !== 'false',
+    /** Extra CA certificate (PEM file) to trust, e.g. a private mail server's. */
+    caFile: process.env.SMTP_CA_FILE ?? '',
+  }
 }
 
 export const PROVIDER_LABELS: Record<string, string> = {

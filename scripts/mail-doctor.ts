@@ -15,7 +15,7 @@ import { Socket } from 'node:net'
 import nodemailer from 'nodemailer'
 import { env } from '../server/env.ts'
 import { renderEmail } from '../server/mail/templates.ts'
-import { smtpTransport } from '../server/mail/transport.ts'
+import { productionMailProblem, senderProblem, smtpTransport } from '../server/mail/transport.ts'
 
 let fails = 0
 const pass = (m: string) => console.log(`  PASS  ${m}`)
@@ -45,11 +45,19 @@ console.log('\n  Configuration')
 env.smtp.host ? pass(`SMTP_HOST is set (${env.smtp.host}:${env.smtp.port})`) : fail('SMTP_HOST is empty — mail only goes to the local dev inbox')
 fromDomain ? pass(`EMAIL_FROM domain: ${fromDomain}`) : fail('EMAIL_FROM is missing or has no domain')
 if (/(^|\.)(example\.(com|org|net)|yourdomain\.com|localhost|local|test)$/.test(fromDomain)) fail(`${fromDomain} is a placeholder — real inboxes will reject it`)
-if (/(^|\.)(gmail|outlook|hotmail|yahoo|icloud)\.com$/.test(fromDomain)) fail(`You cannot send as ${fromDomain} from your own server — Gmail/Outlook DMARC will reject it. Use your own domain.`)
+const mailboxProvider = ['smtp.gmail.com', 'smtp-mail.outlook.com', 'smtp.office365.com'].includes(env.smtp.host)
+if (/(^|\.)(gmail|googlemail|outlook|hotmail|live|yahoo|icloud)\.com$/.test(fromDomain) && !mailboxProvider)
+  fail(`You cannot send as ${fromDomain} from your own server — DMARC will reject it. Use SMTP_PRESET=gmail/outlook, or your own domain.`)
+if (mailboxProvider) pass(`sending through ${env.smtp.host}: the provider signs mail (SPF/DKIM/DMARC handled by them)`)
+const sender = senderProblem()
+sender ? fail(sender) : env.smtp.host && pass('sender address matches the SMTP account')
+if (env.smtp.host === 'smtp.gmail.com' && env.smtp.pass && env.smtp.pass.length !== 16) warn('a Google app password is 16 letters — this looks like a normal password, which Google rejects')
+const prodProblem = env.isProduction ? productionMailProblem() : null
+if (prodProblem) fail(prodProblem)
 env.baseURL.startsWith('https://') ? pass(`BETTER_AUTH_URL is https (${env.baseURL}) — reset links use it`) : warn(`BETTER_AUTH_URL is ${env.baseURL} — fine locally, must be your https domain in production`)
 env.smtp.requireTLS || env.smtp.secure ? pass('TLS is required for SMTP') : warn('SMTP_REQUIRE_TLS=false — only acceptable for the local catcher')
 
-if (fromDomain && !/\.(local|test)$/.test(fromDomain)) {
+if (fromDomain && !/\.(local|test)$/.test(fromDomain) && !mailboxProvider) {
   console.log(`\n  DNS for ${fromDomain}`)
   const mx = await dns.resolveMx(fromDomain).catch(() => [])
   mx.length ? pass(`MX: ${mx.map((m) => m.exchange).join(', ')}`) : warn('no MX record (needed to receive bounces/replies)')
