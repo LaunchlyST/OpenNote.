@@ -136,7 +136,27 @@ async function addNote(p, text) {
   await p.keyboard.press('Escape')
 
   // 3. Zoom 1 h → 30 → 15 → 5 min by gesture (no buttons).
-  check((await p.getByRole('button', { name: /Zoom (in|out)/ }).count()) === 0, 'there are no zoom buttons')
+  // Zoom mode: click the corner square, plain scroll zooms; click again, scroll scrolls.
+  const toggle = p.getByRole('button', { name: /scroll wheel/ })
+  const scroller = p.locator('.scroll-area').filter({ has: p.locator('[data-day]') })
+  const plainWheel = async (dy) => {
+    const b = await p.locator('[data-day]').first().boundingBox()
+    await p.mouse.move(b.x + 40, 400)
+    await p.mouse.wheel(0, dy)
+    await p.waitForTimeout(160)
+  }
+  await toggle.click()
+  check((await toggle.getAttribute('aria-pressed')) === 'true', 'clicking the corner square turns zoom mode on')
+  await plainWheel(120)
+  check((await zoomLabel(p)) === '30 min', 'zoom mode: scrolling down zooms in')
+  await plainWheel(-120)
+  check((await zoomLabel(p)) === '1 h', 'zoom mode: scrolling up zooms out')
+  await toggle.click()
+  check((await toggle.getAttribute('aria-pressed')) === 'false', 'clicking it again turns zoom mode off')
+  const top0 = await scroller.evaluate((el) => el.scrollTop)
+  await plainWheel(240)
+  const top1 = await scroller.evaluate((el) => el.scrollTop)
+  check((await zoomLabel(p)) === '1 h' && top1 > top0, 'with zoom mode off, scrolling just scrolls the calendar')
   const labels = [await zoomLabel(p)]
   for (let i = 0; i < 3; i++) {
     await wheelZoom(p, 1)
