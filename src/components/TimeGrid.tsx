@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { Plus, StickyNote, ZoomIn } from 'lucide-react'
+import { StickyNote, ZoomIn } from 'lucide-react'
 import { useApp } from '../store'
 import { colorOf } from '../lib/colors'
 import type { CalendarEvent } from '../lib/types'
@@ -158,6 +158,11 @@ export function TimeGrid({
   const [slotTarget, setSlotTarget] = useState<SlotTarget | null>(null)
   // The empty row under the pointer shows a dashed "+" placeholder.
   const [hoverCell, setHoverCell] = useState<{ day: string; row: number } | null>(null)
+  // The square last clicked stays highlighted (its own start and length, so
+  // it stays on the right time whatever the zoom).
+  const [selected, setSelected] = useState<{ day: string; start: number; len: number } | null>(null)
+  const selectedRef = useRef(selected)
+  selectedRef.current = selected
   // Zoom mode: click the corner square once and the wheel zooms instead of
   // scrolling (down = in, up = out); click it again to scroll normally.
   const [zoomMode, setZoomMode] = useState(false)
@@ -284,6 +289,13 @@ export function TimeGrid({
     const prev = prevHourPx.current
     prevHourPx.current = hourHeight
     if (!el || prev === hourHeight) return
+    const sel = selectedRef.current
+    if (sel) {
+      const oldTop = (sel.start / 60) * prev - el.scrollTop
+      const offset = oldTop >= 0 && oldTop <= el.clientHeight - 40 ? oldTop : el.clientHeight / 3
+      el.scrollTop = Math.max(0, (sel.start / 60) * hourHeight - offset)
+      return
+    }
     const centreMin = ((el.scrollTop + el.clientHeight / 2) / prev) * 60
     el.scrollTop = Math.max(0, (centreMin / 60) * hourHeight - el.clientHeight / 2)
   }, [hourHeight])
@@ -459,11 +471,12 @@ export function TimeGrid({
     const y = e.clientY - rect.top
     const minute = clamp(Math.floor((y / hourHeight) * 60), 0, DAY_MINUTES - 1)
     const rangeStart = Math.floor(minute / interval) * interval
+    setSelected({ day: dateKey(day), start: rangeStart, len: interval })
     setSlotTarget({
       day,
       rangeStart,
       rangeEnd: rangeStart + interval,
-      slot: Math.floor(minute / SLOT_MINUTES) * SLOT_MINUTES,
+      slot: rangeStart,
       x: e.clientX + 8,
       y: e.clientY + 8,
     })
@@ -474,8 +487,9 @@ export function TimeGrid({
     if (drag) return
     const rect = e.currentTarget.getBoundingClientRect()
     const minute = clamp(Math.floor(((e.clientY - rect.top) / hourHeight) * 60), 0, DAY_MINUTES - 1)
-    const slot = Math.floor(minute / SLOT_MINUTES) * SLOT_MINUTES
     const rangeStart = Math.floor(minute / interval) * interval
+    const slot = rangeStart
+    setSelected({ day: dateKey(day), start: rangeStart, len: interval })
     const count = slotNotes.get(dateKey(day))?.get(slot)?.length ?? 0
     let focusId: string | undefined
     if (count < MAX_SLOT_NOTES) {
@@ -733,7 +747,6 @@ export function TimeGrid({
             {interval < 60 &&
               HOURS.flatMap((h) =>
                 Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval)
-                  .filter((m) => m % 15 === 0)
                   .map((m) => (
                   <div
                     key={`m${h}-${m}`}
@@ -752,10 +765,20 @@ export function TimeGrid({
           >
             {/* gridlines */}
             <div className="pointer-events-none absolute inset-0">
+              {/* Every other slot gets a whisper of shade so neighbours are easy to tell apart. */}
+              {Array.from({ length: DAY_MINUTES / interval }, (_, i) => i)
+                .filter((i) => i % 2 === 1)
+                .map((i) => (
+                  <div
+                    key={`r${i}`}
+                    className="absolute inset-x-0 bg-[#fafaf9]"
+                    style={{ top: ((i * interval) / 60) * hourHeight, height: (interval / 60) * hourHeight }}
+                  />
+                ))}
               {HOURS.map((h) => (
                 <div
                   key={`h${h}`}
-                  className="absolute inset-x-0 border-t border-dashed border-[#e6e6e3]"
+                  className="absolute inset-x-0 border-t-[1.5px] border-[#dcdbd7]"
                   style={{ top: h * hourHeight }}
                 />
               ))}
@@ -764,10 +787,7 @@ export function TimeGrid({
                   Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval).map((m) => (
                     <div
                       key={`m${h}-${m}`}
-                      className={cn(
-                        'absolute inset-x-0 border-t',
-                        m % 30 === 0 ? 'border-[#f0f0ee]' : 'border-dashed border-[#f3f3f1]',
-                      )}
+                      className="absolute inset-x-0 border-t border-[#ecebe8]"
                       style={{ top: ((h * 60 + m) / 60) * hourHeight }}
                     />
                   )),
@@ -800,13 +820,52 @@ export function TimeGrid({
                     if (!hoverCell || hoverCell.day !== k || hoverCell.row !== row) setHoverCell({ day: k, row })
                   }}
                   onMouseLeave={() => setHoverCell(null)}
-                  className="relative"
+                  className="relative border-l border-[#ecebe8] first:border-l-0"
                   style={{
                     ...(colWidths
                       ? { width: colWidths[di], flex: '0 0 auto' }
                       : { flex: '1 1 0%', minWidth: 0 }),
                   }}
                 >
+                  {(() => {
+                    const k = dateKey(day)
+                    const range = (start: number, len: number) =>
+                      `${formatClock(fromMinutes(day, start), hour12)}–${formatClock(fromMinutes(day, start + len), hour12)}`
+                    const sel = selected && selected.day === k ? selected : null
+                    const hov =
+                      hoverCell && hoverCell.day === k && !(sel && sel.start === hoverCell.row && sel.len === interval)
+                        ? hoverCell
+                        : null
+                    return (
+                      <>
+                        {hov && (
+                          <div
+                            data-testid="slot-hover"
+                            className="pointer-events-none absolute inset-x-[2px] rounded-[6px] border border-[#93c5fd] bg-[#eff6ff]"
+                            style={{ top: (hov.row / 60) * hourHeight + 1, height: (interval / 60) * hourHeight - 1 }}
+                          >
+                            <span className="absolute left-1.5 top-1 rounded-[4px] bg-white/90 px-1 text-[10px] font-semibold tabular-nums leading-[14px] text-[#2563eb]">
+                              {range(hov.row, interval)}
+                            </span>
+                          </div>
+                        )}
+                        {sel && (
+                          <div
+                            data-testid="slot-selected"
+                            className="pointer-events-none absolute inset-x-[2px] rounded-[6px] border-[1.5px] border-[#3b82f6] bg-[#dbeafe]/70"
+                            style={{ top: (sel.start / 60) * hourHeight + 1, height: Math.max(4, (sel.len / 60) * hourHeight - 1) }}
+                          >
+                            {(sel.len / 60) * hourHeight >= 16 && (
+                              <span className="absolute left-1.5 top-1 rounded-[4px] bg-[#3b82f6] px-1 text-[10px] font-semibold tabular-nums leading-[14px] text-white">
+                                {weekdayShort(day)} {day.getDate()} · {range(sel.start, sel.len)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
+
                   {placed.map((p) => {
                     const color = colorOf(
                       calMap.get(p.event.calendarId)?.color,
@@ -901,21 +960,6 @@ export function TimeGrid({
                       </div>
                     )
                   })}
-
-                  {hoverCell && hoverCell.day === dateKey(day) && !slotTarget && (
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-x-1 grid place-items-center rounded-[12px] border-[1.5px] border-dashed border-[#cfcfcb] bg-white/60"
-                      style={{
-                        top: (hoverCell.row / 60) * hourHeight + 3,
-                        height: Math.max(18, (interval / 60) * hourHeight - 6),
-                      }}
-                    >
-                      <span className="grid h-6 w-6 place-items-center rounded-full border border-[#dcdbd7] bg-white text-[#8f8e8a]">
-                        <Plus className="h-3.5 w-3.5" />
-                      </span>
-                    </div>
-                  )}
 
                   {renderNotes(day, placed)}
 
