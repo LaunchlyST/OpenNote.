@@ -57,7 +57,7 @@ export function MiniCalendar() {
   const today = new Date()
 
   return (
-    <div className="border-b border-[#ececea] px-3 pb-4 pt-4">
+    <div className="rounded-2xl border border-[#ececea] bg-white px-3 pb-3 pt-3.5 shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
       <div className="mb-3 flex items-center justify-between px-0.5">
         <h2 className="text-[13px] font-semibold tracking-[-0.01em] text-[#191919]">
           {monthLong(cursor)}{' '}
@@ -121,7 +121,7 @@ export function MiniCalendar() {
                 className={cn(
                   'relative grid h-7 w-7 place-items-center rounded-full text-[12px] tabular-nums transition-all duration-150',
                   selected
-                    ? 'bg-[#191919] font-semibold text-white shadow-[0_2px_6px_-1px_rgba(0,0,0,0.35)]'
+                    ? 'bg-[#f1f9dd] font-semibold text-[#191919] ring-2 ring-[#c5ea7a]'
                     : isToday
                       ? 'font-semibold text-[#5d7a0f] ring-1 ring-[#cbe98a] hover:bg-[#f2f8e0]'
                       : inMonth
@@ -130,7 +130,7 @@ export function MiniCalendar() {
                 )}
               >
                 {d.getDate()}
-                {hasEvents && !selected && (
+                {hasEvents && (
                   <span
                     className={cn(
                       'absolute bottom-[3px] h-[3px] w-[3px] rounded-full',

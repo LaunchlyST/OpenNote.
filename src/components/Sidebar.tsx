@@ -21,6 +21,7 @@ import { cn } from '../lib/id'
 import { useNow } from '../hooks'
 import { IconButton, Section } from './ui'
 import { ProfileBox } from './ProfileBox'
+import { MiniCalendar } from './MiniCalendar'
 import { AppIcon } from '../landing/components/primitives'
 
 interface SidebarProps {
@@ -208,23 +209,23 @@ export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {})
 
   return (
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-[#ececea] bg-[#fbfbfa]">
-      <div className="flex h-[64px] shrink-0 items-center gap-2.5 px-4">
-        <AppIcon className="h-[30px] w-[30px] text-[30px]" />
-        <span className="text-[16px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
-      </div>
+      <div className="scroll-area flex-1 overflow-y-auto">
+        {/* Month at a glance sits first; everything else follows below it. */}
+        <div className="px-3 pt-3">
+          <MiniCalendar />
+        </div>
 
-      <div className="px-3">
-        <button
-          type="button"
-          onClick={newEvent}
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-[#191919] text-[13.5px] font-semibold text-white shadow-[0_6px_16px_-8px_rgba(0,0,0,0.6)] transition hover:bg-[#37352f] active:scale-[0.99]"
-        >
-          <Plus className="h-4 w-4" strokeWidth={2.4} />
-          New event
-        </button>
-      </div>
+        <div className="px-3 pt-3">
+          <button
+            type="button"
+            onClick={newEvent}
+            className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-[#191919] text-[13.5px] font-semibold text-white shadow-[0_6px_16px_-8px_rgba(0,0,0,0.6)] transition hover:bg-[#37352f] active:scale-[0.99]"
+          >
+            <Plus className="h-4 w-4" strokeWidth={2.4} />
+            New event
+          </button>
+        </div>
 
-      <div className="scroll-area mt-2 flex-1 overflow-y-auto">
         <div className="px-3 pb-3">
           <nav className="pt-2">
             <div className="space-y-0.5">
@@ -288,6 +289,10 @@ export function Sidebar({ onToggleNotes, notesOpen = false }: SidebarProps = {})
       </div>
 
       <div className="shrink-0 border-t border-[#ececea] px-3 py-3">
+        <div className="mb-2.5 flex items-center gap-2 px-1">
+          <AppIcon className="h-6 w-6 text-[24px]" />
+          <span className="text-[14px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
+        </div>
         <ProfileBox />
       </div>
     </aside>
