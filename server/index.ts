@@ -6,7 +6,7 @@ import { fromNodeHeaders, toNodeHandler } from 'better-auth/node'
 import { auth } from './auth.ts'
 import { db } from './db.ts'
 import { deployRouter } from './deploy.ts'
-import { env, requireEmailVerification, smtpConfigured } from './env.ts'
+import { env, googleConfigured, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
 import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
@@ -48,7 +48,7 @@ app.use(express.json({ limit: '2mb' }))
 
 /** Which sign-in options the UI should offer. Contains no secrets. */
 app.get('/api/auth-config', (_req, res) => {
-  res.json({ emailVerificationRequired: requireEmailVerification, emailEnabled: smtpConfigured })
+  res.json({ google: googleConfigured, emailVerificationRequired: requireEmailVerification, emailEnabled: smtpConfigured })
 })
 
 interface AuthedRequest extends Request {
@@ -154,5 +154,6 @@ app.listen(env.apiPort, () => {
   console.log(`OpenNote API listening on http://localhost:${env.apiPort}`)
   console.log(`  Administrators: ${admins.length ? admins.join(', ') : 'none (set ADMIN_EMAILS and verify the address)'}`)
   console.log(`  Email delivery: ${transportName() === 'smtp' ? `SMTP via ${env.smtp.host}:${env.smtp.port}` : transportName() === 'local' ? 'local dev inbox → http://localhost:5173/api/dev/mail' : 'OFF — set SMTP_HOST'}`)
+  console.log(`  Google sign-in: ${googleConfigured ? 'on' : 'off (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)'}`)
   console.log(`  Email verification required: ${requireEmailVerification ? 'yes' : 'no'}`)
 })

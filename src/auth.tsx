@@ -37,6 +37,8 @@ export interface SignUpInput {
 }
 
 export interface AuthConfig {
+  /** Google sign-in is configured on the server. */
+  google: boolean
   emailVerificationRequired: boolean
   emailEnabled: boolean
 }
@@ -54,6 +56,8 @@ interface AuthContextValue {
   signUp: (input: SignUpInput) => Promise<SignUpResult>
   /** `rememberMe: false` gives a session that ends when the browser closes. */
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>
+  /** Sends the browser to Google's own sign-in page (account chooser). */
+  signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   updateProfile: (patch: { fullName?: string; avatar?: string | null }) => Promise<void>
   changePassword: (current: string, next: string) => Promise<void>
@@ -62,14 +66,14 @@ interface AuthContextValue {
   resendVerification: (email: string) => Promise<void>
 }
 
-const DEFAULT_CONFIG: AuthConfig = { emailVerificationRequired: false, emailEnabled: false }
+const DEFAULT_CONFIG: AuthConfig = { google: false, emailVerificationRequired: false, emailEnabled: false }
 
 const MESSAGES: Record<string, string> = {
   INVALID_EMAIL_OR_PASSWORD: 'Incorrect email or password. Please try again.',
   USER_ALREADY_EXISTS: 'An account with that email already exists.',
   USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL: 'An account with that email already exists.',
   EMAIL_NOT_VERIFIED: 'Please verify your email first. We have sent you a new verification link.',
-  PASSWORD_TOO_SHORT: 'Your password must be at least 8 characters.',
+  PASSWORD_TOO_SHORT: 'Your password must be at least 10 characters.',
   PASSWORD_TOO_LONG: 'Your password is too long.',
   INVALID_EMAIL: 'Please enter a valid email address.',
   INVALID_PASSWORD: 'Your current password is incorrect.',
@@ -195,6 +199,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refetch()
   }, [refetch])
 
+  const signInWithGoogle = useCallback(async () => {
+    const { error } = await authClient.signIn.social({
+      provider: 'google',
+      callbackURL: `${origin()}/app`,
+      // Cancelled or failed Google sign-ins come back here with ?error=...
+      errorCallbackURL: `${origin()}/app/signin`,
+      newUserCallbackURL: `${origin()}/app`,
+    })
+    if (error) fail(error, 'Google sign-in could not start. Please try again.')
+  }, [])
+
   /**
    * Sign-out, in an order that leaves nothing behind:
    * 1. push any edit still waiting to be saved (it belongs to this user),
@@ -270,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       config,
       signUp,
       signIn,
+      signInWithGoogle,
       signOut,
       updateProfile,
       changePassword,
@@ -277,7 +293,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resetPassword,
       resendVerification,
     }),
-    [user, isPending, config, signUp, signIn, signOut, updateProfile, changePassword, requestPasswordReset, resetPassword, resendVerification],
+    [user, isPending, config, signUp, signIn, signInWithGoogle, signOut, updateProfile, changePassword, requestPasswordReset, resetPassword, resendVerification],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -296,6 +312,7 @@ export function StaticAuthProvider({ user, children }: { user: AuthUser | null; 
       config: DEFAULT_CONFIG,
       signUp: async () => ({ needsVerification: false }),
       signIn: noop,
+      signInWithGoogle: noop,
       signOut: noop,
       updateProfile: noop,
       changePassword: noop,

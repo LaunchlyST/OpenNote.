@@ -56,6 +56,8 @@ the site and the API. Set `BETTER_AUTH_URL` to the public https URL.
   SMTP, confirm your own address from the server terminal with
   `npm run admin:verify -- you@example.com`. Only admins see *Admin → Deploy*,
   and the API checks the role on every request.
+- **Continue with Google**: set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+  — step-by-step in [docs/google-sign-in.md](docs/google-sign-in.md).
 - **Remember me**: checked keeps you signed in for 30 days; unchecked ends the
   session when the browser closes.
 - **Data**: each user's calendar is stored server-side and only returned to

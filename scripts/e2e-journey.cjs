@@ -50,6 +50,9 @@ const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 1500
   await p.getByRole('link', { name: /Get Started Free/ }).first().click()
   await p.getByRole('button', { name: 'Create account' }).waitFor()
   ok('“Get Started Free” opens registration')
+  ;(await p.getByRole('button', { name: 'Continue with Google' }).count()) === 1 && (await p.getByText('or continue with', { exact: true }).count()) === 1
+    ? ok('sign-up shows the email form plus “or continue with” Google')
+    : die('Google / email choice missing')
 
   await p.getByLabel('Full name', { exact: true }).fill('Journey Tester')
   await p.getByLabel('Email address', { exact: true }).fill(email)

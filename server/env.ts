@@ -71,6 +71,11 @@ export const env = {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
+  /** Google OAuth client (Google Cloud Console → Credentials). Server-only. */
+  google: {
+    clientId: (process.env.GOOGLE_CLIENT_ID ?? '').trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? '').trim(),
+  },
   /**
    * Accounts that become administrators once their email is verified. Empty
    * means nobody. DEPLOY_ADMIN_EMAILS is still read for older .env files.
@@ -162,6 +167,7 @@ export const PROVIDER_LABELS: Record<string, string> = {
   custom: 'Custom host',
 }
 
+export const googleConfigured = Boolean(env.google.clientId && env.google.clientSecret)
 export const smtpConfigured = Boolean(env.smtp.host && env.smtp.from)
 
 /**

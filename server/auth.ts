@@ -1,7 +1,9 @@
 import { betterAuth } from 'better-auth'
 import { admin } from 'better-auth/plugins'
 import { db } from './db.ts'
-import { env, requireEmailVerification } from './env.ts'
+import { env, googleConfigured, requireEmailVerification } from './env.ts'
+import { passwordProblem } from './password-policy.ts'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { enqueueEmail } from './mail/index.ts'
 import { syncRoles } from './roles.ts'
 
@@ -14,7 +16,7 @@ export const auth = betterAuth({
 
   emailAndPassword: {
     enabled: true,
-    minPasswordLength: 8,
+    minPasswordLength: 10,
     maxPasswordLength: 128,
     requireEmailVerification,
     autoSignIn: true,
@@ -44,6 +46,44 @@ export const auth = betterAuth({
       // never set it; only the server can.
       plan: { type: 'string', required: false, defaultValue: 'free', input: false },
     },
+  },
+
+  // Google sign-in through Google's own OAuth pages (PKCE + state checked by
+  // Better Auth). OpenNote never sees the Google password.
+  socialProviders: googleConfigured
+    ? {
+        google: {
+          clientId: env.google.clientId,
+          clientSecret: env.google.clientSecret,
+          // Always show Google's account chooser, so another account can be picked.
+          prompt: 'select_account',
+        },
+      }
+    : {},
+
+  account: {
+    accountLinking: {
+      // A Google sign-in joins an existing OpenNote account only when Google
+      // has verified the address AND the OpenNote account's email is verified
+      // too. An unverified look-alike account can never capture a Google login.
+      enabled: true,
+      requireLocalEmailVerified: true,
+      trustedProviders: [],
+      allowDifferentEmails: false,
+    },
+  },
+
+  // Password strength is enforced here, on the server, for every way a
+  // password is set: sign-up, reset and change.
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      const field =
+        ctx.path === '/sign-up/email' ? 'password' : ctx.path === '/reset-password' || ctx.path === '/change-password' ? 'newPassword' : null
+      if (!field) return
+      const body = (ctx.body ?? {}) as Record<string, unknown>
+      const problem = passwordProblem(String(body[field] ?? ''), typeof body.email === 'string' ? body.email : undefined)
+      if (problem) throw new APIError('BAD_REQUEST', { message: problem, code: 'WEAK_PASSWORD' })
+    }),
   },
 
   plugins: [

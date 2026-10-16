@@ -149,6 +149,34 @@ try {
     check('repeated wrong passwords are rate limited', codes.includes(429), codes.join(','))
   }
 
+  console.log('\n  Email + password: only the right password works')
+  {
+    const ok = await call('/sign-in/email', { email: 'sam@opennote.test', password: PASSWORD })
+    check('correct OpenNote password → signed in', ok.status === 200 && Boolean(sessionCookie(ok)))
+    for (const [label, pw] of [
+      ['wrong password', 'a-long-enough-passwore'],
+      ['random password', 'x9!Qz7#mK2$vT4'],
+      ['empty password', ''],
+      ['password with different case', PASSWORD.toUpperCase()],
+    ] as const) {
+      const r = await call('/sign-in/email', { email: 'sam@opennote.test', password: pw })
+      check(`${label} → rejected, no session`, r.status >= 400 && !sessionCookie(r), `got ${r.status}`)
+    }
+    const unknown = await call('/sign-in/email', { email: 'nobody-here@opennote.test', password: PASSWORD })
+    check('unknown email → rejected with the same message (does not reveal accounts)', unknown.status === 401 && String(unknown.body?.code) === 'INVALID_EMAIL_OR_PASSWORD')
+    check('…and no account is created by a failed sign-in', role('nobody-here@opennote.test') === undefined)
+    const emailOnly = await call('/sign-in/email', { email: 'sam@opennote.test' })
+    check('email without a password → rejected', emailOnly.status >= 400 && !sessionCookie(emailOnly))
+    const dup = await call('/sign-up/email', { name: 'Again', email: 'SAM@opennote.test', password: 'another-pass-123' })
+    check('duplicate registration (any letter case) → rejected', dup.status >= 400 && !sessionCookie(dup), `got ${dup.status}`)
+    for (const [label, pw] of [['too short', 'short-1'], ['letters only', 'abcdefghijklmno'], ['digits only', '12345678901'], ['very common', 'password123'], ['contains the email name', 'weakuser-2026!']] as const) {
+      const r = await call('/sign-up/email', { name: 'Weak', email: 'weakuser@opennote.test', password: pw })
+      check(`weak password (${label}) → refused at sign-up`, r.status === 400 && role('weakuser@opennote.test') === undefined, `got ${r.status}`)
+    }
+    const fake = await call('/get-session', undefined, 'better-auth.session_token=forged.value')
+    check('a made-up session cookie is not accepted', fake.body === null)
+  }
+
   console.log('\n  Remember me')
   {
     const on = await call('/sign-in/email', { email: 'sam@opennote.test', password: PASSWORD, rememberMe: true })
