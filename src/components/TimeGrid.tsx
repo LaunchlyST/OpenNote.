@@ -138,6 +138,7 @@ export function TimeGrid({
     settings,
     addSlotNote,
     openNotesFor,
+    settingsOpen,
     openEdit,
     saveEvent,
     selectDate,
@@ -280,6 +281,9 @@ export function TimeGrid({
   }, [notes])
 
   const totalHeight = 24 * hourHeight
+  // The current-time indicator only exists when today's column is on screen
+  // and the calendar itself is showing (not covered by Settings).
+  const showNow = !settingsOpen && gridDays.some((d) => isSameDay(d, now))
   const nowMin = minutesOfDay(now)
 
   // Start the day at a sensible scroll offset.
@@ -523,6 +527,8 @@ export function TimeGrid({
     slot: number,
   ) => {
     e.stopPropagation()
+    // Selecting a note marks its own 5-minute slot (independent of the red now-line).
+    setSelected({ day: dateKey(day), start: slot, len: SLOT_MINUTES })
     const r = e.currentTarget.getBoundingClientRect()
     setSlotTarget({ day, rangeStart, rangeEnd: rangeStart + interval, slot, x: r.left, y: r.bottom + 4 })
   }
@@ -729,6 +735,14 @@ export function TimeGrid({
                   </span>
                 </span>
               </button>
+              {isToday && (
+                <span
+                  data-testid="today-pill"
+                  className="pointer-events-none absolute left-1/2 top-[1px] z-10 -translate-x-1/2 rounded-full bg-[#ef4444] px-1.5 py-[1.5px] text-[9px] font-semibold uppercase leading-none tracking-[0.06em] text-white"
+                >
+                  Today
+                </span>
+              )}
               {/* Notes-section documents linked to this day: a badge only,
                   never anything inside the time grid. */}
               {count > 0 && (
@@ -758,11 +772,22 @@ export function TimeGrid({
       {/* Timeline */}
       <div
         ref={scrollRef}
-        className="scroll-area relative flex-1 overflow-y-auto overflow-x-hidden"
+        className="scroll-area relative isolate flex-1 overflow-y-auto overflow-x-hidden"
         style={{ touchAction: 'pan-y' }}
       >
         <div className="relative flex" style={{ height: totalHeight }}>
           <div className="relative w-[62px] shrink-0 select-none">
+            {showNow && (
+              <div
+                data-testid="now-label"
+                className="absolute inset-x-0 z-10 flex -translate-y-1/2 justify-center"
+                style={{ top: (nowMin / 60) * hourHeight }}
+              >
+                <span className="rounded-full bg-[#ef4444] px-1.5 py-[2px] text-[10px] font-semibold leading-none tabular-nums text-white">
+                  {formatClock(now, hour12)}
+                </span>
+              </div>
+            )}
             {HOURS.map((h) => (
               <div
                 key={h}
@@ -823,9 +848,9 @@ export function TimeGrid({
                     />
                   )),
                 )}
-              {days.some((d) => isSameDay(d, now)) && (
+              {showNow && (
                 <div
-                  className="absolute inset-x-0 border-t border-[#ffd6d7]"
+                  className="absolute inset-x-0 border-t border-[#fde4e4]"
                   style={{ top: (nowMin / 60) * hourHeight }}
                 />
               )}
@@ -888,7 +913,7 @@ export function TimeGrid({
                           >
                             {(sel.len / 60) * hourHeight >= 16 && (
                               <span className="absolute left-1.5 top-1 rounded-[4px] bg-[#3b82f6] px-1 text-[10px] font-semibold tabular-nums leading-[14px] text-white">
-                                {weekdayShort(day)} {day.getDate()} · {range(sel.start, sel.len)}
+                                {day.toLocaleDateString(undefined, { weekday: 'long' })} {day.getDate()} · {range(sel.start, sel.len)}
                               </span>
                             )}
                           </div>
@@ -896,6 +921,19 @@ export function TimeGrid({
                       </>
                     )
                   })()}
+
+                  {isToday && showNow && (
+                    <div
+                      data-testid="now-line"
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-x-0"
+                      style={{ top: (nowMin / 60) * hourHeight }}
+                    >
+                      <div className="relative border-t-[1.5px] border-[rgba(239,68,68,0.85)]">
+                        <span className="absolute -left-[4px] -top-[5px] h-2 w-2 rounded-full bg-[#ef4444]" />
+                      </div>
+                    </div>
+                  )}
 
                   {placed.map((p) => {
                     const color = colorOf(
@@ -994,16 +1032,6 @@ export function TimeGrid({
 
                   {renderNotes(day, placed)}
 
-                  {isToday && (
-                    <div
-                      className="pointer-events-none absolute inset-x-0 z-30"
-                      style={{ top: (nowMin / 60) * hourHeight }}
-                    >
-                      <div className="relative border-t-[1.5px] border-[#ff5a5f]">
-                        <span className="absolute -left-[4px] -top-[4px] h-2 w-2 rounded-full bg-[#ff5a5f]" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               )
             })}
