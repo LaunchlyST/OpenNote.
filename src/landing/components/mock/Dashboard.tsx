@@ -12,7 +12,6 @@ import {
   Plus,
   Search,
   Settings,
-  StickyNote,
   Sun,
 } from 'lucide-react'
 import { COLORS } from '../../../lib/colors'
@@ -156,7 +155,6 @@ function Sidebar() {
         <div className="px-3 pb-3">
           <div className="space-y-0.5 pt-2">
             <NavItem icon={<CalendarDays className="h-[15px] w-[15px]" />} label="Calendar" active />
-            <NavItem icon={<StickyNote className="h-[15px] w-[15px]" />} label="Notes" />
             <NavItem icon={<Sun className="h-[15px] w-[15px]" />} label="Today" />
             <NavItem icon={<Settings className="h-[15px] w-[15px]" />} label="Settings" />
           </div>
@@ -262,10 +260,6 @@ function TopBar({ view, onViewChange }: { view: MockView; onViewChange?: (v: Moc
           })}
         </span>
         <span className="grid h-9 w-9 place-items-center text-[#6b6a66]"><Search className="h-4 w-4" /></span>
-        <span className="inline-flex h-9 items-center gap-1.5 px-2.5 text-[12.5px] font-medium text-[#6b6a66]">
-          <StickyNote className="h-4 w-4" />
-          Notes
-        </span>
         <span className="grid h-9 w-9 place-items-center text-[#6b6a66]"><Settings className="h-4 w-4" /></span>
       </span>
     </header>
