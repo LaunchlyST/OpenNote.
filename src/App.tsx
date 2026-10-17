@@ -5,7 +5,7 @@ import { useRouter } from './router'
 import { PreferencesProvider, usePreferences } from './preferences'
 import { useEventReminders } from './hooks/reminders'
 import { WorkspacePicker } from './projects/WorkspacePicker'
-import { ProjectDashboard } from './projects/ProjectDashboard'
+import { MyProjects } from './projects/MyProjects'
 import { PageChrome, Spinner, btn } from './projects/Chrome'
 import { ProjectContext } from './projects/context'
 import { ApiError, parseWorkspaceRoute, paths, projectsApi } from './projects/api'
@@ -276,7 +276,7 @@ function Shell() {
 
   // Sign In → Choose workspace → My Projects → a project's calendar.
   const route = parseWorkspaceRoute(path) ?? { kind: 'picker' as const }
-  if (route.kind === 'dashboard') return <ProjectDashboard key={route.workspace} workspace={route.workspace} />
+  if (route.kind === 'dashboard') return <MyProjects key={route.workspace} workspace={route.workspace} />
   if (route.kind === 'project') return <ProjectView key={route.id} id={route.id} />
   return <WorkspacePicker />
 }

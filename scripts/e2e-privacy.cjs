@@ -22,18 +22,19 @@ const EVENT = `Alice secret meeting ${stamp}`
 const NOTE = `Alice private note ${stamp}`
 
 const appReady = (p) => p.getByText('Full Week').first().waitFor({ timeout: 15000 })
-const pickerReady = (p) => p.getByText('Choose Your Workspace').first().waitFor({ timeout: 15000 })
+const pickerReady = (p) => p.getByText('Your space to make').first().waitFor({ timeout: 15000 })
 /** Sign-in lands on the workspace picker: open Free, then open (or create) the named project. */
 async function enterProject(p, name) {
   await pickerReady(p)
-  await p.getByRole('button', { name: 'Open Free workspace' }).click()
-  await p.getByText(/No projects yet|All projects/).first().waitFor({ timeout: 15000 })
+  await p.getByRole('button', { name: /Get Started Free/ }).click()
+  await p.getByText(/Your workspace starts here|Showing \d/).first().waitFor({ timeout: 15000 })
   const card = p.getByRole('button', { name: `Open ${name}`, exact: true }).first()
   if (await card.count()) await card.click()
   else {
-    await p.getByRole('button', { name: /Create (New|your first) Project/i }).first().click()
+    await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
     await p.getByLabel('Project name').fill(name)
-    await p.getByRole('button', { name: 'Create project' }).click()
+    await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
+    await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
   }
   await appReady(p)
 }

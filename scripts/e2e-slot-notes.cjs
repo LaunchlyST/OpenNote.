@@ -22,9 +22,10 @@ const zoomLabel = (p) => p.getByTestId('zoom-label').innerText()
 const popover = (p) => p.getByRole('dialog', { name: /^Notes for/ })
 
 async function createProject(p, name) {
-  await p.getByRole('button', { name: /Create (New|your first) Project/i }).first().click()
+  await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
   await p.getByLabel('Project name').fill(name)
-  await p.getByRole('button', { name: 'Create project' }).click()
+  await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
+  await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
   await appReady(p)
 }
 
@@ -98,7 +99,7 @@ async function addNote(p, text) {
   await p.getByLabel('Password', { exact: true }).fill('slot-notes-pass-1')
   await p.getByLabel('Confirm password', { exact: true }).fill('slot-notes-pass-1')
   await p.getByRole('button', { name: 'Create account' }).click()
-  await p.getByRole('button', { name: 'Open Free workspace' }).click()
+  await p.getByRole('button', { name: /Get Started Free/ }).click()
   await createProject(p, 'Alpha')
   check((await zoomLabel(p)) === '1 h', 'calendar opens zoomed out at 1-hour rows')
   check((await p.locator('[data-note-card]').count()) === 0, 'a new project has no notes')
@@ -286,7 +287,7 @@ async function addNote(p, text) {
 
   // 7. Another project never sees them.
   await p.getByRole('button', { name: /Back to Projects/ }).click()
-  await p.getByText(/All projects/).first().waitFor()
+  await p.getByText(/Showing \d/).first().waitFor()
   await createProject(p, 'Beta')
   check((await p.locator('[data-note-card]').count()) === 0, 'project Beta has none of Alpha’s notes')
   await clickSlot(p, 9 * 60)

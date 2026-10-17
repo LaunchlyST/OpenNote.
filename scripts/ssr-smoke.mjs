@@ -315,13 +315,14 @@ try {
   /* -------------------------------------------------------------- */
   console.log('\n  Workspace picker (after sign-in):')
   const appHtml = await renderApp()
-  check('signed-in /app shows the workspace picker', appHtml.includes('Choose Your Workspace'))
-  check('picker offers OpenNote Free', appHtml.includes('OpenNote Free') && appHtml.includes('Open Free workspace'))
-  check('picker shows OpenNote Pro', appHtml.includes('OpenNote Pro'))
-  check('Pro is locked for a Free account', appHtml.includes('Pro is coming soon') && !appHtml.includes('Open Pro workspace'))
-  check('picker does not jump straight to the calendar', !appHtml.includes('Full Week'))
+  check('signed-in /app shows the welcome page', appHtml.includes('Your space to make'))
+  check('Free is the main action', appHtml.includes('OpenNote Free') && appHtml.includes('Get Started Free') && appHtml.includes('No payment required.'))
+  check('Pro is shown as coming soon', appHtml.includes('OpenNote Pro') && appHtml.includes('Pro — Coming Soon'))
+  check('Pro cannot be opened by a Free account', !appHtml.includes('Open Pro workspace'))
+  check('no technical billing messages', !/Checkout is not switched on|You have not been charged|keeps whatever plan/.test(appHtml))
+  check('the welcome page does not jump straight to the calendar', !appHtml.includes('Full Week'))
   const proHtml = await renderApp(undefined, { ...TEST_USER, plan: 'pro' })
-  check('Pro account can open the Pro workspace', proHtml.includes('Open Pro workspace'))
+  check('a Pro account can open the Pro workspace', proHtml.includes('Open Pro workspace'))
 
   console.log('\n  Project calendar (existing calendar UI):')
   const calHtml = await renderProject()
@@ -339,7 +340,7 @@ try {
 
   /* Route-provided screens */
   const guestHtml = await renderApp(undefined, null)
-  check('workspace is not rendered without a session', !guestHtml.includes('Full Week') && !guestHtml.includes('Choose Your Workspace'))
+  check('workspace is not rendered without a session', !guestHtml.includes('Full Week') && !guestHtml.includes('Your space to make'))
   const forgotHtml = await renderApp({ screen: 'forgot' }, null)
   check('/app/forgot-password renders the reset request form', forgotHtml.includes('Reset your password'))
   const resetHtml = await renderApp({ screen: 'reset' }, null)
