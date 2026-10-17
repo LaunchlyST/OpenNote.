@@ -151,7 +151,13 @@ export function TimeGrid({
   // the current visit only.
   const [zoom, setZoomState] = useState(0)
   const interval = ZOOM_LEVELS[zoom].interval
-  const hourHeight = hourPxFor(zoom, baseHourHeight)
+  const [gridWidth, setGridWidth] = useState(0)
+  // Square cells: one row (one interval) is exactly as tall as one day column
+  // of the week is wide, so 1 h, 30, 15 or 5 min each fill a 1:1 square.
+  // Day view uses the same week-column size so its squares match.
+  const squarePx = gridWidth > 0 ? Math.floor(gridWidth / 7) : 0
+  const hourHeight =
+    squarePx > 0 ? squarePx * (60 / ZOOM_LEVELS[zoom].interval) : hourPxFor(zoom, baseHourHeight)
   const setZoom = (next: number) => {
     setZoomState(clampZoom(next))
   }
@@ -178,7 +184,6 @@ export function TimeGrid({
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const gridRef = useRef<HTMLDivElement | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
-  const [gridWidth, setGridWidth] = useState(0)
 
   const isSingleDay = gridDays.length === 1
 

@@ -64,6 +64,35 @@ const hm = (min) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`
   }
   const inside = (r, c) => r.x >= c.x - 0.5 && r.x + r.width <= c.x + c.w + 0.5
 
+  // 0. Square cells at every zoom level, and they grow with the screen.
+  const squareAt = async () => {
+    const c = await cols.nth(3).boundingBox()
+    const order = { '1 h': 60, '30 min': 30, '15 min': 15, '5 min': 5 }
+    const rowH = (c.height / 1440) * order[await label()]
+    return { w: c.width, h: rowH }
+  }
+  const sizes = []
+  for (const lvl of ['1 h', '30 min', '15 min', '5 min']) {
+    await zoomTo(lvl)
+    const q = await squareAt()
+    sizes.push(`${lvl} ${Math.round(q.w)}×${Math.round(q.h)}`)
+    check(Math.abs(q.w - q.h) <= 2, `${lvl}: each slot is a square (${q.w.toFixed(0)} × ${q.h.toFixed(0)} px)`)
+  }
+  await zoomTo('1 h')
+  const small = (await squareAt()).w
+  await p.setViewportSize({ width: 1920, height: 1080 })
+  await p.waitForTimeout(300)
+  const big = await squareAt()
+  check(big.w > small + 20 && Math.abs(big.w - big.h) <= 2, `a wider screen gives bigger squares (${Math.round(small)} → ${Math.round(big.w)} px)`)
+  const ws = await cols.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)))
+  check(Math.max(...ws) - Math.min(...ws) <= 1, `all seven columns are equal width (${ws.join(', ')})`)
+  await reveal(10 * 60)
+  const l10 = await p.locator('div', { hasText: /^10:00$/ }).first().boundingBox()
+  check(Math.abs(l10.y + l10.height / 2 - (await yOf(0, 600)).y) < 2, 'the 10:00 label lines up with its square')
+  SHOTS && (await p.screenshot({ path: `${SHOTS}/grid-squares-1920.png` }))
+  await p.setViewportSize({ width: 1440, height: 900 })
+  await p.waitForTimeout(300)
+
   // 1. Hover highlights exactly the square under the mouse.
   await reveal(10 * 60)
   let at = await yOf(2, 10 * 60 + 30)

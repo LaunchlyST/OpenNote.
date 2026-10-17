@@ -207,11 +207,16 @@ async function addNote(p, text) {
   await p.keyboard.press('Escape')
   await p.waitForTimeout(200)
   const hourCards = await p.locator('[data-day]').first().locator('[data-note-card]').allInnerTexts()
-  check(hourCards.some((t) => t.includes('Call client')) && hourCards.some((t) => /\+\d+ more note/.test(t)), `three busy slots in one hour show an overflow indicator (${hourCards.join(' / ')})`)
-  await p.getByRole('button', { name: /more note/ }).click()
+  // With tall square rows all three busy slots fit; on shorter rows the
+  // extras collapse into "+N more". Either way every slot stays reachable.
+  const allShown = ['Call client', 'Prep slides', 'Book room'].every((t) => hourCards.some((c) => c.includes(t)))
+  const overflow = hourCards.some((t) => /\+\d+ more note/.test(t))
+  check(hourCards.some((t) => t.includes('Call client')) && (allShown || overflow), `three busy slots in one hour stay visible or show an overflow indicator (${hourCards.join(' / ').replace(/\n/g, ' ')})`)
+  if (overflow) await p.getByRole('button', { name: /more note/ }).click()
+  else await clickSlot(p, 9 * 60)
   await popover(p).waitFor()
   const opts = await popover(p).getByLabel('Time slot').locator('option').allInnerTexts()
-  check(opts.filter((o) => /note/.test(o)).length === 3, 'the overflow popover lists every occupied slot in that hour')
+  check(opts.filter((o) => /note/.test(o)).length === 3, 'the hour popover lists every occupied slot in that hour')
   await p.keyboard.press('Escape')
 
   // Delete one note.
