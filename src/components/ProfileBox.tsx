@@ -82,15 +82,27 @@ export function ProfileBox() {
               <UserRound className="h-[18px] w-[18px]" />
               Profile
             </button>
-            <a role="menuitem" href="/#pricing" className={item} onClick={close}>
-              <CreditCard className="h-[18px] w-[18px]" />
-              <span>
+            {/* Not clickable until subscriptions launch. */}
+            <div
+              role="menuitem"
+              aria-disabled="true"
+              tabIndex={-1}
+              className="group/sub relative flex w-full cursor-default items-center gap-3 rounded-[14px] px-3 py-2.5 text-left text-[14px] font-medium text-[#191919]"
+            >
+              <CreditCard className="h-[18px] w-[18px] shrink-0" />
+              <span className="flex items-center gap-1.5">
                 Subscription
-                <span className="ml-1 -translate-y-1.5 inline-block rounded-[5px] bg-[#f6c90e] px-1 text-[8.5px] font-bold italic tracking-wide text-white">
-                  PRO
+                <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full bg-[#fdf3c4] px-1.5 py-[2px] text-[9px] font-semibold uppercase leading-none tracking-[0.06em] text-[#8a6a00] ring-1 ring-inset ring-[#f2d66b]">
+                  Coming Soon
                 </span>
               </span>
-            </a>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-1/2 top-full z-10 mt-1 -translate-x-1/2 whitespace-nowrap rounded-lg bg-[#191919] px-2 py-1 text-[11px] font-medium text-white opacity-0 shadow-[0_6px_16px_-6px_rgba(0,0,0,0.45)] transition-opacity duration-150 group-hover/sub:opacity-100"
+              >
+                Subscriptions coming soon
+              </span>
+            </div>
             <button type="button" role="menuitem" className={item} onClick={() => { close(); openAccount('account') }}>
               <SettingsIcon className="h-[18px] w-[18px]" />
               Settings
