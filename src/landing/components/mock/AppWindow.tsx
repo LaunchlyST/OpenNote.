@@ -9,6 +9,7 @@ import {
 } from './AppChrome'
 import type { MockView } from './AppChrome'
 import { MockDashboard } from './Dashboard'
+import { MockProjects } from './Projects'
 import { DEMO_WEEK_TITLE } from '../../demo'
 
 /**
@@ -49,15 +50,21 @@ function useFitScale(baseWidth: number) {
   return { ref, scale }
 }
 
+/** Which screen the showcase window is showing. */
+export type MockScreen = 'calendar' | 'projects'
+
 /** The current dashboard layout: sidebar, top bar and calendar. */
 function AppBody({
   view,
   onViewChange,
+  screen,
 }: {
   view: MockView
   onViewChange?: (view: MockView) => void
   dateLabel: string
+  screen: MockScreen
 }) {
+  if (screen === 'projects') return <MockProjects />
   return <MockDashboard view={view} onViewChange={onViewChange} />
 }
 
@@ -70,12 +77,14 @@ export function AppWindow({
   onViewChange,
   dateLabel = `${DEMO_WEEK_TITLE}, 2026`,
   label = 'OpenNote',
+  screen = 'calendar',
   className,
 }: {
   view?: MockView
   onViewChange?: (view: MockView) => void
   dateLabel?: string
   label?: string
+  screen?: MockScreen
   className?: string
 }) {
   const { ref, scale } = useFitScale(BASE_W)
@@ -100,7 +109,7 @@ export function AppWindow({
           <span className="w-[38px]" aria-hidden="true" />
         </div>
         <div style={{ height: BASE_H }}>
-          <AppBody view={view} onViewChange={onViewChange} dateLabel={dateLabel} />
+          <AppBody view={view} onViewChange={onViewChange} dateLabel={dateLabel} screen={screen} />
         </div>
       </div>
     </div>
@@ -168,19 +177,21 @@ export function ResponsiveAppWindow({
   onViewChange,
   dateLabel,
   label = 'OpenNote',
+  screen = 'calendar',
   className,
 }: {
   view?: MockView
   onViewChange?: (view: MockView) => void
   dateLabel?: string
   label?: string
+  screen?: MockScreen
   className?: string
 }) {
   // OpenNote is desktop-only, so every screen size shows the desktop app,
   // scaled to fit.
   return (
     <div className={className}>
-      <AppWindow view={view} onViewChange={onViewChange} dateLabel={dateLabel} label={label} />
+      <AppWindow view={view} onViewChange={onViewChange} dateLabel={dateLabel} label={label} screen={screen} />
     </div>
   )
 }
