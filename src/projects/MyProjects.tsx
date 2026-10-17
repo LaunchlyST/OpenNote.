@@ -76,16 +76,33 @@ export function createdLabel(iso: string | null | undefined): string {
   return `Created: ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
 }
 
-/** Page buttons with ellipses: 1 … 4 5 6 … 20. */
+/** How many numbered buttons the pager shows at once. */
+const MAX_PAGE_BUTTONS = 4
+
+/**
+ * Page buttons with ellipses, never more than `MAX_PAGE_BUTTONS` numbers wide:
+ * `1 2 3 … 20` near the start, `1 … 9 10 … 20` in the middle, `1 … 18 19 20`
+ * at the end. The first and last pages are always reachable; the remaining
+ * slots go to whichever pages sit closest to the current one.
+ */
 function pageList(current: number, total: number): Array<number | '…'> {
-  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
-  const out: Array<number | '…'> = [1]
-  const from = Math.max(2, current - 1)
-  const to = Math.min(total - 1, current + 1)
-  if (from > 2) out.push('…')
-  for (let i = from; i <= to; i++) out.push(i)
-  if (to < total - 1) out.push('…')
-  out.push(total)
+  if (total <= MAX_PAGE_BUTTONS) return Array.from({ length: total }, (_, i) => i + 1)
+
+  const chosen = new Set<number>([1, total])
+  // Nearest neighbours of `current` first, so the active page is always listed.
+  for (let d = 0; chosen.size < MAX_PAGE_BUTTONS && d < total; d++) {
+    for (const p of [current - d, current + d]) {
+      if (chosen.size >= MAX_PAGE_BUTTONS) break
+      if (p > 1 && p < total) chosen.add(p)
+    }
+  }
+
+  const sorted = [...chosen].sort((a, b) => a - b)
+  const out: Array<number | '…'> = []
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push('…')
+    out.push(p)
+  })
   return out
 }
 
@@ -93,7 +110,7 @@ function pageList(current: number, total: number): Array<number | '…'> {
 /* Top navigation                                                       */
 /* ------------------------------------------------------------------ */
 
-function ComingSoonLink({ label }: { label: string }) {
+function ComingSoonLink({ label, name }: { label: string; name?: string }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -115,22 +132,38 @@ function ComingSoonLink({ label }: { label: string }) {
         aria-haspopup="dialog"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'rounded-lg px-3 py-1.5 text-[13.5px] font-medium transition',
-          open ? 'bg-[#f1f1ef] text-[#191919]' : 'text-[#5f5e5b] hover:text-[#191919]',
+          'inline-flex h-[30px] items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[13px] font-medium transition',
+          open ? 'bg-[#f1f1ef] text-[#191919]' : 'text-[#5f5e5b] hover:bg-[#f3f3f1] hover:text-[#191919]',
         )}
       >
+        <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-[#d6d5cf]" />
         {label}
       </button>
       {open && (
         <div
           role="dialog"
-          aria-label={`${label} — Coming Soon`}
+          aria-label={`${name ?? label} — Coming Soon`}
           className="absolute left-1/2 top-full z-40 mt-2 w-56 -translate-x-1/2 rounded-xl border border-[#ececea] bg-white p-3 text-left shadow-[0_12px_32px_-12px_rgba(0,0,0,0.25)]"
         >
           <p className="text-[13px] font-semibold text-[#191919]">Coming Soon</p>
           <p className="mt-0.5 text-[12px] leading-snug text-[#6b6a66]">This feature is being developed.</p>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The three centre links, bare on the page — no pill behind them. Each one
+ * still picks up a soft background on hover and while its popover is open.
+ * The labels are placeholders; swap them in `HeaderLinks` once the sections exist.
+ */
+function HeaderLinks() {
+  return (
+    <div className="inline-flex items-center gap-0.5">
+      <ComingSoonLink label="Coming Soon" name="Features" />
+      <ComingSoonLink label="Coming Soon" name="Explore" />
+      <ComingSoonLink label="Coming Soon" name="Community" />
     </div>
   )
 }
@@ -158,7 +191,7 @@ export function AccountMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-xl px-1.5 py-1 transition hover:bg-[#f3f3f1]"
+        className="flex h-11 items-center gap-2 rounded-full border border-[#ebebe9] bg-white pl-1 pr-3.5 transition hover:bg-[#f7f7f5]"
       >
         <Avatar size={30} name={user.fullName} src={user.avatar} />
         <span className="hidden max-w-[140px] truncate text-[13px] font-medium text-[#37352f] md:block">{user.fullName || user.email}</span>
@@ -549,56 +582,53 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
     window.setTimeout(() => setNotice((n) => (n === msg ? null : n)), 3000)
   }
 
-  const top = (
-    <header className="sticky top-0 z-30 border-b border-[#ececea] bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
-        <a href="/" aria-label="OpenNote home" className="shrink-0">
-          <Logo size="sm" />
-        </a>
-        <nav aria-label="Explore OpenNote" className="hidden flex-1 items-center justify-center gap-1 md:flex">
-          <ComingSoonLink label="Features" />
-          <ComingSoonLink label="Explore" />
-          <ComingSoonLink label="Community" />
-        </nav>
-        <div className="ml-auto flex items-center gap-2 md:ml-0">
-          {!locked && (
-            <button type="button" onClick={() => setDialog({ kind: 'create' })} className={cn(btn.primary, 'h-9 px-3 sm:px-4')}>
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Create Project</span>
-              <span className="sm:hidden">New</span>
-            </button>
-          )}
-          <AccountMenu />
-        </div>
-      </div>
-      <nav aria-label="Explore OpenNote (mobile)" className="flex items-center justify-center gap-1 border-t border-[#f1f1ef] py-1 md:hidden">
-        <ComingSoonLink label="Features" />
-        <ComingSoonLink label="Explore" />
-        <ComingSoonLink label="Community" />
-      </nav>
-    </header>
-  )
-
-  const workspaceChip = (
+  const createButton = (
     <button
       type="button"
-      onClick={() => navigate(paths.picker)}
-      className="inline-flex items-center gap-1.5 rounded-full border border-[#e3e3e0] bg-white px-2.5 py-1 text-[11.5px] font-medium text-[#6b6a66] transition hover:border-[#cfcfcb] hover:text-[#191919]"
+      onClick={() => setDialog({ kind: 'create' })}
+      className="inline-flex h-12 items-center gap-2 rounded-lg bg-gradient-to-b from-[#2c2c68] to-[#171740] px-5 text-[14px] font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.16),0_2px_6px_rgba(27,27,70,0.22),0_12px_26px_-12px_rgba(27,27,70,0.85)] transition hover:from-[#35357e] hover:to-[#1e1e52] active:translate-y-px"
     >
-      OpenNote {workspace === 'pro' ? 'Pro' : 'Free'} · Switch workspace
+      <Plus className="h-[18px] w-[18px]" />
+      Create Project
     </button>
+  )
+
+  /**
+   * One row, no absolute positioning: brand left / links centred / account
+   * right. The `1fr auto 1fr` track is what keeps the links dead centre of the
+   * window no matter how wide the brand or the account chip grows.
+   */
+  const top = (
+    <header className="sticky top-0 z-30">
+      <div className="mx-auto w-full px-4 sm:px-6">
+        <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-3">
+          <a href="/" aria-label="OpenNote home" className="justify-self-start">
+            <Logo size="sm" />
+          </a>
+          <nav aria-label="Explore OpenNote" className="hidden justify-self-center md:block">
+            <HeaderLinks />
+          </nav>
+          <div className="justify-self-end">
+            <AccountMenu />
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-center pb-3 md:hidden">
+        <HeaderLinks />
+      </div>
+    </header>
   )
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto overflow-x-hidden bg-[#fafaf9]">
       {top}
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-12 pt-7 sm:px-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-10 pt-7 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-[24px] font-semibold tracking-[-0.03em] text-[#191919]">My Projects</h1>
             <p className="mt-1 text-[13.5px] text-[#8f8e8a]">Organise your projects, calendars and notes in one place.</p>
           </div>
-          {workspaceChip}
+          {!locked && createButton}
         </div>
 
         {locked ? (
@@ -665,11 +695,6 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
               <Empty
                 title="Your workspace starts here"
                 body="Create your first project to organise your calendar and notes."
-                action={
-                  <button type="button" className={btn.primary} onClick={() => setDialog({ kind: 'create' })}>
-                    <Plus className="h-4 w-4" /> Create Project
-                  </button>
-                }
               />
             ) : filtered.length === 0 ? (
               <Empty title="No matching projects found." body="Try a different name." />
@@ -697,8 +722,9 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
                     />
                   ))}
                 </div>
-                {/* Always shown; on a single page the arrows are simply disabled. */}
-                <div className="mt-8">
+                {/* Bottom centre. Shown whenever there is something to page through, so the
+                    control is discoverable; on a single page every button is disabled. */}
+                <div className="mt-8 flex justify-center sm:mt-auto sm:pt-10">
                   <Pager page={page} pages={pages} onPage={(n) => setView((v) => ({ ...v, page: n }))} />
                 </div>
               </>

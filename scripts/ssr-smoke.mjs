@@ -241,16 +241,14 @@ try {
     'Try it right here.',
     'Full Week',
     'No account needed.',
-    // Pricing
+    // Pricing. Pro and Business are sealed: no price, no feature list, so the
+    // old "Introductory Price" and per-feature copy must not come back.
     'Simple plans. Better planning.',
     'Free Forever',
-    'Introductory Price',
     'Coming Soon',
     'Built for Teams',
     'isn’t available yet. Nothing can be purchased',
-    'Already a member of our main platform?',
-    'Shared team calendars',
-    'Advanced permissions',
+    'Nothing is on sale yet',
     // FAQ
     'Questions &amp; answers',
     'What is OpenNote?',

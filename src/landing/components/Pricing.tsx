@@ -112,6 +112,36 @@ function FeatureRow({
   )
 }
 
+/**
+ * Stands in for a plan's feature list while it is still sealed. Blurred
+ * placeholder rows hint that there is a list without giving any of it away, and
+ * a lock badge says plainly that it is not for sale yet.
+ */
+function SealedFeatures() {
+  return (
+    <div className="relative overflow-hidden rounded-[14px] border border-lp-line bg-lp-sunken">
+      <div aria-hidden="true" className="space-y-3 p-4 blur-[3px] select-none">
+        {[92, 74, 86, 66].map((w, i) => (
+          <span key={i} className="flex items-center gap-2.5">
+            <span className="h-4 w-4 shrink-0 rounded-full bg-white" />
+            <span className="h-3 rounded-full bg-white" style={{ width: `${w}%` }} />
+          </span>
+        ))}
+      </div>
+      <div
+        aria-hidden="true"
+        className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.5)_0%,rgba(255,255,255,0.72)_55%,rgba(255,255,255,0.88)_100%)]"
+      />
+      <div className="absolute inset-0 grid place-items-center p-6">
+        <span className="inline-flex items-center gap-2 rounded-full border-[1.5px] border-lp-ink bg-white px-3.5 py-1.5 text-[11.5px] font-semibold tracking-[0.1em] text-lp-ink uppercase shadow-[2px_2px_0_0_#191919]">
+          <Lock className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden="true" />
+          Coming soon
+        </span>
+      </div>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ */
 /* Price block                                                         */
 /* ------------------------------------------------------------------ */
@@ -224,26 +254,22 @@ function PlanCard({ plan }: { plan: Plan }) {
           <PriceBlock plan={plan} />
         </div>
 
-        <div className={cn('mt-6 mb-5 h-px', t.divider)} />
+        {plan.features.length > 0 ? (
+          <>
+            <div className={cn('mt-6 mb-5 h-px', t.divider)} />
 
-        <ul className="flex-1 space-y-2.5">
-          {plan.features.map((feature) => (
-            <FeatureRow key={feature.label} feature={feature} theme={plan.theme} />
-          ))}
-        </ul>
-
-        {/* Membership reassurance, only where it applies */}
-        {plan.id === 'pro' && (
-          <p
-            className={cn(
-              'mt-6 rounded-xl border px-3.5 py-3 text-[13px] leading-relaxed',
-              isDark
-                ? 'border-white/10 bg-white/5 text-white/65'
-                : 'border-lp-line bg-lp-sunken text-lp-body',
-            )}
-          >
-            {PRICING.membershipNote}
-          </p>
+            <ul className="flex-1 space-y-2.5">
+              {plan.features.map((feature) => (
+                <FeatureRow key={feature.label} feature={feature} theme={plan.theme} />
+              ))}
+            </ul>
+          </>
+        ) : (
+          <div className="flex-1">
+            <div className="mt-6 mb-5">
+              <SealedFeatures />
+            </div>
+          </div>
         )}
 
         {/* CTA */}

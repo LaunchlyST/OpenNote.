@@ -27,6 +27,10 @@ process.env.BETTER_AUTH_URL = 'http://localhost:3001'
 process.env.BETTER_AUTH_SECRET = SECRET
 process.env.DATABASE_PATH = join(tmp, 'test.db')
 process.env.SMTP_HOST = ''
+// These checks sign users in and expect a session, including one who has not
+// verified their address yet. Pin verification off rather than letting it
+// follow whatever SMTP happens to be configured on the machine.
+process.env.REQUIRE_EMAIL_VERIFICATION = 'false'
 process.env.DEPLOY_PROVIDER = 'vercel'
 process.env.DEPLOY_PRODUCTION_URL = 'https://opennote.example.com'
 process.env.DEPLOY_HOOK_URL = ''
@@ -66,13 +70,14 @@ process.env.DEPLOY_HOOK_URL = `http://127.0.0.1:${(hook.address() as AddressInfo
 /* ------------------------------------------------------------------ */
 
 const { auth } = await import('../server/auth.ts')
-const { getMigrations } = await import('better-auth/db/migration')
 
-// The throwaway database starts empty, so Better Auth's own tables have to be
-// created first — the same thing `npm run db:migrate` does.
+// The throwaway database starts empty, so it has to be brought up to date the
+// same way the app does it — see `applyMigrations` in server/schema.ts. This
+// used to be a hand-rolled copy of just the Better Auth half, which drifted and
+// left the auth tables missing, so every signed-in check below failed with 401.
 {
-  const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(auth.options)
-  if (toBeCreated.length || toBeAdded.length) await runMigrations()
+  const { applyMigrations } = await import('../server/schema.ts')
+  await applyMigrations({ quiet: true })
 }
 
 const { deployRouter, publicStatus } = await import('../server/deploy.ts')
