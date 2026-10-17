@@ -1,36 +1,60 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
   Bell,
+  BellRing,
+  CalendarClock,
   CalendarDays,
   Check,
+  Clock,
   CreditCard,
+  Eye,
   Globe,
+  ImageUp,
+  KeyRound,
+  LayoutGrid,
+  Link2,
   Loader2,
   Lock,
   LogOut,
+  Mail,
+  Monitor,
+  Moon,
   Palette,
   Rocket,
   Settings as SettingsIcon,
   Shield,
+  ShieldCheck,
+  Smartphone,
+  Sparkles,
+  Sun,
+  Tags,
   Trash2,
   UserRound,
+  ZoomIn,
 } from 'lucide-react'
 import { useApp } from '../store'
 import type { SettingsSectionId } from '../store'
 import { useAuth } from '../auth'
+import { authClient } from '../lib/auth-client'
 import { fileToAvatar } from '../lib/avatar'
-import { planOf } from '../lib/plan'
-import { PLANS } from '../lib/plan'
+import { COLORS, COLOR_IDS } from '../lib/colors'
 import { cn } from '../lib/id'
+import { ZOOM_LEVELS } from '../lib/slots'
+import { ACCENTS, formatDate, usePreferences } from '../preferences'
+import type { AccentId, Preferences } from '../preferences'
+import { inQuietHours, notificationPermission } from '../hooks/reminders'
 import { Avatar } from './Avatar'
 import { DeployPanel } from './DeployPanel'
 import {
+  Badge,
   Button,
   ComingSoon,
   Field,
+  SaveStatus,
   SegmentedControl,
+  Select,
   SettingsCard,
   SettingsRow,
   Toggle,
@@ -42,258 +66,662 @@ interface SectionDef {
   icon: ReactNode
 }
 
+const ICON = 'h-4 w-4'
 const SECTIONS: SectionDef[] = [
-  { id: 'profile', label: 'Profile', icon: <UserRound className="h-4 w-4" /> },
-  { id: 'account', label: 'Account', icon: <SettingsIcon className="h-4 w-4" /> },
-  { id: 'general', label: 'General', icon: <Globe className="h-4 w-4" /> },
-  { id: 'appearance', label: 'Appearance', icon: <Palette className="h-4 w-4" /> },
-  {
-    id: 'notifications',
-    label: 'Notifications',
-    icon: <Bell className="h-4 w-4" />,
-  },
-  {
-    id: 'calendar',
-    label: 'Calendar Preferences',
-    icon: <CalendarDays className="h-4 w-4" />,
-  },
-  { id: 'security', label: 'Security', icon: <Shield className="h-4 w-4" /> },
-  { id: 'billing', label: 'Billing', icon: <CreditCard className="h-4 w-4" /> },
-  { id: 'deploy', label: 'Deploy', icon: <Rocket className="h-4 w-4" /> },
+  { id: 'profile', label: 'Profile', icon: <UserRound className={ICON} /> },
+  { id: 'account', label: 'Account', icon: <SettingsIcon className={ICON} /> },
+  { id: 'general', label: 'General', icon: <Globe className={ICON} /> },
+  { id: 'appearance', label: 'Appearance', icon: <Palette className={ICON} /> },
+  { id: 'notifications', label: 'Notifications', icon: <Bell className={ICON} /> },
+  { id: 'calendar', label: 'Calendar Preferences', icon: <CalendarDays className={ICON} /> },
+  { id: 'security', label: 'Security', icon: <Shield className={ICON} /> },
+  { id: 'billing', label: 'Billing', icon: <CreditCard className={ICON} /> },
+  { id: 'deploy', label: 'Deploy', icon: <Rocket className={ICON} /> },
 ]
 
-function formatJoined(iso: string): string {
-  const date = new Date(iso)
-  if (Number.isNaN(date.getTime())) return 'Unknown'
-  return date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
+export const SECTION_KEY = 'opennote.settings-section'
+const DEVICE_TZ = (() => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Unknown'
+  } catch {
+    return 'Unknown'
+  }
+})()
 
-function SectionShell({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description: string
-  children: ReactNode
-}) {
+function SectionShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
-    <div className="animate-fade">
-      <h2 className="text-[17px] font-bold tracking-[-0.02em] text-ink">
-        {title}
-      </h2>
-      <p className="mt-1 text-[12.5px] leading-snug text-muted">{description}</p>
-      <div className="mt-4 space-y-3">{children}</div>
+    <div>
+      <h2 className="text-[20px] font-semibold tracking-[-0.02em] text-[#191919]">{title}</h2>
+      <p className="mt-1 text-[13px] leading-snug text-[#8f8e8a]">{description}</p>
+      <div className="mt-5 space-y-4">{children}</div>
     </div>
   )
 }
 
+function useDateFormat() {
+  const { dateFormat } = usePreferences().preferences
+  return (iso: string | Date) => {
+    const d = typeof iso === 'string' ? new Date(iso) : iso
+    return Number.isNaN(d.getTime()) ? 'Unknown' : formatDate(d, dateFormat)
+  }
+}
+
+/** The sign-in methods on this account, from Better Auth (credential = email & password). */
+function useAccounts() {
+  const [providers, setProviders] = useState<string[] | null>(null)
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    let alive = true
+    authClient
+      .listAccounts()
+      .then(({ data, error: e }) => {
+        if (!alive) return
+        if (e || !data) setError(true)
+        else setProviders(data.map((a) => a.providerId))
+      })
+      .catch(() => alive && setError(true))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return { providers, error }
+}
+
+const providerLabel = (id: string) => (id === 'credential' ? 'Email & password' : id === 'google' ? 'Google' : id)
+
+/** Saves an account preference and reports the result inline. */
+function usePrefSaver() {
+  const { update } = usePreferences()
+  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const timer = useRef<number | undefined>(undefined)
+  const save = async (patch: Partial<Preferences>) => {
+    setState('saving')
+    const ok = await update(patch)
+    setState(ok ? 'saved' : 'error')
+    window.clearTimeout(timer.current)
+    if (ok) timer.current = window.setTimeout(() => setState('idle'), 1600)
+  }
+  return { save, state }
+}
+
+function ProjectTag() {
+  return <span className="ml-1 rounded bg-[#f1f1ef] px-1 py-[1px] text-[10px] font-medium text-[#8f8e8a]">this project</span>
+}
+
 /* ------------------------------------------------------------------ */
-/* Sections                                                            */
+/* Profile                                                             */
 /* ------------------------------------------------------------------ */
 
 function ProfileSection() {
   const { user, updateProfile } = useAuth()
+  const fmt = useDateFormat()
   const [name, setName] = useState(user?.fullName ?? '')
-  const [avatar, setAvatar] = useState<string | undefined>(user?.avatar)
-  const [saved, setSaved] = useState(false)
+  const [nameState, setNameState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [nameError, setNameError] = useState<string | null>(null)
+  const [photoState, setPhotoState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+  const [photoError, setPhotoError] = useState<string | null>(null)
 
-  if (!user) {
-    return (
-      <SectionShell
-        title="Profile"
-        description="Your name, photo and account details."
-      >
-        <SettingsCard>
-          <div className="px-5 py-6 text-center">
-            <p className="text-[12.5px] leading-snug text-muted">
-              You are signed out, so there is no profile to edit yet. Sign in
-              from the sidebar and your details will appear here.
-            </p>
-          </div>
-        </SettingsCard>
-      </SectionShell>
-    )
+  if (!user) return null
+  const trimmed = name.trim()
+  const invalid = trimmed.length < 2 ? 'Use at least 2 characters.' : trimmed.length > 60 ? 'Use at most 60 characters.' : null
+  const dirty = trimmed !== user.fullName
+
+  const savePhoto = async (avatar: string | null) => {
+    setPhotoState('saving')
+    setPhotoError(null)
+    try {
+      await updateProfile({ avatar })
+      setPhotoState('saved')
+    } catch (err) {
+      setPhotoState('error')
+      setPhotoError(err instanceof Error ? err.message : 'Your photo could not be saved.')
+    }
   }
 
-  const pickAvatar = async (e: ChangeEvent<HTMLInputElement>) => {
+  const pick = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
     try {
-      setAvatar(await fileToAvatar(file))
-      setSaved(false)
-    } catch {
-      /* ignore invalid images */
+      await savePhoto(await fileToAvatar(file))
+    } catch (err) {
+      setPhotoState('error')
+      setPhotoError(err instanceof Error ? err.message : 'That image could not be used.')
     }
   }
 
-  const save = (e: FormEvent) => {
+  const save = async (e: FormEvent) => {
     e.preventDefault()
-    const trimmed = name.trim()
-    if (trimmed.length < 2) return
-    updateProfile({ fullName: trimmed, avatar: avatar ?? null })
-    setSaved(true)
-    window.setTimeout(() => setSaved(false), 2000)
+    if (invalid) {
+      setNameError(invalid)
+      return
+    }
+    setNameError(null)
+    setNameState('saving')
+    try {
+      await updateProfile({ fullName: trimmed })
+      setNameState('saved')
+    } catch (err) {
+      setNameState('error')
+      setNameError(err instanceof Error ? err.message : 'Your name could not be saved.')
+    }
   }
 
   return (
-    <SectionShell
-      title="Profile"
-      description="Your name, photo and the details tied to your account."
-    >
-      <SettingsCard title="Profile photo">
-        <SettingsRow label="Photo" hint="Saved to your account, up to 2 MB.">
-          <div className="flex items-center gap-3">
-            <Avatar size={48} name={name} src={avatar} />
-            <div className="flex flex-col gap-1.5">
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 py-1.5 text-[11.5px] font-medium text-ink-soft transition hover:border-border-strong hover:text-ink">
-                Change image
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={pickAvatar}
-                />
-              </label>
-              {avatar && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAvatar(undefined)
-                    updateProfile({ avatar: null })
-                    setSaved(false)
-                  }}
-                  className="inline-flex items-center gap-1.5 self-start rounded-lg px-1.5 py-0.5 text-[11px] text-muted transition hover:text-red-500"
-                >
-                  <Trash2 className="h-3 w-3" />
-                  Remove
-                </button>
-              )}
-            </div>
+    <SectionShell title="Profile" description="How you appear in OpenNote.">
+      <div className="flex items-center gap-4 rounded-2xl border border-[#ececea] bg-gradient-to-br from-white to-[#f7f7f5] p-5">
+        <Avatar size={64} name={user.fullName} src={user.avatar} />
+        <div className="min-w-0">
+          <p className="truncate text-[17px] font-semibold tracking-[-0.01em] text-[#191919]" data-testid="profile-preview-name">
+            {user.fullName || 'Your name'}
+          </p>
+          <p className="truncate text-[13px] text-[#6b6a66]">{user.email}</p>
+          <p className="mt-1 text-[11.5px] text-[#a3a29e]">Member since {fmt(user.createdAt)}</p>
+        </div>
+      </div>
+
+      <SettingsCard title="Profile picture" description="A square image works best. It is resized and saved to your account." icon={<ImageUp className="h-3.5 w-3.5" />}>
+        <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+          <Avatar size={52} name={user.fullName} src={user.avatar} />
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-[10px] bg-[#191919] px-3.5 text-[12.5px] font-semibold text-white transition hover:bg-[#37352f]">
+              {user.avatar ? 'Replace photo' : 'Upload photo'}
+              <input type="file" accept="image/*" className="sr-only" onChange={pick} aria-label="Upload profile photo" />
+            </label>
+            {user.avatar && (
+              <Button variant="secondary" onClick={() => void savePhoto(null)}>
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove
+              </Button>
+            )}
+            <SaveStatus state={photoState} error={photoError} />
           </div>
-        </SettingsRow>
+        </div>
       </SettingsCard>
 
       <form onSubmit={save}>
-        <SettingsCard title="Details">
-          <div className="space-y-3 px-5 py-4">
+        <SettingsCard title="Personal details" icon={<UserRound className="h-3.5 w-3.5" />}>
+          <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
             <Field
-              label="Full name"
+              label="Display name"
               value={name}
+              maxLength={60}
               onChange={(v) => {
                 setName(v)
-                setSaved(false)
+                setNameState('idle')
+                setNameError(null)
               }}
               autoComplete="name"
-              placeholder="Your name"
+              error={nameError}
             />
-            <Field
-              label="Email"
-              value={user.email}
-              onChange={() => {}}
-              autoComplete="email"
-              disabled
-            />
-            <Button type="submit">
-              {saved ? <Check className="h-4 w-4" /> : null}
-              {saved ? 'Saved' : 'Save changes'}
+            <Field label="Email address" value={user.email} onChange={() => {}} disabled hint="Your sign-in email. See Account." />
+            <div>
+              <span className="mb-1.5 block text-[12px] font-medium text-[#5f5e5b]">Time zone</span>
+              <div className="flex h-10 items-center rounded-[10px] border border-[#e3e3e0] bg-[#f7f7f5] px-3 text-[13px] text-[#37352f]">
+                {DEVICE_TZ}
+              </div>
+              <span className="mt-1 block text-[11.5px] text-[#8f8e8a]">From this device. Calendar times use it.</span>
+            </div>
+            <div>
+              <span className="mb-1.5 block text-[12px] font-medium text-[#5f5e5b]">Language</span>
+              <Select ariaLabel="Language" value="en" onChange={() => {}} options={[{ value: 'en', label: 'English' }]} />
+              <span className="mt-1 block text-[11.5px] text-[#8f8e8a]">More languages will come with translations.</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-3 px-5 py-3">
+            <SaveStatus state={nameState} error={nameState === 'error' ? nameError : null} />
+            <Button type="submit" disabled={!dirty || nameState === 'saving'}>
+              {nameState === 'saving' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Save changes
             </Button>
           </div>
         </SettingsCard>
       </form>
-
-      <SettingsCard title="Membership">
-        <SettingsRow
-          label="Member since"
-          hint="The date this account was created."
-        >
-          <span className="text-[12.5px] font-medium text-ink">
-            {formatJoined(user.createdAt)}
-          </span>
-        </SettingsRow>
-      </SettingsCard>
     </SectionShell>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Account                                                             */
+/* ------------------------------------------------------------------ */
+
+function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const confirm = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const { error: e } = await authClient.deleteUser(hasPassword ? { password } : {})
+      if (e) throw new Error(e.message || 'Your account could not be deleted.')
+      window.location.replace('/')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Your account could not be deleted.')
+      setBusy(false)
+    }
+  }
+
+  if (!open)
+    return (
+      <SettingsRow label="Delete account" hint="Permanently deletes your account, every project, event and note. This cannot be undone.">
+        <Button variant="danger" onClick={() => setOpen(true)}>
+          <Trash2 className="h-3.5 w-3.5" />
+          Delete account
+        </Button>
+      </SettingsRow>
+    )
+
+  return (
+    <div className="space-y-3 px-5 py-4" data-testid="delete-confirm">
+      <p className="text-[12.5px] leading-snug text-[#6b3a35]">
+        This permanently deletes your OpenNote account and all of its projects, events and notes. There is no undo.
+      </p>
+      <Field label='Type "DELETE" to confirm' value={typed} onChange={setTyped} autoComplete="off" />
+      {hasPassword ? (
+        <Field label="Your password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
+      ) : (
+        <p className="text-[11.5px] text-[#8f8e8a]">For Google accounts you may be asked to sign in again first if your last sign-in was not recent.</p>
+      )}
+      {error && <p className="text-[12px] text-[#b4453c]">{error}</p>}
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={() => setOpen(false)} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="danger-solid" onClick={() => void confirm()} disabled={busy || typed !== 'DELETE' || (hasPassword && !password)}>
+          {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          Delete my account
+        </Button>
+      </div>
+    </div>
   )
 }
 
 function AccountSection() {
   const { user, signOut } = useAuth()
+  const fmt = useDateFormat()
+  const { providers, error } = useAccounts()
+  if (!user) return null
+  const hasPassword = !!providers?.includes('credential')
 
   return (
-    <SectionShell
-      title="Account"
-      description="The plan on this account and the session you are using."
-    >
-      <SettingsCard title="Session">
-        <SettingsRow
-          label="Signed in as"
-          hint="The account you are signed in with."
-        >
-          <span className="text-[12.5px] font-medium text-ink">
-            {user ? user.email : 'Signed out'}
-          </span>
+    <SectionShell title="Account" description="Your sign-in details and account controls.">
+      <SettingsCard title="Account information" icon={<Mail className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Email address">
+          <span className="text-[13px] font-medium text-[#191919]">{user.email}</span>
         </SettingsRow>
-        <div className="px-5 py-4">
-          <Button variant="secondary" onClick={signOut} disabled={!user}>
-            <LogOut className="h-4 w-4" />
-            Log out
-          </Button>
-        </div>
+        <SettingsRow label="Created">
+          <span className="text-[13px] text-[#37352f]">{fmt(user.createdAt)}</span>
+        </SettingsRow>
+        <SettingsRow label="Sign-in method">
+          {providers ? (
+            <span className="flex flex-wrap gap-1.5" data-testid="providers">
+              {providers.map((p) => (
+                <Badge key={p}>{providerLabel(p)}</Badge>
+              ))}
+            </span>
+          ) : error ? (
+            <span className="text-[12px] text-[#b4453c]">Could not load</span>
+          ) : (
+            <Loader2 className="h-4 w-4 animate-spin text-[#a3a29e]" />
+          )}
+        </SettingsRow>
+        <SettingsRow label="Status">
+          {user.emailVerified ? <Badge tone="success">Active · Email verified</Badge> : <Badge tone="warning">Active · Email not verified</Badge>}
+        </SettingsRow>
       </SettingsCard>
 
-      <SettingsCard title="Danger zone">
-        <div className="px-5 py-4">
-          <ComingSoon>
-            Account deletion is not available yet, so this action stays
-            switched off rather than pretending to work.
-          </ComingSoon>
-          <Button variant="danger" className="mt-3" disabled>
-            <Trash2 className="h-4 w-4" />
-            Delete account
+      <SettingsCard title="Account management" icon={<Link2 className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Change email address" hint="Changing your sign-in email needs a confirmation email flow.">
+          <Badge tone="soon">Coming soon</Badge>
+        </SettingsRow>
+        <SettingsRow label="Connected sign-in methods" hint="Linking or unlinking methods from here is not available yet.">
+          <Badge tone="soon">Coming soon</Badge>
+        </SettingsRow>
+        <SettingsRow label="Log out" hint="Signs you out on this device.">
+          <Button variant="secondary" onClick={() => void signOut()}>
+            <LogOut className="h-3.5 w-3.5" />
+            Log out
           </Button>
-        </div>
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title="Danger zone" tone="danger" icon={<Trash2 className="h-3.5 w-3.5" />}>
+        {providers ? (
+          <DeleteAccount hasPassword={hasPassword} />
+        ) : (
+          <div className="px-5 py-4 text-[12px] text-[#8f8e8a]">{error ? 'Could not load your sign-in methods.' : 'Loading…'}</div>
+        )}
       </SettingsCard>
     </SectionShell>
   )
 }
 
+/* ------------------------------------------------------------------ */
+/* General                                                             */
+/* ------------------------------------------------------------------ */
+
 function GeneralSection() {
   const { settings, updateSettings } = useApp()
-  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const { preferences } = usePreferences()
+  const { save, state } = usePrefSaver()
+  const today = new Date()
 
   return (
-    <SectionShell
-      title="General"
-      description="Regional details and how the workspace opens."
-    >
-      <SettingsCard title="Region">
-        <SettingsRow
-          label="Language"
-          hint="OpenNote ships in English for now."
-        >
-          <span className="text-[12.5px] font-medium text-ink">English</span>
+    <SectionShell title="General" description="Language, region and how OpenNote opens.">
+      <SettingsCard title="Language & region" icon={<Globe className="h-3.5 w-3.5" />} action={<SaveStatus state={state} />}>
+        <SettingsRow label="Language" hint="OpenNote is available in English. Other languages will appear here once translated.">
+          <Select ariaLabel="Language" value="en" onChange={() => {}} options={[{ value: 'en', label: 'English' }]} />
         </SettingsRow>
-        <SettingsRow label="Time zone" hint="Read from this browser.">
-          <span className="text-[12.5px] font-medium text-ink">
-            {timezone || 'Unknown'}
-          </span>
+        <SettingsRow label="Time zone" hint="Taken from this device. Calendar times are shown in it.">
+          <span className="text-[13px] font-medium text-[#37352f]">{DEVICE_TZ}</span>
+        </SettingsRow>
+        <SettingsRow label="Date format" hint={`Today: ${formatDate(today, preferences.dateFormat)}`}>
+          <Select
+            ariaLabel="Date format"
+            value={preferences.dateFormat}
+            onChange={(v) => void save({ dateFormat: v })}
+            options={[
+              { value: 'DMY', label: 'DD/MM/YYYY' },
+              { value: 'MDY', label: 'MM/DD/YYYY' },
+              { value: 'YMD', label: 'YYYY-MM-DD' },
+            ]}
+          />
+        </SettingsRow>
+        <SettingsRow label="Time format">
+          <ProjectTag />
+          <SegmentedControl
+            ariaLabel="Time format"
+            value={settings.hour12 ? '12' : '24'}
+            onChange={(v) => updateSettings({ hour12: v === '12' })}
+            options={[
+              { value: '12', label: '12-hour' },
+              { value: '24', label: '24-hour' },
+            ]}
+          />
         </SettingsRow>
       </SettingsCard>
 
-      <SettingsCard title="Workspace">
+      <SettingsCard title="Workspace" icon={<LayoutGrid className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Default opening page" hint="What you see when you open a project.">
+          <Select
+            ariaLabel="Default opening page"
+            value={preferences.openTo}
+            onChange={(v) => void save({ openTo: v })}
+            options={[
+              { value: 'calendar', label: 'Calendar' },
+              { value: 'today', label: 'Today' },
+              { value: 'notes', label: 'Notes' },
+            ]}
+          />
+        </SettingsRow>
+        <SettingsRow label="Start of week">
+          <ProjectTag />
+          <SegmentedControl
+            ariaLabel="Start of week"
+            value={settings.weekStartsOn}
+            onChange={(v) => updateSettings({ weekStartsOn: v })}
+            options={[
+              { value: 1, label: 'Monday' },
+              { value: 0, label: 'Sunday' },
+            ]}
+          />
+        </SettingsRow>
+        <SettingsRow label="Save changes automatically" hint="Every change is saved to your account as you make it. This is always on.">
+          <Badge tone="success">
+            <Check className="h-3 w-3" />
+            Always on
+          </Badge>
+        </SettingsRow>
+        <SettingsRow label="Remember last calendar view" hint="Reopen each project in the view you used last (Day, Full Week or Month).">
+          <Toggle label="Remember last calendar view" checked={preferences.rememberView} onChange={(v) => void save({ rememberView: v })} />
+        </SettingsRow>
+      </SettingsCard>
+    </SectionShell>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Appearance                                                          */
+/* ------------------------------------------------------------------ */
+
+function ThemeCard({ id, label, icon, active, soon }: { id: string; label: string; icon: ReactNode; active: boolean; soon?: boolean }) {
+  const dark = id === 'dark'
+  return (
+    <div
+      aria-disabled={soon || undefined}
+      data-theme-card={id}
+      className={cn(
+        'relative rounded-2xl border p-2.5 transition',
+        active ? 'border-[var(--color-accent-deep)] ring-2 ring-[var(--color-accent-soft)]' : 'border-[#ececea]',
+        soon && 'opacity-70',
+      )}
+    >
+      <div
+        className={cn(
+          'h-[74px] overflow-hidden rounded-xl border',
+          dark
+            ? 'border-[#2a2a2a] bg-[#151515]'
+            : id === 'system'
+              ? 'border-[#ececea] bg-gradient-to-r from-white from-50% to-[#151515] to-50%'
+              : 'border-[#ececea] bg-[#fafaf9]',
+        )}
+      >
+        <div className="flex h-full gap-1.5 p-2">
+          <div className={cn('w-1/4 rounded-md', dark ? 'bg-[#232323]' : 'bg-white ring-1 ring-black/5')} />
+          <div className="flex flex-1 flex-col gap-1.5">
+            <div className={cn('h-2.5 w-2/3 rounded', dark ? 'bg-[#2e2e2e]' : 'bg-[#ececea]')} />
+            <div className="h-2.5 w-1/2 rounded" style={{ background: 'var(--color-accent)' }} />
+            <div className={cn('h-2.5 w-3/4 rounded', dark ? 'bg-[#2e2e2e]' : 'bg-[#ececea]')} />
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between px-1">
+        <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-[#191919]">
+          {icon}
+          {label}
+        </span>
+        {active ? (
+          <Badge tone="accent">
+            <Check className="h-3 w-3" />
+            Active
+          </Badge>
+        ) : soon ? (
+          <Badge tone="soon">Coming soon</Badge>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function AppearanceSection() {
+  const { settings, updateSettings } = useApp()
+  const { preferences } = usePreferences()
+  const { save, state } = usePrefSaver()
+
+  return (
+    <SectionShell title="Appearance" description="Theme, accent colour and motion.">
+      <SettingsCard title="Theme" icon={<Sun className="h-3.5 w-3.5" />} description="OpenNote currently ships in Light. Dark and System are being designed.">
+        <div className="grid gap-3 px-5 py-4 sm:grid-cols-3">
+          <ThemeCard id="light" label="Light" icon={<Sun className="h-3.5 w-3.5" />} active />
+          <ThemeCard id="dark" label="Dark" icon={<Moon className="h-3.5 w-3.5" />} active={false} soon />
+          <ThemeCard id="system" label="System" icon={<Monitor className="h-3.5 w-3.5" />} active={false} soon />
+        </div>
+      </SettingsCard>
+
+      <SettingsCard
+        title="Accent colour"
+        icon={<Palette className="h-3.5 w-3.5" />}
+        description="Used for toggles, highlights and focus rings across OpenNote."
+        action={<SaveStatus state={state} />}
+      >
+        <div role="radiogroup" aria-label="Accent colour" className="flex flex-wrap gap-2.5 px-5 py-4">
+          {(Object.keys(ACCENTS) as AccentId[]).map((id) => {
+            const a = ACCENTS[id]
+            const on = preferences.accent === id
+            return (
+              <button
+                key={id}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-label={a.name}
+                onClick={() => void save({ accent: id })}
+                className={cn(
+                  'flex items-center gap-2 rounded-full border py-1.5 pl-1.5 pr-3 text-[12px] font-medium transition',
+                  on ? 'border-[#191919] bg-white text-[#191919]' : 'border-[#ececea] text-[#5f5e5b] hover:border-[#cfcfcb]',
+                )}
+              >
+                <span className="grid h-5 w-5 place-items-center rounded-full" style={{ background: a.accent }}>
+                  {on && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                </span>
+                {a.name}
+              </button>
+            )
+          })}
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Display" icon={<Eye className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Layout density" hint="Compact layout is being designed.">
+          <SegmentedControl
+            ariaLabel="Layout density"
+            value="comfortable"
+            onChange={() => {}}
+            options={[
+              { value: 'comfortable', label: 'Comfortable' },
+              { value: 'compact', label: 'Compact', disabled: true },
+            ]}
+          />
+        </SettingsRow>
+        <SettingsRow label="Subtle animations" hint="Gentle fades when panels and cards appear.">
+          <Toggle label="Subtle animations" checked={preferences.animations} onChange={(v) => void save({ animations: v })} />
+        </SettingsRow>
         <SettingsRow
-          label="Open with the sidebar collapsed"
-          hint="Gives the calendar more room on wide screens."
+          label="Reduce motion"
+          hint={
+            <>
+              Turns off all animation and transitions. <ProjectTag />
+            </>
+          }
         >
-          <Toggle
-            label="Open with the sidebar collapsed"
-            checked={settings.sidebarCollapsed}
-            onChange={(v) => updateSettings({ sidebarCollapsed: v })}
+          <Toggle label="Reduce motion" checked={settings.reduceMotion} onChange={(v) => updateSettings({ reduceMotion: v })} />
+        </SettingsRow>
+      </SettingsCard>
+    </SectionShell>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Notifications                                                       */
+/* ------------------------------------------------------------------ */
+
+function NotificationsSection() {
+  const { preferences } = usePreferences()
+  const { save, state } = usePrefSaver()
+  const [permission, setPermission] = useState(notificationPermission())
+
+  const ask = async () => {
+    if (permission === 'unsupported') return
+    try {
+      setPermission(await Notification.requestPermission())
+    } catch {
+      setPermission(notificationPermission())
+    }
+  }
+
+  const permBadge =
+    permission === 'granted' ? (
+      <Badge tone="success">Allowed</Badge>
+    ) : permission === 'denied' ? (
+      <Badge tone="danger">Blocked</Badge>
+    ) : permission === 'unsupported' ? (
+      <Badge>Not supported</Badge>
+    ) : (
+      <Badge tone="warning">Not allowed yet</Badge>
+    )
+
+  const quietNow = inQuietHours(new Date(), preferences)
+  const timeInput =
+    'h-9 rounded-[10px] border border-[#e3e3e0] px-2.5 text-[12.5px] disabled:bg-[#f7f7f5] disabled:text-[#a3a29e]'
+
+  return (
+    <SectionShell title="Notifications" description="Reminders for your events, delivered by this browser.">
+      <SettingsCard title="Browser notifications" icon={<BellRing className="h-3.5 w-3.5" />} action={<SaveStatus state={state} />}>
+        <SettingsRow
+          label="Permission"
+          hint={
+            permission === 'denied'
+              ? 'Notifications are blocked for this site. Allow them in your browser’s site settings.'
+              : permission === 'unsupported'
+                ? 'This browser does not support notifications.'
+                : 'Reminders need this browser’s permission.'
+          }
+        >
+          <span data-testid="notif-permission">{permBadge}</span>
+          {permission === 'default' && (
+            <Button variant="secondary" onClick={() => void ask()}>
+              Allow notifications
+            </Button>
+          )}
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title="Event reminders" icon={<CalendarClock className="h-3.5 w-3.5" />}>
+        <SettingsRow
+          label="Remind me before events"
+          hint={
+            permission === 'granted'
+              ? 'Shown while OpenNote is open in this browser. Nothing is sent by email.'
+              : 'Saved, but reminders can only appear once notifications are allowed above.'
+          }
+        >
+          <Toggle label="Remind me before events" checked={preferences.remindersEnabled} onChange={(v) => void save({ remindersEnabled: v })} />
+        </SettingsRow>
+        <SettingsRow label="Default reminder time">
+          <Select
+            ariaLabel="Default reminder time"
+            value={preferences.reminderLead}
+            disabled={!preferences.remindersEnabled}
+            onChange={(v) => void save({ reminderLead: v })}
+            options={[5, 10, 15, 30, 60].map((m) => ({ value: m as Preferences['reminderLead'], label: `${m} minutes before` }))}
+          />
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title="Note reminders" icon={<Bell className="h-3.5 w-3.5" />}>
+        <div className="px-5 py-4">
+          <ComingSoon>Dated notes will be able to carry their own reminder. Notes never create reminders on their own.</ComingSoon>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard title="Quiet hours" icon={<Moon className="h-3.5 w-3.5" />}>
+        <SettingsRow
+          label="Pause reminders during quiet hours"
+          hint={preferences.quietHours ? (quietNow ? 'Quiet hours are on right now.' : 'Reminders resume outside these hours.') : undefined}
+        >
+          <Toggle label="Quiet hours" checked={preferences.quietHours} onChange={(v) => void save({ quietHours: v })} />
+        </SettingsRow>
+        <SettingsRow label="From / until">
+          <input
+            type="time"
+            aria-label="Quiet hours start"
+            value={preferences.quietStart}
+            disabled={!preferences.quietHours}
+            onChange={(e) => e.target.value && void save({ quietStart: e.target.value })}
+            className={timeInput}
+          />
+          <span className="text-[12px] text-[#8f8e8a]">to</span>
+          <input
+            type="time"
+            aria-label="Quiet hours end"
+            value={preferences.quietEnd}
+            disabled={!preferences.quietHours}
+            onChange={(e) => e.target.value && void save({ quietEnd: e.target.value })}
+            className={timeInput}
           />
         </SettingsRow>
       </SettingsCard>
@@ -301,19 +729,29 @@ function GeneralSection() {
   )
 }
 
-function AppearanceSection() {
-  const { settings, updateSettings } = useApp()
+/* ------------------------------------------------------------------ */
+/* Calendar Preferences                                                */
+/* ------------------------------------------------------------------ */
+
+const HOUR_OPTIONS = Array.from({ length: 25 }, (_, h) => h)
+
+function CalendarPreferencesSection() {
+  const { settings, updateSettings, calendars, updateCalendar } = useApp()
+  const label = (h: number) =>
+    settings.hour12
+      ? h === 0 || h === 24
+        ? '12 AM'
+        : h === 12
+          ? '12 PM'
+          : `${h % 12} ${h < 12 ? 'AM' : 'PM'}`
+      : `${String(h).padStart(2, '0')}:00`
+  const start = settings.dayStartHour ?? 7
+  const end = settings.dayEndHour ?? 22
 
   return (
-    <SectionShell
-      title="Appearance"
-      description="What OpenNote looks like when you open it."
-    >
-      <SettingsCard title="Layout">
-        <SettingsRow
-          label="Default view"
-          hint="The view the calendar opens on. You can still switch views at any time."
-        >
+    <SectionShell title="Calendar Preferences" description="How this project’s calendar looks and opens. Changes apply straight away.">
+      <SettingsCard title="Default view" icon={<CalendarDays className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Open the calendar in">
           <SegmentedControl
             ariaLabel="Default view"
             value={settings.defaultView}
@@ -327,146 +765,163 @@ function AppearanceSection() {
         </SettingsRow>
       </SettingsCard>
 
-      <SettingsCard title="Motion">
-        <SettingsRow
-          label="Reduce motion"
-          hint="Shortens the interface's entry animations. Nothing else changes."
-        >
-          <Toggle
-            label="Reduce motion"
-            checked={settings.reduceMotion}
-            onChange={(v) => updateSettings({ reduceMotion: v })}
-          />
-        </SettingsRow>
-      </SettingsCard>
-    </SectionShell>
-  )
-}
-
-function NotificationsSection() {
-  const { user } = useAuth()
-
-  return (
-    <SectionShell
-      title="Notifications"
-      description="Reminders about upcoming events and notes."
-    >
-      <SettingsCard title="Email reminders">
-        <div className="space-y-3 px-5 py-4">
-          <Field
-            label="Send reminders to"
-            value={user?.email ?? ''}
-            onChange={() => {}}
-            autoComplete="email"
-            disabled
-          />
-          <ComingSoon>
-            OpenNote has no reminder service yet, so nothing can be scheduled
-            or delivered. This section will switch on when it does.
-          </ComingSoon>
-        </div>
-      </SettingsCard>
-    </SectionShell>
-  )
-}
-
-function CalendarPreferencesSection() {
-  const { settings, updateSettings } = useApp()
-  const set = <K extends keyof typeof settings>(key: K, value: (typeof settings)[K]) =>
-    updateSettings({ [key]: value } as Partial<typeof settings>)
-
-  return (
-    <SectionShell
-      title="Calendar Preferences"
-      description="How days and times are laid out. Changes apply to the calendar straight away."
-    >
-      <SettingsCard title="Week">
-        <SettingsRow label="Week starts on">
+      <SettingsCard title="Time" icon={<Clock className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Start of week">
           <SegmentedControl
             ariaLabel="Week starts on"
             value={settings.weekStartsOn}
-            onChange={(v) => set('weekStartsOn', v)}
+            onChange={(v) => updateSettings({ weekStartsOn: v })}
             options={[
-              { value: 1, label: 'Mon' },
-              { value: 0, label: 'Sun' },
+              { value: 1, label: 'Monday' },
+              { value: 0, label: 'Sunday' },
             ]}
           />
         </SettingsRow>
-        <SettingsRow
-          label="Show weekends"
-          hint="Hides Saturday and Sunday from the week grid."
-        >
-          <Toggle
-            label="Show weekends"
-            checked={settings.showWeekends}
-            onChange={(v) => set('showWeekends', v)}
-          />
-        </SettingsRow>
-      </SettingsCard>
-
-      <SettingsCard title="Time">
         <SettingsRow label="Time format">
           <SegmentedControl
-            ariaLabel="Time format"
+            ariaLabel="Clock format"
             value={settings.hour12 ? '12' : '24'}
-            onChange={(v) => set('hour12', v === '12')}
+            onChange={(v) => updateSettings({ hour12: v === '12' })}
             options={[
-              { value: '24', label: '24h' },
-              { value: '12', label: '12h' },
+              { value: '12', label: '12-hour' },
+              { value: '24', label: '24-hour' },
             ]}
           />
         </SettingsRow>
-        <SettingsRow
-          label="Row height"
-          hint="How tall one hour is in the grid."
-        >
-          <SegmentedControl
-            ariaLabel="Row height"
-            value={settings.hourHeight}
-            onChange={(v) => set('hourHeight', v)}
-            options={[
-              { value: 44, label: 'S' },
-              { value: 56, label: 'M' },
-              { value: 72, label: 'L' },
-            ]}
+        <SettingsRow label="Day starts at" hint="The calendar opens scrolled to this time. Earlier hours are softly shaded.">
+          <Select
+            ariaLabel="Day starts at"
+            value={start}
+            onChange={(v) => updateSettings({ dayStartHour: v, ...(v >= end ? { dayEndHour: Math.min(24, v + 1) } : {}) })}
+            options={HOUR_OPTIONS.slice(0, 24).map((h) => ({ value: h, label: label(h) }))}
+          />
+        </SettingsRow>
+        <SettingsRow label="Day ends at" hint="Later hours are softly shaded.">
+          <Select
+            ariaLabel="Day ends at"
+            value={end}
+            onChange={(v) => updateSettings({ dayEndHour: v })}
+            options={HOUR_OPTIONS.slice(1).map((h) => ({ value: h, label: label(h), disabled: h <= start }))}
           />
         </SettingsRow>
       </SettingsCard>
 
-      <div className="rounded-2xl border border-line bg-white px-5 py-4">
-        <p className="text-[11.5px] leading-snug text-muted">
-          Everything here is saved to this project automatically.
-        </p>
-      </div>
+      <SettingsCard
+        title="Zoom"
+        icon={<ZoomIn className="h-3.5 w-3.5" />}
+        description="Zoom from 1 hour down to 5 minutes with Ctrl + scroll, pinch, or the zoom square."
+      >
+        <SettingsRow label="Default zoom">
+          <SegmentedControl
+            ariaLabel="Default zoom"
+            value={settings.defaultZoom ?? 0}
+            onChange={(v) => updateSettings({ defaultZoom: v })}
+            options={ZOOM_LEVELS.map((z, i) => ({ value: i, label: z.label }))}
+          />
+        </SettingsRow>
+        <SettingsRow label="Remember last zoom level" hint="Reopen at the zoom you used last instead of the default.">
+          <Toggle label="Remember last zoom level" checked={!!settings.rememberZoom} onChange={(v) => updateSettings({ rememberZoom: v })} />
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title="Display" icon={<Eye className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Show weekends">
+          <Toggle label="Show weekends" checked={settings.showWeekends} onChange={(v) => updateSettings({ showWeekends: v })} />
+        </SettingsRow>
+        <SettingsRow label="Highlight the current day">
+          <Toggle label="Highlight the current day" checked={settings.highlightToday !== false} onChange={(v) => updateSettings({ highlightToday: v })} />
+        </SettingsRow>
+        <SettingsRow label="Current-time indicator" hint="The red line that marks the time now, in today’s column only.">
+          <Toggle label="Current-time indicator" checked={settings.showNowLine !== false} onChange={(v) => updateSettings({ showNowLine: v })} />
+        </SettingsRow>
+        <SettingsRow label="Grid lines" hint="Lines between time slots and alternating slot shading. Hour lines always show.">
+          <Toggle label="Grid lines" checked={settings.showGridLines !== false} onChange={(v) => updateSettings({ showGridLines: v })} />
+        </SettingsRow>
+      </SettingsCard>
+
+      <SettingsCard title="Calendar categories" icon={<Tags className="h-3.5 w-3.5" />} description="Change a category’s colour. Its events keep everything else.">
+        {calendars.map((c) => (
+          <SettingsRow key={c.id} label={c.name}>
+            <div role="radiogroup" aria-label={`${c.name} colour`} className="flex gap-1.5">
+              {COLOR_IDS.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={c.color === id}
+                  aria-label={`${c.name}: ${COLORS[id].name}`}
+                  onClick={() => updateCalendar(c.id, { color: id })}
+                  className={cn(
+                    'h-6 w-6 rounded-full ring-offset-2 transition',
+                    c.color === id ? 'ring-2 ring-[#191919]' : 'hover:ring-2 hover:ring-[#dcdbd7]',
+                  )}
+                  style={{ background: COLORS[id].dot }}
+                />
+              ))}
+            </div>
+          </SettingsRow>
+        ))}
+        {calendars.length === 0 && (
+          <p className="px-5 py-4 text-[12px] text-[#8f8e8a]">This project has no categories yet. Add one from the sidebar.</p>
+        )}
+      </SettingsCard>
     </SectionShell>
   )
 }
 
-function SecuritySection() {
-  const { user, changePassword } = useAuth()
-  const { settings, updateSettings } = useApp()
+/* ------------------------------------------------------------------ */
+/* Security                                                            */
+/* ------------------------------------------------------------------ */
+
+interface SessionRow {
+  id: string
+  token: string
+  createdAt: string | Date
+  updatedAt: string | Date
+  userAgent?: string | null
+}
+
+function describeAgent(ua?: string | null) {
+  if (!ua) return 'Unknown device'
+  const browser = /Edg\//.test(ua)
+    ? 'Edge'
+    : /Chrome\//.test(ua)
+      ? 'Chrome'
+      : /Firefox\//.test(ua)
+        ? 'Firefox'
+        : /Safari\//.test(ua)
+          ? 'Safari'
+          : 'Browser'
+  const os = /Windows/.test(ua)
+    ? 'Windows'
+    : /Mac OS X/.test(ua)
+      ? 'macOS'
+      : /Android/.test(ua)
+        ? 'Android'
+        : /iPhone|iPad/.test(ua)
+          ? 'iOS'
+          : /Linux/.test(ua)
+            ? 'Linux'
+            : ''
+  return os ? `${browser} on ${os}` : browser
+}
+
+function PasswordCard({ email }: { email: string }) {
+  const { changePassword, requestPasswordReset } = useAuth()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
-  const twoFactorRef = useRef(false)
-
-  useEffect(() => {
-    // Read once per mount so an unset preference is not written back on save.
-    twoFactorRef.current = Boolean(settings.twoFactor)
-  }, [settings.twoFactor])
+  const [reset, setReset] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (busy) return
     setError(null)
     setDone(false)
-    if (next !== confirm) {
-      setError('New passwords do not match.')
-      return
-    }
+    if (next.length < 10) return setError('Use at least 10 characters.')
+    if (next !== confirm) return setError('The new passwords do not match.')
     setBusy(true)
     try {
       await changePassword(current, next)
@@ -475,165 +930,310 @@ function SecuritySection() {
       setConfirm('')
       setDone(true)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Could not update your password.',
-      )
+      setError(err instanceof Error ? err.message : 'Your password could not be changed.')
     } finally {
       setBusy(false)
     }
   }
 
-  if (!user) {
-    return (
-      <SectionShell
-        title="Security"
-        description="Password and sign-in protection."
+  return (
+    <SettingsCard title="Password" icon={<KeyRound className="h-3.5 w-3.5" />} description="Changing it signs out your other devices.">
+      <form onSubmit={submit} className="space-y-3 px-5 py-4">
+        <Field label="Current password" type="password" value={current} onChange={setCurrent} autoComplete="current-password" />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="New password" type="password" value={next} onChange={setNext} autoComplete="new-password" hint="At least 10 characters." />
+          <Field label="Confirm new password" type="password" value={confirm} onChange={setConfirm} autoComplete="new-password" />
+        </div>
+        {error && <p className="text-[12px] text-[#b4453c]">{error}</p>}
+        {done && <p className="text-[12px] font-medium text-[#2f6b35]">Your password has been changed.</p>}
+        <div className="flex justify-end">
+          <Button type="submit" disabled={busy || !current || !next}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Lock className="h-3.5 w-3.5" />}
+            Change password
+          </Button>
+        </div>
+      </form>
+      <SettingsRow
+        label="Forgot your password?"
+        hint={reset === 'sent' ? `A reset link is on its way to ${email}.` : `We’ll email a reset link to ${email}.`}
       >
-        <SettingsCard>
-          <div className="px-5 py-6 text-center">
-            <p className="text-[12.5px] leading-snug text-muted">
-              Sign in to manage your password.
-            </p>
-          </div>
-        </SettingsCard>
-      </SectionShell>
-    )
+        <Button
+          variant="secondary"
+          disabled={reset === 'sending' || reset === 'sent'}
+          onClick={async () => {
+            setReset('sending')
+            try {
+              await requestPasswordReset(email)
+              setReset('sent')
+            } catch {
+              setReset('error')
+            }
+          }}
+        >
+          {reset === 'sent' ? 'Link sent' : reset === 'error' ? 'Try again' : 'Send reset link'}
+        </Button>
+      </SettingsRow>
+    </SettingsCard>
+  )
+}
+
+function SessionsCard() {
+  const [rows, setRows] = useState<SessionRow[] | null>(null)
+  const [current, setCurrent] = useState<string | null>(null)
+  const [error, setError] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const fmt = useDateFormat()
+
+  const load = async () => {
+    setError(false)
+    try {
+      const [list, me] = await Promise.all([authClient.listSessions(), authClient.getSession()])
+      if (list.error || !list.data) throw new Error('sessions')
+      setRows(list.data as SessionRow[])
+      setCurrent(me.data?.session?.id ?? null)
+    } catch {
+      setError(true)
+    }
   }
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const others = rows?.filter((r) => r.id !== current) ?? []
 
   return (
-    <SectionShell title="Security" description="Password and sign-in protection.">
-      <form onSubmit={submit}>
-        <SettingsCard title="Password">
-          <div className="space-y-3 px-5 py-4">
-            {error && (
-              <p className="rounded-xl bg-red-50 px-3 py-2 text-[11.5px] leading-snug text-red-500">
-                {error}
-              </p>
-            )}
-            {done && (
-              <p className="flex items-center gap-2 rounded-xl bg-accent-soft px-3 py-2 text-[11.5px] text-accent-text">
-                <Check className="h-3.5 w-3.5" />
-                Your password has been updated.
-              </p>
-            )}
-            <Field
-              label="Current password"
-              type="password"
-              value={current}
-              onChange={setCurrent}
-              autoComplete="current-password"
-            />
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Field
-                label="New password"
-                type="password"
-                value={next}
-                onChange={setNext}
-                autoComplete="new-password"
-                placeholder="At least 8 characters"
-              />
-              <Field
-                label="Confirm new password"
-                type="password"
-                value={confirm}
-                onChange={setConfirm}
-                autoComplete="new-password"
-              />
-            </div>
-            <Button type="submit" disabled={busy}>
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Lock className="h-4 w-4" />
-              )}
-              Update password
-            </Button>
-          </div>
-        </SettingsCard>
-      </form>
-
-      <SettingsCard title="Extra protection">
-        <SettingsRow
-          label="Two-step verification"
-          hint="Adds a second step at sign-in."
-        >
-          <Toggle
-            label="Two-step verification"
-            checked={Boolean(settings.twoFactor)}
-            onChange={(v) => updateSettings({ twoFactor: v })}
-          />
-        </SettingsRow>
+    <SettingsCard
+      title="Active sessions"
+      icon={<Smartphone className="h-3.5 w-3.5" />}
+      description="Devices currently signed in to your account."
+      action={
+        others.length > 0 ? (
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true)
+              await authClient.revokeOtherSessions().catch(() => null)
+              await load()
+              setBusy(false)
+            }}
+          >
+            Sign out other sessions
+          </Button>
+        ) : undefined
+      }
+    >
+      {error && <p className="px-5 py-4 text-[12px] text-[#b4453c]">Your sessions could not be loaded.</p>}
+      {!rows && !error && (
         <div className="px-5 py-4">
-          <ComingSoon>
-            A second sign-in step is not switched on yet. Your choice is
-            remembered for when it is.
-          </ComingSoon>
+          <Loader2 className="h-4 w-4 animate-spin text-[#a3a29e]" />
+        </div>
+      )}
+      {rows?.map((r) => (
+        <div key={r.id} data-testid="session-row" className="flex items-center gap-3 px-5 py-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[#f4f4f2] text-[#5f5e5b]">
+            <Monitor className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-center gap-2 text-[13px] font-medium text-[#191919]">
+              {describeAgent(r.userAgent)}
+              {r.id === current && <Badge tone="success">This device</Badge>}
+            </p>
+            <p className="text-[11.5px] text-[#8f8e8a]">
+              Signed in {fmt(new Date(r.createdAt))} · last active {fmt(new Date(r.updatedAt))}
+            </p>
+          </div>
+          {r.id !== current && (
+            <Button
+              variant="secondary"
+              onClick={async () => {
+                await authClient.revokeSession({ token: r.token }).catch(() => null)
+                await load()
+              }}
+            >
+              Sign out
+            </Button>
+          )}
+        </div>
+      ))}
+    </SettingsCard>
+  )
+}
+
+function SecuritySection() {
+  const { user } = useAuth()
+  const { providers, error } = useAccounts()
+  if (!user) return null
+  const hasPassword = !!providers?.includes('credential')
+
+  return (
+    <SectionShell title="Security" description="Your password, sign-in method and devices.">
+      <SettingsCard title="Sign-in method" icon={<ShieldCheck className="h-3.5 w-3.5" />}>
+        <SettingsRow
+          label="Connected providers"
+          hint={providers && !hasPassword ? 'You sign in with Google. Your password is managed by Google.' : undefined}
+        >
+          {providers ? (
+            <span className="flex flex-wrap gap-1.5">
+              {providers.map((p) => (
+                <Badge key={p}>{providerLabel(p)}</Badge>
+              ))}
+            </span>
+          ) : error ? (
+            <span className="text-[12px] text-[#b4453c]">Could not load</span>
+          ) : (
+            <Loader2 className="h-4 w-4 animate-spin text-[#a3a29e]" />
+          )}
+        </SettingsRow>
+      </SettingsCard>
+
+      {hasPassword && <PasswordCard email={user.email} />}
+
+      <SettingsCard title="Two-factor authentication" icon={<Lock className="h-3.5 w-3.5" />}>
+        <div className="px-5 py-4">
+          <ComingSoon>A second sign-in step (an authenticator app code) is not available yet.</ComingSoon>
         </div>
       </SettingsCard>
 
-      <SettingsCard title="Devices">
-        <div className="px-5 py-4">
-          <ComingSoon>
-            Signing out of other devices is not available yet.
-          </ComingSoon>
-          <Button variant="secondary" className="mt-3" disabled>
-            <LogOut className="h-4 w-4" />
-            Log out of all devices
-          </Button>
-        </div>
+      <SessionsCard />
+
+      <SettingsCard title="How your account is protected" icon={<Shield className="h-3.5 w-3.5" />}>
+        <ul className="space-y-2 px-5 py-4 text-[12.5px] leading-snug text-[#5f5e5b]">
+          {[
+            'Passwords are stored only as salted hashes, never in plain text.',
+            'Your session lives in an HttpOnly cookie that page scripts cannot read.',
+            'Repeated sign-in attempts are rate-limited.',
+            'Every project is private to your account; no one else can open it.',
+          ].map((t) => (
+            <li key={t} className="flex gap-2">
+              <Check className="mt-[2px] h-3.5 w-3.5 shrink-0 text-[#2f6b35]" />
+              {t}
+            </li>
+          ))}
+        </ul>
       </SettingsCard>
     </SectionShell>
   )
 }
+
+/* ------------------------------------------------------------------ */
+/* Billing — Coming soon only                                          */
+/* ------------------------------------------------------------------ */
+
+const PLAN_CARDS = [
+  {
+    id: 'free',
+    name: 'OpenNote Free',
+    price: '£0',
+    period: 'forever',
+    blurb: 'Calendar, notes and personal planning.',
+    features: ['Unlimited projects', 'Day, week and month views', 'Notes and time-slot notes', 'Autosave across devices'],
+  },
+  {
+    id: 'pro',
+    name: 'OpenNote Pro',
+    price: '£9',
+    period: 'per month · planned',
+    blurb: 'Advanced productivity and business tools.',
+    features: ['Everything in Free', 'Pro workspace', 'Advanced planning tools', 'Priority support'],
+  },
+  {
+    id: 'business',
+    name: 'OpenNote Business',
+    price: 'TBA',
+    period: 'pricing to be announced',
+    blurb: 'Team collaboration and business management.',
+    features: ['Everything in Pro', 'Shared team calendars', 'Roles and permissions', 'Team administration'],
+  },
+] as const
+
+const COMPARISON: Array<[string, boolean, boolean, boolean]> = [
+  ['Calendar & notes', true, true, true],
+  ['Projects & autosave', true, true, true],
+  ['Pro workspace & tools', false, true, true],
+  ['Team calendars & roles', false, false, true],
+]
 
 function BillingSection() {
   const { user } = useAuth()
-  const plan = planOf(user?.plan)
-
+  const current = user?.plan === 'pro' ? 'pro' : 'free'
   return (
-    <SectionShell
-      title="Billing"
-      description="The plan on this account."
-    >
-      <SettingsCard title="Current plan">
-        <SettingsRow
-          label={plan.label}
-          hint={plan.blurb}
-        >
-          <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[10.5px] font-bold uppercase tracking-wide text-accent-text">
-            {plan.shortLabel}
-          </span>
-        </SettingsRow>
-        <div className="px-5 py-4">
-          <ComingSoon>
-            Checkout is not switched on yet, so paid plans cannot be bought.
-            Your account keeps whatever plan it was given.
-          </ComingSoon>
-        </div>
-      </SettingsCard>
+    <SectionShell title="Billing" description="Your plan.">
+      <div
+        className="flex items-center gap-2.5 rounded-2xl border border-[#f2e3a6] bg-[#fffbeb] px-4 py-3 text-[13px] text-[#6b5410]"
+        data-testid="billing-message"
+      >
+        <Sparkles className="h-4 w-4 shrink-0 text-[#c9a227]" />
+        OpenNote Pro and Business are coming soon. Enjoy OpenNote Free while we build something better.
+      </div>
 
-      <SettingsCard title="Available plans">
-        <div className="divide-y divide-line-soft">
-          {(Object.keys(PLANS) as Array<keyof typeof PLANS>).map((id) => {
-            const p = PLANS[id]
-            const current = p.id === plan.id
-            return (
-              <div
-                key={p.id}
-                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5"
-              >
-                <div className="min-w-0">
-                  <p className="text-[12.5px] font-medium text-ink">{p.label}</p>
-                  <p className="mt-0.5 text-[11px] text-muted">
-                    {p.price} · {p.blurb}
-                  </p>
-                </div>
-                <Button variant="secondary" disabled={!p.purchasable}>
-                  {current ? 'Current plan' : 'Choose'}
-                </Button>
+      <div className="grid gap-3 lg:grid-cols-3">
+        {PLAN_CARDS.map((p) => {
+          const isCurrent = p.id === current
+          const soon = p.id !== 'free'
+          return (
+            <div
+              key={p.id}
+              data-plan={p.id}
+              className={cn(
+                'flex flex-col rounded-2xl border bg-white p-5',
+                isCurrent ? 'border-[var(--color-accent-deep)] ring-2 ring-[var(--color-accent-soft)]' : 'border-[#ececea]',
+              )}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[14px] font-semibold text-[#191919]">{p.name}</h3>
+                {isCurrent ? <Badge tone="accent">Current plan</Badge> : soon ? <Badge tone="soon">Coming soon</Badge> : null}
               </div>
-            )
-          })}
+              <p className="mt-3 flex items-baseline gap-1.5">
+                <span className="text-[26px] font-semibold tracking-[-0.03em] text-[#191919]">{p.price}</span>
+                <span className="text-[12px] text-[#8f8e8a]">{p.period}</span>
+              </p>
+              <p className="mt-1 text-[12.5px] text-[#6b6a66]">{p.blurb}</p>
+              <ul className="mt-4 flex-1 space-y-2">
+                {p.features.map((f) => (
+                  <li key={f} className="flex gap-2 text-[12.5px] text-[#37352f]">
+                    <Check className={cn('mt-[2px] h-3.5 w-3.5 shrink-0', soon ? 'text-[#c4c3be]' : 'text-accent-deep')} />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              <div
+                className={cn(
+                  'mt-5 flex h-9 items-center justify-center rounded-[10px] text-[12.5px] font-semibold',
+                  isCurrent ? 'bg-accent-soft text-accent-text' : 'bg-[#f4f4f2] text-[#a3a29e]',
+                )}
+              >
+                {isCurrent ? 'Your plan' : 'Coming soon'}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <SettingsCard title="Planned features" icon={<LayoutGrid className="h-3.5 w-3.5" />}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[420px] text-left text-[12.5px]">
+            <thead>
+              <tr className="text-[11px] uppercase tracking-[0.06em] text-[#a3a29e]">
+                <th className="px-5 py-2.5 font-semibold">Feature</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Free</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Pro</th>
+                <th className="px-3 py-2.5 text-center font-semibold">Business</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#f1f1ef]">
+              {COMPARISON.map(([f, ...cols]) => (
+                <tr key={f}>
+                  <td className="px-5 py-2.5 text-[#37352f]">{f}</td>
+                  {cols.map((on, i) => (
+                    <td key={i} className="px-3 py-2.5 text-center">
+                      {on ? <Check className="mx-auto h-4 w-4 text-[#2f6b35]" /> : <span className="text-[#cfcfcb]">—</span>}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </SettingsCard>
     </SectionShell>
@@ -641,24 +1241,17 @@ function BillingSection() {
 }
 
 /* ------------------------------------------------------------------ */
-/* Page                                                                */
+/* Deploy (administrators only; the server re-checks the role)         */
 /* ------------------------------------------------------------------ */
 
-/** Deployment controls (administrators only; the server re-checks the role). */
 function DeploySection() {
   const [open, setOpen] = useState(false)
   return (
-    <SectionShell
-      title="Deploy"
-      description="Publish the current version of OpenNote."
-    >
-      <SettingsCard title="Production">
-        <SettingsRow
-          label="Deploy controls"
-          hint="Publishing stays switched off unless the server allows it."
-        >
+    <SectionShell title="Deploy" description="Publish the current version of OpenNote.">
+      <SettingsCard title="Production" icon={<Rocket className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Deploy controls" hint="Publishing stays switched off unless the server allows it.">
           <Button variant="secondary" onClick={() => setOpen(true)}>
-            <Rocket className="h-4 w-4" />
+            <Rocket className="h-3.5 w-3.5" />
             Open
           </Button>
         </SettingsRow>
@@ -668,52 +1261,50 @@ function DeploySection() {
   )
 }
 
+/* ------------------------------------------------------------------ */
+/* Page                                                                */
+/* ------------------------------------------------------------------ */
+
 export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
   const { settingsSection, setSettingsSection } = useApp()
   const { user } = useAuth()
+  const { status } = usePreferences()
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  // Switching sections starts the content at the top, the way a route change
-  // would, instead of leaving the previous section's scroll position behind.
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
-  }, [settingsSection])
-
-  // Deploy is for administrators only.
-  const sections = SECTIONS.filter((s) => s.id !== 'deploy' || user?.role === 'admin')
+  const sections = useMemo(() => SECTIONS.filter((s) => s.id !== 'deploy' || user?.role === 'admin'), [user?.role])
   const active = sections.find((s) => s.id === settingsSection) ?? sections[0]
 
+  // Remember the section for next time, and start each section at the top.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SECTION_KEY, active.id)
+    } catch {
+      /* storage blocked */
+    }
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'auto' })
+  }, [active.id])
+
   return (
-    <div className="flex h-full min-h-0 flex-col bg-canvas-warm">
-      {/* Page header */}
-      <div className="shrink-0 border-b border-line bg-white px-6 py-4">
+    <div className="flex h-full min-h-0 flex-col bg-[#f7f7f5]">
+      <div className="shrink-0 border-b border-[#ececea] bg-white px-4 py-4 sm:px-6">
         {onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="-ml-2 mb-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12px] font-medium text-ink-soft transition hover:bg-line-soft hover:text-ink"
+            className="-ml-2 mb-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-medium text-[#5f5e5b] transition hover:bg-[#f3f3f1] hover:text-[#191919]"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to calendar
           </button>
         )}
-        <h1 className="text-[17px] font-bold tracking-[-0.025em] text-ink">
-          Settings
-        </h1>
-        <p className="mt-0.5 text-[12px] text-muted">
-          Account, workspace and calendar preferences.
-        </p>
+        <h1 className="text-[20px] font-semibold tracking-[-0.025em] text-[#191919]">Settings</h1>
+        <p className="mt-0.5 text-[12.5px] text-[#8f8e8a]">Account, workspace and calendar preferences.</p>
       </div>
 
-      {/* Section nav + content */}
-      <div className="scroll-area min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-6 px-6 py-6 lg:flex-row lg:gap-8">
-          {/* Nav — a column on wide screens, a scrolling strip on narrow ones */}
-          <nav
-            aria-label="Settings sections"
-            className="shrink-0 lg:w-[196px]"
-          >
-            <div className="no-scrollbar -mx-6 flex gap-1 overflow-x-auto px-6 pb-1 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
+      <div ref={scrollRef} className="scroll-area min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-10">
+          <nav aria-label="Settings sections" className="shrink-0 lg:sticky lg:top-6 lg:w-[210px] lg:self-start">
+            <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
               {sections.map((s) => {
                 const isActive = s.id === active.id
                 return (
@@ -723,36 +1314,27 @@ export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
                     aria-current={isActive ? 'page' : undefined}
                     onClick={() => setSettingsSection(s.id)}
                     className={cn(
-                      'flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-[12.5px] transition-all duration-150 lg:w-full',
+                      'flex shrink-0 items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13px] transition-colors lg:w-full',
                       isActive
-                        ? 'bg-white font-semibold text-ink shadow-[0_1px_3px_rgba(16,24,40,0.08)] ring-1 ring-black/[0.04]'
-                        : 'font-medium text-ink-soft hover:bg-white/70 hover:text-ink',
+                        ? 'bg-white font-semibold text-[#191919] shadow-[0_1px_3px_rgba(16,24,40,0.08)] ring-1 ring-black/[0.04]'
+                        : 'font-medium text-[#5f5e5b] hover:bg-white/70 hover:text-[#191919]',
                     )}
                   >
-                    <span
-                      className={cn(
-                        'shrink-0 transition-colors',
-                        isActive ? 'text-accent-text' : 'text-faint',
-                      )}
-                    >
-                      {s.icon}
-                    </span>
-                    <span className="whitespace-nowrap lg:whitespace-normal">
-                      {s.label}
-                    </span>
+                    <span className={cn('shrink-0', isActive ? 'text-accent-deep' : 'text-[#a3a29e]')}>{s.icon}</span>
+                    <span className="whitespace-nowrap">{s.label}</span>
                   </button>
                 )
               })}
             </div>
           </nav>
 
-          {/* Content */}
-          <div ref={scrollRef} className="min-w-0 flex-1 pb-4">
-            {active.id === 'profile' && (
-              // Keyed by account so signing in as someone else starts this
-              // form from their details rather than the previous values.
-              <ProfileSection key={user?.id ?? 'signed-out'} />
+          <div className="min-w-0 flex-1 pb-8">
+            {status === 'error' && (
+              <p className="mb-4 rounded-xl border border-[#f0cfcc] bg-[#fdf3f2] px-4 py-2.5 text-[12.5px] text-[#9c3a32]">
+                Your saved preferences could not be loaded. Changes may not save until you refresh.
+              </p>
             )}
+            {active.id === 'profile' && <ProfileSection key={user?.id ?? 'signed-out'} />}
             {active.id === 'account' && <AccountSection />}
             {active.id === 'general' && <GeneralSection />}
             {active.id === 'appearance' && <AppearanceSection />}

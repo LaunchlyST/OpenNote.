@@ -135,6 +135,7 @@ export function TimeGrid({
     calendars,
     notes,
     slotNotes: slotNoteList,
+    updateSettings,
     settings,
     addSlotNote,
     openNotesFor,
@@ -152,7 +153,10 @@ export function TimeGrid({
   // saved data are untouched.
   // The calendar always opens at the normal 1-hour layout; zooming is for
   // the current visit only.
-  const [zoom, setZoomState] = useState(0)
+  // Opens at the project's default zoom, or the last one used if it asks to.
+  const [zoom, setZoomState] = useState(() =>
+    clampZoom(settings.rememberZoom ? settings.zoomLevel : settings.defaultZoom),
+  )
   const interval = ZOOM_LEVELS[zoom].interval
   const [gridWidth, setGridWidth] = useState(0)
   // Square cells: one row (one interval) is exactly as tall as one day column
@@ -162,7 +166,9 @@ export function TimeGrid({
   const hourHeight =
     squarePx > 0 ? squarePx * (60 / ZOOM_LEVELS[zoom].interval) : hourPxFor(zoom, baseHourHeight)
   const setZoom = (next: number) => {
-    setZoomState(clampZoom(next))
+    const z = clampZoom(next)
+    setZoomState(z)
+    if (settings.rememberZoom && z !== settings.zoomLevel) updateSettings({ zoomLevel: z })
   }
   const [slotTarget, setSlotTarget] = useState<SlotTarget | null>(null)
   // The empty row under the pointer shows a dashed "+" placeholder.
@@ -283,14 +289,19 @@ export function TimeGrid({
   const totalHeight = 24 * hourHeight
   // The current-time indicator only exists when today's column is on screen
   // and the calendar itself is showing (not covered by Settings).
-  const showNow = !settingsOpen && gridDays.some((d) => isSameDay(d, now))
+  const showNow =
+    settings.showNowLine !== false && !settingsOpen && gridDays.some((d) => isSameDay(d, now))
+  const highlightToday = settings.highlightToday !== false
+  const showGridLines = settings.showGridLines !== false
+  const dayStart = Math.min(23, Math.max(0, settings.dayStartHour ?? 7))
+  const dayEnd = Math.min(24, Math.max(dayStart + 1, settings.dayEndHour ?? 22))
   const nowMin = minutesOfDay(now)
 
   // Start the day at a sensible scroll offset.
   useLayoutEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    el.scrollTop = Math.max(0, 7.5 * hourHeight - 24)
+    el.scrollTop = Math.max(0, dayStart * hourHeight - 8)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -387,6 +398,16 @@ export function TimeGrid({
       el.removeEventListener('gesturechange', onGestureChange)
     }
   }, [])
+
+  // Once the square size is known, open at "Day starts at" (Calendar Preferences).
+  const didInitScroll = useRef(false)
+  useLayoutEffect(() => {
+    const el = scrollRef.current
+    if (!el || didInitScroll.current || squarePx <= 0) return
+    didInitScroll.current = true
+    el.scrollTop = Math.max(0, dayStart * hourHeight - 8)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [squarePx])
 
   const slotNotes = useMemo(() => groupSlotNotes(slotNoteList), [slotNoteList])
 
@@ -715,7 +736,7 @@ export function TimeGrid({
                     'flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-[14px] border transition-all duration-150',
                     isSelected
                       ? 'border-[#191919] bg-[#191919] text-white shadow-[0_6px_16px_-6px_rgba(0,0,0,0.45)]'
-                      : isToday
+                      : isToday && highlightToday
                         ? 'border-[#d4f08a] bg-[#f6fce6] text-[#191919] group-hover:bg-[#eef8d4]'
                         : 'border-[#ececea] bg-white text-[#191919] group-hover:border-[#dcdbd7] group-hover:bg-[#fafaf9]',
                   )}
@@ -735,7 +756,7 @@ export function TimeGrid({
                   </span>
                 </span>
               </button>
-              {isToday && (
+              {isToday && highlightToday && (
                 <span
                   data-testid="today-pill"
                   className="pointer-events-none absolute left-1/2 top-[1px] z-10 -translate-x-1/2 rounded-full bg-[#ef4444] px-1.5 py-[1.5px] text-[9px] font-semibold uppercase leading-none tracking-[0.06em] text-white"
@@ -821,8 +842,15 @@ export function TimeGrid({
           >
             {/* gridlines */}
             <div className="pointer-events-none absolute inset-0">
+              {/* Hours outside "Day starts / ends at" are softly shaded. */}
+              {dayStart > 0 && (
+                <div data-testid="off-hours" className="absolute inset-x-0 top-0 bg-[#f3f3f1]" style={{ height: dayStart * hourHeight }} />
+              )}
+              {dayEnd < 24 && (
+                <div data-testid="off-hours" className="absolute inset-x-0 bg-[#f3f3f1]" style={{ top: dayEnd * hourHeight, height: (24 - dayEnd) * hourHeight }} />
+              )}
               {/* Every other slot gets a whisper of shade so neighbours are easy to tell apart. */}
-              {Array.from({ length: DAY_MINUTES / interval }, (_, i) => i)
+              {showGridLines && Array.from({ length: DAY_MINUTES / interval }, (_, i) => i)
                 .filter((i) => i % 2 === 1)
                 .map((i) => (
                   <div
@@ -838,7 +866,7 @@ export function TimeGrid({
                   style={{ top: h * hourHeight }}
                 />
               ))}
-              {interval < 60 &&
+              {showGridLines && interval < 60 &&
                 HOURS.flatMap((h) =>
                   Array.from({ length: 60 / interval - 1 }, (_, i) => (i + 1) * interval).map((m) => (
                     <div

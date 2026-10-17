@@ -1,6 +1,7 @@
 import {
   createContext,
   useCallback,
+  useEffect,
   useContext,
   useMemo,
   useState,
@@ -14,6 +15,7 @@ import { DEFAULT_SETTINGS } from './lib/seed'
 import { addDays, addMonths, startOfDay } from './lib/date'
 import { uid } from './lib/id'
 import { useProjectSync } from './sync'
+import { usePreferences } from './preferences'
 import type { SaveStatus, Workspace } from './sync'
 
 export interface ModalState {
@@ -114,12 +116,16 @@ export function AppProvider({
 }) {
   const [events, setEvents] = useState<CalendarEvent[]>(initial.events)
   const [calendars, setCalendars] = useState<Calendar[]>(initial.calendars)
+  const { preferences } = usePreferences()
   // Split any older mixed note list into documents and time-slot notes once.
   const [split] = useState(() => splitLegacyNotes(initial.notes, initial.slotNotes))
   const [notes, setNotes] = useState<Note[]>(split.notes)
   const [slotNotes, setSlotNotes] = useState<SlotNote[]>(split.slotNotes)
   const [notesFilter, setNotesFilter] = useState<string | null>(null)
-  const [notesOpenRequest, setNotesOpenRequest] = useState(0)
+  // General → "Default opening page: Notes" opens the Notes section on arrival.
+  const [notesOpenRequest, setNotesOpenRequest] = useState(() =>
+    preferences.openTo === 'notes' ? 1 : 0,
+  )
   const [settings, setSettings] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
     ...initial.settings,
@@ -131,15 +137,49 @@ export function AppProvider({
   )
   const saveStatus = useProjectSync(projectId, workspace)
 
-  const [view, setViewState] = useState<ViewMode>(() => settings.defaultView)
+  // Opening view: General → "Default opening page" / "Remember last view".
+  const viewKey = projectId ? `opennote.lastview.${projectId}` : null
+  const [view, setViewState] = useState<ViewMode>(() => {
+    if (preferences.openTo === 'today') return 'day'
+    if (preferences.rememberView && viewKey) {
+      try {
+        const v = window.localStorage.getItem(viewKey)
+        if (v === 'day' || v === 'week' || v === 'month') return v
+      } catch {
+        /* storage blocked */
+      }
+    }
+    return settings.defaultView
+  })
+  useEffect(() => {
+    if (!preferences.rememberView || !viewKey) return
+    try {
+      window.localStorage.setItem(viewKey, view)
+    } catch {
+      /* storage blocked */
+    }
+  }, [view, viewKey, preferences.rememberView])
+  // "Reduce motion" applies to the whole interface.
+  useEffect(() => {
+    document.documentElement.classList.toggle('reduce-motion', settings.reduceMotion)
+    return () => document.documentElement.classList.remove('reduce-motion')
+  }, [settings.reduceMotion])
   const [focusDay, setFocusDay] = useState(false)
   const [selectedDate, setSelectedDate] = useState<Date>(() =>
     startOfDay(new Date()),
   )
   const [modal, setModal] = useState<ModalState | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [settingsSection, setSettingsSection] =
-    useState<SettingsSectionId>('profile')
+  // Settings reopens on the section used last (remembered in this browser).
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>(() => {
+    try {
+      const v = window.localStorage.getItem('opennote.settings-section')
+      if (v) return v as SettingsSectionId
+    } catch {
+      /* storage blocked */
+    }
+    return 'profile'
+  })
 
   const openSettings = useCallback((target?: SettingsSectionId) => {
     if (target) setSettingsSection(target)

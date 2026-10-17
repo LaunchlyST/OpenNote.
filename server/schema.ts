@@ -20,6 +20,8 @@ export async function applyMigrations({ quiet = false } = {}) {
   ensureAppTables()
   const { ensureProjectTables } = await import('./projects.ts')
   ensureProjectTables()
+  const { ensurePreferenceTables } = await import('./preferences.ts')
+  ensurePreferenceTables()
   const { backfillPlans } = await import('./plans.ts')
   backfillPlans()
 }

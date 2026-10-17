@@ -486,3 +486,24 @@ html.lp-cursor-on * {
 .reduce-motion .settings-exit {
   animation: none;
 }
+
+/* Appearance → "Subtle animations" off: decorative entry animations stop. */
+.no-anim .animate-pop,
+.no-anim .animate-rise,
+.no-anim .animate-fade,
+.no-anim .animate-sheet,
+.no-anim .animate-scrim,
+.no-anim .settings-enter,
+.no-anim .settings-exit {
+  animation: none;
+}
+
+/* Calendar Preferences / Appearance → "Reduce motion": no animations or transitions. */
+.reduce-motion *,
+.reduce-motion *::before,
+.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}

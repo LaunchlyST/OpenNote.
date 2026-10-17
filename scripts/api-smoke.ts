@@ -261,6 +261,40 @@ try {
   const origAfter = await req('GET', `/api/projects/${biz?.id}`, undefined, b.cookies)
   check('deleting a copy leaves the original', origAfter.status === 200)
 
+  console.log('\n  Preferences')
+  const prefs0 = await req('GET', '/api/preferences', undefined, b.cookies)
+  check(prefs0.status === 200 && (prefs0.json?.preferences as { dateFormat?: string })?.dateFormat === 'DMY', 'new accounts get default preferences')
+  const prefs1 = await req('PATCH', '/api/preferences', { preferences: { dateFormat: 'YMD', accent: 'blue', reminderLead: 30, quietStart: '21:30' } }, b.cookies)
+  check(prefs1.status === 200, 'valid preferences save')
+  const prefs2 = await req('GET', '/api/preferences', undefined, b.cookies)
+  const p2 = prefs2.json?.preferences as Record<string, unknown>
+  check(p2.dateFormat === 'YMD' && p2.accent === 'blue' && p2.reminderLead === 30 && p2.quietStart === '21:30', 'preferences persist')
+  for (const [label, body] of [
+    ['an unknown key', { theme: 'dark' }],
+    ['a bad value', { reminderLead: 7 }],
+    ['a bad time', { quietStart: '25:00' }],
+  ] as const) {
+    const r = await req('PATCH', '/api/preferences', { preferences: body }, b.cookies)
+    check(r.status === 400, `rejects ${label}`, `got ${r.status}`)
+  }
+  const aPrefs = await req('GET', '/api/preferences', undefined, a.cookies)
+  check((aPrefs.json?.preferences as { accent?: string })?.accent === 'lime', 'preferences are per account')
+  const anonPrefs = await req('GET', '/api/preferences')
+  check(anonPrefs.status === 401, 'anonymous preferences → 401')
+
+  console.log('\n  Account deletion')
+  const z = await req('POST', '/api/auth/sign-up/email', { name: 'Zed', email: 'zed@opennote.test', password: PASSWORD })
+  await req('POST', '/api/projects', { workspace: 'free', name: 'Zed project', color: 'lime' }, z.cookies)
+  const wrongPw = await req('POST', '/api/auth/delete-user', { password: 'not-the-password-123' }, z.cookies)
+  const stillThere = await req('GET', '/api/projects?workspace=free', undefined, z.cookies)
+  check(wrongPw.status !== 200 && stillThere.text.includes('Zed project'), 'a wrong password does not delete the account', `got ${wrongPw.status}`)
+  const zDel = await req('POST', '/api/auth/delete-user', { password: PASSWORD }, z.cookies)
+  check(zDel.status === 200, 'the account owner can delete their account', zDel.text)
+  const zLogin = await req('POST', '/api/auth/sign-in/email', { email: 'zed@opennote.test', password: PASSWORD })
+  check(zLogin.status !== 200, 'a deleted account can no longer sign in', `got ${zLogin.status}`)
+  const bobAfter = await req('GET', '/api/projects?workspace=free', undefined, b.cookies)
+  check(bobAfter.text.includes('Business 2026'), 'deleting one account leaves other accounts untouched')
+
   console.log('\n  Admin-only routes')
   const mlog = await req('GET', '/api/admin/mail-log', undefined, a.cookies)
   check('the mail log refuses a normal user', mlog.status === 403, `got ${mlog.status}`)

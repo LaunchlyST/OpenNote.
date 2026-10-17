@@ -64,6 +64,20 @@ export interface Settings {
   reduceMotion: boolean
   /** Calendar vertical zoom: index into ZOOM_LEVELS (0 = 1-hour rows). */
   zoomLevel?: number
+  /** Default zoom level (index into ZOOM_LEVELS) a project opens at. */
+  defaultZoom?: number
+  /** Re-open at the last zoom used instead of the default. */
+  rememberZoom?: boolean
+  /** Hour the calendar scrolls to on open (0–23). */
+  dayStartHour?: number
+  /** Hour after which the grid is shaded as outside your day (1–24). */
+  dayEndHour?: number
+  /** Mark today's column and header. */
+  highlightToday?: boolean
+  /** Show the red current-time line. */
+  showNowLine?: boolean
+  /** Show sub-hour lines and alternating slot shading. */
+  showGridLines?: boolean
   /** Whether the left sidebar starts collapsed. */
   sidebarCollapsed: boolean
   /**

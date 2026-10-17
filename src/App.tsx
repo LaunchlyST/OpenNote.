@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { AppProvider, useApp } from './store'
 import type { ProjectData } from './store'
 import { useRouter } from './router'
+import { PreferencesProvider, usePreferences } from './preferences'
+import { useEventReminders } from './hooks/reminders'
 import { WorkspacePicker } from './projects/WorkspacePicker'
 import { ProjectDashboard } from './projects/ProjectDashboard'
 import { PageChrome, Spinner, btn } from './projects/Chrome'
@@ -53,7 +55,8 @@ function MainArea() {
 
 /** The existing OpenNote calendar UI, for whichever project is loaded. */
 function CalendarShell() {
-  const { goToToday, setView, navigate, settingsOpen, closeSettings, notesOpenRequest } = useApp()
+  const { goToToday, setView, navigate, settingsOpen, closeSettings, notesOpenRequest, events } = useApp()
+  useEventReminders(events, usePreferences().preferences)
   // Settings opens in the main content area, over the calendar (which stays
   // mounted underneath, so closing it returns to the same view and scroll).
   const settingsTransition = useExitTransition(settingsOpen, SETTINGS_TRANSITION_MS)
@@ -315,7 +318,13 @@ function Gate() {
 
   if (needsUser && !user) return <SessionCheck />
   // Remount per account so one user's projects never leak into another's.
-  return <Shell key={user?.id ?? 'guest'} />
+  return user ? (
+    <PreferencesProvider key={user.id}>
+      <Shell />
+    </PreferencesProvider>
+  ) : (
+    <Shell key="guest" />
+  )
 }
 
 function SessionCheck() {

@@ -41,6 +41,10 @@ export const auth = betterAuth({
   },
 
   user: {
+    // Users can delete their own account from Settings. Better Auth checks
+    // the password (email accounts) or a recent sign-in (Google) first;
+    // their projects and preferences are removed with them (ON DELETE CASCADE).
+    deleteUser: { enabled: true },
     additionalFields: {
       // Subscription plan. input: false — a sign-up or profile update can
       // never set it; only the server can.

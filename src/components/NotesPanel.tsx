@@ -14,6 +14,7 @@ import { useApp } from '../store'
 import type { Note } from '../lib/types'
 import { dateKey, parseDateInput, relativeDayLabel } from '../lib/date'
 import { cn, uid } from '../lib/id'
+import { formatDateKey, usePreferences } from '../preferences'
 
 /**
  * The Notes section (System B): longer notes with a title and description,
@@ -32,15 +33,14 @@ function autoGrow(el: HTMLTextAreaElement | null) {
   el.style.height = `${Math.max(el.scrollHeight, 24)}px`
 }
 
-function longDate(key: string) {
-  const d = parseDateInput(key)
-  if (!d) return key
-  return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
+/** "Sat 17/10/2026" — weekday plus the date in the user's chosen format. */
+function useLongDate() {
+  const { dateFormat } = usePreferences().preferences
+  return (key: string) => {
+    const d = parseDateInput(key)
+    if (!d) return key
+    return `${d.toLocaleDateString(undefined, { weekday: 'short' })} ${formatDateKey(key, dateFormat)}`
+  }
 }
 
 const card =
@@ -67,6 +67,7 @@ function NoteSummary({
     onDragEnd: () => void
   }
 }) {
+  const longDate = useLongDate()
   const hidden = note.date && note.showOnCalendar === false
   return (
     <div
@@ -247,6 +248,7 @@ function NoteEditor({ note, onDone }: { note: Note; onDone: () => void }) {
 
 export function NotesPanel() {
   const { notes, addNote, moveNote, selectedDate, notesFilter, setNotesFilter } = useApp()
+  const longDate = useLongDate()
   const [editingId, setEditingId] = useState<string | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)

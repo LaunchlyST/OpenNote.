@@ -12,5 +12,12 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultView: 'week',
   reduceMotion: false,
   sidebarCollapsed: false,
+  defaultZoom: 0,
+  rememberZoom: false,
+  dayStartHour: 7,
+  dayEndHour: 22,
+  highlightToday: true,
+  showNowLine: true,
+  showGridLines: true,
   twoFactor: false,
 }
