@@ -5,8 +5,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  FolderOpen,
+  CalendarPlus,
   GripVertical,
   Pin,
   Plus,
@@ -37,6 +36,7 @@ import {
  */
 
 const HAIRLINE = '#eceef2'
+const DAY_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 /* ------------------------------------------------------------------ */
 /* Top bar                                                             */
@@ -376,21 +376,21 @@ export function MockNotes({
         style={{ borderColor: HAIRLINE }}
       >
         <span className="flex items-center gap-1.5">
-          <FolderOpen className="h-3 w-3 text-[#d8b31a]" strokeWidth={2.2} />
+          <StickyNote className="h-3 w-3 text-[#d8b31a]" strokeWidth={2.2} />
           <span className="text-[10px] font-semibold tracking-[-0.01em] text-[#1f2330]">Notes</span>
           <span className="rounded-full bg-[#f2f3f6] px-1 py-px text-[7px] font-semibold text-[#6b7183]">
             {count}
           </span>
         </span>
-        <span className="flex items-center gap-0.5 rounded-md bg-[#bef264] px-1.5 py-[2px] text-[8px] font-semibold text-[#3f4a14]">
+        <span className="flex items-center gap-0.5 rounded-md bg-[#191919] px-1.5 py-[2px] text-[8px] font-semibold text-white">
           <Plus className="h-2 w-2" strokeWidth={3} />
           New
         </span>
       </div>
 
       <div className="border-b bg-white px-2.5 py-1.5" style={{ borderColor: HAIRLINE }}>
-        <span className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#dfe2e8] py-[3px] text-[8px] font-medium text-[#6b7183]">
-          <Clock className="h-2.5 w-2.5" />
+        <span className="flex w-full items-center justify-center gap-1 rounded-md border border-dashed border-[#c5e17a] bg-[#f8fce9] py-[3px] text-[8px] font-medium text-[#4b6410]">
+          <CalendarPlus className="h-2.5 w-2.5" />
           Pin note to Today · 2
         </span>
       </div>
@@ -654,12 +654,11 @@ export function MockDayTimeline({
         style={{ gridTemplateColumns: '38px 1fr', borderColor: HAIRLINE }}
       >
         <span />
-        <span className="flex flex-col items-center gap-0.5 border-l py-1.5" style={{ borderColor: HAIRLINE }}>
-          <span className="text-[7px] font-semibold tracking-[0.06em] text-[#8b90a0] uppercase">
-            {DEMO_WEEKDAYS[dayIndex]}
-          </span>
-          <span className="grid h-[18px] w-[18px] place-items-center rounded-full bg-[#bef264] text-[8.5px] font-semibold text-[#33400f] ring-1 ring-inset ring-[#a3d922]/60">
-            {DEMO_DAY_NUMBERS[dayIndex]}
+        <span className="border-l px-2 pt-2.5 pb-1.5" style={{ borderColor: HAIRLINE }}>
+          <span className="relative mx-auto flex w-[92px] flex-col items-center rounded-[9px] bg-[#191919] py-1 text-white shadow-[0_4px_10px_-5px_rgba(0,0,0,0.5)]">
+            <span className="absolute -top-[6px] rounded-full bg-[#ef4444] px-1 text-[5.5px] font-bold tracking-[0.08em]">TODAY</span>
+            <span className="text-[7px] font-medium text-white/80">{DAY_LONG[dayIndex]}</span>
+            <span className="text-[11px] leading-tight font-semibold tabular-nums">{DEMO_DAY_NUMBERS[dayIndex]}</span>
           </span>
         </span>
       </div>
@@ -705,8 +704,8 @@ export function MockDayTimeline({
               className="absolute inset-x-0 flex items-center"
               style={{ top: (nowMinutes - GRID_START) * pxPerMinute }}
             >
-              <span className="-ml-[3px] h-[5px] w-[5px] rounded-full bg-[#f472b6]" />
-              <span className="h-px flex-1 bg-[#f9a8c8]" />
+              <span className="-ml-[3px] h-[5px] w-[5px] rounded-full bg-[#ff5a5f]" />
+              <span className="h-px flex-1 bg-[#ff5a5f]" />
             </span>
           </span>
         </span>
@@ -739,6 +738,13 @@ const MONTH_CHIPS: Record<number, Array<{ label: string; color: EventColorId }>>
   14: [{ label: 'Team sync', color: 'lime' }],
   16: [{ label: 'Dentist', color: 'blue' }],
   21: [{ label: 'Roadmap review', color: 'purple' }],
+}
+
+/** Start time shown before each month chip, as in the live MonthView. */
+const EXTRA_TIMES: Record<string, string> = { 'Team sync': '10:00', Dentist: '15:30', 'Roadmap review': '11:00' }
+function chipTime(label: string) {
+  const e = DEMO_EVENTS.find((x) => x.title === label)
+  return e ? demoClock(e.start) : EXTRA_TIMES[label]
 }
 
 export function MockMonthGrid({ dense = false }: { dense?: boolean }) {
@@ -778,9 +784,9 @@ export function MockMonthGrid({ dense = false }: { dense?: boolean }) {
             >
               <span
                 className={cn(
-                  'mb-0.5 grid h-[13px] w-[13px] place-items-center rounded-full text-[7.5px] font-semibold tabular-nums',
+                  'mb-0.5 grid h-[13px] w-fit min-w-[13px] place-items-center rounded-[4px] px-0.5 text-[7.5px] font-semibold tabular-nums',
                   isToday
-                    ? 'bg-[#bef264] text-[#33400f]'
+                    ? 'bg-[#191919] text-white'
                     : inMonth
                       ? 'text-[#3d4354]'
                       : 'text-[#ccd0d9]',
@@ -798,10 +804,7 @@ export function MockMonthGrid({ dense = false }: { dense?: boolean }) {
                       color: COLORS[chip.color].text,
                     }}
                   >
-                    <span
-                      className="h-[3px] w-[3px] shrink-0 rounded-full"
-                      style={{ background: COLORS[chip.color].dot }}
-                    />
+                    {chipTime(chip.label) && <span className="shrink-0 tabular-nums opacity-70">{chipTime(chip.label)}</span>}
                     <span className="truncate">{chip.label}</span>
                   </span>
                 ))}

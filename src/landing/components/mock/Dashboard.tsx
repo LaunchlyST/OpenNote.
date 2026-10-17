@@ -1,7 +1,10 @@
 import type { ReactNode } from 'react'
 import {
   CalendarDays,
+  ArrowLeft,
   Check,
+  Cloud,
+  ZoomIn,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -27,6 +30,7 @@ import type { MockView } from './AppChrome'
  */
 
 const LINE = '#ececea'
+const DAY_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 /** The visitor's real weekday (Monday = 0) is "today" in the sample week. */
 const TODAY = T.todayIndex
 const HOUR_H = 56
@@ -154,6 +158,7 @@ function Sidebar() {
             <NavItem icon={<CalendarDays className="h-[15px] w-[15px]" />} label="Calendar" active />
             <NavItem icon={<StickyNote className="h-[15px] w-[15px]" />} label="Notes" />
             <NavItem icon={<Sun className="h-[15px] w-[15px]" />} label="Today" />
+            <NavItem icon={<Settings className="h-[15px] w-[15px]" />} label="Settings" />
           </div>
 
           <div className="my-3 h-px" style={{ background: LINE }} />
@@ -217,6 +222,13 @@ function TopBar({ view, onViewChange }: { view: MockView; onViewChange?: (v: Moc
   const active = Math.max(0, VIEWS.findIndex((v) => v.value === view))
   return (
     <header className="flex h-[64px] shrink-0 items-center gap-3 border-b bg-white px-5" style={{ borderColor: LINE }}>
+      {/* Free workspaces live inside a project: the way back sits first. */}
+      <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-[#37352f]">
+        <ArrowLeft className="h-4 w-4 text-[#6b6a66]" />
+        Back to Projects
+      </span>
+      <Cloud className="h-4 w-4 shrink-0 text-[#a3a29e]" aria-hidden="true" />
+      <span className="h-6 w-px shrink-0 bg-[#ececea]" />
       <span className="truncate text-[22px] font-semibold tracking-[-0.03em] text-[#191919]">
         {range}
         <span className="ml-2 font-normal text-[#a3a29e]">{year}</span>
@@ -270,23 +282,31 @@ function TimeGrid({ days }: { days: number[] }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-white">
-      <div className="flex h-[64px] shrink-0 border-b" style={{ borderColor: LINE }}>
-        <div className="w-[62px] shrink-0" />
-        <div className="flex flex-1 border-l" style={{ borderColor: LINE }}>
-          {DEMO_WEEKDAYS.map((d, i) => (
-            <span key={d} className="flex flex-1 flex-col items-center justify-center gap-1 py-2">
-              <span className="text-[10.5px] font-semibold tracking-[0.07em] text-[#a3a29e] uppercase">{d}</span>
-              <span
-                className={cn(
-                  'grid h-8 min-w-8 place-items-center rounded-xl px-2 text-[15px] font-semibold tabular-nums',
-                  i === TODAY ? 'bg-[#191919] text-white shadow-[0_2px_6px_-1px_rgba(0,0,0,0.35)]' : 'text-[#191919]',
-                )}
-              >
-                {T.weekNumbers[i]}
+      {/* Day cards, as in the live TimeGrid: full weekday, big date, today in black. */}
+      <div className="flex shrink-0 items-stretch gap-[7px] border-b px-[10px] pt-[9px] pb-[9px]" style={{ borderColor: LINE }}>
+        <span className="grid w-[44px] shrink-0 place-items-center rounded-[10px] border border-[#e3e3e0] text-[#8f8e8a]">
+          <span className="flex flex-col items-center leading-none">
+            <ZoomIn className="h-3.5 w-3.5" />
+            <span className="mt-0.5 text-[8.5px] font-medium">1 h</span>
+          </span>
+        </span>
+        {DAY_LONG.map((d, i) => (
+          <span
+            key={d}
+            className={cn(
+              'relative flex flex-1 flex-col items-center justify-center rounded-[12px] border py-[7px]',
+              i === TODAY ? 'border-[#191919] bg-[#191919] text-white shadow-[0_6px_14px_-6px_rgba(0,0,0,0.5)]' : 'border-[#e6e6e3] bg-white text-[#191919]',
+            )}
+          >
+            {i === TODAY && (
+              <span className="absolute -top-[7px] rounded-full bg-[#ef4444] px-1.5 py-px text-[7.5px] font-bold tracking-[0.08em] text-white">
+                TODAY
               </span>
-            </span>
-          ))}
-        </div>
+            )}
+            <span className={cn('text-[10.5px] font-medium', i === TODAY ? 'text-white/80' : 'text-[#6b6a66]')}>{d}</span>
+            <span className="text-[18px] leading-tight font-semibold tabular-nums">{T.weekNumbers[i]}</span>
+          </span>
+        ))}
       </div>
 
       <div className="relative min-h-0 flex-1 overflow-hidden">
