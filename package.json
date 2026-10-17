@@ -8,7 +8,7 @@
     "start": "npm run dev",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview --host 0.0.0.0 --port 5173 --strictPort",
+    "preview": "vite build && vite preview --host 0.0.0.0 --port 5173 --strictPort",
     "test": "node scripts/ssr-smoke.mjs",
     "test:deploy": "tsx scripts/deploy-smoke.ts",
     "test:auth": "tsx scripts/auth-smoke.ts",
