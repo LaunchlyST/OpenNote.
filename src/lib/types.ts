@@ -22,14 +22,32 @@ export interface CalendarEvent {
   seeded?: boolean
 }
 
+/**
+ * A Notes-section document: title + description, optionally linked to a day.
+ * It never has a time and never renders inside the calendar grid; a dated
+ * note only shows as a small "Notes (n)" badge on its day header.
+ */
 export interface Note {
   id: string
   title: string
   body: string
-  /** yyyy-mm-dd */
+  /** yyyy-mm-dd — optional link to a day. */
   date?: string
-  /** HH:mm */
+  /** Whether a dated note shows its badge on the calendar (default true). */
+  showOnCalendar?: boolean
+  /** Legacy: older notes carried a time. Migrated away on load; never set now. */
   time?: string
+  createdAt: number
+}
+
+/** A calendar time-slot note: lives in one 5-minute slot of one day (max 3 per slot). */
+export interface SlotNote {
+  id: string
+  /** yyyy-mm-dd */
+  date: string
+  /** HH:mm, start of its 5-minute slot */
+  time: string
+  title: string
   createdAt: number
 }
 

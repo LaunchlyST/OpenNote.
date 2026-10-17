@@ -114,7 +114,8 @@ async function enterProject(p, name) {
   const hasNote = async () => {
     const btn = p.getByRole('button', { name: 'Notes', exact: true }).first()
     if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click()
-    return p.evaluate((t) => [...document.querySelectorAll('input,textarea')].some((el) => el.value === t), noteTitle)
+    // Saved notes show as cards (title text); an open editor shows inputs.
+    return p.evaluate((t) => document.body.innerText.includes(t) || [...document.querySelectorAll('input,textarea')].some((el) => el.value === t), noteTitle)
   }
   ;(await p.getByText(eventTitle).count()) && (await hasNote()) ? ok('event and note still there after refresh') : die('data lost on refresh')
 

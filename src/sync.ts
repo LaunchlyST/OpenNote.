@@ -23,6 +23,8 @@ export interface Workspace<E = unknown, C = unknown, N = unknown, S = unknown> {
   calendars: C[]
   notes: N[]
   settings: S
+  /** Calendar time-slot notes, kept apart from Notes-section documents. */
+  slotNotes?: unknown[]
 }
 
 export type SaveStatus = 'saved' | 'saving' | 'error'

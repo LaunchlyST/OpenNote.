@@ -19,7 +19,7 @@ import {
 import { cn, uid } from '../lib/id'
 import { useNow } from '../hooks'
 import { colorOf as noteColor } from '../lib/colors'
-import type { Note } from '../lib/types'
+import type { SlotNote } from '../lib/types'
 import {
   MAX_SLOT_NOTES,
   SLOT_MINUTES,
@@ -134,8 +134,10 @@ export function TimeGrid({
     events,
     calendars,
     notes,
+    slotNotes: slotNoteList,
     settings,
-    addNote,
+    addSlotNote,
+    openNotesFor,
     openEdit,
     saveEvent,
     selectDate,
@@ -269,8 +271,9 @@ export function TimeGrid({
 
   const noteCounts = useMemo(() => {
     const map = new Map<string, number>()
+    // Notes-section documents linked to a day (and not hidden from the calendar).
     for (const n of notes) {
-      if (!n.date) continue
+      if (!n.date || n.showOnCalendar === false) continue
       map.set(n.date, (map.get(n.date) ?? 0) + 1)
     }
     return map
@@ -381,7 +384,7 @@ export function TimeGrid({
     }
   }, [])
 
-  const slotNotes = useMemo(() => groupSlotNotes(notes), [notes])
+  const slotNotes = useMemo(() => groupSlotNotes(slotNoteList), [slotNoteList])
 
   useEffect(() => {
     if (!drag) return
@@ -499,7 +502,7 @@ export function TimeGrid({
     let focusId: string | undefined
     if (count < MAX_SLOT_NOTES) {
       focusId = uid('note')
-      addNote({ id: focusId, date: dateKey(day), time: minutesToTime(slot), title: '', body: '' })
+      addSlotNote({ id: focusId, date: dateKey(day), time: minutesToTime(slot), title: '' })
     }
     // Opens on the slot either way, so a full slot shows "Slot full (3/3)".
     setSlotTarget({
@@ -546,7 +549,7 @@ export function TimeGrid({
       color: color.text,
       boxShadow: `inset 2px 0 0 ${color.dot}, inset 0 0 0 1px ${color.border}`,
     }
-    const label = (n: Note) => n.title.trim() || 'Untitled note'
+    const label = (n: SlotNote) => n.title.trim() || 'Untitled note'
 
     return [...rows.entries()].map(([row, slots]) => {
       // Share the column with events in the same row instead of covering them.
@@ -679,8 +682,16 @@ export function TimeGrid({
             const isSelected = isSameDay(day, selectedDate)
             const count = noteCounts.get(dateKey(day)) ?? 0
             return (
-              <button
+              <div
                 key={day.toISOString()}
+                className="relative flex"
+                style={
+                  headerWidths
+                    ? { width: headerWidths[di], flex: '0 0 auto' }
+                    : { flex: '1 1 0%', minWidth: 0 }
+                }
+              >
+              <button
                 type="button"
                 onClick={() => {
                   // In Full Week, a day click narrows the grid to that day.
@@ -691,12 +702,7 @@ export function TimeGrid({
                     selectDate(day)
                   }
                 }}
-                className="group flex items-center justify-center px-[3px] py-2"
-                style={
-                  headerWidths
-                    ? { width: headerWidths[di], flex: '0 0 auto' }
-                    : undefined
-                }
+                className="group flex w-full items-center justify-center px-[3px] py-2"
               >
                 <span
                   className={cn(
@@ -717,13 +723,33 @@ export function TimeGrid({
                     {headerWidths && headerWidths[di] >= 110
                       ? day.toLocaleDateString(undefined, { weekday: 'long' })
                       : weekdayShort(day)}
-                    {count > 0 && <StickyNote className="h-2.5 w-2.5 text-[#d8b31a]" />}
                   </span>
                   <span className="text-[18px] font-semibold leading-none tabular-nums tracking-[-0.02em]">
                     {day.getDate()}
                   </span>
                 </span>
               </button>
+              {/* Notes-section documents linked to this day: a badge only,
+                  never anything inside the time grid. */}
+              {count > 0 && (
+                <button
+                  type="button"
+                  data-testid="day-notes-badge"
+                  data-date={dateKey(day)}
+                  onClick={() => openNotesFor(dateKey(day))}
+                  title={`Open notes for ${day.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}`}
+                  className={cn(
+                    'absolute bottom-[1px] left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-[2px] text-[9.5px] font-semibold leading-none shadow-[0_1px_2px_rgba(0,0,0,0.08)] transition',
+                    isSelected
+                      ? 'bg-[#fdf3c4] text-[#8a6a00] ring-1 ring-inset ring-[#191919] hover:bg-[#fbe9a0]'
+                      : 'bg-[#fdf3c4] text-[#8a6a00] ring-1 ring-inset ring-[#f2d66b] hover:bg-[#fbe9a0]',
+                  )}
+                >
+                  <StickyNote className="h-2.5 w-2.5" />
+                  Notes ({count})
+                </button>
+              )}
+              </div>
             )
           })}
         </div>

@@ -53,7 +53,7 @@ function MainArea() {
 
 /** The existing OpenNote calendar UI, for whichever project is loaded. */
 function CalendarShell() {
-  const { goToToday, setView, navigate, settingsOpen, closeSettings } = useApp()
+  const { goToToday, setView, navigate, settingsOpen, closeSettings, notesOpenRequest } = useApp()
   // Settings opens in the main content area, over the calendar (which stays
   // mounted underneath, so closing it returns to the same view and scroll).
   const settingsTransition = useExitTransition(settingsOpen, SETTINGS_TRANSITION_MS)
@@ -76,6 +76,16 @@ function CalendarShell() {
       setRightOpen((o) => !o)
     }
   }
+
+  // A day's "Notes (n)" badge asks for the Notes section: open whichever
+  // notes surface is visible at this width (the store holds the filter).
+  useEffect(() => {
+    if (!notesOpenRequest) return
+    closeSettings()
+    if (wide) setNotesOpen(true)
+    else setRightOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notesOpenRequest])
 
   useEffect(() => {
     if (settingsOpen) return

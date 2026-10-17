@@ -41,6 +41,15 @@ function note(n: unknown): string | null {
   return null
 }
 
+function slotNote(n: unknown): string | null {
+  if (!isObj(n)) return 'slot note is not an object'
+  if (!str(n.id, 100) || !str(n.title)) return 'slot note id/title'
+  if (!(typeof n.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(n.date))) return 'slot note date'
+  if (!(typeof n.time === 'string' && /^\d{2}:\d{2}$/.test(n.time))) return 'slot note time'
+  if (typeof n.createdAt !== 'number') return 'slot note createdAt'
+  return null
+}
+
 export function validateWorkspace(data: unknown): string | null {
   if (!isObj(data)) return 'workspace is not an object'
   const { events, calendars, notes, settings } = data
@@ -59,5 +68,15 @@ export function validateWorkspace(data: unknown): string | null {
     const err = note(n)
     if (err) return err
   }
+  // Calendar time-slot notes: optional (older saves have none), kept apart from notes.
+  const { slotNotes } = data
+  if (slotNotes !== undefined) {
+    if (!Array.isArray(slotNotes) || slotNotes.length > MAX_ITEMS) return 'slot notes'
+    for (const n of slotNotes) {
+      const err = slotNote(n)
+      if (err) return err
+    }
+  }
+  if (Array.isArray(notes) && notes.some((n) => isObj(n) && n.showOnCalendar !== undefined && typeof n.showOnCalendar !== 'boolean')) return 'note showOnCalendar'
   return null
 }

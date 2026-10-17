@@ -87,7 +87,7 @@ export function MonthView() {
   const noteCounts = useMemo(() => {
     const map = new Map<string, number>()
     for (const n of notes) {
-      if (!n.date) continue
+      if (!n.date || n.showOnCalendar === false) continue
       map.set(n.date, (map.get(n.date) ?? 0) + 1)
     }
     return map

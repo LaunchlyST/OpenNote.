@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom'
 import { CalendarPlus, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { useApp } from '../store'
-import type { Note } from '../lib/types'
+import type { SlotNote } from '../lib/types'
 import { dateKey, formatClock, fromMinutes, monthShort, weekdayShort } from '../lib/date'
 import { uid } from '../lib/id'
 import { cn } from '../lib/id'
@@ -39,7 +39,7 @@ export function SlotNotesPopover({
   target: SlotTarget
   onClose: () => void
 }) {
-  const { notes, addNote, updateNote, deleteNote, openCreate, settings } = useApp()
+  const { slotNotes: notes, addSlotNote, updateSlotNote, deleteSlotNote, openCreate, settings } = useApp()
   const [slot, setSlot] = useState(target.slot)
   // A note made by double-click and closed without any text is discarded,
   // so stray double-clicks never leave empty notes behind.
@@ -48,15 +48,15 @@ export function SlotNotesPopover({
   const onClose = useCallback(() => {
     const id = target.focusId
     const created = id ? notesRef.current.find((n) => n.id === id) : undefined
-    if (created && !created.title.trim() && !created.body.trim()) deleteNote(created.id)
+    if (created && !created.title.trim()) deleteSlotNote(created.id)
     close()
-  }, [target.focusId, deleteNote, close])
+  }, [target.focusId, deleteSlotNote, close])
   const [focusId, setFocusId] = useState<string | null>(target.focusId ?? null)
   const ref = useRef<HTMLDivElement | null>(null)
   const [pos, setPos] = useState({ left: target.x, top: target.y })
 
   const key = dateKey(target.day)
-  const dayNotes = useMemo(() => groupSlotNotes(notes).get(key) ?? new Map<number, Note[]>(), [notes, key])
+  const dayNotes = useMemo(() => groupSlotNotes(notes).get(key) ?? new Map<number, SlotNote[]>(), [notes, key])
   const list = dayNotes.get(slot) ?? []
   const full = list.length >= MAX_SLOT_NOTES
 
@@ -97,7 +97,7 @@ export function SlotNotesPopover({
   const add = () => {
     if (full) return
     const id = uid('note')
-    addNote({ id, date: key, time: minutesToTime(slot), title: '', body: '' })
+    addSlotNote({ id, date: key, time: minutesToTime(slot), title: '' })
     setFocusId(id)
   }
 
@@ -160,7 +160,7 @@ export function SlotNotesPopover({
               value={n.title}
               placeholder="Write a note…"
               maxLength={200}
-              onChange={(e) => updateNote(n.id, { title: e.target.value })}
+              onChange={(e) => updateSlotNote(n.id, { title: e.target.value })}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
               }}
@@ -169,7 +169,7 @@ export function SlotNotesPopover({
             <button
               type="button"
               aria-label={`Delete note ${i + 1}`}
-              onClick={() => deleteNote(n.id)}
+              onClick={() => deleteSlotNote(n.id)}
               className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[#a3a29e] transition hover:bg-white hover:text-[#dc2626]"
             >
               <Trash2 className="h-3.5 w-3.5" />

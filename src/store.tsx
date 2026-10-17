@@ -6,7 +6,8 @@ import {
   useState,
 } from 'react'
 import type { ReactNode } from 'react'
-import type { Calendar, CalendarEvent, Note, Settings, ViewMode } from './lib/types'
+import type { Calendar, CalendarEvent, Note, Settings, SlotNote, ViewMode } from './lib/types'
+import { splitLegacyNotes } from './lib/slots'
 import type { EventColorId } from './lib/colors'
 import { AUTO_COLORS } from './lib/colors'
 import { DEFAULT_SETTINGS } from './lib/seed'
@@ -72,6 +73,18 @@ interface AppContextValue {
   deleteCalendar: (id: string) => void
   toggleCalendar: (id: string) => void
 
+  /** Calendar time-slot notes (System A). Separate from `notes`. */
+  slotNotes: SlotNote[]
+  addSlotNote: (note: Omit<SlotNote, 'createdAt'>) => void
+  updateSlotNote: (id: string, patch: Partial<Pick<SlotNote, 'title'>>) => void
+  deleteSlotNote: (id: string) => void
+
+  /** Notes panel filter (a yyyy-mm-dd day) and a request to open the panel. */
+  notesFilter: string | null
+  setNotesFilter: (date: string | null) => void
+  notesOpenRequest: number
+  openNotesFor: (date: string | null) => void
+
   addNote: (patch?: Partial<Note>) => void
   updateNote: (id: string, patch: Partial<Note>) => void
   deleteNote: (id: string) => void
@@ -80,7 +93,9 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null)
 
-export type ProjectData = Workspace<CalendarEvent, Calendar, Note, Partial<Settings>>
+export type ProjectData = Workspace<CalendarEvent, Calendar, Note, Partial<Settings>> & {
+  slotNotes?: SlotNote[]
+}
 
 /**
  * One project's calendar: its events, calendars, notes and settings. The data
@@ -99,15 +114,20 @@ export function AppProvider({
 }) {
   const [events, setEvents] = useState<CalendarEvent[]>(initial.events)
   const [calendars, setCalendars] = useState<Calendar[]>(initial.calendars)
-  const [notes, setNotes] = useState<Note[]>(initial.notes)
+  // Split any older mixed note list into documents and time-slot notes once.
+  const [split] = useState(() => splitLegacyNotes(initial.notes, initial.slotNotes))
+  const [notes, setNotes] = useState<Note[]>(split.notes)
+  const [slotNotes, setSlotNotes] = useState<SlotNote[]>(split.slotNotes)
+  const [notesFilter, setNotesFilter] = useState<string | null>(null)
+  const [notesOpenRequest, setNotesOpenRequest] = useState(0)
   const [settings, setSettings] = useState<Settings>(() => ({
     ...DEFAULT_SETTINGS,
     ...initial.settings,
   }))
 
   const workspace = useMemo(
-    () => ({ events, calendars, notes, settings }),
-    [events, calendars, notes, settings],
+    () => ({ events, calendars, notes, slotNotes, settings }),
+    [events, calendars, notes, slotNotes, settings],
   )
   const saveStatus = useProjectSync(projectId, workspace)
 
@@ -253,6 +273,25 @@ export function AppProvider({
     [setCalendars],
   )
 
+  const addSlotNote = useCallback(
+    (note: Omit<SlotNote, 'createdAt'>) =>
+      setSlotNotes((list) => [...list, { ...note, createdAt: Date.now() }]),
+    [],
+  )
+  const updateSlotNote = useCallback(
+    (id: string, patch: Partial<Pick<SlotNote, 'title'>>) =>
+      setSlotNotes((list) => list.map((n) => (n.id === id ? { ...n, ...patch } : n))),
+    [],
+  )
+  const deleteSlotNote = useCallback(
+    (id: string) => setSlotNotes((list) => list.filter((n) => n.id !== id)),
+    [],
+  )
+  const openNotesFor = useCallback((date: string | null) => {
+    setNotesFilter(date)
+    setNotesOpenRequest((n) => n + 1)
+  }, [])
+
   const addNote = useCallback(
     (patch?: Partial<Note>) => {
       const note: Note = {
@@ -262,6 +301,8 @@ export function AppProvider({
         createdAt: Date.now(),
         ...patch,
       }
+      // Documents never carry a time, so they can never reach the grid.
+      delete note.time
       setNotes((list) => [note, ...list])
     },
     [setNotes],
@@ -269,8 +310,10 @@ export function AppProvider({
 
   const updateNote = useCallback(
     (id: string, patch: Partial<Note>) => {
+      const clean = { ...patch }
+      delete clean.time
       setNotes((list) =>
-        list.map((n) => (n.id === id ? { ...n, ...patch } : n)),
+        list.map((n) => (n.id === id ? { ...n, ...clean } : n)),
       )
     },
     [setNotes],
@@ -304,6 +347,14 @@ export function AppProvider({
 
   const value = useMemo<AppContextValue>(
     () => ({
+      slotNotes,
+      addSlotNote,
+      updateSlotNote,
+      deleteSlotNote,
+      notesFilter,
+      setNotesFilter,
+      notesOpenRequest,
+      openNotesFor,
       settingsOpen,
       settingsSection,
       setSettingsSection,
@@ -339,6 +390,13 @@ export function AppProvider({
       moveNote,
     }),
     [
+      slotNotes,
+      addSlotNote,
+      updateSlotNote,
+      deleteSlotNote,
+      notesFilter,
+      notesOpenRequest,
+      openNotesFor,
       settingsOpen,
       settingsSection,
       openSettings,

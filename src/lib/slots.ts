@@ -1,4 +1,4 @@
-import type { Note } from './types'
+import type { Note, SlotNote } from './types'
 
 /**
  * Time-slot notes.
@@ -47,14 +47,14 @@ export function minutesToTime(min: number): string {
 }
 
 /** Start minute of the 5-minute slot a note sits in, or null when not time-pinned. */
-export function slotOf(note: Note): number | null {
+export function slotOf(note: { time?: string }): number | null {
   const m = timeToMinutes(note.time)
   return m === null ? null : Math.floor(m / SLOT_MINUTES) * SLOT_MINUTES
 }
 
 /** date → slot start minute → notes (oldest first). */
-export function groupSlotNotes(notes: Note[]): Map<string, Map<number, Note[]>> {
-  const out = new Map<string, Map<number, Note[]>>()
+export function groupSlotNotes(notes: SlotNote[]): Map<string, Map<number, SlotNote[]>> {
+  const out = new Map<string, Map<number, SlotNote[]>>()
   for (const n of notes) {
     if (!n.date) continue
     const slot = slotOf(n)
@@ -68,4 +68,36 @@ export function groupSlotNotes(notes: Note[]): Map<string, Map<number, Note[]>> 
   for (const day of out.values())
     for (const list of day.values()) list.sort((a, b) => a.createdAt - b.createdAt)
   return out
+}
+
+/**
+ * Older versions kept both kinds of note in one list: a note with a time was
+ * drawn in the grid. Split them without losing anything:
+ * - a timed note with no description was made in a calendar slot → SlotNote;
+ * - a timed note with a description is a document → keep it, drop the time.
+ * Untimed notes are documents already. Idempotent: running it twice is a no-op.
+ */
+export function splitLegacyNotes(
+  notes: Note[],
+  slotNotes: SlotNote[] = [],
+): { notes: Note[]; slotNotes: SlotNote[] } {
+  const docs: Note[] = []
+  const slots = [...slotNotes]
+  const have = new Set(slots.map((s) => s.id))
+  for (const n of notes) {
+    if (!n.time) {
+      docs.push(n)
+      continue
+    }
+    const slot = slotOf(n)
+    if (!n.body.trim() && n.date && slot !== null) {
+      if (!have.has(n.id))
+        slots.push({ id: n.id, date: n.date, time: minutesToTime(slot), title: n.title, createdAt: n.createdAt })
+      continue
+    }
+    const doc = { ...n }
+    delete doc.time
+    docs.push(doc)
+  }
+  return { notes: docs, slotNotes: slots }
 }
