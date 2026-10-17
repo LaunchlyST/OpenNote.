@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { StickyNote, ZoomIn } from 'lucide-react'
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
+import { Check, Clock, StickyNote, Users, ZoomIn } from 'lucide-react'
 import { useApp } from '../store'
 import { colorOf } from '../lib/colors'
 import type { CalendarEvent } from '../lib/types'
@@ -18,7 +18,6 @@ import {
 } from '../lib/date'
 import { cn, uid } from '../lib/id'
 import { useNow } from '../hooks'
-import { colorOf as noteColor } from '../lib/colors'
 import type { SlotNote } from '../lib/types'
 import {
   MAX_SLOT_NOTES,
@@ -32,7 +31,6 @@ import {
 import { SlotNotesPopover } from './SlotNotesPopover'
 import type { SlotTarget } from './SlotNotesPopover'
 
-const NOTE_CARD = 18
 const NOTE_GAP = 2
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
@@ -138,6 +136,7 @@ export function TimeGrid({
     updateSettings,
     settings,
     addSlotNote,
+    updateSlotNote,
     openNotesFor,
     settingsOpen,
     openEdit,
@@ -175,7 +174,7 @@ export function TimeGrid({
   const [hoverCell, setHoverCell] = useState<{ day: string; row: number } | null>(null)
   // The square last clicked stays highlighted (its own start and length, so
   // it stays on the right time whatever the zoom).
-  const [selected, setSelected] = useState<{ day: string; start: number; len: number } | null>(null)
+  const [selected, setSelected] = useState<{ day: string; start: number; len: number; fromNote?: boolean } | null>(null)
   const selectedRef = useRef(selected)
   selectedRef.current = selected
   // Zoom mode: click the corner square once and the wheel zooms instead of
@@ -549,13 +548,19 @@ export function TimeGrid({
   ) => {
     e.stopPropagation()
     // Selecting a note marks its own 5-minute slot (independent of the red now-line).
-    setSelected({ day: dateKey(day), start: slot, len: SLOT_MINUTES })
+    // A selected note is marked on its own card, not with the blue square.
+    setSelected({ day: dateKey(day), start: slot, len: SLOT_MINUTES, fromNote: true })
     const r = e.currentTarget.getBoundingClientRect()
     setSlotTarget({ day, rangeStart, rangeEnd: rangeStart + interval, slot, x: r.left, y: r.bottom + 4 })
   }
 
-  /** Note cards for one day column, confined to their own rows. */
-  const renderNotes = (day: Date, placed: Placed[]) => {
+  /**
+   * Calendar time-slot note cards for one day column (mint task cards).
+   * Zoomed out: ONE card per visible row (its first note) with "+N" for the
+   * rest. At 5-minute zoom: up to three separate cards, as many as fit, with
+   * "+N" on the last when space runs out. Cards never leave their own row.
+   */
+  const renderNotes = (day: Date, placed: Placed[], colW: number) => {
     const bySlot = slotNotes.get(dateKey(day))
     if (!bySlot) return null
     const rows = new Map<number, number[]>()
@@ -566,88 +571,137 @@ export function TimeGrid({
       else rows.set(row, [slot])
     }
     const rowPx = (interval / 60) * hourHeight
-    const fits = Math.max(1, Math.floor((rowPx - NOTE_GAP) / (NOTE_CARD + NOTE_GAP)))
-    const color = noteColor('yellow')
-    const card =
-      'pointer-events-auto flex w-full items-center gap-1 overflow-hidden rounded-[6px] px-1.5 text-left text-[10.5px] font-medium leading-none transition hover:brightness-[0.97]'
-    const cardStyle = {
-      height: NOTE_CARD,
-      background: color.bg,
-      color: color.text,
-      boxShadow: `inset 2px 0 0 ${color.dot}, inset 0 0 0 1px ${color.border}`,
-    }
+    const usable = rowPx - NOTE_GAP * 2
+    // Secondary details go first when space is tight; the title always stays.
+    const showTime = colW >= 84 && usable >= 34
+    const showCollab = colW >= 120 && usable >= 34
     const label = (n: SlotNote) => n.title.trim() || 'Untitled note'
+    const span = (slot: number) =>
+      `${formatClock(fromMinutes(day, slot), hour12)} – ${formatClock(fromMinutes(day, slot + SLOT_MINUTES), hour12)}`
+    const cardH = (withBody: boolean) => (showTime ? 40 : 24) + (withBody ? 15 : 0)
+
+    const card = (n: SlotNote, row: number, slot: number, extra: number, height: number, withBody: boolean) => {
+      const isSel = !!selected && selected.day === dateKey(day) && selected.start === slot
+      return (
+        <div
+          key={n.id}
+          data-note-card
+          data-selected={isSel || undefined}
+          role="button"
+          tabIndex={0}
+          title={label(n)}
+          onClick={(e) => openSlot(e, day, row, slot)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              openSlot(e as unknown as ReactMouseEvent<HTMLElement>, day, row, slot)
+            }
+          }}
+          className={cn(
+            'group/note pointer-events-auto relative flex shrink-0 flex-col justify-center overflow-hidden rounded-[10px] border px-2 text-left transition-colors',
+            'border-[#cdeadb] bg-[#e9f7ef] hover:bg-[#e1f3e8]',
+            isSel && 'border-[#5fb98a] shadow-[0_0_0_2px_rgba(95,185,138,0.25)]',
+          )}
+          style={{ height }}
+        >
+          <div className="flex min-w-0 items-start gap-1.5">
+            <span
+              className={cn(
+                'min-w-0 flex-1 truncate text-[11.5px] font-semibold leading-[15px] text-[#17352a]',
+                n.done && 'text-[#6f8f7d] line-through',
+              )}
+            >
+              {label(n)}
+            </span>
+            {extra > 0 && (
+              <button
+                type="button"
+                aria-label={`Show all ${extra + 1} notes`}
+                onClick={(e) => openSlot(e, day, row, slot)}
+                className="shrink-0 rounded-full bg-white/80 px-1.5 text-[10px] font-bold leading-[15px] text-[#2f6b4c] ring-1 ring-inset ring-[#cdeadb]"
+              >
+                +{extra}
+              </button>
+            )}
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={!!n.done}
+              aria-label={`Mark “${label(n)}” ${n.done ? 'not done' : 'done'}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                updateSlotNote(n.id, { done: !n.done })
+              }}
+              className={cn(
+                'mt-[1px] grid h-[13px] w-[13px] shrink-0 place-items-center rounded-[4px] border transition',
+                n.done ? 'border-[#2f8f5f] bg-[#2f8f5f] text-white' : 'border-[#8cc2a5] bg-white/70 hover:border-[#2f8f5f]',
+              )}
+            >
+              {n.done && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
+            </button>
+          </div>
+          {withBody && n.body?.trim() && (
+            <span className="truncate text-[10.5px] leading-[15px] text-[#4c7a63]">{n.body}</span>
+          )}
+          {showTime && (
+            <div className="mt-[3px] flex min-w-0 items-center gap-1">
+              <Clock className="h-3 w-3 shrink-0 text-[#4c7a63]" />
+              <span className="min-w-0 flex-1 truncate text-[10.5px] tabular-nums leading-[13px] text-[#4c7a63]">{span(slot)}</span>
+              {showCollab && (
+                <span className="group/collab relative shrink-0">
+                  <button
+                    type="button"
+                    aria-disabled="true"
+                    aria-label="Team collaboration — Coming Soon"
+                    onClick={(e) => e.stopPropagation()}
+                    className="grid h-[15px] w-[15px] cursor-default place-items-center rounded-full border border-dashed border-[#8cc2a5] bg-white/60 text-[#6f9c84]"
+                  >
+                    <Users className="h-2 w-2" />
+                  </button>
+                  <span
+                    role="tooltip"
+                    className="pointer-events-none absolute bottom-full right-0 z-40 mb-1 whitespace-nowrap rounded-md bg-[#191919] px-1.5 py-1 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover/collab:opacity-100 group-focus-within/collab:opacity-100"
+                  >
+                    Team collaboration — Coming Soon
+                  </span>
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )
+    }
 
     return [...rows.entries()].map(([row, slots]) => {
       // Share the column with events in the same row instead of covering them.
       const busy = placed.some((p) => p.startMin < row + interval && p.endMin > row)
-      const items: React.ReactNode[] = []
+      const items: ReactNode[] = []
       if (interval === SLOT_MINUTES) {
-        // Fully zoomed in: every note of the slot, as its own card.
+        // Fully zoomed in: up to three separate cards, as many as fit.
         const list = bySlot.get(slots[0]) ?? []
-        list.forEach((n, i) =>
-          items.push(
-            <button
-              key={n.id}
-              type="button"
-              data-note-card
-              className={card}
-              style={cardStyle}
-              title={label(n)}
-              onClick={(e) => openSlot(e, day, row, slots[0])}
-            >
-              <span className="shrink-0 opacity-60">{i + 1}.</span>
-              <span className="truncate">{label(n)}</span>
-            </button>,
-          ),
-        )
+        // Each card is sized for its own content; descriptions only show if
+        // every card still fits, then as many cards as fit are shown.
+        const sized = (bodies: boolean) => list.map((n) => cardH(bodies && !!n.body?.trim()))
+        const total = (hs: number[]) => hs.reduce((t, h) => t + h, 0) + NOTE_GAP * (hs.length - 1)
+        const withBody = total(sized(true)) <= usable
+        const heights = sized(withBody)
+        let shownCount = 0
+        let used = 0
+        for (const h of heights) {
+          if (used + h + (shownCount ? NOTE_GAP : 0) > usable) break
+          used += h + (shownCount ? NOTE_GAP : 0)
+          shownCount++
+        }
+        shownCount = Math.max(1, shownCount)
+        list.slice(0, shownCount).forEach((n, i) => {
+          const extra = i === shownCount - 1 ? list.length - shownCount : 0
+          items.push(card(n, row, slots[0], extra, Math.min(heights[i], usable), withBody))
+        })
       } else {
-        // Zoomed out: the first note of each occupied slot, with +N for the rest.
-        const overflow = slots.length > fits
-        const shown = overflow ? slots.slice(0, fits - 1) : slots
-        for (const slot of shown) {
-          const list = bySlot.get(slot) ?? []
-          items.push(
-            <div key={slot} data-note-card className={card} style={cardStyle} title={list.map(label).join(' · ')}>
-              <button
-                type="button"
-                className="flex min-w-0 flex-1 items-center gap-1 text-left"
-                onClick={(e) => openSlot(e, day, row, slot)}
-              >
-                {slots.length > 1 || slot !== row ? (
-                  <span className="shrink-0 tabular-nums opacity-60">{minutesToTime(slot)}</span>
-                ) : null}
-                <span className="truncate">{label(list[0])}</span>
-              </button>
-              {list.length > 1 && (
-                <button
-                  type="button"
-                  aria-label={`Show all ${list.length} notes`}
-                  onClick={(e) => openSlot(e, day, row, slot)}
-                  className="shrink-0 rounded-[4px] bg-white/70 px-1 py-[2px] text-[9.5px] font-bold"
-                >
-                  +{list.length - 1}
-                </button>
-              )}
-            </div>,
-          )
-        }
-        if (overflow) {
-          const hidden = slots.slice(fits - 1)
-          const count = hidden.reduce((t, s) => t + (bySlot.get(s)?.length ?? 0), 0)
-          items.push(
-            <button
-              key="more"
-              type="button"
-              data-note-card
-              className={cn(card, 'justify-center font-semibold')}
-              style={cardStyle}
-              onClick={(e) => openSlot(e, day, row, hidden[0])}
-            >
-              +{count} more note{count === 1 ? '' : 's'}
-            </button>,
-          )
-        }
+        // Zoomed out: one card for the row, with +N for every other note in it.
+        const all = slots.flatMap((s) => bySlot.get(s) ?? [])
+        const first = (bySlot.get(slots[0]) ?? [])[0]
+        if (first) items.push(card(first, row, slots[0], all.length - 1, Math.min(cardH(false), usable), false))
       }
       return (
         <div
@@ -656,7 +710,7 @@ export function TimeGrid({
           className="pointer-events-none absolute z-[25] flex flex-col overflow-hidden"
           style={{
             top: (row / 60) * hourHeight + NOTE_GAP,
-            height: rowPx - NOTE_GAP * 2,
+            height: usable,
             left: busy ? '50%' : 4,
             right: 4,
             gap: NOTE_GAP,
@@ -915,7 +969,7 @@ export function TimeGrid({
                     const k = dateKey(day)
                     const range = (start: number, len: number) =>
                       `${formatClock(fromMinutes(day, start), hour12)}–${formatClock(fromMinutes(day, start + len), hour12)}`
-                    const sel = selected && selected.day === k ? selected : null
+                    const sel = selected && selected.day === k && !selected.fromNote ? selected : null
                     const hov =
                       hoverCell && hoverCell.day === k && !(sel && sel.start === hoverCell.row && sel.len === interval)
                         ? hoverCell
@@ -1058,7 +1112,7 @@ export function TimeGrid({
                     )
                   })}
 
-                  {renderNotes(day, placed)}
+                  {renderNotes(day, placed, colWidths?.[di] ?? squarePx)}
 
                 </div>
               )

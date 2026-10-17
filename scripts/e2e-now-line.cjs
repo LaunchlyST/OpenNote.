@@ -116,7 +116,7 @@ const pad = (v) => String(v).padStart(2, '0')
   await p.keyboard.press('Escape')
   const lineY2 = (await line.boundingBox()).y - (await scroller.boundingBox()).y + (await scroller.evaluate((el) => el.scrollTop))
   check(Math.abs(lineY - lineY2) < 1, 'selecting a square or a note does not move the current-time line')
-  check((await sel.innerText()).includes('10:30–10:35'), 'selecting the note marks its own slot')
+  check((await p.locator('[data-note-card][data-selected]').count()) === 1, 'selecting the note marks its own card')
 
   // 10. The line never covers events or notes.
   await line.scrollIntoViewIfNeeded()

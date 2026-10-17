@@ -48,6 +48,10 @@ export interface SlotNote {
   /** HH:mm, start of its 5-minute slot */
   time: string
   title: string
+  /** Optional short description. */
+  body?: string
+  /** Ticked off on its card. */
+  done?: boolean
   createdAt: number
 }
 

@@ -78,7 +78,7 @@ interface AppContextValue {
   /** Calendar time-slot notes (System A). Separate from `notes`. */
   slotNotes: SlotNote[]
   addSlotNote: (note: Omit<SlotNote, 'createdAt'>) => void
-  updateSlotNote: (id: string, patch: Partial<Pick<SlotNote, 'title'>>) => void
+  updateSlotNote: (id: string, patch: Partial<Pick<SlotNote, 'title' | 'body' | 'done'>>) => void
   deleteSlotNote: (id: string) => void
 
   /** Notes panel filter (a yyyy-mm-dd day) and a request to open the panel. */
@@ -319,7 +319,7 @@ export function AppProvider({
     [],
   )
   const updateSlotNote = useCallback(
-    (id: string, patch: Partial<Pick<SlotNote, 'title'>>) =>
+    (id: string, patch: Partial<Pick<SlotNote, 'title' | 'body' | 'done'>>) =>
       setSlotNotes((list) => list.map((n) => (n.id === id ? { ...n, ...patch } : n))),
     [],
   )

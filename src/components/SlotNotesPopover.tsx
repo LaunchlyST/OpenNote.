@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CalendarPlus, Plus, StickyNote, Trash2, X } from 'lucide-react'
+import { CalendarPlus, Check, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { useApp } from '../store'
 import type { SlotNote } from '../lib/types'
 import { dateKey, formatClock, fromMinutes, monthShort, weekdayShort } from '../lib/date'
@@ -152,28 +152,53 @@ export function SlotNotesPopover({
 
       <ul className="mt-2 space-y-1.5">
         {list.map((n, i) => (
-          <li key={n.id} className="flex items-center gap-1.5 rounded-xl bg-[#fdf9e3] px-2 py-1.5 ring-1 ring-[#f1e3a0]">
-            <span className="w-11 shrink-0 text-[10.5px] font-semibold text-[#8a7412]">Note {i + 1}</span>
+          <li key={n.id} className="rounded-xl border border-[#cdeadb] bg-[#e9f7ef] px-2 py-1.5">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={!!n.done}
+                aria-label={`Note ${i + 1} done`}
+                onClick={() => updateSlotNote(n.id, { done: !n.done })}
+                className={cn(
+                  'grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[4px] border transition',
+                  n.done ? 'border-[#2f8f5f] bg-[#2f8f5f] text-white' : 'border-[#8cc2a5] bg-white hover:border-[#2f8f5f]',
+                )}
+              >
+                {n.done && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
+              </button>
+              <input
+                aria-label={`Note ${i + 1}`}
+                autoFocus={n.id === focusId}
+                value={n.title}
+                placeholder="Write a note…"
+                maxLength={200}
+                onChange={(e) => updateSlotNote(n.id, { title: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                }}
+                className={cn(
+                  'min-w-0 flex-1 bg-transparent text-[12.5px] font-medium text-[#17352a] outline-none placeholder:text-[#8fb5a0]',
+                  n.done && 'text-[#6f8f7d] line-through',
+                )}
+              />
+              <button
+                type="button"
+                aria-label={`Delete note ${i + 1}`}
+                onClick={() => deleteSlotNote(n.id)}
+                className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[#6f9c84] transition hover:bg-white hover:text-[#dc2626]"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <input
-              aria-label={`Note ${i + 1}`}
-              autoFocus={n.id === focusId}
-              value={n.title}
-              placeholder="Write a note…"
-              maxLength={200}
-              onChange={(e) => updateSlotNote(n.id, { title: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-              }}
-              className="min-w-0 flex-1 bg-transparent text-[12.5px] text-[#191919] outline-none placeholder:text-[#b8b6ae]"
+              aria-label={`Note ${i + 1} description`}
+              value={n.body ?? ''}
+              placeholder="Add a description (optional)"
+              maxLength={300}
+              onChange={(e) => updateSlotNote(n.id, { body: e.target.value || undefined })}
+              className="mt-0.5 w-full bg-transparent pl-5 text-[11.5px] text-[#4c7a63] outline-none placeholder:text-[#9cc0ab]"
             />
-            <button
-              type="button"
-              aria-label={`Delete note ${i + 1}`}
-              onClick={() => deleteSlotNote(n.id)}
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[#a3a29e] transition hover:bg-white hover:text-[#dc2626]"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
           </li>
         ))}
         {list.length === 0 && (

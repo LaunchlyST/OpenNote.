@@ -46,6 +46,8 @@ function slotNote(n: unknown): string | null {
   if (!str(n.id, 100) || !str(n.title)) return 'slot note id/title'
   if (!(typeof n.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(n.date))) return 'slot note date'
   if (!(typeof n.time === 'string' && /^\d{2}:\d{2}$/.test(n.time))) return 'slot note time'
+  if (!optStr(n.body, MAX_TEXT)) return 'slot note body'
+  if (n.done !== undefined && typeof n.done !== 'boolean') return 'slot note done'
   if (typeof n.createdAt !== 'number') return 'slot note createdAt'
   return null
 }

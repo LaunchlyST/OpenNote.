@@ -80,7 +80,7 @@ async function pinch(p, factor) {
 
 async function addNote(p, text) {
   await popover(p).getByRole('button', { name: /Add (another )?note/ }).click()
-  const inputs = popover(p).getByRole('textbox')
+  const inputs = popover(p).getByRole('textbox', { name: /^Note \d$/ })
   const input = inputs.nth((await inputs.count()) - 1)
   await input.fill(text)
 }
@@ -129,9 +129,9 @@ async function addNote(p, text) {
   await shot(p, 'zoomed-out')
 
   // 6. +2 opens all notes.
-  await p.getByRole('button', { name: 'Show all 3 notes' }).click()
+  await p.getByRole('button', { name: 'Show all 3 notes', exact: true }).click()
   await popover(p).waitFor()
-  const vals = await popover(p).getByRole('textbox').evaluateAll((els) => els.map((e) => e.value))
+  const vals = await popover(p).getByRole('textbox', { name: /^Note \d$/ }).evaluateAll((els) => els.map((e) => e.value))
   check(vals.join('|') === 'Call client|Send invoice #42|Review design', `+2 opens all three notes (${vals.join(', ')})`)
   await p.keyboard.press('Escape')
 
@@ -210,9 +210,9 @@ async function addNote(p, text) {
   // With tall square rows all three busy slots fit; on shorter rows the
   // extras collapse into "+N more". Either way every slot stays reachable.
   const allShown = ['Call client', 'Prep slides', 'Book room'].every((t) => hourCards.some((c) => c.includes(t)))
-  const overflow = hourCards.some((t) => /\+\d+ more note/.test(t))
+  const overflow = hourCards.some((t) => /\+\d+/.test(t))
   check(hourCards.some((t) => t.includes('Call client')) && (allShown || overflow), `three busy slots in one hour stay visible or show an overflow indicator (${hourCards.join(' / ').replace(/\n/g, ' ')})`)
-  if (overflow) await p.getByRole('button', { name: /more note/ }).click()
+  if (overflow) await p.getByRole('button', { name: /^Show all \d+ notes$/ }).first().click()
   else await clickSlot(p, 9 * 60)
   await popover(p).waitFor()
   const opts = await popover(p).getByLabel('Time slot').locator('option').allInnerTexts()
@@ -275,7 +275,8 @@ async function addNote(p, text) {
   await p.locator('[data-note-card]').first().scrollIntoViewIfNeeded()
   await shot(p, 'normal-1h')
   const afterReload = await p.locator('[data-note-card]').allInnerTexts()
-  check(afterReload.some((t) => t.includes('Call client') && t.includes('+2')) && afterReload.some((t) => t.includes('Prep slides')) && !afterReload.some((t) => t.includes('Book room')), `notes are still saved after a refresh (${afterReload.join(' / ').replace(/\n/g, ' ')})`)
+  // One card per visible hour: 3 notes at 09:00 + Prep slides at 09:20 → "+3"; Book room was deleted.
+  check(afterReload.some((t) => t.includes('Call client') && t.includes('+3')) && !afterReload.some((t) => t.includes('Book room')), `notes are still saved after a refresh (${afterReload.join(' / ').replace(/\n/g, ' ')})`)
 
   // Switching weeks and back.
   await p.getByRole('button', { name: 'Next', exact: true }).click()
