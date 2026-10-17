@@ -8,8 +8,6 @@ import {
   MockWeekTimeline,
 } from './AppChrome'
 import type { MockView } from './AppChrome'
-import { MockDashboard } from './Dashboard'
-import { MockProjects } from './Projects'
 import { DEMO_WEEK_TITLE } from '../../demo'
 
 /**
@@ -53,10 +51,20 @@ function useFitScale(baseWidth: number) {
 /** Which screen the showcase window is showing. */
 export type MockScreen = 'calendar' | 'projects'
 
-/** The current dashboard layout: sidebar, top bar and calendar. */
+/**
+ * Real screenshots of the app (taken by scripts/capture-landing.cjs from the
+ * live Free workspace), so the landing page shows exactly what users get.
+ * Re-run that script after any UI change to refresh them.
+ */
+const SHOTS: Record<MockView | 'projects', string> = {
+  week: '/landing/app-week.png',
+  day: '/landing/app-day.png',
+  month: '/landing/app-month.png',
+  projects: '/landing/app-projects.png',
+}
+
 function AppBody({
   view,
-  onViewChange,
   screen,
 }: {
   view: MockView
@@ -64,8 +72,17 @@ function AppBody({
   dateLabel: string
   screen: MockScreen
 }) {
-  if (screen === 'projects') return <MockProjects />
-  return <MockDashboard view={view} onViewChange={onViewChange} />
+  const key = screen === 'projects' ? 'projects' : view
+  return (
+    <img
+      src={SHOTS[key]}
+      alt={key === 'projects' ? 'OpenNote My Projects page' : `OpenNote calendar, ${key === 'week' ? 'Full Week' : key === 'day' ? 'Day' : 'Month'} view`}
+      width={1920}
+      height={1200}
+      draggable={false}
+      className="block h-full w-full select-none object-cover object-top"
+    />
+  )
 }
 
 /* ------------------------------------------------------------------ */
