@@ -644,7 +644,7 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
             </div>
 
             {notice && (
-              <p role="status" className="mt-4 rounded-xl bg-[#191919] px-4 py-2.5 text-[13px] text-white">
+              <p role="alert" className="mt-4 text-[13px] text-[#b4453c]">
                 {notice}
               </p>
             )}
@@ -689,7 +689,6 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
                         try {
                           const copy = await projectsApi.duplicate(p.id)
                           setProjects((list) => [copy, ...(list ?? [])])
-                          flash(`Duplicated “${p.name}”.`)
                         } catch (e) {
                           flash((e as Error).message)
                         }
@@ -717,7 +716,6 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
             setProjects((list) => [project, ...(list ?? [])])
             setView((v) => ({ ...v, q: '', sort: 'recent', page: 1 }))
             setDialog(null)
-            flash(`Created “${project.name}”.`)
           }}
         />
       )}
@@ -738,7 +736,6 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
           onClose={() => setDialog(null)}
           onDeleted={() => {
             setProjects((list) => (list ?? []).filter((p) => p.id !== dialog.project.id))
-            flash(`Deleted “${dialog.project.name}”.`)
             setDialog(null)
           }}
         />
