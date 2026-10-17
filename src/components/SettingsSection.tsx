@@ -26,7 +26,7 @@ export function SettingsCard({
   return (
     <section
       className={cn(
-        'overflow-hidden rounded-2xl border bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04)]',
+        'overflow-hidden rounded-[22px] border bg-white shadow-[0_1px_2px_rgba(16,24,40,0.04),0_12px_32px_-24px_rgba(16,24,40,0.25)]',
         tone === 'danger' ? 'border-[#f3d4d4]' : 'border-[#ececea]',
       )}
     >
@@ -35,8 +35,8 @@ export function SettingsCard({
           {icon && (
             <span
               className={cn(
-                'mt-[1px] grid h-7 w-7 shrink-0 place-items-center rounded-lg',
-                tone === 'danger' ? 'bg-[#fdecec] text-[#b4453c]' : 'bg-[#f4f4f2] text-[#5f5e5b]',
+                'mt-[1px] grid h-8 w-8 shrink-0 place-items-center rounded-xl',
+                tone === 'danger' ? 'bg-[#fdecec] text-[#b4453c]' : 'bg-[#f7fee7] text-[#4d7c0f]',
               )}
             >
               {icon}
@@ -262,7 +262,7 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'inline-flex h-9 items-center justify-center gap-1.5 rounded-[10px] px-3.5 text-[12.5px] font-semibold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex h-9 items-center justify-center gap-1.5 rounded-xl px-4 text-[12.5px] font-semibold transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50',
         variant === 'primary' && 'bg-[#191919] text-white hover:bg-[#37352f]',
         variant === 'secondary' && 'border border-[#e3e3e0] bg-white text-[#37352f] hover:border-[#cfcfcb] hover:bg-[#fafaf9]',
         variant === 'danger' && 'border border-[#f0cfcc] bg-white text-[#b4453c] hover:bg-[#fdf3f2]',

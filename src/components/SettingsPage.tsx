@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Logo } from '../landing/components/primitives'
+import { AccountMenu } from '../projects/MyProjects'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -1285,26 +1287,43 @@ export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
   }, [active.id])
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#f7f7f5]">
-      <div className="shrink-0 border-b border-[#ececea] bg-white px-4 py-4 sm:px-6">
-        {onBack && (
-          <button
-            type="button"
-            onClick={onBack}
-            className="-ml-2 mb-1.5 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] font-medium text-[#5f5e5b] transition hover:bg-[#f3f3f1] hover:text-[#191919]"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to calendar
-          </button>
-        )}
-        <h1 className="text-[20px] font-semibold tracking-[-0.025em] text-[#191919]">Settings</h1>
-        <p className="mt-0.5 text-[12.5px] text-[#8f8e8a]">Account, workspace and calendar preferences.</p>
-      </div>
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#fafaf9]">
+      {/* Soft background glow — same material as My Projects and the welcome page */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+        style={{
+          background:
+            'radial-gradient(60% 55% at 30% 0%, rgba(190,242,100,0.20), transparent 70%), radial-gradient(45% 45% at 80% 10%, rgba(167,139,250,0.10), transparent 70%)',
+        }}
+      />
+      <header className="relative z-10 shrink-0">
+        <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-4 sm:px-6">
+          <a href="/" aria-label="OpenNote home">
+            <Logo size="sm" />
+          </a>
+          <AccountMenu />
+        </div>
+        <div className="mx-auto max-w-[1080px] px-4 pb-2 pt-2 sm:px-6">
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="-ml-2 mb-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-[#5f5e5b] transition hover:bg-white hover:text-[#191919]"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to calendar
+            </button>
+          )}
+          <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-[#191919] sm:text-[36px]">Settings</h1>
+          <p className="mt-1 text-[14px] text-[#5f5e5b]">Manage your account, workspace and calendar preferences.</p>
+        </div>
+      </header>
 
-      <div ref={scrollRef} className="scroll-area min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+      <div ref={scrollRef} className="scroll-area relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-10">
           <nav aria-label="Settings sections" className="shrink-0 lg:sticky lg:top-6 lg:w-[210px] lg:self-start">
-            <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0 lg:pb-0">
+            <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:rounded-[22px] lg:border lg:border-[#ececea] lg:bg-white lg:p-2 lg:shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
               {sections.map((s) => {
                 const isActive = s.id === active.id
                 return (
@@ -1316,11 +1335,11 @@ export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
                     className={cn(
                       'flex shrink-0 items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13px] transition-colors lg:w-full',
                       isActive
-                        ? 'bg-white font-semibold text-[#191919] shadow-[0_1px_3px_rgba(16,24,40,0.08)] ring-1 ring-black/[0.04]'
-                        : 'font-medium text-[#5f5e5b] hover:bg-white/70 hover:text-[#191919]',
+                        ? 'bg-[#ecfccb] font-semibold text-[#191919]'
+                        : 'font-medium text-[#5f5e5b] hover:bg-[#f4f4f2] hover:text-[#191919]',
                     )}
                   >
-                    <span className={cn('shrink-0', isActive ? 'text-accent-deep' : 'text-[#a3a29e]')}>{s.icon}</span>
+                    <span className={cn('shrink-0', isActive ? 'text-[#3f6212]' : 'text-[#a3a29e]')}>{s.icon}</span>
                     <span className="whitespace-nowrap">{s.label}</span>
                   </button>
                 )
