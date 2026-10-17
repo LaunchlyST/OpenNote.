@@ -5,8 +5,7 @@
  *   node scripts/capture-landing.cjs
  *
  * Signs up a throwaway account on the local dev server, opens the Free
- * workspace, creates a project filled with a sample week (dated to the
- * current week), and saves 1920×1200 shots to public/landing/.
+ * workspace, creates a project exactly as a new user sees it (empty), and saves 1920×1200 shots to public/landing/.
  * Uses only the local dev database; nothing is published.
  */
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
@@ -80,18 +79,9 @@ const EVENTS = [
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
   }
   const todayIdx = (now.getDay() + 6) % 7
-  await api('PUT', `/${project.id}/data`, {
-    data: {
-      ...data,
-      calendars: CALENDARS,
-      events: EVENTS.map(([title, day, s, e, cal], i) => ({ id: `ev${i}`, title, start: at(day, s), end: at(day, e), calendarId: cal })),
-      notes: [
-        { id: 'n1', title: 'Call back', body: 'Sam — invoice question before Friday.', date: key(todayIdx), createdAt: 3 },
-        { id: 'n2', title: 'Grocery list', body: 'Oat milk\nSpinach\nCoffee beans', createdAt: 2 },
-        { id: 'n3', title: 'Ideas', body: 'Add a focus timer to the planner.', createdAt: 1 },
-      ],
-    },
-  })
+  // Leave the project exactly as a new Free user sees it: one calendar
+  // ("My calendar"), no events, no notes — the app's own defaults.
+  void data
 
   // My Projects page
   await p.reload({ waitUntil: 'load' })
@@ -107,18 +97,10 @@ const EVENTS = [
   }
   await view('Full Week')
   // Scroll the time grid so the morning is in view, as on the landing page.
-  await p.evaluate(() => {
-    const el = [...document.querySelectorAll('.scroll-area')].find((e) => e.scrollHeight > e.clientHeight + 200 && e.closest('main'))
-    if (el) el.scrollTop = el.scrollHeight * (8.5 / 24)
-  })
   await p.mouse.move(5, 5)
   await p.waitForTimeout(500)
   await p.screenshot({ path: `${OUT}/app-week.png` })
   await view('Day')
-  await p.evaluate(() => {
-    const el = [...document.querySelectorAll('.scroll-area')].find((e) => e.scrollHeight > e.clientHeight + 200 && e.closest('main'))
-    if (el) el.scrollTop = el.scrollHeight * (8.5 / 24)
-  })
   await p.waitForTimeout(500)
   await p.screenshot({ path: `${OUT}/app-day.png` })
   await view('Month')
