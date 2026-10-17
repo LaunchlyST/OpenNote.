@@ -697,11 +697,10 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
                     />
                   ))}
                 </div>
-                {pages > 1 && (
-                  <div className="mt-8">
-                    <Pager page={page} pages={pages} onPage={(n) => setView((v) => ({ ...v, page: n }))} />
-                  </div>
-                )}
+                {/* Always shown; on a single page the arrows are simply disabled. */}
+                <div className="mt-8">
+                  <Pager page={page} pages={pages} onPage={(n) => setView((v) => ({ ...v, page: n }))} />
+                </div>
               </>
             )}
           </>

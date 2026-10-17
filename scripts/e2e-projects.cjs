@@ -122,7 +122,7 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   // Search across every page
   await p.getByPlaceholder('Search your projects...').fill('Bulk 09')
   check((await count()) === 'Showing 1–10 of 10 projects', `search filters across all pages (${await count()})`)
-  check((await pager.count()) === 0, 'one page of results hides the pagination')
+  check((await pager.getByRole('button', { name: 'Next page' }).isDisabled()) && (await pager.getByRole('button', { name: 'Previous page' }).isDisabled()), 'one page of results: pager shown, arrows disabled')
   await p.getByPlaceholder('Search your projects...').fill('zzz-nothing')
   check(await p.getByText('No matching projects found.').isVisible(), 'no matches: “No matching projects found.”')
   await p.getByPlaceholder('Search your projects...').fill('')
@@ -140,7 +140,7 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   // Page counts for 12, 13 and 25 projects (filtered sets of known size)
   for (const [q, total, pages] of [['Bulk 00', 9, 1], ['Bulk 01', 10, 1]]) {
     await p.getByPlaceholder('Search your projects...').fill(q)
-    check((await count()).endsWith(`of ${total} projects`) && (await pager.count()) === (pages > 1 ? 1 : 0), `“${q}”: ${total} projects on ${pages} page`)
+    check((await count()).endsWith(`of ${total} projects`) && (await pager.getByRole('button', { name: /^Page \d+$/ }).count()) === pages, `“${q}”: ${total} projects on ${pages} page`)
   }
   await p.getByPlaceholder('Search your projects...').fill('')
 
@@ -188,9 +188,8 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   await p.getByTestId('project-count').waitFor()
   for (const [tag, size, pages, last] of [['PgTwelve', 12, 1, '1–12'], ['PgThirteen', 13, 2, '13–13'], ['PgTwentyFive', 25, 3, '25–25']]) {
     await p.getByPlaceholder('Search your projects...').fill(`${tag}-`)
-    const hasPager = (await pager.count()) === 1
-    if (hasPager) await pager.getByRole('button', { name: 'Last page' }).click()
-    const nums = hasPager ? await pager.getByRole('button', { name: /^Page \d+$/ }).count() : 1
+    if (!(await pager.getByRole('button', { name: 'Last page' }).isDisabled())) await pager.getByRole('button', { name: 'Last page' }).click()
+    const nums = await pager.getByRole('button', { name: /^Page \d+$/ }).count()
     check(nums === pages && (await count()) === `Showing ${last} of ${size} projects`, `${size} projects → ${pages} page${pages > 1 ? 's' : ''}, last page “${await count()}”`)
   }
 
