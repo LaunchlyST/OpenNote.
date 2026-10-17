@@ -12,6 +12,7 @@ import {
   Plus,
   Search,
   Settings,
+  StickyNote,
   Sun,
 } from 'lucide-react'
 import { COLORS } from '../../../lib/colors'
@@ -32,8 +33,8 @@ const LINE = '#ececea'
 const DAY_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 /** The visitor's real weekday (Monday = 0) is "today" in the sample week. */
 const TODAY = T.todayIndex
-const HOUR_H = 56
-const FIRST_HOUR = 8
+const HOUR_H = 64
+const FIRST_HOUR = 7
 const LAST_HOUR = 21
 const NOW_MIN = 10 * 60 + 40
 
@@ -155,6 +156,7 @@ function Sidebar() {
         <div className="px-3 pb-3">
           <div className="space-y-0.5 pt-2">
             <NavItem icon={<CalendarDays className="h-[15px] w-[15px]" />} label="Calendar" active />
+            <NavItem icon={<StickyNote className="h-[15px] w-[15px]" />} label="Notes" />
             <NavItem icon={<Sun className="h-[15px] w-[15px]" />} label="Today" />
             <NavItem icon={<Settings className="h-[15px] w-[15px]" />} label="Settings" />
           </div>
@@ -219,15 +221,23 @@ function TopBar({ view, onViewChange }: { view: MockView; onViewChange?: (v: Moc
   const [range, year] = HEADINGS[view]
   const active = Math.max(0, VIEWS.findIndex((v) => v.value === view))
   return (
-    <header className="flex h-[64px] shrink-0 items-center gap-3 border-b bg-white px-5" style={{ borderColor: LINE }}>
+    <header className="flex h-[64px] shrink-0 items-center gap-2 overflow-hidden border-b bg-white px-4" style={{ borderColor: LINE }}>
       {/* Free workspaces live inside a project: the way back sits first. */}
       <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] font-medium text-[#37352f]">
         <ArrowLeft className="h-4 w-4 text-[#6b6a66]" />
         Back to Projects
       </span>
-      <Cloud className="h-4 w-4 shrink-0 text-[#a3a29e]" aria-hidden="true" />
+      {/* The open project, and its save state, as in the live header. */}
+      <span className="flex shrink-0 items-center gap-1.5 text-[12.5px] font-semibold text-[#191919]">
+        <span className="h-[7px] w-[7px] rounded-full bg-[#84cc16]" />
+        My Week
+      </span>
+      <span className="flex shrink-0 items-center gap-1 text-[11px] text-[#a3a29e]">
+        <Cloud className="h-3.5 w-3.5" aria-hidden="true" />
+        Saved
+      </span>
       <span className="h-6 w-px shrink-0 bg-[#ececea]" />
-      <span className="truncate text-[22px] font-semibold tracking-[-0.03em] text-[#191919]">
+      <span className="shrink-0 whitespace-nowrap text-[20px] font-semibold tracking-[-0.03em] text-[#191919]">
         {range}
         <span className="ml-2 font-normal text-[#a3a29e]">{year}</span>
       </span>
@@ -237,7 +247,7 @@ function TopBar({ view, onViewChange }: { view: MockView; onViewChange?: (v: Moc
         <span className="grid h-7 w-7 place-items-center"><ChevronRight className="h-4 w-4" /></span>
       </span>
 
-      <span className="ml-auto flex shrink-0 items-center gap-1.5">
+      <span className="ml-auto flex shrink-0 items-center gap-0.5">
         <span className="relative grid grid-cols-3 rounded-[10px] bg-[#f1f1ef] p-[3px]">
           <span
             aria-hidden="true"
@@ -246,7 +256,7 @@ function TopBar({ view, onViewChange }: { view: MockView; onViewChange?: (v: Moc
           />
           {VIEWS.map((v) => {
             const cls = cn(
-              'relative z-10 px-4 py-[5px] text-[12.5px] font-medium transition-colors',
+              'relative z-10 px-3 py-[5px] text-[12.5px] font-medium transition-colors',
               view === v.value ? 'text-[#191919]' : 'text-[#6b6a66]',
             )
             // Static mockups render spans; the interactive preview wires buttons.
@@ -260,6 +270,10 @@ function TopBar({ view, onViewChange }: { view: MockView; onViewChange?: (v: Moc
           })}
         </span>
         <span className="grid h-9 w-9 place-items-center text-[#6b6a66]"><Search className="h-4 w-4" /></span>
+        <span className="inline-flex h-9 items-center gap-1.5 px-2.5 text-[12.5px] font-medium text-[#6b6a66]">
+          <StickyNote className="h-4 w-4" />
+          Notes
+        </span>
         <span className="grid h-9 w-9 place-items-center text-[#6b6a66]"><Settings className="h-4 w-4" /></span>
       </span>
     </header>
