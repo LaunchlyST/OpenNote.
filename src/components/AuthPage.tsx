@@ -136,20 +136,9 @@ function readResetToken(): { token: string | null; invalid: boolean } {
   return { token: params.get('token'), invalid: params.get('error') === 'INVALID_TOKEN' }
 }
 
-function GoogleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
-      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.4h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z" />
-      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 8-2.9l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.1 0-5.8-2.1-6.7-5H1.3v3.1A12 12 0 0 0 12 24Z" />
-      <path fill="#FBBC05" d="M5.3 14.3a7.2 7.2 0 0 1 0-4.6V6.6h-4a12 12 0 0 0 0 10.8l4-3.1Z" />
-      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.3 6.6l4 3.1c.9-2.9 3.6-4.9 6.7-4.9Z" />
-    </svg>
-  )
-}
-
 export function AuthPage() {
   const { screen, goTo, close } = useScreen()
-  const { user, config, signIn, signUp, signInWithGoogle, requestPasswordReset, resetPassword, resendVerification } =
+  const { user, config, signIn, signUp, requestPasswordReset, resetPassword, resendVerification } =
     useAuth()
   const mode: Mode = screen === 'signup' || screen === 'forgot' || screen === 'reset' ? screen : 'signin'
   const isSignup = mode === 'signup'
@@ -174,8 +163,6 @@ export function AuthPage() {
     const fromGoogle = takeOAuthErrorFromUrl()
     if (fromGoogle) setError(fromGoogle)
   }, [])
-  const [googleBusy, setGoogleBusy] = useState(false)
-
   /** Checked: stay signed in for 30 days. Unchecked: until the browser closes. */
   const [rememberMe, setRememberMe] = useState(true)
 
@@ -396,26 +383,8 @@ export function AuthPage() {
                           or continue with
                           <span className="h-px flex-1 bg-[#e3e9f0]" />
                         </div>
-                        <button
-                          type="button"
-                          disabled={!config.google || googleBusy}
-                          onClick={() => {
-                            setError(null)
-                            setGoogleBusy(true)
-                            // Leaves OpenNote for Google's own page; the Google
-                            // password is only ever typed there.
-                            signInWithGoogle().catch((err: unknown) => {
-                              setGoogleBusy(false)
-                              setError(err instanceof Error ? err.message : 'Google sign-in could not start.')
-                            })
-                          }}
-                          className="flex h-11 w-full items-center justify-center gap-2.5 rounded-[12px] border border-[#dfe7f0] bg-white/80 text-[14px] font-semibold text-[#1b2232] shadow-[0_1px_2px_rgba(16,24,40,0.05)] transition hover:border-[#c6d6e6] hover:bg-white disabled:cursor-not-allowed disabled:opacity-55"
-                        >
-                          {googleBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <GoogleIcon />}
-                          Continue with Google
-                        </button>
-                        {!config.google && (
-                          <p className="-mt-2 text-center text-[11.5px] text-[#8a94a7]">
+                        {config.google && (
+                          <p className="text-center text-[11.5px] text-[#8a94a7]">
                             Google sign-in is not set up on this server yet.
                           </p>
                         )}

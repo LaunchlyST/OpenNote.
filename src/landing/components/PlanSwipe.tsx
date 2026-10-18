@@ -115,7 +115,7 @@ function FreeSlide() {
         <span className="text-[13.5px] text-lp-muted">Available today</span>
       </SlideHeading>
       <Laptop>
-        <AppWindow label="opennote — free" />
+        <AppWindow screen="projects" label="opennote — free" />
       </Laptop>
       <div className="mt-8 px-1">
         <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-lp-ink">Included in Free</h3>
@@ -192,7 +192,7 @@ function ProSlide() {
         <div className="relative overflow-hidden rounded-[14px]">
           {/* Preview only: blurred, non-interactive, hidden from assistive tech. */}
           <div aria-hidden="true" inert className="pointer-events-none select-none">
-            <AppWindow label="opennote — pro" />
+            <AppWindow screen="projects" label="opennote — pro" />
           </div>
           <ProOverlay showBadge={false} />
         </div>

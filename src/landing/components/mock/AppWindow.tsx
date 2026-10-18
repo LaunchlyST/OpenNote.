@@ -8,6 +8,7 @@ import {
   MockWeekTimeline,
 } from './AppChrome'
 import type { MockView } from './AppChrome'
+import { MockProjects } from './Projects'
 import { DEMO_WEEK_TITLE } from '../../demo'
 
 /**
@@ -72,11 +73,14 @@ function AppBody({
   dateLabel: string
   screen: MockScreen
 }) {
-  const key = screen === 'projects' ? 'projects' : view
+  if (screen === 'projects') {
+    return <MockProjects />
+  }
+  const key = view
   return (
     <img
       src={SHOTS[key]}
-      alt={key === 'projects' ? 'OpenNote My Projects page' : `OpenNote calendar, ${key === 'week' ? 'Full Week' : key === 'day' ? 'Day' : 'Month'} view`}
+      alt={`OpenNote calendar, ${key === 'week' ? 'Full Week' : key === 'day' ? 'Day' : 'Month'} view`}
       width={1920}
       height={1200}
       draggable={false}

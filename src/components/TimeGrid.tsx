@@ -695,7 +695,8 @@ export function TimeGrid({
         shownCount = Math.max(1, shownCount)
         list.slice(0, shownCount).forEach((n, i) => {
           const extra = i === shownCount - 1 ? list.length - shownCount : 0
-          items.push(card(n, row, slots[0], extra, Math.min(heights[i], usable), withBody))
+          const h = shownCount === 1 && list.length === 1 ? usable : Math.min(heights[i], usable)
+          items.push(card(n, row, slots[0], extra, h, withBody))
         })
       } else {
         // Zoomed out: one card for the row, with +N for every other note in it.
