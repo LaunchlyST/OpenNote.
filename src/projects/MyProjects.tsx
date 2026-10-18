@@ -602,10 +602,10 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
     <header className="sticky top-0 z-30">
       <div className="mx-auto w-full px-4 sm:px-6">
         <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-3">
-          <a href="/" aria-label="OpenNote home" className="justify-self-start">
+          <a href="/" aria-label="Desknoty home" className="justify-self-start">
             <Logo size="sm" />
           </a>
-          <nav aria-label="Explore OpenNote" className="hidden justify-self-center md:block">
+          <nav aria-label="Explore Desknoty" className="hidden justify-self-center md:block">
             <HeaderLinks />
           </nav>
           <div className="justify-self-end">
@@ -634,7 +634,7 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
         {locked ? (
           <Empty
             title="The Pro workspace is locked"
-            body="It opens with an active OpenNote Pro subscription. Your Free projects are unaffected."
+            body="It opens with an active Desknoty Pro subscription. Your Free projects are unaffected."
             action={
               <button type="button" className={btn.primary} onClick={() => navigate(paths.dashboard('free'))}>
                 <Lock className="h-4 w-4" /> Go to Free workspace

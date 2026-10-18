@@ -1,5 +1,5 @@
 /**
- * OpenNote's transactional email templates.
+ * Desknoty's transactional email templates.
  *
  * Table-based HTML with inline styles (what every mail client renders the
  * same), a plain-text twin for clients that block HTML, and a hidden preheader
@@ -27,11 +27,11 @@ function esc(value: string): string {
   return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
 
-/** The OpenNote calendar mark, drawn with tables so it survives Outlook. */
+/** The Desknoty calendar mark, drawn with tables so it survives Outlook. */
 function logo(): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0"><tr>
     <td style="width:28px;height:28px;border:1.5px solid ${BRAND.ink};border-radius:7px;border-top-width:7px;text-align:center;font:600 12px/18px Inter,Segoe UI,Arial,sans-serif;color:${BRAND.ink}">✓</td>
-    <td style="padding-left:10px;font:600 17px/1 Inter,Segoe UI,Arial,sans-serif;color:${BRAND.ink};letter-spacing:-0.02em">OpenNote</td>
+    <td style="padding-left:10px;font:600 17px/1 Inter,Segoe UI,Arial,sans-serif;color:${BRAND.ink};letter-spacing:-0.02em">Desknoty</td>
   </tr></table>`
 }
 
@@ -72,38 +72,38 @@ function layout(opts: {
 }
 
 function text(heading: string, paragraphs: string[], action: string, url: string, footnote: string): string {
-  return [`OpenNote`, '', heading, '', ...paragraphs.flatMap((p) => [p, '']), `${action}:`, url, '', '—', footnote].join('\n')
+  return [`Desknoty`, '', heading, '', ...paragraphs.flatMap((p) => [p, '']), `${action}:`, url, '', '—', footnote].join('\n')
 }
 
 export function renderEmail(kind: EmailKind, data: { url: string; name?: string }): RenderedEmail {
   const hello = data.name ? `Hi ${data.name},` : 'Hi,'
-  const footnote = 'You received this email because of activity on your OpenNote account. OpenNote will never ask for your password by email.'
+  const footnote = 'You received this email because of activity on your Desknoty account. Desknoty will never ask for your password by email.'
 
   const spec = {
     'reset-password': {
-      subject: 'Reset your OpenNote password',
+      subject: 'Reset your Desknoty password',
       preheader: 'Use this link within one hour to choose a new password.',
       heading: 'Reset your password',
       paragraphs: [
         hello,
-        'We received a request to reset the password for your OpenNote account. The link below works once and expires in one hour.',
+        'We received a request to reset the password for your Desknoty account. The link below works once and expires in one hour.',
         "If you didn't ask for this, you can safely ignore this email — your password won't change.",
       ],
       action: 'Choose a new password',
     },
     'verify-email': {
-      subject: 'Confirm your OpenNote email',
-      preheader: 'One click to finish setting up your OpenNote account.',
+      subject: 'Confirm your Desknoty email',
+      preheader: 'One click to finish setting up your Desknoty account.',
       heading: 'Confirm your email address',
-      paragraphs: [hello, 'Thanks for signing up for OpenNote. Confirm your email address to finish creating your account.'],
+      paragraphs: [hello, 'Thanks for signing up for Desknoty. Confirm your email address to finish creating your account.'],
       action: 'Confirm email',
     },
     test: {
-      subject: 'OpenNote test email',
-      preheader: 'Your OpenNote email setup is working.',
+      subject: 'Desknoty test email',
+      preheader: 'Your Desknoty email setup is working.',
       heading: 'Your email setup works',
-      paragraphs: ['This is a test from your OpenNote server. Password reset and verification emails are sent the same way.'],
-      action: 'Open OpenNote',
+      paragraphs: ['This is a test from your Desknoty server. Password reset and verification emails are sent the same way.'],
+      action: 'Open Desknoty',
     },
   }[kind]
 

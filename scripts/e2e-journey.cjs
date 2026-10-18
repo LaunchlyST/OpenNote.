@@ -80,7 +80,7 @@ async function enterProject(p, name) {
   ok(`account registered${needsVerify ? ' (verification required)' : ' (verification off: no SMTP)'}`)
 
   if (needsVerify) {
-    const link = await mailLink(p, email, 'Confirm your OpenNote email', 'Confirm email')
+    const link = await mailLink(p, email, 'Confirm your Desknoty email', 'Confirm email')
     link ? ok('verification email received in local inbox') : die('verification email')
     await p.goto(link)
     await enterProject(p, 'Journey')
@@ -106,7 +106,7 @@ async function enterProject(p, name) {
   const pinLabel = await p.getByRole('button', { name: /Pin note to/ }).innerText()
   pinLabel.includes('· 1') ? ok('note created and pinned to the selected day') : die(`note pin count: ${pinLabel}`)
 
-  ok('tasks: not part of OpenNote Free (no tasks feature exists) — skipped')
+  ok('tasks: not part of Desknoty Free (no tasks feature exists) — skipped')
 
   await p.waitForTimeout(100) // well inside the 600 ms save debounce
   await p.reload()
@@ -139,7 +139,7 @@ async function enterProject(p, name) {
   await p.getByLabel('Email address', { exact: true }).fill(email)
   await p.getByRole('button', { name: 'Send reset link' }).click()
   await p.getByText('Check your email').first().waitFor()
-  const reset = await mailLink(p, email, 'Reset your OpenNote password', 'Choose a new password')
+  const reset = await mailLink(p, email, 'Reset your Desknoty password', 'Choose a new password')
   reset ? ok('password reset requested, email in local inbox') : die('reset email')
 
   await p.goto(reset)
@@ -183,7 +183,7 @@ async function enterProject(p, name) {
   await p.locator('#pricing').scrollIntoViewIfNeeded()
   const pricing = await p.locator('#pricing').innerText()
   const proBuyLinks = await p.locator('#pricing a[href*="checkout"], #pricing a[href*="stripe"]').count()
-  pricing.includes('Coming Soon') && !/Get OpenNote Pro/.test(pricing) && proBuyLinks === 0
+  pricing.includes('Coming Soon') && !/Get Desknoty Pro/.test(pricing) && proBuyLinks === 0
     ? ok('Pro shows “Coming Soon” and cannot be purchased')
     : die('Pro purchase is reachable')
 

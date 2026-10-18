@@ -38,7 +38,7 @@ export function Footer() {
         <div className="lg:col-span-5">
           <Logo />
           <p className="mt-4 max-w-[34ch] text-[14px] leading-relaxed text-lp-body">{FOOTER.description}</p>
-          <p className="mt-6 text-[12.5px] text-lp-muted">© {year} OpenNote. All rights reserved.</p>
+          <p className="mt-6 text-[12.5px] text-lp-muted">© {year} Desknoty. All rights reserved.</p>
         </div>
         <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:col-span-7">
           {FOOTER.columns.map((col) => (

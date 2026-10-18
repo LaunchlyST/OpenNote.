@@ -43,7 +43,7 @@ const signinReady = (p) => p.getByRole('heading', { name: 'Welcome back' }).wait
 async function confirmViaInbox(p, email) {
   for (let i = 0; i < 30; i++) {
     await p.goto(`${B}/api/dev/mail`)
-    const a = p.locator('tr', { hasText: email }).locator('a', { hasText: 'Confirm your OpenNote email' }).first()
+    const a = p.locator('tr', { hasText: email }).locator('a', { hasText: 'Confirm your Desknoty email' }).first()
     if (await a.count()) {
       await p.goto(`${B}/api/dev/mail/${await a.getAttribute('href')}`)
       await p.goto(await p.locator('a', { hasText: 'Confirm email' }).first().getAttribute('href'))
@@ -80,9 +80,9 @@ async function signOut(p, name) {
   await signinReady(p)
 }
 
-const cacheKeys = (p) => p.evaluate(() => Object.keys(localStorage).filter((k) => /^opennote\..+:.+/.test(k)))
+const cacheKeys = (p) => p.evaluate(() => Object.keys(localStorage).filter((k) => /^Desknoty\..+:.+/.test(k)))
 const pageHas = (p, text) => p.evaluate((t) => document.body.innerText.includes(t) || [...document.querySelectorAll('input,textarea')].some((e) => e.value.includes(t)), text)
-async function openNotes(p) {
+async function Desknotys(p) {
   const btn = p.getByRole('button', { name: 'Notes', exact: true }).first()
   if ((await btn.getAttribute('aria-pressed')) !== 'true') await btn.click()
 }
@@ -108,7 +108,7 @@ async function openNotes(p) {
   await p.getByRole('button', { name: 'New event' }).click()
   await p.getByPlaceholder('Add a title').fill(EVENT)
   await p.getByRole('button', { name: 'Add event' }).click()
-  await openNotes(p)
+  await Desknotys(p)
   await p.getByRole('button', { name: /Pin note to/ }).click()
   await p.getByPlaceholder('Title').first().fill(NOTE)
   check((await pageHas(p, EVENT)) && (await pageHas(p, NOTE)), 'User A created an event and a note')
@@ -134,7 +134,7 @@ async function openNotes(p) {
   await signUp(p, Bu)
   await p.waitForTimeout(1200)
   check(!(await pageHas(p, EVENT)), 'User B does not see A’s event')
-  await openNotes(p)
+  await Desknotys(p)
   check(!(await pageHas(p, NOTE)), 'User B does not see A’s note')
   const bWs = await (await p.request.get(`${B}/api/projects?workspace=free`)).text()
   check(!bWs.includes(EVENT) && !bWs.includes(NOTE), 'B’s server workspace holds none of A’s data')
@@ -144,7 +144,7 @@ async function openNotes(p) {
 
   // --- User A returns ---
   await signIn(p, A)
-  await openNotes(p)
+  await Desknotys(p)
   await p.waitForTimeout(800)
   check(await pageHas(p, EVENT), 'A’s event is restored from the server')
   check(await pageHas(p, NOTE), 'A’s note (saved right before sign-out) is restored from the server')

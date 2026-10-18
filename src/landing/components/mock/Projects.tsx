@@ -43,7 +43,7 @@ function Header() {
       <div className="grid h-16 grid-cols-[1fr_auto_1fr] items-center gap-3">
         <span className="flex items-center gap-2">
           <AppIcon day="17" className="h-7 w-7 text-[28px]" />
-          <span className="text-[17px] font-semibold tracking-[-0.025em] text-[#191919]">OpenNote</span>
+          <span className="text-[17px] font-semibold tracking-[-0.025em] text-[#191919]">Desknoty</span>
         </span>
 
         <nav className="flex items-center gap-0.5">

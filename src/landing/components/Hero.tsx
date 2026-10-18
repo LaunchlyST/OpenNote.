@@ -134,11 +134,11 @@ function HeroPlanScreens() {
               className="relative w-full shrink-0"
             >
               {plan.key === 'free' ? (
-                <ResponsiveAppWindow view="week" label={`opennote — week of ${PREVIEW_TODAY.weekTitle.split(' –')[0]}`} />
+                <ResponsiveAppWindow view="week" label={`Desknoty — week of ${PREVIEW_TODAY.weekTitle.split(' –')[0]}`} />
               ) : (
                 <>
                   <div aria-hidden="true" className="pointer-events-none select-none">
-                    <ResponsiveAppWindow view="week" label="opennote pro — coming soon" />
+                    <ResponsiveAppWindow view="week" label="Desknoty pro — coming soon" />
                   </div>
                   <ProOverlay />
                 </>

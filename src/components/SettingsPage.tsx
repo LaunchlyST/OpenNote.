@@ -210,7 +210,7 @@ function ProfileSection() {
   }
 
   return (
-    <SectionShell title="Profile" description="How you appear in OpenNote.">
+    <SectionShell title="Profile" description="How you appear in Desknoty.">
       <div className="flex items-center gap-4 rounded-2xl border border-[#ececea] bg-gradient-to-br from-white to-[#f7f7f5] p-5">
         <Avatar size={64} name={user.fullName} src={user.avatar} />
         <div className="min-w-0">
@@ -320,7 +320,7 @@ function DeleteAccount({ hasPassword }: { hasPassword: boolean }) {
   return (
     <div className="space-y-3 px-5 py-4" data-testid="delete-confirm">
       <p className="text-[12.5px] leading-snug text-[#6b3a35]">
-        This permanently deletes your OpenNote account and all of its projects, events and notes. There is no undo.
+        This permanently deletes your Desknoty account and all of its projects, events and notes. There is no undo.
       </p>
       <Field label='Type "DELETE" to confirm' value={typed} onChange={setTyped} autoComplete="off" />
       {hasPassword ? (
@@ -413,9 +413,9 @@ function GeneralSection() {
   const today = new Date()
 
   return (
-    <SectionShell title="General" description="Language, region and how OpenNote opens.">
+    <SectionShell title="General" description="Language, region and how Desknoty opens.">
       <SettingsCard title="Language & region" icon={<Globe className="h-3.5 w-3.5" />} action={<SaveStatus state={state} />}>
-        <SettingsRow label="Language" hint="OpenNote is available in English. Other languages will appear here once translated.">
+        <SettingsRow label="Language" hint="Desknoty is available in English. Other languages will appear here once translated.">
           <Select ariaLabel="Language" value="en" onChange={() => {}} options={[{ value: 'en', label: 'English' }]} />
         </SettingsRow>
         <SettingsRow label="Time zone" hint="Taken from this device. Calendar times are shown in it.">
@@ -546,7 +546,7 @@ function AppearanceSection() {
 
   return (
     <SectionShell title="Appearance" description="Theme, accent colour and motion.">
-      <SettingsCard title="Theme" icon={<Sun className="h-3.5 w-3.5" />} description="OpenNote currently ships in Light. Dark and System are being designed.">
+      <SettingsCard title="Theme" icon={<Sun className="h-3.5 w-3.5" />} description="Desknoty currently ships in Light. Dark and System are being designed.">
         <div className="grid gap-3 px-5 py-4 sm:grid-cols-3">
           <ThemeCard id="light" label="Light" icon={<Sun className="h-3.5 w-3.5" />} active />
           <ThemeCard id="dark" label="Dark" icon={<Moon className="h-3.5 w-3.5" />} active={false} soon />
@@ -557,7 +557,7 @@ function AppearanceSection() {
       <SettingsCard
         title="Accent colour"
         icon={<Palette className="h-3.5 w-3.5" />}
-        description="Used for toggles, highlights and focus rings across OpenNote."
+        description="Used for toggles, highlights and focus rings across Desknoty."
         action={<SaveStatus state={state} />}
       >
         <div role="radiogroup" aria-label="Accent colour" className="flex flex-wrap gap-2.5 px-5 py-4">
@@ -677,7 +677,7 @@ function NotificationsSection() {
           label="Remind me before events"
           hint={
             permission === 'granted'
-              ? 'Shown while OpenNote is open in this browser. Nothing is sent by email.'
+              ? 'Shown while Desknoty is open in this browser. Nothing is sent by email.'
               : 'Saved, but reminders can only appear once notifications are allowed above.'
           }
         >
@@ -1125,7 +1125,7 @@ function SecuritySection() {
 const PLAN_CARDS = [
   {
     id: 'free',
-    name: 'OpenNote Free',
+    name: 'Desknoty Free',
     price: '£0',
     period: 'forever',
     blurb: 'Calendar, notes and personal planning.',
@@ -1133,7 +1133,7 @@ const PLAN_CARDS = [
   },
   {
     id: 'pro',
-    name: 'OpenNote Pro',
+    name: 'Desknoty Pro',
     price: '£9',
     period: 'per month · planned',
     blurb: 'Advanced productivity and business tools.',
@@ -1141,7 +1141,7 @@ const PLAN_CARDS = [
   },
   {
     id: 'business',
-    name: 'OpenNote Business',
+    name: 'Desknoty Business',
     price: 'TBA',
     period: 'pricing to be announced',
     blurb: 'Team collaboration and business management.',
@@ -1166,7 +1166,7 @@ function BillingSection() {
         data-testid="billing-message"
       >
         <Sparkles className="h-4 w-4 shrink-0 text-[#c9a227]" />
-        OpenNote Pro and Business are coming soon. Enjoy OpenNote Free while we build something better.
+        Desknoty Pro and Business are coming soon. Enjoy Desknoty Free while we build something better.
       </div>
 
       <div className="grid gap-3 lg:grid-cols-3">
@@ -1249,7 +1249,7 @@ function BillingSection() {
 function DeploySection() {
   const [open, setOpen] = useState(false)
   return (
-    <SectionShell title="Deploy" description="Publish the current version of OpenNote.">
+    <SectionShell title="Deploy" description="Publish the current version of Desknoty.">
       <SettingsCard title="Production" icon={<Rocket className="h-3.5 w-3.5" />}>
         <SettingsRow label="Deploy controls" hint="Publishing stays switched off unless the server allows it.">
           <Button variant="secondary" onClick={() => setOpen(true)}>
@@ -1299,7 +1299,7 @@ export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
       />
       <header className="relative z-10 shrink-0">
         <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-4 sm:px-6">
-          <a href="/" aria-label="OpenNote home">
+          <a href="/" aria-label="Desknoty home">
             <Logo size="sm" />
           </a>
           <AccountMenu />

@@ -37,7 +37,7 @@ export const HERO = {
   titleLead: 'Plan the day.',
   titleEmphasis: 'Keep the thought.',
   description:
-    'OpenNote is a calendar with your notes built in. Plan by day, week or month, and keep every note next to the day it belongs to.',
+    'Desknoty is a calendar with your notes built in. Plan by day, week or month, and keep every note next to the day it belongs to.',
   primaryCta: { label: 'Start Planning Free', href: '/app/signup' },
   secondaryCta: { label: 'See it in action', section: 'preview' },
   authenticatedCta: { label: 'Open My Calendar', href: '/app' },
@@ -69,7 +69,7 @@ export const HOW_IT_WORKS = {
   eyebrow: 'How it works',
   heading: 'From a blank week to a plan.',
   description:
-    'No setup and no learning curve. If you have used a paper diary, you already know how OpenNote works.',
+    'No setup and no learning curve. If you have used a paper diary, you already know how Desknoty works.',
   steps: [
     {
       number: '01',
@@ -197,10 +197,10 @@ export const PRICING = {
   eyebrow: 'Pricing',
   heading: 'Simple plans. Better planning.',
   subtitle:
-    'Start for free, unlock more when you’re ready, and grow with OpenNote.',
+    'Start for free, unlock more when you’re ready, and grow with Desknoty.',
   /** Shown on the Pro card, where it is most relevant. */
   membershipNote:
-    'Already a member of our main platform? OpenNote Pro may be included with your membership.',
+    'Already a member of our main platform? Desknoty Pro may be included with your membership.',
   /** Shown once under the grid, covering all three plans at once. */
   billingNote:
     'Prices shown are introductory and not yet final. Billing periods, Pro availability and membership integration will be announced before anything is charged.',
@@ -230,7 +230,7 @@ export const PRICING = {
     },
     {
       id: 'pro',
-      name: 'OpenNote Pro',
+      name: 'Desknoty Pro',
       tagline: 'Coming Soon',
       description: 'More freedom to plan, organise, and stay productive.',
       price: {
@@ -245,14 +245,14 @@ export const PRICING = {
       cta: {
         label: 'Coming Soon',
         kind: 'unavailable',
-        note: 'OpenNote Pro isn’t available yet. Nothing can be purchased and you won’t be charged.',
+        note: 'Desknoty Pro isn’t available yet. Nothing can be purchased and you won’t be charged.',
       },
       featured: true,
       theme: 'lime',
     },
     {
       id: 'business',
-      name: 'OpenNote Business',
+      name: 'Desknoty Business',
       tagline: 'Coming Soon',
       description:
         'Smarter scheduling and organisation for growing teams and businesses.',
@@ -286,38 +286,38 @@ export const FAQ = {
   heading: 'Questions & answers',
   items: [
     {
-      question: 'What is OpenNote?',
+      question: 'What is Desknoty?',
       answer:
-        'OpenNote is an all-in-one platform to manage your business, organise schedules, track tasks, and keep everything in one place.',
+        'Desknoty is an all-in-one platform to manage your business, organise schedules, track tasks, and keep everything in one place.',
     },
     {
-      question: 'Is OpenNote free?',
-      answer: 'Yes. OpenNote offers a Free plan for everyday planning.',
+      question: 'Is Desknoty free?',
+      answer: 'Yes. Desknoty offers a Free plan for everyday planning.',
     },
     {
-      question: 'What does OpenNote Pro include?',
+      question: 'What does Desknoty Pro include?',
       answer:
-        'OpenNote Pro will include advanced business tools, better team communication, and smarter workplace management features.',
+        'Desknoty Pro will include advanced business tools, better team communication, and smarter workplace management features.',
     },
     {
-      question: 'How much does OpenNote Pro cost?',
+      question: 'How much does Desknoty Pro cost?',
       answer:
         'Pricing details are coming soon. Stay tuned!',
     },
     {
-      question: 'Is OpenNote Pro a monthly subscription?',
+      question: 'Is Desknoty Pro a monthly subscription?',
       answer:
-        'OpenNote Pro will offer a monthly subscription with access to premium business tools, advanced features, and regular updates.',
+        'Desknoty Pro will offer a monthly subscription with access to premium business tools, advanced features, and regular updates.',
     },
     {
-      question: 'Can I use OpenNote on my phone?',
+      question: 'Can I use Desknoty on my phone?',
       answer:
-        'No. OpenNote is designed for desktop only.',
+        'No. Desknoty is designed for desktop only.',
     },
     {
-      question: 'When is OpenNote Business launching?',
+      question: 'When is Desknoty Business launching?',
       answer:
-        'OpenNote Business is coming soon. Its release date has not been announced.',
+        'Desknoty Business is coming soon. Its release date has not been announced.',
     },
   ] satisfies FaqItem[],
 } as const
@@ -327,7 +327,7 @@ export const FAQ = {
 /* ------------------------------------------------------------------ */
 
 export const FINAL_CTA = {
-  headingLead: 'Get OpenNote',
+  headingLead: 'Get Desknoty',
   headingEmphasis: 'for free.',
   description:
     'Your schedule, plans and notes in one place. The Free plan stays free.',

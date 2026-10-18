@@ -78,7 +78,7 @@ export function Logo({ className, size = 'md', markOnly = false, tone = 'ink' }:
       <AppIcon className={mark} />
       {!markOnly && (
         <span className={cn('font-semibold tracking-[-0.02em]', tone === 'paper' ? 'text-white' : 'text-lp-ink', word)}>
-          OpenNote
+          Desknoty
         </span>
       )}
     </span>

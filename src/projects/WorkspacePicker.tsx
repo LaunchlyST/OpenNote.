@@ -19,8 +19,8 @@ import { AccountMenu } from './MyProjects'
 import { paths } from './api'
 
 /**
- * The welcome page after sign-in. OpenNote Free is the clear next step;
- * OpenNote Pro is shown as a coming product and cannot be opened or bought
+ * The welcome page after sign-in. Desknoty Free is the clear next step;
+ * Desknoty Pro is shown as a coming product and cannot be opened or bought
  * (unless the account's server-side plan already is Pro).
  */
 
@@ -57,7 +57,7 @@ export function WorkspacePicker() {
 
       <header className="relative z-10">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <a href="/" aria-label="OpenNote home">
+          <a href="/" aria-label="Desknoty home">
             <Logo size="sm" />
           </a>
           <AccountMenu />
@@ -74,7 +74,7 @@ export function WorkspacePicker() {
             </span>
           </h1>
           <p className="mx-auto mt-4 max-w-lg text-[15.5px] leading-relaxed text-[#5f5e5b]">
-            Plan your days, capture your ideas, and keep everything organised with OpenNote.
+            Plan your days, capture your ideas, and keep everything organised with Desknoty.
           </p>
           <p className="mt-3 text-[13px] font-medium text-[#8f8e8a]">Start free today. More possibilities are coming.</p>
         </section>
@@ -82,7 +82,7 @@ export function WorkspacePicker() {
         <section aria-label="Workspaces" className="mt-10 grid gap-5 md:grid-cols-2 md:items-stretch">
           {/* Free — the main action */}
           <article
-            aria-label="OpenNote Free"
+            aria-label="Desknoty Free"
             className="group relative flex flex-col rounded-[22px] border border-[#cfe9a0] bg-white p-6 shadow-[0_0_0_4px_rgba(190,242,100,0.18),0_20px_40px_-24px_rgba(77,124,15,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_0_0_5px_rgba(190,242,100,0.28),0_26px_50px_-24px_rgba(77,124,15,0.4)] motion-reduce:transform-none sm:p-7"
           >
             <div className="flex items-center justify-between">
@@ -91,7 +91,7 @@ export function WorkspacePicker() {
               </span>
               <span className="rounded-full bg-[#ecfccb] px-2.5 py-1 text-[10.5px] font-bold tracking-[0.08em] text-[#3f6212]">FREE FOREVER</span>
             </div>
-            <h2 className="mt-5 text-[24px] font-semibold tracking-[-0.025em] text-[#191919]">OpenNote Free</h2>
+            <h2 className="mt-5 text-[24px] font-semibold tracking-[-0.025em] text-[#191919]">Desknoty Free</h2>
             <p className="mt-1.5 text-[14px] text-[#5f5e5b]">Everything you need to organise your day, beautifully.</p>
             <ul className="mt-6 flex-1 space-y-3">
               {FREE_BENEFITS.map(([icon, text]) => (
@@ -114,7 +114,7 @@ export function WorkspacePicker() {
 
           {/* Pro — coming soon */}
           <article
-            aria-label="OpenNote Pro"
+            aria-label="Desknoty Pro"
             className="group relative flex flex-col overflow-hidden rounded-[22px] border border-[#2c2b33] p-6 text-white transition hover:border-[#3d3b47] sm:p-7"
             style={{
               background:
@@ -129,7 +129,7 @@ export function WorkspacePicker() {
                 {hasPro ? 'YOUR PLAN' : 'COMING SOON'}
               </span>
             </div>
-            <h2 className="mt-5 text-[24px] font-semibold tracking-[-0.025em]">OpenNote Pro</h2>
+            <h2 className="mt-5 text-[24px] font-semibold tracking-[-0.025em]">Desknoty Pro</h2>
             <p className="mt-1.5 text-[14px] text-[#c9c6d6]">Your next level of productivity is on its way.</p>
             <p className="mt-6 text-[11px] font-semibold uppercase tracking-[0.1em] text-[#8f8aa8]">Planned features</p>
             <ul className="mt-3 flex-1 space-y-3">
@@ -164,7 +164,7 @@ export function WorkspacePicker() {
                   role="tooltip"
                   className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-white px-2.5 py-1.5 text-[11.5px] font-medium text-[#17161b] opacity-0 shadow-lg transition-opacity group-hover/pro:opacity-100"
                 >
-                  OpenNote Pro is in development.
+                  Desknoty Pro is in development.
                 </span>
               </span>
             )}
@@ -172,7 +172,7 @@ export function WorkspacePicker() {
           </article>
         </section>
 
-        <section aria-label="Why OpenNote" className="mt-10 grid gap-3 sm:grid-cols-3">
+        <section aria-label="Why Desknoty" className="mt-10 grid gap-3 sm:grid-cols-3">
           {[
             [<CalendarDays className="h-4 w-4" />, 'Plan Beautifully', 'Organise your schedule with a clean calendar.'],
             [<NotebookPen className="h-4 w-4" />, 'Capture Everything', 'Keep important notes and ideas together.'],

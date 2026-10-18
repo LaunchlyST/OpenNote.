@@ -15,8 +15,8 @@ import { Reveal, Section } from './primitives'
 type PlanKey = 'free' | 'pro'
 
 export const PLANS: Array<{ key: PlanKey; tab: string; title: string }> = [
-  { key: 'free', tab: 'Free', title: 'OpenNote Free' },
-  { key: 'pro', tab: 'Pro — Coming Soon', title: 'OpenNote Pro (coming soon)' },
+  { key: 'free', tab: 'Free', title: 'Desknoty Free' },
+  { key: 'pro', tab: 'Pro — Coming Soon', title: 'Desknoty Pro (coming soon)' },
 ]
 
 const FREE_FEATURES = [
@@ -115,7 +115,7 @@ function FreeSlide() {
         <span className="text-[13.5px] text-lp-muted">Available today</span>
       </SlideHeading>
       <Laptop>
-        <AppWindow screen="projects" label="opennote — free" />
+        <AppWindow screen="projects" label="Desknoty — free" />
       </Laptop>
       <div className="mt-8 px-1">
         <h3 className="text-[18px] font-semibold tracking-[-0.01em] text-lp-ink">Included in Free</h3>
@@ -159,7 +159,7 @@ export function ProOverlay({ showBadge = true }: { showBadge?: boolean }) {
           <span className="mx-auto grid h-10 w-10 place-items-center rounded-[11px] border-[1.5px] border-lp-ink bg-lime-bright text-lp-ink shadow-[2px_2px_0_0_#191919] sm:h-11 sm:w-11">
             <Lock className="h-[18px] w-[18px]" strokeWidth={2.4} aria-hidden="true" />
           </span>
-          <p className="mt-3 text-[22px] font-semibold tracking-[-0.03em] text-lp-ink sm:mt-4 sm:text-[27px]">OpenNote Pro</p>
+          <p className="mt-3 text-[22px] font-semibold tracking-[-0.03em] text-lp-ink sm:mt-4 sm:text-[27px]">Desknoty Pro</p>
           <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-lp-ink px-2.5 py-1 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-white sm:text-[11px]">
             <Sparkles className="h-3 w-3 text-lime-bright" aria-hidden="true" /> Coming soon
           </span>
@@ -192,7 +192,7 @@ function ProSlide() {
         <div className="relative overflow-hidden rounded-[14px]">
           {/* Preview only: blurred, non-interactive, hidden from assistive tech. */}
           <div aria-hidden="true" inert className="pointer-events-none select-none">
-            <AppWindow screen="projects" label="opennote — pro" />
+            <AppWindow screen="projects" label="Desknoty — pro" />
           </div>
           <ProOverlay showBadge={false} />
         </div>
@@ -299,7 +299,7 @@ export function PlanSwipe() {
     <Section id="plans">
       <Reveal>
         <div className="mx-auto max-w-[640px] text-center">
-          <h2 className="text-[32px] font-semibold tracking-[-0.03em] text-lp-ink sm:text-[44px]">Explore OpenNote</h2>
+          <h2 className="text-[32px] font-semibold tracking-[-0.03em] text-lp-ink sm:text-[44px]">Explore Desknoty</h2>
           <p className="mt-3 text-[17px] text-lp-body">One workspace. More possibilities.</p>
         </div>
       </Reveal>

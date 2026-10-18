@@ -41,13 +41,13 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   const proBtn = p.getByRole('button', { name: 'Pro — Coming Soon' })
   check(await proBtn.isDisabled(), 'welcome page: Pro is Coming Soon and cannot be opened')
   check((await p.getByText(/Checkout is not switched on|You have not been charged/).count()) === 0, 'welcome page: no technical billing messages')
-  const freeBox = await p.getByRole('article', { name: 'OpenNote Free' }).boundingBox()
-  const proBox = await p.getByRole('article', { name: 'OpenNote Pro' }).boundingBox()
+  const freeBox = await p.getByRole('article', { name: 'Desknoty Free' }).boundingBox()
+  const proBox = await p.getByRole('article', { name: 'Desknoty Pro' }).boundingBox()
   check(Math.abs(freeBox.height - proBox.height) < 2 && Math.abs(freeBox.y - proBox.y) < 2, 'Free and Pro cards sit side by side at equal height')
   await shot(p, 'welcome')
   await p.setViewportSize({ width: 390, height: 844 })
   await p.waitForTimeout(200)
-  const stacked = (await p.getByRole('article', { name: 'OpenNote Pro' }).boundingBox()).y > (await p.getByRole('article', { name: 'OpenNote Free' }).boundingBox()).y + 100
+  const stacked = (await p.getByRole('article', { name: 'Desknoty Pro' }).boundingBox()).y > (await p.getByRole('article', { name: 'Desknoty Free' }).boundingBox()).y + 100
   check(stacked && !(await p.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)), 'welcome page on a phone: Free above Pro, no sideways scroll')
   await shot(p, 'welcome-mobile')
   await p.setViewportSize({ width: 1440, height: 900 })
@@ -58,7 +58,7 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   check(true, 'empty state: “Your workspace starts here”')
   check((await p.getByRole('button', { name: /settings/i }).count()) === 0, 'no Settings gear on My Projects')
   for (const label of ['Features', 'Explore', 'Community']) {
-    await p.getByRole('navigation', { name: 'Explore OpenNote' }).getByRole('button', { name: label }).click()
+    await p.getByRole('navigation', { name: 'Explore Desknoty' }).getByRole('button', { name: label }).click()
     const pop = p.getByRole('dialog', { name: `${label} — Coming Soon` })
     check((await pop.innerText()).includes('This feature is being developed.'), `“${label}” shows Coming Soon`)
     await p.keyboard.press('Escape')

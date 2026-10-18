@@ -140,7 +140,7 @@ function Sidebar() {
     <aside className="flex h-full w-[264px] shrink-0 flex-col border-r bg-[#fbfbfa]" style={{ borderColor: LINE }}>
       <div className="flex h-[64px] shrink-0 items-center gap-2.5 px-4">
         <AppIcon day={String(T.dayNumber)} className="h-[30px] w-[30px] text-[30px]" />
-        <span className="text-[16px] font-semibold tracking-[-0.02em] text-[#191919]">OpenNote</span>
+        <span className="text-[16px] font-semibold tracking-[-0.02em] text-[#191919]">Desknoty</span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">

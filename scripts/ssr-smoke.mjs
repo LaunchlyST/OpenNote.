@@ -220,7 +220,7 @@ try {
     // Hero
     'Plan the day.',
     'Keep the thought.',
-    'OpenNote is a calendar with your notes built in.',
+    'Desknoty is a calendar with your notes built in.',
     'Start Planning Free',
     'See it in action',
     'Sign In',
@@ -251,15 +251,15 @@ try {
     'Nothing is on sale yet',
     // FAQ
     'Questions &amp; answers',
-    'What is OpenNote?',
-    'Is OpenNote free?',
-    'When is OpenNote Business launching?',
+    'What is Desknoty?',
+    'Is Desknoty free?',
+    'When is Desknoty Business launching?',
     // Final CTA
-    'Get OpenNote',
+    'Get Desknoty',
     'for free.',
     'Start Planning for Free',
     // Footer
-    'OpenNote',
+    'Desknoty',
     'Privacy Policy',
     'Terms of Service',
     'All rights reserved.',
@@ -279,8 +279,8 @@ try {
   check('FAQ uses aria-expanded', html.includes('aria-expanded'))
   check('preview switcher uses aria-pressed', html.includes('aria-pressed'))
   check('Business CTA is a real disabled button', /disabled[^>]*>[^<]*Coming Soon/.test(html.replace(/\s+/g, ' ')))
-  check('Pro CTA is not a link', !/href="\/app\/signup"[^>]*>[^<]*Get OpenNote Pro/.test(html))
-  check('Pro is not offered for purchase', !html.includes('Get OpenNote Pro') && !html.includes('Most Popular'))
+  check('Pro CTA is not a link', !/href="\/app\/signup"[^>]*>[^<]*Get Desknoty Pro/.test(html))
+  check('Pro is not offered for purchase', !html.includes('Get Desknoty Pro') && !html.includes('Most Popular'))
   check('no checkout or payment links', !/href="[^"]*(checkout|stripe|billing)/i.test(html))
 
   /* Product mockups */
@@ -322,8 +322,8 @@ try {
   console.log('\n  Workspace picker (after sign-in):')
   const appHtml = await renderApp()
   check('signed-in /app shows the welcome page', appHtml.includes('Your space to make'))
-  check('Free is the main action', appHtml.includes('OpenNote Free') && appHtml.includes('Get Started Free') && appHtml.includes('No payment required.'))
-  check('Pro is shown as coming soon', appHtml.includes('OpenNote Pro') && appHtml.includes('Pro — Coming Soon'))
+  check('Free is the main action', appHtml.includes('Desknoty Free') && appHtml.includes('Get Started Free') && appHtml.includes('No payment required.'))
+  check('Pro is shown as coming soon', appHtml.includes('Desknoty Pro') && appHtml.includes('Pro — Coming Soon'))
   check('Pro cannot be opened by a Free account', !appHtml.includes('Open Pro workspace'))
   check('no technical billing messages', !/Checkout is not switched on|You have not been charged|keeps whatever plan/.test(appHtml))
   check('the welcome page does not jump straight to the calendar', !appHtml.includes('Full Week'))
@@ -333,7 +333,7 @@ try {
   console.log('\n  Project calendar (existing calendar UI):')
   const calHtml = await renderProject()
   check('calendar app renders', calHtml.length > 3000, `${calHtml.length} chars`)
-  check('calendar shows the OpenNote wordmark', calHtml.includes('OpenNote'))
+  check('calendar shows the Desknoty wordmark', calHtml.includes('Desknoty'))
   check('calendar shows the view switcher', calHtml.includes('Full Week'))
   check('calendar shows the notes rail', calHtml.includes('Notes'))
   check('calendar shows the date title', /\d{4}/.test(calHtml))

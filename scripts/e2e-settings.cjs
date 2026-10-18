@@ -122,7 +122,7 @@ const check = (ok, msg) => {
 
   // Billing
   await go('Billing')
-  check((await p.getByTestId('billing-message').innerText()).includes('OpenNote Pro and Business are coming soon. Enjoy OpenNote Free while we build something better.'), 'billing shows the coming-soon message')
+  check((await p.getByTestId('billing-message').innerText()).includes('Desknoty Pro and Business are coming soon. Enjoy Desknoty Free while we build something better.'), 'billing shows the coming-soon message')
   check((await p.locator('[data-plan="free"]').innerText()).includes('Current plan'), 'Free shows Current plan')
   check((await p.locator('[data-plan="pro"]').innerText()).includes('Coming soon') && (await p.locator('[data-plan="business"]').innerText()).includes('Coming soon'), 'Pro and Business say Coming soon')
   const buy = await p.locator('main').getByRole('button', { name: /subscribe|upgrade|choose|buy|checkout/i }).count()

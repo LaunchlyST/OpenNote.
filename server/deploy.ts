@@ -100,7 +100,7 @@ function readLastDeployment(): DeploymentRecord | null {
 async function requireAdmin(req: AuthedRequest, res: Res, next: NextFunction) {
   const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
   if (!session) {
-    res.status(401).json({ error: 'Sign in to OpenNote first.' })
+    res.status(401).json({ error: 'Sign in to Desknoty first.' })
     return
   }
 

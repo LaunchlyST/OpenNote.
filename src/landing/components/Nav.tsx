@@ -85,7 +85,7 @@ export function Nav() {
             window.scrollTo({ top: 0, behavior: 'smooth' })
           }}
           className="rounded-lg"
-          aria-label="OpenNote — back to top"
+          aria-label="Desknoty — back to top"
         >
           <Logo />
         </a>

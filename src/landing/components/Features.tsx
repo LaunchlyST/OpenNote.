@@ -22,30 +22,30 @@ export function Features() {
       <div data-anim="assemble" className="mt-14 grid gap-4 md:mt-16">
         <Reveal data-anim-item="">
           <FeatureCard icon={<StickyNote className={ICON} />} title={FEATURES.notes.title} body={FEATURES.notes.body}>
-            <ProductImage screen="notes" alt="The current OpenNote calendar with its notes panel open" />
+            <ProductImage screen="notes" alt="The current Desknoty calendar with its notes panel open" />
           </FeatureCard>
         </Reveal>
         <div className="grid gap-4 md:grid-cols-2">
           <Reveal data-anim-item="">
             <FeatureCard icon={<Palette className={ICON} />} title={FEATURES.categories.title} body={FEATURES.categories.body}>
-              <ProductImage screen="week" alt="OpenNote Full Week view with the calendar sidebar" />
+              <ProductImage screen="week" alt="Desknoty Full Week view with the calendar sidebar" />
             </FeatureCard>
           </Reveal>
           <Reveal data-anim-item="" delay={80}>
             <FeatureCard icon={<Plus className={ICON} />} title={FEATURES.compact[2].title} body={FEATURES.compact[2].body}>
-              <ProductImage screen="event" alt="The current OpenNote new event dialog" />
+              <ProductImage screen="event" alt="The current Desknoty new event dialog" />
             </FeatureCard>
           </Reveal>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <Reveal data-anim-item="">
             <FeatureCard icon={<LayoutGrid className={ICON} />} title={FEATURES.compact[0].title} body={FEATURES.compact[0].body}>
-              <ProductImage screen="month" alt="The current OpenNote Month view" />
+              <ProductImage screen="month" alt="The current Desknoty Month view" />
             </FeatureCard>
           </Reveal>
           <Reveal data-anim-item="" delay={80}>
             <FeatureCard icon={<Compass className={ICON} />} title={FEATURES.compact[1].title} body={FEATURES.compact[1].body}>
-              <ProductImage screen="day" alt="OpenNote Day view with date navigation and view controls" />
+              <ProductImage screen="day" alt="Desknoty Day view with date navigation and view controls" />
             </FeatureCard>
           </Reveal>
         </div>

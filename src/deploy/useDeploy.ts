@@ -74,7 +74,7 @@ export function useDeploy(): UseDeployResult {
     setDeploying(true)
     setError(null)
     setSteps([
-      'Sending an authenticated request to the OpenNote server…',
+      'Sending an authenticated request to the Desknoty server…',
       `Asking ${status?.providerLabel ?? 'the host'} to rebuild the site…`,
     ])
     try {

@@ -1,11 +1,11 @@
 /**
- * Tests OpenNote's own email system without any outside service.
+ * Tests Desknoty's own email system without any outside service.
  *
  * Run with: npm run test:mail
  *
  * Covers the templates, the outbox (queueing, retries with backoff, giving up,
  * erasing one-time links after delivery, rate limiting, header-injection
- * refusal) and the real SMTP client path, delivered to OpenNote's built-in
+ * refusal) and the real SMTP client path, delivered to Desknoty's built-in
  * loopback SMTP catcher. Nothing here reaches a real inbox.
  */
 import { execFileSync } from 'node:child_process'
@@ -24,7 +24,7 @@ process.env.MAILBOX_DIR = join(tmp, 'mailbox')
 process.env.MAIL_RATE_PER_HOUR = '5'
 process.env.MAIL_MAX_ATTEMPTS = '3'
 process.env.SMTP_HOST = ''
-process.env.EMAIL_FROM = 'OpenNote <no-reply@opennote.test>'
+process.env.EMAIL_FROM = 'Desknoty <no-reply@opennote.test>'
 
 let failures = 0
 function check(label: string, ok: boolean, detail = '') {
@@ -59,14 +59,14 @@ try {
   console.log('\n  Templates')
   {
     const reset = renderEmail('reset-password', { url: LINK, name: 'Sam <script>' })
-    check('reset subject is branded', reset.subject === 'Reset your OpenNote password')
-    check('HTML carries the OpenNote name', reset.html.includes('OpenNote'))
+    check('reset subject is branded', reset.subject === 'Reset your Desknoty password')
+    check('HTML carries the Desknoty name', reset.html.includes('Desknoty'))
     check('HTML has the action link', reset.html.includes(LINK.replace(/&/g, '&#38;')))
     check('plain-text version has the link', reset.text.includes(LINK))
     check('user input is escaped (no HTML injection)', !reset.html.includes('<script>') && reset.html.includes('&#60;script&#62;'))
     check('says the link expires in one hour', reset.text.includes('one hour'))
     const verify = renderEmail('verify-email', { url: LINK })
-    check('verification email has its own subject', verify.subject === 'Confirm your OpenNote email')
+    check('verification email has its own subject', verify.subject === 'Confirm your Desknoty email')
   }
 
   console.log('\n  Outbox → local dev inbox')
@@ -146,7 +146,7 @@ try {
     check('a list of addresses is refused', !two.queued)
   }
 
-  console.log('\n  Real SMTP path → OpenNote SMTP catcher (loopback)')
+  console.log('\n  Real SMTP path → Desknoty SMTP catcher (loopback)')
   {
     const caught: Array<{ to: string[]; subject: string; html: string; text: string }> = []
     const server = await startSmtpCatcher({ port: 0, onMessage: (m) => caught.push(m) })
@@ -162,12 +162,12 @@ try {
     const mine = caught.filter((m) => m.to.join() === 'smtp@example.com')
     check('the SMTP server accepted the message', r.queued && row(r.id).status === 'sent', r.queued ? String(row(r.id).lastError) : '')
     check('exactly one message reached that recipient', mine.length === 1)
-    check('the subject survived SMTP encoding', mine[0]?.subject === 'Reset your OpenNote password', mine[0]?.subject)
+    check('the subject survived SMTP encoding', mine[0]?.subject === 'Reset your Desknoty password', mine[0]?.subject)
     check('the HTML part arrived intact', Boolean(mine[0]?.html.includes('Choose a new password')))
     check('the plain-text part has the link', Boolean(mine[0]?.text.includes(LINK)))
 
     // With TLS required (the default), a server without STARTTLS is refused —
-    // OpenNote never falls back to sending a reset link in clear text.
+    // Desknoty never falls back to sending a reset link in clear text.
     env.smtp.requireTLS = true
     setTransport(smtpTransport())
     const t = enqueueEmail('reset-password', 'tls@example.com', { url: LINK })
@@ -208,7 +208,7 @@ try {
     // run for real, exactly as they do against smtp.gmail.com.
     const ca = (n: string) => join(tmp, n)
     const ossl = (...a: string[]) => execFileSync('openssl', a, { stdio: 'ignore' })
-    ossl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', ca('ca.key'), '-out', ca('ca.pem'), '-days', '1', '-subj', '/CN=OpenNote Test CA')
+    ossl('req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', ca('ca.key'), '-out', ca('ca.pem'), '-days', '1', '-subj', '/CN=Desknoty Test CA')
     ossl('req', '-newkey', 'rsa:2048', '-nodes', '-keyout', ca('srv.key'), '-out', ca('srv.csr'), '-subj', '/CN=localhost')
     writeFileSync(ca('ext'), 'subjectAltName=DNS:localhost\n')
     ossl('x509', '-req', '-in', ca('srv.csr'), '-CA', ca('ca.pem'), '-CAkey', ca('ca.key'), '-CAcreateserial', '-out', ca('srv.pem'), '-days', '1', '-extfile', ca('ext'))
@@ -229,7 +229,7 @@ try {
       requireTLS: true,
       user: 'opennote.sender@gmail.test',
       pass: 'abcdefghijklmnop',
-      from: 'OpenNote <opennote.sender@gmail.test>',
+      from: 'Desknoty <opennote.sender@gmail.test>',
       caFile: ca('ca.pem'),
     })
     env.mail.transport = 'smtp'
@@ -269,14 +269,14 @@ try {
     const g = smtpSettings()
     check('SMTP_PRESET=gmail → smtp.gmail.com:587 with STARTTLS', g.host === 'smtp.gmail.com' && g.port === 587 && !g.secure && g.requireTLS)
     check('spaces in a Google app password are removed', g.pass === 'abcdefghijklmnop')
-    check('the sender defaults to the Gmail address', g.from === 'OpenNote <me@gmail.com>')
+    check('the sender defaults to the Gmail address', g.from === 'Desknoty <me@gmail.com>')
     Object.assign(process.env, { SMTP_PRESET: 'outlook', SMTP_USER: 'me@outlook.com' })
     const o = smtpSettings()
     check('SMTP_PRESET=outlook → smtp-mail.outlook.com:587', o.host === 'smtp-mail.outlook.com' && o.port === 587)
     process.env = keep
-    Object.assign(env.smtp, { host: 'smtp.gmail.com', user: 'me@gmail.com', from: 'OpenNote <no-reply@other.com>' })
+    Object.assign(env.smtp, { host: 'smtp.gmail.com', user: 'me@gmail.com', from: 'Desknoty <no-reply@other.com>' })
     check('a mismatched sender is flagged for Gmail', /must be the same address/.test(senderProblem() ?? ''))
-    env.smtp.from = 'OpenNote <me@gmail.com>'
+    env.smtp.from = 'Desknoty <me@gmail.com>'
     check('a matching sender passes', senderProblem() === null)
   }
 

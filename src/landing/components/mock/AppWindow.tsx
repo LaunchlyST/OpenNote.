@@ -77,7 +77,7 @@ function AppBody({
   return (
     <img
       src={`${SHOTS[key]}?v=20261018-current`}
-      alt={key === 'projects' ? 'OpenNote My Projects screen' : `OpenNote calendar, ${key === 'week' ? 'Full Week' : key === 'day' ? 'Day' : 'Month'} view`}
+      alt={key === 'projects' ? 'Desknoty My Projects screen' : `Desknoty calendar, ${key === 'week' ? 'Full Week' : key === 'day' ? 'Day' : 'Month'} view`}
       width={1920}
       height={1200}
       draggable={false}
@@ -94,7 +94,7 @@ export function AppWindow({
   view = 'week',
   onViewChange,
   dateLabel = `${DEMO_WEEK_TITLE}, 2026`,
-  label = 'OpenNote',
+  label = 'Desknoty',
   screen = 'calendar',
   className,
 }: {
@@ -194,7 +194,7 @@ export function ResponsiveAppWindow({
   view = 'week',
   onViewChange,
   dateLabel,
-  label = 'OpenNote',
+  label = 'Desknoty',
   screen = 'calendar',
   className,
 }: {

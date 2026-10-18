@@ -117,7 +117,7 @@ app.get('/api/plan', requireUser, async (req: AuthedRequest, res) => {
 // Upgrading is not open: Pro is "coming soon". Any attempt to start a
 // purchase is refused here, whatever the browser sends.
 app.post('/api/billing/checkout', requireUser, (_req, res) => {
-  res.status(403).json({ error: 'OpenNote Pro is coming soon and cannot be purchased yet. You have not been charged.' })
+  res.status(403).json({ error: 'Desknoty Pro is coming soon and cannot be purchased yet. You have not been charged.' })
 })
 
 // Pro-only API surface. Nothing lives here yet; the guard is in place so a

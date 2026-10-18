@@ -30,7 +30,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     })
   } catch {
     throw new DeployApiError(
-      'Could not reach the OpenNote server. Is `npm run dev` running?',
+      'Could not reach the Desknoty server. Is `npm run dev` running?',
       0,
     )
   }

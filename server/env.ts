@@ -142,7 +142,7 @@ export function smtpSettings() {
   // Google shows app passwords as "abcd efgh ijkl mnop"; the spaces are not part of it.
   const pass = host === 'smtp.gmail.com' ? (process.env.SMTP_PASS ?? '').replace(/\s+/g, '') : (process.env.SMTP_PASS ?? '')
   // With a mailbox provider the sender must be that mailbox, so default to it.
-  const from = process.env.EMAIL_FROM || (preset && user ? `OpenNote <${user}>` : '')
+  const from = process.env.EMAIL_FROM || (preset && user ? `Desknoty <${user}>` : '')
   return {
     host,
     port,

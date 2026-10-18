@@ -8,7 +8,7 @@ import { enqueueEmail } from './mail/index.ts'
 import { syncRoles } from './roles.ts'
 
 export const auth = betterAuth({
-  appName: 'OpenNote',
+  appName: 'Desknoty',
   baseURL: env.baseURL,
   secret: env.secret,
   database: db,

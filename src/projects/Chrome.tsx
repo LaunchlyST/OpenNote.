@@ -14,7 +14,7 @@ export function PageChrome({ children, nav }: { children: ReactNode; nav?: React
     <div className="flex h-full min-h-0 w-full flex-col overflow-y-auto bg-[#f7f7f5]">
       <header className="sticky top-0 z-20 border-b border-[#ececea] bg-white/90 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
-          <a href="/" aria-label="OpenNote home" className="shrink-0">
+          <a href="/" aria-label="Desknoty home" className="shrink-0">
             <Logo size="sm" />
           </a>
           <div className="min-w-0 flex-1">{nav}</div>

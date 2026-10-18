@@ -161,7 +161,7 @@ export function AccountSettings() {
             Account settings
           </h1>
           <p className="text-[11.5px] text-[#8f8e8a]">
-            Manage your OpenNote profile.
+            Manage your Desknoty profile.
           </p>
 
           <form onSubmit={saveProfile} className="mt-5">
@@ -242,7 +242,7 @@ export function AccountSettings() {
             <div className="flex items-center gap-2 rounded-xl bg-[#fbfbfa] px-3 py-2.5 text-[12.5px] text-[#37352f]">
               <Sparkles className="h-4 w-4 shrink-0 text-[#8f8e8a]" />
               <span className="min-w-0 flex-1 truncate">
-                {user.plan === 'pro' ? 'OpenNote Pro' : 'OpenNote Free'}
+                {user.plan === 'pro' ? 'Desknoty Pro' : 'Desknoty Free'}
               </span>
               <span className="shrink-0 text-[10.5px] text-[#b4b3ae]">
                 {user.plan === 'pro' ? 'Plan' : 'Plan · Pro coming soon'}
@@ -315,7 +315,7 @@ export function AccountSettings() {
             className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[12.5px] text-[#c0392b] transition hover:bg-[#fdf1f1]"
           >
             <Trash2 className="h-4 w-4" />
-            Log out of OpenNote
+            Log out of Desknoty
           </button>
         </div>
       </div>

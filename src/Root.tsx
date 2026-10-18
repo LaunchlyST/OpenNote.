@@ -68,7 +68,7 @@ function RouteFallback() {
           />
         </span>
         <span className="sr-only" role="status">
-          Loading OpenNote…
+          Loading Desknoty…
         </span>
       </div>
     </div>

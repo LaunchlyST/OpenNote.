@@ -1,7 +1,7 @@
 /**
  * Subscription plans.
  *
- * OpenNote has no billing backend yet — the landing page's PRICING table marks
+ * Desknoty has no billing backend yet — the landing page's PRICING table marks
  * every paid plan as `unavailable` ("Payments coming soon — checkout is not
  * switched on yet"). So a plan is a value *stored on the account record* and
  * read back here. It is never inferred from whether someone happens to be
@@ -16,7 +16,7 @@ export type PlanId = 'free' | 'pro' | 'business'
 
 export interface Plan {
   id: PlanId
-  /** Full product name, e.g. "OpenNote Pro". */
+  /** Full product name, e.g. "Desknoty Pro". */
   label: string
   /** Compact name for the badge, e.g. "Pro". */
   shortLabel: string
@@ -39,7 +39,7 @@ export const PLANS: Record<PlanId, Plan> = {
   },
   pro: {
     id: 'pro',
-    label: 'OpenNote Pro',
+    label: 'Desknoty Pro',
     shortLabel: 'Pro',
     price: '£9 / mo',
     purchasable: false,
@@ -47,7 +47,7 @@ export const PLANS: Record<PlanId, Plan> = {
   },
   business: {
     id: 'business',
-    label: 'OpenNote Business',
+    label: 'Desknoty Business',
     shortLabel: 'Business',
     price: 'Coming soon',
     purchasable: false,

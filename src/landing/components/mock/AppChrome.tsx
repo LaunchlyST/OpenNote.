@@ -75,7 +75,7 @@ export function MockTopBar({
           <StickyNote className="h-3 w-3" strokeWidth={2.4} />
         </span>
         <span className="text-[11.5px] font-semibold tracking-[-0.015em] text-[#1f2330]">
-          OpenNote
+          Desknoty
         </span>
       </span>
 

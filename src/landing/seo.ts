@@ -9,11 +9,11 @@ import { useEffect } from 'react'
  */
 
 export const SITE = {
-  name: 'OpenNote',
-  title: 'OpenNote — Your calendar, with room to think.',
+  name: 'Desknoty',
+  title: 'Desknoty — Your calendar, with room to think.',
   description:
     'Plan your days, organise your notes, and keep everything that matters in one simple calendar. Free forever, with day, week and month views.',
-  appTitle: 'OpenNote — Calendar & Planner',
+  appTitle: 'Desknoty — Calendar & Planner',
   locale: 'en_GB',
 } as const
 

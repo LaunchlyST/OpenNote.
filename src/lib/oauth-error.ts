@@ -27,17 +27,17 @@ const BETTER_AUTH_CODES: Record<string, string> = {
   no_callback_url:
     'Google sign-in could not find a return address. Please contact support.',
   unable_to_link_account:
-    'That Google account is linked to a different OpenNote account.',
+    'That Google account is linked to a different Desknoty account.',
   email_does_not_match:
-    'The email address from Google does not match an existing OpenNote account. Sign in with your email and password instead.',
+    'The email address from Google does not match an existing Desknoty account. Sign in with your email and password instead.',
   account_already_linked_to_different_user:
-    'That Google account is already linked to a different OpenNote account.',
+    'That Google account is already linked to a different Desknoty account.',
   email_not_found:
     'Google did not share an email address. This happens with some private or organisational accounts — please use your email and password instead.',
   account_not_linked:
-    'An OpenNote account with this email already exists but its email is not verified yet. Sign in with your email and password, verify your email, then you can use Google too.',
+    'An Desknoty account with this email already exists but its email is not verified yet. Sign in with your email and password, verify your email, then you can use Google too.',
   'account not linked':
-    'An OpenNote account with this email already exists but its email is not verified yet. Sign in with your email and password, verify your email, then you can use Google too.',
+    'An Desknoty account with this email already exists but its email is not verified yet. Sign in with your email and password, verify your email, then you can use Google too.',
   state_mismatch: 'Google sign-in could not be verified (security check failed). Please try again.',
   please_restart_the_process: 'Google sign-in expired. Please try again.',
   email_not_verified:

@@ -68,7 +68,7 @@ export function ProductPreview() {
           icon={<MousePointerClick className="h-6 w-6" />}
           tint="#ffdce9"
           heading="Try it right here."
-          description="This is the real OpenNote layout with a sample week. Switch views below or with the tabs inside the window. No account needed."
+          description="This is the real Desknoty layout with a sample week. Switch views below or with the tabs inside the window. No account needed."
         />
       </Reveal>
 
@@ -108,7 +108,7 @@ export function ProductPreview() {
         <div ref={stageRef} className="mt-8 rounded-[22px] bg-lp-sunken p-2 sm:p-6">
           <div ref={frameRef}>
           <div key={view} className="lp-viewswap">
-          <ResponsiveAppWindow view={view} onViewChange={choose} dateLabel={DATE_LABELS[view]} screen={screen} label="opennote — sample data" />
+          <ResponsiveAppWindow view={view} onViewChange={choose} dateLabel={DATE_LABELS[view]} screen={screen} label="Desknoty — sample data" />
           </div>
           </div>
         </div>

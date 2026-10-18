@@ -122,12 +122,12 @@ const HEADINGS: Record<Mode, { title: string; body: string }> = {
     title: 'Create your account',
     body: 'Your calendar, notes and tasks together in one calm place. Free to start.',
   },
-  signin: { title: 'Welcome back', body: 'Sign in to OpenNote to pick up where you left off.' },
+  signin: { title: 'Welcome back', body: 'Sign in to Desknoty to pick up where you left off.' },
   forgot: {
     title: 'Reset your password',
     body: 'Enter your account email and we will send you a link to choose a new password.',
   },
-  reset: { title: 'Choose a new password', body: 'Pick a new password for your OpenNote account.' },
+  reset: { title: 'Choose a new password', body: 'Pick a new password for your Desknoty account.' },
 }
 
 function readResetToken(): { token: string | null; invalid: boolean } {
@@ -236,7 +236,7 @@ export function AuthPage() {
         <div className="flex items-center justify-between">
           <span className="inline-flex items-center gap-2">
             <AppIcon className="h-7 w-7 text-[28px]" />
-            <span className="text-[15.5px] font-semibold tracking-[-0.02em] text-[#141a26]">OpenNote</span>
+            <span className="text-[15.5px] font-semibold tracking-[-0.02em] text-[#141a26]">Desknoty</span>
           </span>
           {user ? (
             <button
@@ -315,7 +315,7 @@ export function AuthPage() {
                           type={showPassword ? 'text' : 'password'}
                           value={password}
                           onChange={setPassword}
-                          placeholder={mode === 'signin' ? 'Your OpenNote password' : 'At least 10 characters'}
+                          placeholder={mode === 'signin' ? 'Your Desknoty password' : 'At least 10 characters'}
                           autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
                           minLength={mode === 'signin' ? undefined : 10}
                           autoFocus={mode === 'reset'}
