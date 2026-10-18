@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { apiUrl } from './lib/api-base'
 
 /**
  * Account-wide preferences (General, Appearance, Notifications), saved to the
@@ -87,7 +88,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
-    fetch('/api/preferences', { credentials: 'include' })
+    fetch(apiUrl('/api/preferences'), { credentials: 'include' })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((body: { preferences: Preferences }) => {
         if (!alive) return
@@ -108,7 +109,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const before = latest.current
     setPreferences({ ...before, ...patch })
     try {
-      const res = await fetch('/api/preferences', {
+      const res = await fetch(apiUrl('/api/preferences'), {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

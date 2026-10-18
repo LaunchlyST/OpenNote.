@@ -1,5 +1,6 @@
 import type { ProjectData } from '../store'
 import type { EventColorId } from '../lib/colors'
+import { apiUrl } from '../lib/api-base'
 
 /** A workspace groups projects by plan. Pro needs an active Pro subscription. */
 export type WorkspaceId = 'free' | 'pro'
@@ -24,7 +25,7 @@ export interface ProjectInput {
 }
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/projects${path}`, {
+  const res = await fetch(apiUrl(`/api/projects${path}`), {
     credentials: 'include',
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,

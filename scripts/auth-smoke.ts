@@ -22,6 +22,8 @@ process.env.BETTER_AUTH_URL = ORIGIN
 process.env.BETTER_AUTH_SECRET = 'b'.repeat(64)
 process.env.DATABASE_PATH = join(tmp, 'test.db')
 process.env.SMTP_HOST = ''
+process.env.SMTP_PRESET = ''
+process.env.MAIL_TRANSPORT = 'local'
 process.env.ADMIN_EMAILS = 'owner@opennote.test'
 process.env.REQUIRE_EMAIL_VERIFICATION = 'false'
 

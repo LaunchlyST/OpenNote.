@@ -120,8 +120,21 @@ export const auth = betterAuth({
 
   advanced: {
     // httpOnly + SameSite=Lax cookies are Better Auth's defaults; force the
-    // Secure flag whenever the site is served over HTTPS.
+    // Secure flag whenever the site is served over HTTPS. When the frontend is
+    // hosted on a different origin than this API, cookies must be SameSite=None
+    // (and Secure) or the browser will drop them on cross-origin requests.
     useSecureCookies: env.baseURL.startsWith('https://'),
+    defaultCookieAttributes: (env.trustedOrigins.some((origin) => {
+      try {
+        const frontendHost = new URL(origin).hostname
+        const apiHost = new URL(env.baseURL).hostname
+        return frontendHost !== apiHost && !frontendHost.endsWith(`.${apiHost}`)
+      } catch {
+        return false
+      }
+    }))
+      ? { sameSite: 'none', secure: true }
+      : { sameSite: 'lax' },
     ipAddress: {
       ipAddressHeaders: env.ipAddressHeaders,
       ...(env.trustedProxies.length ? { trustedProxies: env.trustedProxies } : {}),

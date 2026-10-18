@@ -10,6 +10,8 @@
  * Express server in production and development alike.
  */
 
+import { apiUrl } from '../lib/api-base'
+
 export class DeployApiError extends Error {
   readonly status: number
 
@@ -23,8 +25,8 @@ export class DeployApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response
   try {
-    res = await fetch(path, {
-      credentials: 'same-origin',
+    res = await fetch(apiUrl(path), {
+      credentials: 'include',
       headers: { accept: 'application/json', ...(init?.headers ?? {}) },
       ...init,
     })

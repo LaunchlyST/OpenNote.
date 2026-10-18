@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { apiUrl } from './lib/api-base'
 
 /**
  * Sign-out hooks into the active sync: first push any edit still waiting in
@@ -49,7 +50,7 @@ export function useProjectSync(projectId: string | undefined, workspace: Workspa
     if (!projectId || stopped) return
     setStatus('saving')
     try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}/data`, {
+      const res = await fetch(apiUrl(`/api/projects/${encodeURIComponent(projectId)}/data`), {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },

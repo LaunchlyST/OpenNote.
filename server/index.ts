@@ -42,6 +42,27 @@ app.disable('x-powered-by')
 // client IPs for rate limiting are read from X-Forwarded-* headers.
 app.set('trust proxy', 1)
 
+// Cross-origin support: when the frontend is hosted separately from this API
+// (for example a static site on GitHub Pages), the browser calls this server
+// from another origin. Allow those origins and their credentials, and answer
+// preflight requests, so the httpOnly session cookie can travel with them.
+const allowedOrigins = new Set([env.baseURL, ...env.trustedOrigins].map((o) => o.replace(/\/+$/, '')))
+app.use((req, res, next) => {
+  const origin = typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : ''
+  if (origin && allowedOrigins.has(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin)
+    res.setHeader('Vary', 'Origin')
+    res.setHeader('Access-Control-Allow-Credentials', 'true')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  }
+  if (req.method === 'OPTIONS') {
+    res.status(204).end()
+    return
+  }
+  next()
+})
+
 // Better Auth must see the raw request body, so it is mounted before any
 // body parser.
 app.all('/api/auth/*splat', toNodeHandler(auth))

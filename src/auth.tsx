@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { authClient } from './lib/auth-client'
+import { apiUrl } from './lib/api-base'
 import { blockCacheWrites, clearAllUserCaches, clearOtherUserCaches } from './lib/local-cache'
 import { flushPendingSave, stopSync } from './sync'
 
@@ -139,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
-    fetch('/api/auth-config')
+    fetch(apiUrl('/api/auth-config'))
       .then((r) => (r.ok ? r.json() : DEFAULT_CONFIG))
       .then((c: AuthConfig) => alive && setConfig(c))
       .catch(() => {})
