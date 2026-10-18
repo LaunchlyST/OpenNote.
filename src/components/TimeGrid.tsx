@@ -598,13 +598,29 @@ export function TimeGrid({
             }
           }}
           className={cn(
-            'group/note pointer-events-auto relative flex shrink-0 flex-col justify-center overflow-hidden rounded-[10px] border px-2 text-left transition-colors',
+            'group/note pointer-events-auto relative flex shrink-0 flex-col overflow-hidden rounded-[10px] border px-2 py-1.5 text-left transition-colors',
             'border-[#cdeadb] bg-[#e9f7ef] hover:bg-[#e1f3e8]',
             isSel && 'border-[#5fb98a] shadow-[0_0_0_2px_rgba(95,185,138,0.25)]',
           )}
           style={{ height }}
         >
-          <div className="flex min-w-0 items-start gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={!!n.done}
+              aria-label={`Mark "${label(n)}" ${n.done ? 'not done' : 'done'}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                updateSlotNote(n.id, { done: !n.done })
+              }}
+              className={cn(
+                'grid h-[13px] w-[13px] shrink-0 place-items-center rounded-[4px] border transition',
+                n.done ? 'border-[#2f8f5f] bg-[#2f8f5f] text-white' : 'border-[#8cc2a5] bg-white/70 hover:border-[#2f8f5f]',
+              )}
+            >
+              {n.done && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
+            </button>
             <span
               className={cn(
                 'min-w-0 flex-1 truncate text-[11.5px] font-semibold leading-[15px] text-[#17352a]',
@@ -623,51 +639,33 @@ export function TimeGrid({
                 +{extra}
               </button>
             )}
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={!!n.done}
-              aria-label={`Mark “${label(n)}” ${n.done ? 'not done' : 'done'}`}
-              onClick={(e) => {
-                e.stopPropagation()
-                updateSlotNote(n.id, { done: !n.done })
-              }}
-              className={cn(
-                'mt-[1px] grid h-[13px] w-[13px] shrink-0 place-items-center rounded-[4px] border transition',
-                n.done ? 'border-[#2f8f5f] bg-[#2f8f5f] text-white' : 'border-[#8cc2a5] bg-white/70 hover:border-[#2f8f5f]',
-              )}
-            >
-              {n.done && <Check className="h-2.5 w-2.5" strokeWidth={3.5} />}
-            </button>
           </div>
           {withBody && n.body?.trim() && (
             <span className="truncate text-[10.5px] leading-[15px] text-[#4c7a63]">{n.body}</span>
           )}
-          {showTime && (
-            <div className="mt-[3px] flex min-w-0 items-center gap-1">
-              <Clock className="h-3 w-3 shrink-0 text-[#4c7a63]" />
-              <span className="min-w-0 flex-1 truncate text-[10.5px] tabular-nums leading-[13px] text-[#4c7a63]">{span(slot)}</span>
-              {showCollab && (
-                <span className="group/collab relative shrink-0">
-                  <button
-                    type="button"
-                    aria-disabled="true"
-                    aria-label="Team collaboration — Coming Soon"
-                    onClick={(e) => e.stopPropagation()}
-                    className="grid h-[15px] w-[15px] cursor-default place-items-center rounded-full border border-dashed border-[#8cc2a5] bg-white/60 text-[#6f9c84]"
-                  >
-                    <Users className="h-2 w-2" />
-                  </button>
-                  <span
-                    role="tooltip"
-                    className="pointer-events-none absolute bottom-full right-0 z-40 mb-1 whitespace-nowrap rounded-md bg-[#191919] px-1.5 py-1 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover/collab:opacity-100 group-focus-within/collab:opacity-100"
-                  >
-                    Team collaboration — Coming Soon
-                  </span>
+          <div className="flex min-w-0 items-center gap-1">
+            <Clock className="h-3 w-3 shrink-0 text-[#4c7a63]" />
+            <span className="min-w-0 flex-1 truncate text-[10.5px] tabular-nums leading-[13px] text-[#4c7a63]">{showTime ? span(slot) : ''}</span>
+            {showCollab && (
+              <span className="group/collab relative shrink-0">
+                <button
+                  type="button"
+                  aria-disabled="true"
+                  aria-label="Team collaboration — Coming Soon"
+                  onClick={(e) => e.stopPropagation()}
+                  className="grid h-[15px] w-[15px] cursor-default place-items-center rounded-full border border-dashed border-[#8cc2a5] bg-white/60 text-[#6f9c84]"
+                >
+                  <Users className="h-2 w-2" />
+                </button>
+                <span
+                  role="tooltip"
+                  className="pointer-events-none absolute bottom-full right-0 z-40 mb-1 whitespace-nowrap rounded-md bg-[#191919] px-1.5 py-1 text-[10px] font-medium text-white opacity-0 transition-opacity group-hover/collab:opacity-100 group-focus-within/collab:opacity-100"
+                >
+                  Team collaboration — Coming Soon
                 </span>
-              )}
-            </div>
-          )}
+              </span>
+            )}
+          </div>
         </div>
       )
     }
@@ -693,16 +691,23 @@ export function TimeGrid({
           shownCount++
         }
         shownCount = Math.max(1, shownCount)
+        // A single note gets the full usable height — show its body if it fits.
+        const singleFull = shownCount === 1 && list.length === 1
+        const bodyVisible = (n: SlotNote) =>
+          !!n.body?.trim() && (withBody || (singleFull && cardH(true) <= usable))
         list.slice(0, shownCount).forEach((n, i) => {
           const extra = i === shownCount - 1 ? list.length - shownCount : 0
-          const h = shownCount === 1 && list.length === 1 ? usable : Math.min(heights[i], usable)
-          items.push(card(n, row, slots[0], extra, h, withBody))
+          const h = singleFull ? usable : Math.min(heights[i], usable)
+          items.push(card(n, row, slots[0], extra, h, bodyVisible(n)))
         })
       } else {
         // Zoomed out: one card for the row, with +N for every other note in it.
         const all = slots.flatMap((s) => bySlot.get(s) ?? [])
         const first = (bySlot.get(slots[0]) ?? [])[0]
-        if (first) items.push(card(first, row, slots[0], all.length - 1, Math.min(cardH(false), usable), false))
+        if (first) {
+          const bodyOk = !!first.body?.trim() && cardH(true) <= usable
+          items.push(card(first, row, slots[0], all.length - 1, Math.min(usable, cardH(bodyOk)), bodyOk))
+        }
       }
       return (
         <div

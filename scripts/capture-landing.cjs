@@ -41,15 +41,22 @@ const EVENTS = [
 ]
 
 ;(async () => {
-  const b = await chromium.launch()
+  const b = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge' })
   const ctx = await b.newContext({ viewport: { width: 1920, height: 1200 }, deviceScaleFactor: 1 })
   const p = await ctx.newPage()
   await p.goto(`${B}/app/signup`, { waitUntil: 'networkidle' })
   await p.getByLabel('Full name', { exact: true }).fill('Alex Morgan')
-  await p.getByLabel('Email address', { exact: true }).fill(`landing${Date.now()}@example.com`)
+  const email = `landing${Date.now()}@example.com`
+  await p.getByLabel('Email address', { exact: true }).fill(email)
   await p.getByLabel('Password', { exact: true }).fill('landing-shot-2026')
   await p.getByLabel('Confirm password', { exact: true }).fill('landing-shot-2026')
   await p.getByRole('button', { name: 'Create account' }).click()
+  await p.getByText('Check your email', { exact: true }).waitFor()
+  require('node:child_process').execFileSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `import { verifyEmail } from './server/roles.ts'; verifyEmail(${JSON.stringify(email)})`], { cwd: process.cwd() })
+  await p.goto(`${B}/app/signin`, { waitUntil: 'networkidle' })
+  await p.getByLabel('Email address', { exact: true }).fill(email)
+  await p.getByLabel('Password', { exact: true }).fill('landing-shot-2026')
+  await p.getByRole('button', { name: 'Sign in', exact: true }).click()
   await p.getByRole('button', { name: /Get Started Free/ }).first().waitFor({ timeout: 15000 })
   await p.getByRole('button', { name: /Get Started Free/ }).first().click()
   await p.getByRole('button', { name: 'Create Project' }).first().waitFor()
@@ -105,6 +112,13 @@ const EVENTS = [
   await p.screenshot({ path: `${OUT}/app-day.png` })
   await view('Month')
   await p.screenshot({ path: `${OUT}/app-month.png` })
+  await view('Full Week')
+  await p.getByRole('button', { name: 'Notes', exact: true }).last().click()
+  await p.waitForTimeout(700)
+  await p.screenshot({ path: `${OUT}/app-notes.png` })
+  await p.getByRole('button', { name: 'New event', exact: true }).click()
+  await p.waitForTimeout(700)
+  await p.screenshot({ path: `${OUT}/app-event.png` })
   await b.close()
   console.log('Saved real screenshots to', OUT)
 })().catch((e) => {

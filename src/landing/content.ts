@@ -117,7 +117,7 @@ export const FEATURES = {
   categories: {
     kicker: 'Colour-coded calendars',
     title: 'See the shape of your week in colour.',
-    body: 'Work, Personal, Study and Social each get their own colour. Switch them on and off to focus. Try it here.',
+    body: 'Create colour-coded calendars for work, study or personal plans. Show or hide each calendar to focus.',
   },
   daily: {
     kicker: 'Daily schedules',

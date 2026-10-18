@@ -285,7 +285,7 @@ try {
 
   /* Product mockups */
   check('hero shows the week grid', html.includes('Morning planning'))
-  check('page shows a note card', html.includes('Grocery list'))
+  check('page shows the current notes screenshot', html.includes('/landing/app-notes.png'))
   check('demo calendars render', html.includes('Colour-coded') && html.includes('Study'))
   check('no localStorage writes during render', globalThis.localStorage._v.size === 0)
 
