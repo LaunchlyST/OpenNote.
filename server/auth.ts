@@ -126,9 +126,13 @@ export const auth = betterAuth({
     useSecureCookies: env.baseURL.startsWith('https://'),
     defaultCookieAttributes: (env.trustedOrigins.some((origin) => {
       try {
+        const registrable = (host: string) => host.split('.').slice(-2).join('.')
         const frontendHost = new URL(origin).hostname
         const apiHost = new URL(env.baseURL).hostname
-        return frontendHost !== apiHost && !frontendHost.endsWith(`.${apiHost}`)
+        // Subdomains of the same registrable domain (e.g. desknoty.com and
+        // api.desknoty.com) are same-site, so Lax cookies still travel. Only
+        // truly cross-site frontends need SameSite=None.
+        return registrable(frontendHost) !== registrable(apiHost)
       } catch {
         return false
       }
