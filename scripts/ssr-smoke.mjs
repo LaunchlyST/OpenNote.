@@ -286,7 +286,15 @@ try {
   /* Product mockups */
   check('hero shows the week grid', html.includes('Morning planning'))
   check('page shows the current notes screenshot', html.includes('/landing/app-notes.png'))
-  check('demo calendars render', html.includes('Colour-coded') && html.includes('Study'))
+  /* Product mockups — the showcase renders real screenshots of the app
+     (public/landing/app-*.png, taken by scripts/capture-landing.cjs). The
+     demo calendar list ("Study") lives inside those images now, so the check
+     asserts the screenshots are wired up instead of the old live-mock markup. */
+  check('Free plan lists colour-coded calendars', html.includes('Colour-coded'))
+  check(
+    'product showcase shows the real app screenshots',
+    html.includes('/landing/app-week.png') && html.includes('/landing/app-day.png'),
+  )
   check('no localStorage writes during render', globalThis.localStorage._v.size === 0)
 
   /* No placeholders or debug leftovers */

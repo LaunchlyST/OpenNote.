@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="refresh" content="0; url=/" />
+    <title>OpenNote — Your calendar, with room to think.</title>
+  </head>
+  <body>
+    <script>
+      // GitHub Pages serves this for unknown paths. The app uses a History API
+      // router, so we can't preserve the path without server-side rewrites.
+      // Redirect to home — the router takes over from there.
+      if (window.location.pathname !== '/') {
+        window.location.replace('/')
+      }
+    </script>
+  </body>
+</html>
