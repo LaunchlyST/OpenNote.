@@ -85,8 +85,19 @@ export function Hero() {
           </p>
         </div>
 
+        {/* Beta announcement — a small pill between the hero copy and the laptop */}
+        <div
+          className="lp-bob mx-auto mt-9 flex w-fit max-w-full items-center justify-center gap-2 rounded-full border border-lp-line bg-lp-sunken px-4 py-1.5"
+          style={{ animationDelay: '340ms' }}
+        >
+          <span aria-hidden="true" className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#bef264] ring-1 ring-lp-ink/15" />
+          <p className="text-center text-[13px] font-medium tracking-[-0.01em] text-lp-body">
+            🚀 Desknoty is in Beta — We&rsquo;re building and improving every day.
+          </p>
+        </div>
+
         {/* The real interface, in a laptop */}
-        <div className="lp-settle relative mx-auto mt-14 max-w-[1040px] sm:mt-16" style={{ animationDelay: '380ms' }}>
+        <div className="lp-settle relative mx-auto mt-7 max-w-[1040px] sm:mt-8" style={{ animationDelay: '380ms' }}>
           <div data-anim="tilt">
           <div ref={laptopRef} className="relative rounded-[22px] bg-lp-ink p-2 shadow-[0_40px_80px_-40px_rgba(0,0,0,0.45)] sm:p-3">
             <HeroPlanScreens />
