@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Nav } from './components/Nav'
+import { ComingSoon } from './ComingSoon'
 import { Hero } from './components/Hero'
 import { HowItWorks } from './components/HowItWorks'
 import { Features } from './components/Features'
@@ -18,6 +19,16 @@ export function LandingPage() {
   useDocumentMeta(SITE.title, SITE.description)
   useHashOnMount()
   useScrollMotion()
+
+  const [showLanding, setShowLanding] = useState(false)
+  useEffect(() => {
+    const onScroll = () => {
+      setShowLanding(window.scrollY > window.innerHeight * 0.6)
+    }
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   // Scoped classes rather than global CSS overrides, so the calendar app is
   // completely unaffected by anything on this page.
@@ -40,7 +51,11 @@ export function LandingPage() {
       </a>
 
       <Cursor />
-      <Nav />
+      <ComingSoon />
+
+      <div style={{ opacity: showLanding ? 1 : 0, pointerEvents: showLanding ? 'auto' : 'none', transition: 'opacity 0.3s' }}>
+        <Nav />
+      </div>
 
       <main id="main">
         <Hero />
