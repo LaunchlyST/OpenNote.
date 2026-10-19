@@ -4,13 +4,15 @@ import { RouterProvider, useRouter } from './router'
 import type { Screen } from './screens'
 import { SITE, useDocumentMeta } from './landing/seo'
 import { Button, Logo } from './landing/components/primitives'
-import { LandingPage } from './landing/LandingPage'
+import { LandingGate } from './landing/LandingGate'
+import { ComingSoon } from './landing/ComingSoon'
 
 /**
  * Application shell.
  *
- * `/`          → the public landing page
- * `/app`       → the OpenNote calendar (also reachable at `/dashboard`)
+ * `/`          → the Coming Soon entry screen; `/landing` is gated by it
+ * `/landing`   → the public Desknoty landing page (invite code required)
+ * `/app`       → the Desknoty calendar (also reachable at `/dashboard`)
  * `/app/signin`, `/app/signup`, `/app/account` → the existing auth screens
  *
  * The calendar is code-split so a first-time visitor to the landing page never
@@ -113,7 +115,8 @@ function Routes() {
     window.scrollTo({ top: 0, behavior: 'auto' })
   }, [path])
 
-  if (path === '/') return <LandingPage />
+  if (path === '/') return <ComingSoon />
+  if (path === '/landing') return <LandingGate />
   if (isAppRoute(path)) {
     // The key remounts the calendar when the path changes, so a different
     // `initialScreen` (e.g. /app → /app/signup) is honoured immediately

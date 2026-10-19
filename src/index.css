@@ -327,6 +327,85 @@ input {
   animation: lp-float 8s ease-in-out infinite;
 }
 
+/* ------------------------------------------------------------------ */
+/* Coming Soon entry screen                                            */
+/* ------------------------------------------------------------------ */
+
+/* The balloon letters drift like they are barely tethered to the floor. */
+@keyframes lp-letter-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(0.35deg);
+  }
+}
+.lp-letter-float {
+  animation: lp-letter-float 6s ease-in-out infinite;
+}
+
+/* Wrong invite code: a short, polite shake. */
+@keyframes lp-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-5px);
+  }
+  40% {
+    transform: translateX(5px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+.lp-shake {
+  animation: lp-shake 0.4s ease-in-out;
+}
+
+/* Cinematic: the camera pushes into the room… */
+@keyframes cine-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.55);
+  }
+}
+.cine-zoom {
+  animation: cine-zoom 1.15s cubic-bezier(0.5, 0, 0.85, 0.5) forwards;
+  transform-origin: 50% 42%;
+}
+
+/* …and the balloon letters let go and float away. */
+@keyframes cine-letters {
+  from {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-42%) scale(1.06);
+    opacity: 0;
+  }
+}
+.cine-letters {
+  animation: cine-letters 1s cubic-bezier(0.3, 0.7, 0.4, 1) 0.1s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-letter-float,
+  .lp-shake,
+  .cine-zoom,
+  .cine-letters {
+    animation: none;
+  }
+}
+
 /* Blinking caret in the hero's event-title close-up. */
 @keyframes lp-caret {
   0%,

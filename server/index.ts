@@ -16,6 +16,7 @@ import { PLANS, planOf, requirePlan } from './plans.ts'
 import { validateWorkspace } from './workspace.ts'
 import { projectsRouter } from './projects.ts'
 import { preferencesRouter } from './preferences.ts'
+import { earlyAccessRouter } from './early-access.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
@@ -124,6 +125,10 @@ app.use('/api/projects', projectsRouter())
 
 // Account-wide preferences (General, Appearance, Notifications).
 app.use('/api/preferences', preferencesRouter())
+
+// Early-access gate: the invite code for the landing page is checked here,
+// on the server, and remembered in an httpOnly signed cookie.
+app.use(earlyAccessRouter)
 
 // Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())
