@@ -1,5 +1,38 @@
 @import 'tailwindcss';
 
+/* Fredoka — a rounded, playful display face, self-hosted so the Coming Soon
+   headline never depends on the network. One variable woff2 covers 300–700. */
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/fredoka-latin.woff2') format('woff2');
+}
+
+/* Display faces for the Coming Soon design exploration (self-hosted). */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/space-grotesk-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Anton';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/anton-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Instrument Serif';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/instrument-serif.woff2') format('woff2');
+}
+
 @theme {
   --font-sans:
     'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
@@ -46,6 +79,14 @@
 @theme {
   --font-display: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Rounded display face for the Coming Soon launch screen. */
+  --font-round:
+    'Fredoka', 'Baloo 2', 'Arial Rounded MT Bold', 'Nunito', ui-rounded,
+    system-ui, sans-serif;
+  /* Display faces for the three Coming Soon design directions. */
+  --font-grotesk: 'Space Grotesk', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-impact: 'Anton', 'Impact', 'Haettenschweiler', ui-sans-serif, sans-serif;
+  --font-editorial: 'Instrument Serif', 'Times New Roman', Georgia, serif;
 
   --color-lp-bg: #ffffff;
   --color-lp-paper: #ffffff;
@@ -366,6 +407,87 @@ input {
 }
 .lp-shake {
   animation: lp-shake 0.4s ease-in-out;
+}
+
+/* ------------------------------------------------------- Coming Soon ------ */
+/* A full-screen, colourful launch scene: layered colour glows, glossy shapes
+   and a rounded display headline. Motion is choreographed with GSAP; these
+   rules cover the CSS-only bits (glow drift, control pop, error shake). */
+
+/* Slow parallax-free drift for the big blurred colour fields. */
+@keyframes cs-float {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(2.5%, -3%, 0) scale(1.07);
+  }
+}
+.cs-glow {
+  animation: cs-float var(--cs-dur, 18s) ease-in-out infinite;
+  animation-delay: var(--cs-delay, 0s);
+  will-change: transform;
+}
+
+/* The invite control settling into place, and the slider → field morph. */
+@keyframes cs-pop {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.cs-pop {
+  animation: cs-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes cs-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+.cs-shake {
+  animation: cs-shake 0.36s ease-in-out;
+}
+
+/* A gentle halo pulsing behind the swipe handle to invite the drag. */
+@keyframes cs-halo {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 9px rgba(255, 255, 255, 0);
+  }
+}
+.cs-halo {
+  animation: cs-halo 2.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cs-glow,
+  .cs-pop,
+  .cs-shake,
+  .cs-halo {
+    animation: none !important;
+  }
 }
 
 /* Cinematic: the camera pushes into the room… */

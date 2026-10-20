@@ -22,6 +22,11 @@ import { ComingSoon } from './landing/ComingSoon'
  */
 const App = lazy(() => import('./App'))
 
+// Isolated design-exploration routes (`/design` and `/design/a|b|c`). Lazy so
+// they never load on `/` or `/landing`. Review surface only — the production
+// Coming Soon page is untouched. Safe to remove after a concept is chosen.
+const DesignPreview = lazy(() => import('./design/DesignPreview'))
+
 function screenForPath(path: string): Screen | undefined {
   if (path === '/app/signin' || path === '/signin') return 'signin'
   if (path === '/app/signup' || path === '/signup') return 'signup'
@@ -115,6 +120,13 @@ function Routes() {
     window.scrollTo({ top: 0, behavior: 'auto' })
   }, [path])
 
+  if (path.startsWith('/design')) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <DesignPreview />
+      </Suspense>
+    )
+  }
   if (path === '/') return <ComingSoon />
   if (path === '/landing') return <LandingGate />
   if (isAppRoute(path)) {
