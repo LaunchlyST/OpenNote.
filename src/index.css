@@ -802,7 +802,15 @@ html.lp-cursor-on * {
     position: absolute;
     top: calc(var(--rule) * 3);
     right: clamp(20px, 5vw, 64px);
-    width: 300px;
+    width: 400px;
+    font-size: 21px;
+  }
+  .nb-side h2 {
+    font-size: 15px;
+  }
+  .nb-side .nb-box {
+    width: 21px;
+    height: 21px;
   }
 }
 
@@ -958,7 +966,7 @@ html.lp-cursor-on * {
 /* ---- checklist ---------------------------------------------------- */
 .nb-side {
   padding-top: var(--rule);
-  font-size: 17px;
+  font-size: 18px;
   letter-spacing: -0.01em;
 }
 .nb-side ol {
