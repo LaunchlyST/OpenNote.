@@ -709,53 +709,138 @@ html.lp-cursor-on * {
   scroll-behavior: auto !important;
 }
 
-/* ---- Coming Soon: time-lock dial ---------------------------------- */
-.tl-dial {
-  --size: min(122vh, 96vw);
-  width: var(--size);
-  height: var(--size);
-  top: 50%;
-  right: calc(var(--size) * -0.24);
-  transform: translateY(-50%) scale(calc(1 + var(--unlock, 0) * 0.04));
+/* ---- Coming Soon: a ruled notebook page --------------------------- */
+.nb-page {
+  --rule: 36px;
+  --margin: clamp(56px, 9vw, 128px);
+  background: #fbfbf9;
 }
-.tl-glow {
-  background: radial-gradient(closest-side, rgba(75, 91, 255, 0.22), transparent);
-  width: min(122vh, 96vw);
-  height: min(122vh, 96vw);
-  top: 50%;
-  right: calc(min(122vh, 96vw) * -0.24);
-  transform: translateY(-50%);
+.nb-rules {
+  top: calc(var(--rule) * 2);
+  background-image: linear-gradient(to bottom, transparent calc(var(--rule) - 1px), #cfdcef calc(var(--rule) - 1px));
+  background-size: 100% var(--rule);
+  animation: nb-rules 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
-.tl-sans {
-  font-family: var(--font-grotesk);
-  font-weight: 700;
-  font-size: clamp(3rem, min(11.5vw, 18vh), 13rem);
-  line-height: 0.86;
-  letter-spacing: -0.05em;
-}
-.tl-serif {
-  font-family: var(--font-editorial);
-  font-style: italic;
-  font-weight: 400;
-  font-size: clamp(3.4rem, min(13vw, 20vh), 14.5rem);
-  line-height: 0.92;
-  letter-spacing: -0.02em;
-}
-@media (max-width: 767px) {
-  .tl-dial,
-  .tl-glow {
-    --size: min(136vw, 66vh);
-    width: var(--size);
-    height: var(--size);
-    right: auto;
-    left: 50%;
-    top: min(33%, calc(var(--size) * 0.42));
-    transform: translate(-50%, -50%) scale(calc(1 + var(--unlock, 0) * 0.04));
+@keyframes nb-rules {
+  from {
+    clip-path: inset(0 100% 0 0);
   }
-  .tl-sans {
-    font-size: min(15.5vw, 11vh);
+  to {
+    clip-path: inset(0 0 0 0);
   }
-  .tl-serif {
-    font-size: min(19vw, 13.5vh);
+}
+.nb-margin {
+  left: var(--margin);
+  width: 1.5px;
+  background: #e7a3a0;
+  transform-origin: top;
+  animation: nb-margin 1.2s 0.3s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+@keyframes nb-margin {
+  from {
+    transform: scaleY(0);
+  }
+}
+/* Everything on the sheet sits on the rules: heights are whole rules. */
+.nb-sheet {
+  padding: 0 clamp(20px, 5vw, 64px) calc(var(--rule) * 2) calc(var(--margin) + clamp(20px, 3vw, 40px));
+}
+.nb-row {
+  height: var(--rule);
+  line-height: var(--rule);
+}
+.nb-sheet > header {
+  height: calc(var(--rule) * 2);
+}
+.nb-grid {
+  display: grid;
+  gap: 0 clamp(32px, 6vw, 96px);
+  padding-top: calc(var(--rule) * 2);
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  align-items: start;
+}
+.nb-title {
+  font-size: clamp(3rem, 7.4vw, 6.6rem);
+  line-height: calc(var(--rule) * 3);
+}
+.nb-title > span {
+  /* drop each line onto its rule */
+  transform: translateY(calc(var(--rule) * 0.42));
+}
+.nb-body {
+  font-size: 19px;
+  line-height: var(--rule);
+}
+.nb-side {
+  padding-top: calc(var(--rule) * 1);
+}
+.nb-side li,
+.nb-side h2,
+.nb-body,
+.nb-hint {
+  /* sit the text on its rule rather than between two */
+  transform: translateY(calc(var(--rule) * 0.25));
+}
+.nb-slot {
+  height: calc(var(--rule) * 2);
+}
+.nb-tick {
+  stroke-dasharray: 20;
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+  transition-delay: var(--d, 0ms);
+}
+.nb-strike {
+  transform-origin: left;
+  transition: transform 0.5s cubic-bezier(0.65, 0, 0.35, 1);
+  transition-delay: var(--d, 0ms);
+}
+/* load: each line of the page settles onto its rule in turn */
+.nb-up {
+  animation: nb-up 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--i, 0) * 90ms + 500ms);
+}
+@keyframes nb-up {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+}
+@media (max-width: 860px) {
+  .nb-page {
+    --rule: 32px;
+    --margin: 28px;
+  }
+  .nb-grid {
+    grid-template-columns: minmax(0, 1fr);
+    padding-top: var(--rule);
+  }
+  .nb-title {
+    font-size: clamp(2.6rem, 12.5vw, 4.4rem);
+    line-height: calc(var(--rule) * 2);
+  }
+  .nb-title > span {
+    transform: translateY(calc(var(--rule) * 0.3));
+  }
+  .nb-body {
+    font-size: 17px;
+  }
+  .nb-side {
+    padding-top: var(--rule);
+  }
+}
+.nb-still .nb-rules,
+.nb-still .nb-margin,
+.nb-still .nb-up {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nb-rules,
+  .nb-margin,
+  .nb-up {
+    animation: none;
+  }
+  .nb-tick,
+  .nb-strike {
+    transition: none;
   }
 }

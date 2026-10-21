@@ -5,8 +5,8 @@ import { useRouter } from '../router'
 /**
  * Shared early-access logic for the Coming Soon design exploration.
  *
- * The handle rests on the **right** of a track and is dragged to the **left**
- * with mouse or touch to unlock. It springs back to the right when released
+ * The handle rests on the **left** of a track and is dragged to the **right**
+ * with mouse or touch to unlock. It springs back to the left when released
  * before the threshold, unlocks past ~82% of the travel, and supports keyboard
  * activation (Enter/→ slides it across). On unlock it reveals an invite-code
  * field that is validated by the real backend (`POST /api/early-access`), then
@@ -93,14 +93,14 @@ export function useEarlyAccess({ wipe }: Options) {
     dragHandlers.current = null
   }, [])
 
-  // End a drag: return the handle to rest (right), then unlock if it made it
-  // far enough left.
+  // End a drag: return the handle to rest (left), then unlock if it made it
+  // far enough right.
   const endDrag = useCallback(
     (unlock: boolean) => {
       draggingRef.current = false
       setDragging(false)
       removeDragListeners()
-      applyKnob(maxXRef.current)
+      applyKnob(0)
       if (unlock) setPhase('code')
     },
     [applyKnob, removeDragListeners],
@@ -124,7 +124,7 @@ export function useEarlyAccess({ wipe }: Options) {
         if (!draggingRef.current || !max) return
         const next = Math.min(max, Math.max(0, knobStart.current + (ev.clientX - startX.current)))
         applyKnob(next)
-        if (next <= max * 0.18) endDrag(true)
+        if (next >= max * 0.82) endDrag(true)
       }
       const up = () => {
         if (!draggingRef.current) return
@@ -139,8 +139,8 @@ export function useEarlyAccess({ wipe }: Options) {
   )
 
   // Measure the travel range (and re-measure on resize). The track only exists
-  // during the swipe phase. Layout effect so the handle is parked on the right
-  // before first paint — no flash of it starting on the left.
+  // during the swipe phase. Layout effect so the handle is parked on the left
+  // before first paint.
   useLayoutEffect(() => {
     if (phase !== 'swipe') return
     const track = trackRef.current
@@ -149,7 +149,7 @@ export function useEarlyAccess({ wipe }: Options) {
       const v = Math.max(0, track.clientWidth - 12 - 48)
       maxXRef.current = v
       setMaxX(v)
-      if (!draggingRef.current) applyKnob(v) // rest on the right
+      if (!draggingRef.current) applyKnob(Math.min(knobXRef.current, v))
     }
     measure()
     const ro = new ResizeObserver(measure)
@@ -160,16 +160,16 @@ export function useEarlyAccess({ wipe }: Options) {
   // Don't leave window listeners dangling if the screen unmounts mid-drag.
   useEffect(() => removeDragListeners, [removeDragListeners])
 
-  /* Keyboard path: slide the handle to the left, then reveal the field. */
+  /* Keyboard path: slide the handle to the right, then reveal the field. */
   const swipeByKeyboard = useCallback(() => {
     if (phase !== 'swipe') return
     draggingRef.current = false
     setDragging(false)
-    applyKnob(0)
+    applyKnob(maxXRef.current)
     window.setTimeout(
       () => {
         setPhase('code')
-        applyKnob(maxXRef.current)
+        applyKnob(0)
       },
       reduced ? 0 : 340,
     )
@@ -224,8 +224,8 @@ export function useEarlyAccess({ wipe }: Options) {
     isWrong: phase === 'wrong',
     isChecking: phase === 'checking',
     leaving: phase === 'leaving',
-    /** 0 → at rest (right), 1 → fully swiped left (unlocked). */
-    progress: maxX ? (maxX - knobX) / maxX : 0,
+    /** 0 → at rest (left), 1 → fully swiped right (unlocked). */
+    progress: maxX ? knobX / maxX : 0,
   }
 }
 
