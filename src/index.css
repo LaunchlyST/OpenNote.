@@ -1104,122 +1104,152 @@ html.lp-cursor-on * {
   }
 }
 
-/* ---- Coming Soon: loading screen ---------------------------------- */
-/* It is written on the page itself: no backdrop of its own, the paper,
-   rules and margin draw in behind it. */
-.nb-loader {
-  position: absolute;
+/* ---- Coming Soon: loading screen — "open your day" ---------------- */
+.nb-cover {
+  --cover: #121726;
+  --cover-ink: #f6f3ec;
+  position: fixed;
   inset: 0;
-  z-index: 40;
-  display: flex;
-  align-items: center;
-  padding: 0 clamp(20px, 5vw, 64px) 0 calc(var(--margin) + clamp(22px, 3vw, 44px));
+  z-index: 60;
   pointer-events: none;
 }
-.nb-loader-stack {
-  width: 100%;
-  max-width: 1180px;
-  transition:
-    opacity 0.5s ease,
-    transform 0.6s var(--ease-out),
-    filter 0.5s ease;
+.nb-cover-half {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 50%;
+  overflow: hidden;
+  background: var(--cover);
+  transition: transform 0.95s cubic-bezier(0.76, 0, 0.24, 1);
+  will-change: transform;
 }
-.nb-loader-out .nb-loader-stack {
-  opacity: 0;
-  transform: translateY(-22px);
-  filter: blur(8px);
+.nb-cover-top {
+  top: 0;
 }
-.nb-loader-label {
+.nb-cover-bottom {
+  bottom: 0;
+}
+/* each half holds a full-screen copy of the face, offset so the two line up */
+.nb-cover-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 100svh;
+  display: grid;
+  place-items: center;
+}
+.nb-cover-top .nb-cover-inner {
+  top: 0;
+}
+.nb-cover-bottom .nb-cover-inner {
+  bottom: 0;
+}
+.nb-stage-open .nb-cover-top {
+  transform: translateY(-101%);
+}
+.nb-stage-open .nb-cover-bottom {
+  transform: translateY(101%);
+}
+.nb-cover-face {
+  width: min(1100px, 100% - 48px);
+  color: var(--cover-ink);
+  animation: nb-in 0.6s var(--ease-out) both;
+}
+.nb-cover-label {
   display: flex;
   justify-content: space-between;
+  font-family: 'Geist', var(--font-sans);
   font-size: 13px;
   font-weight: 500;
-  letter-spacing: 0.01em;
-  color: var(--color-lp-body);
-  animation: nb-in 0.7s var(--ease-out) both;
+  letter-spacing: 0.02em;
+  opacity: 0.7;
 }
-.nb-loader-part {
-  color: #23314f;
-}
-.nb-loader-clock {
-  margin: 0.06em 0 0.12em -0.03em;
+.nb-cover-clock {
+  margin: 0.02em 0 0.08em -0.04em;
   font-family: var(--font-editorial);
   font-style: italic;
-  font-size: clamp(5.5rem, 17vw, 15rem);
-  line-height: 0.95;
-  letter-spacing: -0.03em;
-  color: #23314f;
+  font-size: clamp(6.5rem, 27vw, 24rem);
+  line-height: 0.9;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
-  animation: nb-in 0.8s 0.05s var(--ease-out) both;
+  white-space: nowrap;
 }
-.nb-loader-colon {
+.nb-cover-colon {
   display: inline-block;
   padding: 0 0.02em;
-  opacity: 0.5;
+  opacity: 0.45;
 }
-/* the day as a line: 24 hours, inked as they pass */
-.nb-loader-day {
+.nb-cover-day {
   position: relative;
   height: 1px;
-  margin-bottom: 40px;
-  background: var(--rule-ink);
+  margin-bottom: 28px;
+  background: rgba(246, 243, 236, 0.18);
 }
-.nb-loader-ink {
+.nb-cover-ink {
   position: absolute;
   left: 0;
   top: -1px;
   height: 3px;
   border-radius: 3px;
-  background: #23314f;
+  background: var(--cover-ink);
 }
-.nb-loader-nib {
+.nb-cover-day em {
   position: absolute;
-  top: -5px;
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
+  top: 12px;
   translate: -50% 0;
-  background: #23314f;
-  box-shadow: 0 0 0 4px var(--paper);
-}
-.nb-loader-tick {
-  position: absolute;
-  top: 6px;
-  width: 1px;
-  height: 6px;
-  translate: -50% 0;
-  background: #c3cddc;
-  transition: background-color 0.2s ease;
-}
-.nb-loader-tick-major {
-  height: 10px;
-}
-.nb-loader-tick-on {
-  background: #23314f;
-}
-.nb-loader-tick em {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  translate: -50% 0;
+  font-family: 'Geist', var(--font-sans);
   font-style: normal;
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--color-lp-muted);
+  opacity: 0.35;
+  transition: opacity 0.2s ease;
 }
-.nb-loader-tick-on em {
-  color: #23314f;
+.nb-cover-day em.nb-cover-on {
+  opacity: 0.9;
 }
-/* the page's words wait, frozen at their first frame, until the loader lifts;
-   the paper, rules and margin draw in underneath it straight away */
+/* the pen line that the cover opens along */
+.nb-cover-seam {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px);
+  height: 2px;
+  background: var(--cover-ink);
+  transform: scaleX(0);
+  transform-origin: left;
+  box-shadow: 0 0 18px rgba(246, 243, 236, 0.55);
+  transition:
+    transform 0.42s cubic-bezier(0.65, 0, 0.35, 1),
+    opacity 0.35s ease;
+}
+.nb-cover-seam::after {
+  content: '';
+  position: absolute;
+  right: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--cover-ink);
+}
+.nb-stage-seam .nb-cover-seam {
+  transform: scaleX(1);
+}
+.nb-stage-open .nb-cover-seam {
+  transform: scaleX(1);
+  opacity: 0;
+}
+/* the page's words wait, frozen at their first frame, until the cover opens */
 .nb-hold .nb-in,
 .nb-hold .nb-roll,
-.nb-hold .nb-highlight {
+.nb-hold .nb-highlight,
+.nb-hold .nb-rules,
+.nb-hold .nb-margin {
   animation-play-state: paused !important;
 }
 @media (max-width: 860px) {
-  .nb-loader-clock {
-    font-size: clamp(4.6rem, 26vw, 8rem);
+  .nb-cover-clock {
+    font-size: clamp(5rem, 34vw, 10rem);
   }
 }

@@ -166,8 +166,9 @@ export function ComingSoon() {
 
 /* ------------------------------------------------------------ loader --- */
 
-const COUNT_MS = 1700
-const HOLD_MS = 420
+const COUNT_MS = 1500
+const HOLD_MS = 260
+const SEAM_MS = 420
 
 function dayPart(minutes: number) {
   const h = minutes / 60
@@ -181,11 +182,11 @@ function dayPart(minutes: number) {
 const pad = (n: number) => String(n).padStart(2, '0')
 
 /**
- * The loading screen: it loads the visitor's day. Written on the page itself
- * (the rules draw in behind it), a large italic clock counts from 00:00 to
- * the time it is now, while a pen line inks a 24-hour timeline along one of
- * the rules and the hour ticks fill in. It rests on the current time for a
- * beat, then lifts away and the headline rolls onto the same page.
+ * The loading screen — "open your day". An ink cover with a huge clock that
+ * counts from 00:00 to the visitor's own time while their day fills a
+ * timeline. On arrival a pen line is drawn across the middle, and the cover
+ * splits open along it like a notebook, cutting the clock in two and
+ * revealing the page, where the headline rolls in.
  */
 function Loader({ onReveal }: { onReveal: () => void }) {
   const [target] = useState(() => {
@@ -193,8 +194,7 @@ function Loader({ onReveal }: { onReveal: () => void }) {
     return d.getHours() * 60 + d.getMinutes()
   })
   const [mins, setMins] = useState(0)
-  const [leaving, setLeaving] = useState(false)
-  const [gone, setGone] = useState(false)
+  const [stage, setStage] = useState<'count' | 'seam' | 'open' | 'gone'>('count')
   const revealRef = useRef(onReveal)
 
   useEffect(() => {
@@ -207,8 +207,8 @@ function Loader({ onReveal }: { onReveal: () => void }) {
     const start = performance.now()
     const frame = (now: number) => {
       const x = Math.min(1, (now - start) / COUNT_MS)
-      // ease in-out: the clock gathers speed through the day, then settles on now
-      const e = x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
+      // fast through the night and morning, braking hard onto "now"
+      const e = 1 - Math.pow(1 - x, 4)
       setMins(Math.round(e * target))
       if (x < 1) {
         raf = requestAnimationFrame(frame)
@@ -216,9 +216,14 @@ function Loader({ onReveal }: { onReveal: () => void }) {
       }
       timers.push(
         window.setTimeout(() => {
-          setLeaving(true)
-          revealRef.current()
-          timers.push(window.setTimeout(() => setGone(true), 650))
+          setStage('seam')
+          timers.push(
+            window.setTimeout(() => {
+              setStage('open')
+              revealRef.current()
+              timers.push(window.setTimeout(() => setStage('gone'), 1000))
+            }, SEAM_MS),
+          )
         }, HOLD_MS),
       )
     }
@@ -229,35 +234,43 @@ function Loader({ onReveal }: { onReveal: () => void }) {
     }
   }, [target])
 
-  if (gone) return null
-  const done = mins === target
+  if (stage === 'gone') return null
   const at = (mins / 1440) * 100
-  return (
-    <div role="status" aria-label="Loading your day" className={cn('nb-loader', leaving && 'nb-loader-out')}>
-      <div className="nb-loader-stack">
-        <p aria-hidden="true" className="nb-loader-label">
-          <span>{done ? 'Now' : 'Loading your day'}</span>
-          <span className="nb-loader-part">{dayPart(mins)}</span>
-        </p>
-        <p aria-hidden="true" className="nb-loader-clock">
-          {pad(Math.floor(mins / 60))}
-          <span className="nb-loader-colon">:</span>
-          {pad(mins % 60)}
-        </p>
-        <div aria-hidden="true" className="nb-loader-day">
-          <span className="nb-loader-ink" style={{ width: `${at}%` }} />
-          <span className="nb-loader-nib" style={{ left: `${at}%` }} />
-          {Array.from({ length: 25 }, (_, h) => (
-            <span
-              key={h}
-              className={cn('nb-loader-tick', h % 6 === 0 && 'nb-loader-tick-major', h * 60 <= mins && 'nb-loader-tick-on')}
-              style={{ left: `${(h / 24) * 100}%` }}
-            >
-              {h % 6 === 0 && <em>{pad(h)}</em>}
-            </span>
-          ))}
-        </div>
+  const done = mins === target
+
+  // The same face is painted in both halves; each half shows its own side
+  // of the seam, so splitting the cover splits the clock.
+  const face = (
+    <div className="nb-cover-face">
+      <p className="nb-cover-label">
+        <span>{done ? 'Now' : 'Loading your day'}</span>
+        <span>{dayPart(mins)}</span>
+      </p>
+      <p className="nb-cover-clock">
+        {pad(Math.floor(mins / 60))}
+        <span className="nb-cover-colon">:</span>
+        {pad(mins % 60)}
+      </p>
+      <div className="nb-cover-day">
+        <span className="nb-cover-ink" style={{ width: `${at}%` }} />
+        {[0, 6, 12, 18, 24].map((h) => (
+          <em key={h} className={cn(h * 60 <= mins && 'nb-cover-on')} style={{ left: `${(h / 24) * 100}%` }}>
+            {pad(h)}
+          </em>
+        ))}
       </div>
+    </div>
+  )
+
+  return (
+    <div role="status" aria-label="Loading your day" className={cn('nb-cover', `nb-stage-${stage}`)}>
+      <div aria-hidden="true" className="nb-cover-half nb-cover-top">
+        <div className="nb-cover-inner">{face}</div>
+      </div>
+      <div aria-hidden="true" className="nb-cover-half nb-cover-bottom">
+        <div className="nb-cover-inner">{face}</div>
+      </div>
+      <span aria-hidden="true" className="nb-cover-seam" />
     </div>
   )
 }
