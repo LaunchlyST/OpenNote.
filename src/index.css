@@ -792,6 +792,19 @@ html.lp-cursor-on * {
     padding-top: max(calc(var(--rule) * 2), round(down, calc((100svh - var(--rule) * 17) / 2), var(--rule)));
   }
 }
+/* On desktop the checklist hangs under the Date field, like a note in the
+   corner of the page, leaving the headline the full width. */
+@media (min-width: 861px) {
+  .nb-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .nb-side {
+    position: absolute;
+    top: calc(var(--rule) * 3);
+    right: clamp(20px, 5vw, 64px);
+    width: 300px;
+  }
+}
 
 /* ---- headline: Geist over an Instrument Serif italic -------------- */
 .nb-title {
