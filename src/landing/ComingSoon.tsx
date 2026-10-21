@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, Pause, RotateCcw } from 'lucide-react'
 import { cn } from '../lib/id'
 import { Logo, ButtonArrow } from './components/primitives'
 import { SITE, useDocumentMeta } from './seo'
@@ -40,6 +40,8 @@ export function ComingSoon() {
   useDocumentMeta(`Coming Soon — ${SITE.name}`, SITE.description)
   const ea = useEarlyAccess({ wipe: WIPE })
   const [date, setDate] = useState('')
+  // A short loader plays on every load; the page's entrance waits for it.
+  const [ready, setReady] = useState(ea.reduced)
   // Every load replays the finished items being ticked off.
   const [ticked, setTicked] = useState(false)
   const signup = useRef<HTMLDivElement | null>(null)
@@ -51,9 +53,10 @@ export function ComingSoon() {
   }, [])
 
   useEffect(() => {
+    if (!ready) return
     const id = window.setTimeout(() => setTicked(true), ea.reduced ? 0 : 60)
     return () => window.clearTimeout(id)
-  }, [ea.reduced])
+  }, [ready, ea.reduced])
 
   /** "Join the waitlist" takes the visitor to the slider. */
   const goToSignup = () => {
@@ -67,7 +70,8 @@ export function ComingSoon() {
   }
 
   return (
-    <div className={cn('nb-page relative min-h-svh overflow-hidden text-lp-ink', ea.reduced && 'nb-still')}>
+    <div className={cn('nb-page relative min-h-svh overflow-hidden text-lp-ink', ea.reduced && 'nb-still', !ready && 'nb-hold')}>
+      {!ea.reduced && <Loader onReveal={() => setReady(true)} />}
       <div aria-hidden="true" className="nb-paper pointer-events-none absolute inset-0" />
       <div aria-hidden="true" className="nb-rules pointer-events-none absolute inset-x-0 bottom-0" />
       <div aria-hidden="true" className="nb-margin pointer-events-none absolute inset-y-0" />
@@ -156,6 +160,96 @@ export function ComingSoon() {
           </section>
         </main>
       </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------ loader --- */
+
+const LOAD_MS = 1500
+
+/**
+ * The loading screen shown on every load: a counter, a line that grows with
+ * it and a lighter field behind the line. The button pauses it (the screen
+ * turns orange and the line catches a little knot at its tip) and resumes
+ * it. At 100% the screen lifts away and the page's own entrance begins.
+ */
+function Loader({ onReveal }: { onReveal: () => void }) {
+  const [pct, setPct] = useState(0)
+  const [paused, setPaused] = useState(false)
+  const [leaving, setLeaving] = useState(false)
+  const [gone, setGone] = useState(false)
+  const pausedRef = useRef(false)
+  const revealRef = useRef(onReveal)
+
+  useEffect(() => {
+    revealRef.current = onReveal
+  }, [onReveal])
+
+  useEffect(() => {
+    pausedRef.current = paused
+  }, [paused])
+
+  useEffect(() => {
+    let raf = 0
+    let last = performance.now()
+    let t = 0
+    const timers: number[] = []
+    const frame = (now: number) => {
+      const dt = now - last
+      last = now
+      if (!pausedRef.current) t = Math.min(LOAD_MS, t + dt)
+      // eased, so it slows a little near the end like a real load
+      const x = t / LOAD_MS
+      setPct(Math.round(100 * (1 - Math.pow(1 - x, 2.2))))
+      if (t < LOAD_MS) {
+        raf = requestAnimationFrame(frame)
+        return
+      }
+      timers.push(
+        window.setTimeout(() => {
+          setLeaving(true)
+          revealRef.current()
+          timers.push(window.setTimeout(() => setGone(true), 750))
+        }, 220),
+      )
+    }
+    raf = requestAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(raf)
+      timers.forEach((id) => window.clearTimeout(id))
+    }
+  }, [])
+
+  if (gone) return null
+  return (
+    <div
+      role="status"
+      aria-label={`Loading Desknoty, ${pct}%`}
+      className={cn('nb-loader', paused && 'nb-loader-paused', leaving && 'nb-loader-out')}
+    >
+      <div aria-hidden="true" className="nb-loader-field" style={{ width: `${pct}%` }} />
+      <p aria-hidden="true" className="nb-loader-count">
+        {pct}
+        <span>%</span>
+      </p>
+      <svg aria-hidden="true" className="nb-loader-line" preserveAspectRatio="none">
+        <line x1="0" y1="50%" x2={`${pct}%`} y2="50%" />
+      </svg>
+      <span aria-hidden="true" className="nb-loader-knot" style={{ left: `${pct}%` }}>
+        <svg viewBox="0 0 44 40" width="44" height="40">
+          <path d="M0 20 h10 c4 0 4 -16 9 -16 s3 30 8 30 s3 -14 8 -14 h9" />
+        </svg>
+      </span>
+      <button
+        type="button"
+        onClick={() => setPaused((p) => !p)}
+        disabled={leaving}
+        aria-label={paused ? 'Resume loading' : 'Pause loading'}
+        className="nb-loader-button"
+      >
+        {paused ? <RotateCcw className="h-[18px] w-[18px]" strokeWidth={2} /> : <Pause className="h-[16px] w-[16px]" strokeWidth={2.2} />}
+      </button>
     </div>
   )
 }
