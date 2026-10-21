@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { cn } from '../lib/id'
@@ -10,15 +10,15 @@ import type { EarlyAccess } from './useEarlyAccess'
 /**
  * Coming Soon — a page from the notebook.
  *
- * Desknoty is a notebook, so the screen is a ruled page: pale blue rules, a
- * red margin, and every line of type sitting on the rules. Beside the
- * headline is today's entry, a to-do list for the launch itself. Two items
- * are already ticked; the last one, "Open the doors", ticks itself when a
- * visitor slides the invite handle.
+ * The screen is a ruled sheet: warm paper with a fine grain, pale blue rules,
+ * a double red margin and a "Date" field in the corner. Every line of type
+ * sits on a rule. The headline is set in Geist with an Instrument Serif
+ * italic second line, and rolls up through a mask on every load, followed by
+ * the description, the checklist and the invite slider.
  *
- * One typeface (Inter, as on the landing page), ink on paper, no ornament.
- * Motion is what a page does: the rules draw across on load, the margin runs
- * down, the finished items tick in order.
+ * The checklist is for the visitor: two items tick themselves off on load;
+ * "Join the waitlist" stays open and points at the slider. Nobody is ever
+ * marked as signed up.
  *
  * Early access: the handle rests on the left of the ink track and is dragged
  * RIGHT (or Enter / →); the invite code is verified by the backend before the
@@ -28,95 +28,131 @@ import type { EarlyAccess } from './useEarlyAccess'
 const WIPE = '#191919'
 
 const TODO = [
-  { text: 'Build the calendar', done: true },
-  { text: 'Add notes to every day', done: true },
-  { text: 'Open the doors', done: false },
+  { text: 'Think of your ideas', done: true },
+  { text: 'Plan what you want to achieve', done: true },
 ]
+
+/** When each finished item gets its tick and its line, in ms after load. */
+const TICK_AT = [1250, 1600]
+const STRIKE_DELAY = 220
 
 export function ComingSoon() {
   useDocumentMeta(`Coming Soon — ${SITE.name}`, SITE.description)
   const ea = useEarlyAccess({ wipe: WIPE })
-  const unlocked = ea.phase !== 'swipe'
   const [date, setDate] = useState('')
   // Every load replays the finished items being ticked off.
   const [ticked, setTicked] = useState(false)
+  const signup = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    setDate(new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))
+    document.body.classList.add('lp-body')
+    return () => document.body.classList.remove('lp-body')
+  }, [])
 
   useEffect(() => {
     const id = window.setTimeout(() => setTicked(true), ea.reduced ? 0 : 60)
     return () => window.clearTimeout(id)
   }, [ea.reduced])
 
-  useEffect(() => {
-    setDate(
-      new Date().toLocaleDateString('en-GB', {
-        weekday: 'short',
-        day: 'numeric',
-        month: 'short',
-      }),
-    )
-    document.body.classList.add('lp-body')
-    return () => document.body.classList.remove('lp-body')
-  }, [])
+  /** "Join the waitlist" takes the visitor to the slider. */
+  const goToSignup = () => {
+    const box = signup.current
+    if (!box) return
+    box.scrollIntoView({ behavior: ea.reduced ? 'auto' : 'smooth', block: 'center' })
+    box.querySelector<HTMLElement>('[role="button"], input')?.focus({ preventScroll: true })
+    box.classList.remove('nb-nudge')
+    void box.offsetWidth
+    box.classList.add('nb-nudge')
+  }
 
   return (
     <div className={cn('nb-page relative min-h-svh overflow-hidden text-lp-ink', ea.reduced && 'nb-still')}>
-      <div aria-hidden="true" className="nb-rules pointer-events-none absolute inset-0" />
+      <div aria-hidden="true" className="nb-paper pointer-events-none absolute inset-0" />
+      <div aria-hidden="true" className="nb-rules pointer-events-none absolute inset-x-0 bottom-0" />
       <div aria-hidden="true" className="nb-margin pointer-events-none absolute inset-y-0" />
 
       <div className="nb-sheet relative">
-        <header className="nb-row flex items-center justify-between">
+        <header className="nb-head nb-in flex items-end justify-between" style={{ '--t': '80ms' } as CSSProperties}>
           <Logo />
-          <span className="text-[15px] text-lp-body tabular-nums">{date}</span>
+          <p className="nb-date flex items-baseline gap-2.5">
+            <span className="text-[12px] font-medium tracking-[0.02em] text-lp-muted">Date</span>
+            <span className="nb-date-field font-editorial text-[19px] italic">{date || ' '}</span>
+          </p>
         </header>
 
         <main className="nb-grid">
           <section aria-labelledby="nb-title" className="nb-main">
-            <h1 id="nb-title" className="nb-title font-semibold tracking-[-0.045em]">
-              <span className="nb-up block" style={{ '--i': 0 } as CSSProperties}>
-                A notebook
+            <h1 id="nb-title" className="nb-title">
+              <span className="nb-mask">
+                <span className="nb-roll nb-line-a" style={{ '--t': '250ms' } as CSSProperties}>
+                  Your day
+                </span>
               </span>
-              <span className="nb-up block" style={{ '--i': 1 } as CSSProperties}>
-                for your days.
+              <span className="nb-mask">
+                <span className="nb-roll nb-line-b" style={{ '--t': '420ms' } as CSSProperties}>
+                  starts here.
+                </span>
               </span>
             </h1>
-            <p className="nb-up nb-body mt-[var(--rule)] max-w-[34rem]" style={{ '--i': 2 } as CSSProperties}>
-              Notes, to-dos and a calendar on one page. It’s free, and it opens soon.
+
+            <p className="nb-in nb-body nb-on-rule" style={{ '--t': '700ms' } as CSSProperties}>
+              A simpler way to manage your notes, tasks and daily plans.
             </p>
-            <div className="nb-up mt-[var(--rule)] max-w-[400px]" style={{ '--i': 3 } as CSSProperties}>
+
+            <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1150ms' } as CSSProperties}>
               <Control ea={ea} />
             </div>
           </section>
 
           <section aria-labelledby="nb-todo" className="nb-side">
-            <h2 id="nb-todo" className="nb-row nb-up text-[15px] font-semibold" style={{ '--i': 2 } as CSSProperties}>
+            <h2
+              id="nb-todo"
+              className="nb-row nb-on-rule nb-in text-[13px] font-semibold tracking-[0.01em] text-lp-body"
+              style={{ '--t': '850ms' } as CSSProperties}
+            >
               Before launch
             </h2>
-            <ul>
+            <ol>
               {TODO.map((item, i) => {
-                const done = (item.done && ticked) || unlocked
+                const done = item.done && ticked
+                const at = ea.reduced ? 0 : TICK_AT[i]
                 return (
                   <li
                     key={item.text}
-                    className="nb-row nb-up flex items-center gap-3 text-[17px]"
-                    style={{ '--i': 3 + i } as CSSProperties}
+                    className="nb-row nb-in flex items-center gap-3"
+                    style={{ '--t': `${930 + i * 80}ms` } as CSSProperties}
                   >
-                    <Box done={done} delay={item.done && !unlocked ? 1300 + i * 900 : 250} />
-                    <span
-                      className="relative"
-                      style={{ '--d': `${item.done && !unlocked ? 1650 + i * 900 : 600}ms` } as CSSProperties}
-                    >
-                      <span className={cn('nb-fade transition-colors duration-500', done && 'text-lp-muted')}>{item.text}</span>
+                    <Box done={done} delay={at} />
+                    <span className="nb-on-rule relative" style={{ '--d': `${at + STRIKE_DELAY}ms` } as CSSProperties}>
+                      <span className={cn('nb-fade', done && 'text-lp-muted')}>{item.text}</span>
                       <span
                         aria-hidden="true"
-                        className="nb-strike absolute top-1/2 left-[-2px] h-[1.5px] w-[calc(100%+4px)] bg-lp-ink"
-                        style={{ transform: done ? 'rotate(-0.8deg) scaleX(1)' : 'rotate(-0.8deg) scaleX(0)' }}
+                        className="nb-strike absolute top-[54%] left-[-3px] h-[1.6px] w-[calc(100%+6px)] rounded-full bg-lp-ink"
+                        style={{ transform: done ? 'rotate(-0.7deg) scaleX(1)' : 'rotate(-0.7deg) scaleX(0)' }}
                       />
                       <span className="sr-only">{done ? ' (done)' : ' (to do)'}</span>
                     </span>
                   </li>
                 )
               })}
-            </ul>
+              <li className="nb-row nb-in flex items-center gap-3" style={{ '--t': '1090ms' } as CSSProperties}>
+                <Box done={false} delay={0} />
+                <button
+                  type="button"
+                  onClick={goToSignup}
+                  className="nb-on-rule nb-waitlist group relative font-medium text-lp-ink"
+                >
+                  <span aria-hidden="true" className="nb-highlight" />
+                  <span className="relative">Join the waitlist</span>
+                  <ArrowRight
+                    aria-hidden="true"
+                    className="relative ml-1.5 inline h-[0.9em] w-[0.9em] -translate-y-px transition-transform duration-300 group-hover:translate-x-1"
+                  />
+                  <span className="sr-only"> (to do — go to the invite slider)</span>
+                </button>
+              </li>
+            </ol>
           </section>
         </main>
       </div>
@@ -124,31 +160,26 @@ export function ComingSoon() {
   )
 }
 
-/** A checkbox whose tick draws itself. */
+/** A notebook checkbox whose tick draws itself. */
 function Box({ done, delay }: { done: boolean; delay: number }) {
   return (
     <svg
       viewBox="0 0 20 20"
       aria-hidden="true"
       data-done={done}
-      className="nb-box h-[18px] w-[18px] shrink-0"
+      className="nb-box h-[17px] w-[17px] shrink-0"
       style={{ '--d': `${delay}ms` } as CSSProperties}
     >
-      <rect x="1" y="1" width="18" height="18" rx="4" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <rect x="1" y="1" width="18" height="18" rx="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
       <path
-        d="M5 10.5l3.2 3.2L15 6.8"
+        d="M5 10.6l3.1 3.1L15 6.9"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
         className="nb-tick"
-        style={
-          {
-            strokeDashoffset: done ? 0 : 20,
-            '--d': `${delay}ms`,
-          } as CSSProperties
-        }
+        style={{ strokeDashoffset: done ? 0 : 20 }}
       />
     </svg>
   )
@@ -175,45 +206,40 @@ function Control({ ea }: { ea: EarlyAccess }) {
               }
             }}
             onPointerDown={ea.onPointerDown}
-            className={cn(
-              'relative flex h-[60px] w-full cursor-grab touch-none items-center rounded-[12px] bg-lp-ink select-none active:cursor-grabbing',
-              ea.shake && 'cs-shake',
-            )}
+            className={cn('nb-track group relative flex h-[60px] w-full touch-none items-center select-none', ea.shake && 'cs-shake')}
           >
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute top-[6px] left-[6px] h-[48px] rounded-[8px] bg-white/[0.14]"
+              className="pointer-events-none absolute top-[6px] left-[6px] h-[48px] rounded-[10px] bg-white/[0.12]"
               style={{
                 width: ea.knobX + 48,
-                transition: ea.dragging ? 'none' : 'width .45s cubic-bezier(.34,1.4,.64,1)',
+                transition: ea.dragging ? 'none' : 'width .5s cubic-bezier(.22,1,.36,1)',
               }}
             />
             <span
               aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 pl-12 text-center text-[15px] font-medium text-white"
+              className="pointer-events-none absolute inset-x-0 pl-12 text-center text-[15px] font-medium tracking-[-0.005em] text-white"
               style={{ opacity: Math.max(0, 1 - passed * 1.8) }}
             >
               Slide to enter with an invite
             </span>
             <div
               aria-hidden="true"
-              className="absolute top-[6px] left-[6px] grid h-[48px] w-[48px] place-items-center rounded-[8px] bg-white text-lp-ink"
+              className="absolute top-[6px] left-[6px]"
               style={{
                 transform: `translateX(${ea.knobX}px)`,
-                transition: ea.dragging ? 'none' : 'transform .45s cubic-bezier(.34,1.4,.64,1)',
+                transition: ea.dragging ? 'none' : 'transform .5s cubic-bezier(.22,1,.36,1)',
               }}
             >
-              <ArrowRight className="h-5 w-5" strokeWidth={2.2} />
+              <span className="nb-knob grid h-[48px] w-[48px] place-items-center rounded-[10px] bg-white text-lp-ink">
+                <ArrowRight className="h-[18px] w-[18px]" strokeWidth={2.2} />
+              </span>
             </div>
           </div>
         ) : (
           <form
             onSubmit={ea.submit}
-            className={cn(
-              'cs-pop flex h-[60px] w-full items-center gap-1.5 rounded-[12px] border-[1.5px] bg-white p-[5px] focus-within:border-lp-ink',
-              ea.isWrong ? 'border-[#c02a21]' : 'border-lp-ink/25',
-              ea.shake && 'cs-shake',
-            )}
+            className={cn('nb-form cs-pop flex h-[60px] w-full items-center gap-1.5 p-[6px]', ea.isWrong && 'nb-form-wrong', ea.shake && 'cs-shake')}
           >
             <input
               value={ea.code}
@@ -222,7 +248,7 @@ function Control({ ea }: { ea: EarlyAccess }) {
                 if (ea.isWrong) ea.setPhase('code')
               }}
               disabled={ea.isChecking || ea.leaving}
-              placeholder="Invite code"
+              placeholder="Your invite code"
               aria-label="Invite code"
               aria-invalid={ea.isWrong}
               aria-describedby={ea.isWrong ? errorId : undefined}
@@ -230,13 +256,13 @@ function Control({ ea }: { ea: EarlyAccess }) {
               autoCapitalize="off"
               spellCheck={false}
               autoFocus
-              className="h-full min-w-0 flex-1 bg-transparent px-3 text-[16px] text-lp-ink placeholder:text-lp-muted"
+              className="h-full min-w-0 flex-1 bg-transparent px-3.5 text-[16px] text-lp-ink placeholder:text-lp-muted"
               style={{ outline: 'none' }}
             />
             <button
               type="submit"
               disabled={ea.isChecking || ea.leaving}
-              className="group/btn inline-flex h-[46px] shrink-0 items-center gap-2 rounded-[8px] bg-lp-ink px-4 text-[15px] font-medium text-white transition-colors hover:bg-lp-ink-3 active:translate-y-px disabled:opacity-70"
+              className="nb-submit group/btn inline-flex h-[48px] shrink-0 items-center gap-2 rounded-[10px] px-4.5 text-[15px] font-medium text-white disabled:opacity-70"
             >
               {ea.isChecking ? 'Checking…' : ea.leaving ? 'Opening…' : 'Enter'}
               <ButtonArrow />
@@ -245,13 +271,9 @@ function Control({ ea }: { ea: EarlyAccess }) {
         )}
       </div>
 
-      <p
-        className="nb-row nb-hint text-[15px] text-lp-body"
-        role={ea.isWrong ? 'alert' : undefined}
-        id={ea.isWrong ? errorId : undefined}
-      >
+      <p className="nb-row nb-hint nb-on-rule text-[14px] text-lp-body" role={ea.isWrong ? 'alert' : undefined} id={ea.isWrong ? errorId : undefined}>
         {ea.isWrong ? (
-          <span className="text-[#c02a21]">That code didn’t work. Check it and try again.</span>
+          <span className="text-[#b42318]">That code didn’t work. Check it and try again.</span>
         ) : ea.phase === 'swipe' ? (
           'Invite only for now.'
         ) : (

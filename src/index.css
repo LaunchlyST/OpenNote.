@@ -712,88 +712,254 @@ html.lp-cursor-on * {
 /* ---- Coming Soon: a ruled notebook page --------------------------- */
 .nb-page {
   --rule: 36px;
-  --margin: clamp(56px, 9vw, 128px);
-  background: #fbfbf9;
+  --margin: clamp(64px, 9vw, 132px);
+  --paper: #faf8f4;
+  --rule-ink: #dbe3ee;
+  --margin-ink: #e5a59e;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--paper);
+  font-family: 'Geist', var(--font-sans);
+  font-feature-settings: 'ss01', 'cv11';
+}
+/* a fine paper grain: present up close, invisible at a glance */
+.nb-paper {
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.45 0 0 0 0 0.4 0 0 0 0 0.32 0 0 0 0.07 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)'/%3E%3C/svg%3E");
 }
 .nb-rules {
-  top: calc(var(--rule) * 2);
-  background-image: linear-gradient(to bottom, transparent calc(var(--rule) - 1px), #cfdcef calc(var(--rule) - 1px));
+  top: calc(var(--rule) * 3);
+  background-image: linear-gradient(to bottom, transparent calc(var(--rule) - 1px), var(--rule-ink) calc(var(--rule) - 1px));
   background-size: 100% var(--rule);
-  animation: nb-rules 1.4s cubic-bezier(0.65, 0, 0.35, 1) both;
+  /* the heavier header rule, as on a real exercise-book page */
+  box-shadow: inset 0 1.5px 0 #b9c8dd;
+  animation: nb-rules 1s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 @keyframes nb-rules {
   from {
     clip-path: inset(0 100% 0 0);
   }
-  to {
-    clip-path: inset(0 0 0 0);
-  }
 }
+/* the double red margin */
 .nb-margin {
   left: var(--margin);
-  width: 1.5px;
-  background: #e7a3a0;
+  width: 4px;
+  border-left: 1px solid var(--margin-ink);
+  border-right: 1px solid var(--margin-ink);
+  opacity: 0.85;
   transform-origin: top;
-  animation: nb-margin 1.2s 0.3s cubic-bezier(0.65, 0, 0.35, 1) both;
+  animation: nb-margin 1s 0.15s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 @keyframes nb-margin {
   from {
     transform: scaleY(0);
   }
 }
+
 /* Everything on the sheet sits on the rules: heights are whole rules. */
 .nb-sheet {
-  padding: 0 clamp(20px, 5vw, 64px) calc(var(--rule) * 2) calc(var(--margin) + clamp(20px, 3vw, 40px));
+  padding: 0 clamp(20px, 5vw, 64px) calc(var(--rule) * 2) calc(var(--margin) + clamp(22px, 3vw, 44px));
+}
+.nb-head {
+  height: calc(var(--rule) * 3);
+  padding-bottom: 14px;
+}
+.nb-date-field {
+  min-width: 8.5rem;
+  padding: 0 0.15rem 1px;
+  border-bottom: 1px solid #b9c8dd;
+  color: #2b3a55;
+  text-align: center;
 }
 .nb-row {
   height: var(--rule);
   line-height: var(--rule);
 }
-.nb-sheet > header {
-  height: calc(var(--rule) * 2);
+.nb-on-rule {
+  /* sit text on its rule rather than between two */
+  transform: translateY(calc(var(--rule) * 0.24));
 }
 .nb-grid {
   display: grid;
-  gap: 0 clamp(32px, 6vw, 96px);
+  gap: 0 clamp(40px, 7vw, 120px);
   padding-top: calc(var(--rule) * 2);
-  grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
+  grid-template-columns: minmax(0, 1fr) minmax(250px, 320px);
   align-items: start;
   max-width: 1180px;
 }
 @media (min-width: 861px) and (min-height: 760px) {
   .nb-grid {
-    /* centre the entry on tall screens, still landing on a rule */
-    padding-top: max(calc(var(--rule) * 2), round(down, calc((100svh - var(--rule) * 16) / 2), var(--rule)));
+    padding-top: max(calc(var(--rule) * 2), round(down, calc((100svh - var(--rule) * 17) / 2), var(--rule)));
   }
 }
+
+/* ---- headline: Geist over an Instrument Serif italic -------------- */
 .nb-title {
-  font-size: clamp(3rem, 7.4vw, 6.6rem);
+  margin: 0;
+}
+.nb-mask {
+  display: block;
+  overflow: hidden;
+  /* room for descenders below the line without breaking the rhythm */
+  --tail: var(--rule);
+  height: calc(var(--rule) * 3 + var(--tail));
+  margin-bottom: calc(var(--tail) * -1);
+}
+.nb-roll {
+  display: block;
+  white-space: nowrap;
+  transform-origin: 0% 100%;
+  translate: 0 calc(var(--rule) * 0.62);
+  animation: nb-roll 1.15s var(--ease-out) both;
+  animation-delay: var(--t, 0ms);
+}
+.nb-line-a {
+  font-size: clamp(3.4rem, 7.6vw, 7rem);
   line-height: calc(var(--rule) * 3);
+  font-weight: 600;
+  letter-spacing: -0.058em;
+  /* Geist's own optical touches: tighter apostrophes and a single-storey look */
+  font-kerning: normal;
 }
-.nb-title > span {
-  /* drop each line onto its rule */
-  transform: translateY(calc(var(--rule) * 0.42));
+.nb-line-b {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-weight: 400;
+  font-size: clamp(3.8rem, 8.6vw, 8rem);
+  line-height: calc(var(--rule) * 3);
+  letter-spacing: -0.03em;
+  color: #23314f;
+  padding-left: 0.04em;
 }
+@keyframes nb-roll {
+  from {
+    transform: translateY(105%) rotate(5deg);
+    opacity: 0;
+    filter: blur(10px);
+  }
+  55% {
+    filter: blur(0);
+  }
+  to {
+    transform: none;
+    opacity: 1;
+    filter: none;
+  }
+}
+
 .nb-body {
+  margin-top: var(--rule);
+  max-width: 32rem;
+  text-wrap: balance;
   font-size: 19px;
   line-height: var(--rule);
+  letter-spacing: -0.012em;
+  color: #3a3a37;
 }
-.nb-side {
-  padding-top: calc(var(--rule) * 1);
-}
-.nb-side li,
-.nb-side h2,
-.nb-body,
-.nb-hint {
-  /* sit the text on its rule rather than between two */
-  transform: translateY(calc(var(--rule) * 0.25));
+.nb-signup {
+  margin-top: var(--rule);
+  max-width: 400px;
+  border-radius: 14px;
 }
 .nb-slot {
   height: calc(var(--rule) * 2);
 }
+
+/* ---- the invite control ------------------------------------------- */
+.nb-track {
+  cursor: grab;
+  border-radius: 14px;
+  background: #191919;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 10px 24px -14px rgba(25, 25, 25, 0.55);
+  transition: box-shadow 0.3s ease;
+  outline: none;
+}
+.nb-track:active {
+  cursor: grabbing;
+}
+.nb-track:hover {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.06) inset,
+    0 14px 30px -14px rgba(25, 25, 25, 0.6);
+}
+.nb-track:focus-visible {
+  box-shadow:
+    0 0 0 3px var(--paper),
+    0 0 0 5px #191919;
+}
+.nb-knob {
+  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.35);
+  transition: transform 0.35s var(--ease-out);
+}
+/* a small nudge on hover hints at the direction */
+.nb-track:hover .nb-knob {
+  transform: translateX(5px);
+}
+.nb-form {
+  border-radius: 14px;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 1.5px rgba(25, 25, 25, 0.16),
+    0 10px 24px -16px rgba(25, 25, 25, 0.35);
+  transition: box-shadow 0.25s ease;
+}
+.nb-form:focus-within {
+  box-shadow:
+    inset 0 0 0 1.5px #191919,
+    0 0 0 4px rgba(25, 25, 25, 0.08),
+    0 10px 24px -16px rgba(25, 25, 25, 0.35);
+}
+.nb-form-wrong,
+.nb-form-wrong:focus-within {
+  box-shadow:
+    inset 0 0 0 1.5px #b42318,
+    0 0 0 4px rgba(180, 35, 24, 0.1);
+}
+.nb-submit {
+  background: #191919;
+  transition:
+    background-color 0.2s ease,
+    transform 0.2s ease;
+}
+.nb-submit:hover {
+  background: #2f2f2c;
+}
+.nb-submit:active {
+  transform: translateY(1px);
+}
+.nb-submit:focus-visible {
+  outline: 2px solid #191919;
+  outline-offset: 2px;
+}
+.nb-nudge {
+  animation: nb-nudge 0.9s var(--ease-out);
+}
+@keyframes nb-nudge {
+  30% {
+    box-shadow: 0 0 0 6px rgba(190, 242, 100, 0.65);
+  }
+}
+
+/* ---- checklist ---------------------------------------------------- */
+.nb-side {
+  padding-top: var(--rule);
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+.nb-side ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.nb-box {
+  transform: translateY(calc(var(--rule) * 0.22));
+  color: #2b2b28;
+}
 .nb-tick {
   stroke-dasharray: 20;
-  transition: stroke-dashoffset 0.45s cubic-bezier(0.65, 0, 0.35, 1);
+  transition: stroke-dashoffset 0.42s cubic-bezier(0.65, 0, 0.35, 1);
   transition-delay: var(--d, 0ms);
 }
 .nb-box[data-done='true'] {
@@ -802,13 +968,14 @@ html.lp-cursor-on * {
 }
 @keyframes nb-press {
   40% {
-    transform: scale(0.82);
+    scale: 0.82;
   }
   75% {
-    transform: scale(1.08);
+    scale: 1.08;
   }
 }
 .nb-fade {
+  transition: color 0.5s ease;
   transition-delay: calc(var(--d, 0ms) + 250ms);
 }
 .nb-strike {
@@ -816,32 +983,82 @@ html.lp-cursor-on * {
   transition: transform 0.5s cubic-bezier(0.65, 0, 0.35, 1);
   transition-delay: var(--d, 0ms);
 }
-/* load: each line of the page settles onto its rule in turn */
-.nb-up {
-  animation: nb-up 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-  animation-delay: calc(var(--i, 0) * 90ms + 500ms);
+.nb-waitlist {
+  cursor: pointer;
+  border-radius: 4px;
+  outline: none;
 }
-@keyframes nb-up {
+.nb-waitlist:focus-visible {
+  box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px #191919;
+}
+/* a highlighter stroke, swiped once the list has settled */
+.nb-highlight {
+  position: absolute;
+  left: -4px;
+  right: -2px;
+  bottom: 0.08em;
+  height: 0.5em;
+  border-radius: 3px 6px 4px 7px;
+  background: #d9f99d;
+  transform-origin: left;
+  rotate: -1deg;
+  animation: nb-highlight 0.55s 2.05s cubic-bezier(0.65, 0, 0.35, 1) both;
+  transition: background-color 0.25s ease;
+}
+.nb-waitlist:hover .nb-highlight {
+  background: #c8f27a;
+}
+@keyframes nb-highlight {
   from {
-    opacity: 0;
-    translate: 0 14px;
+    transform: scaleX(0);
   }
 }
+
+/* ---- load sequence: parts arrive in order ------------------------- */
+.nb-in {
+  animation: nb-in 0.9s var(--ease-out) both;
+  animation-delay: var(--t, 0ms);
+}
+@keyframes nb-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
 @media (max-width: 860px) {
   .nb-page {
     --rule: 32px;
-    --margin: 28px;
+    --margin: 30px;
+  }
+  .nb-head {
+    height: calc(var(--rule) * 2);
+    padding-bottom: 8px;
+  }
+  .nb-rules {
+    top: calc(var(--rule) * 2);
+  }
+  .nb-date-field {
+    min-width: 0;
+    font-size: 17px;
   }
   .nb-grid {
     grid-template-columns: minmax(0, 1fr);
     padding-top: var(--rule);
   }
-  .nb-title {
-    font-size: clamp(2.6rem, 12.5vw, 4.4rem);
+  .nb-mask {
+    height: calc(var(--rule) * 2 + var(--tail));
+  }
+  .nb-line-a {
+    font-size: clamp(2.9rem, 14.5vw, 4.6rem);
     line-height: calc(var(--rule) * 2);
   }
-  .nb-title > span {
-    transform: translateY(calc(var(--rule) * 0.3));
+  .nb-line-b {
+    font-size: clamp(3.2rem, 16.5vw, 5.2rem);
+    line-height: calc(var(--rule) * 2);
+  }
+  .nb-roll {
+    translate: 0 calc(var(--rule) * 0.42);
   }
   .nb-body {
     font-size: 17px;
@@ -850,23 +1067,18 @@ html.lp-cursor-on * {
     padding-top: var(--rule);
   }
 }
+
+.nb-still *,
 .nb-still .nb-rules,
-.nb-still .nb-margin,
-.nb-still .nb-up {
-  animation: none;
+.nb-still .nb-margin {
+  animation: none !important;
+  transition: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
+  .nb-page *,
   .nb-rules,
-  .nb-margin,
-  .nb-up {
-    animation: none;
-  }
-  .nb-tick,
-  .nb-strike,
-  .nb-fade {
-    transition: none;
-  }
-  .nb-box[data-done='true'] {
-    animation: none;
+  .nb-margin {
+    animation: none !important;
+    transition: none !important;
   }
 }
