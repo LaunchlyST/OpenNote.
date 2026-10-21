@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { ArrowRight, Pause, RotateCcw } from 'lucide-react'
+import { ArrowRight } from 'lucide-react'
 import { cn } from '../lib/id'
 import { Logo, ButtonArrow } from './components/primitives'
 import { SITE, useDocumentMeta } from './seo'
@@ -166,20 +166,35 @@ export function ComingSoon() {
 
 /* ------------------------------------------------------------ loader --- */
 
-const LOAD_MS = 1500
+const COUNT_MS = 1700
+const HOLD_MS = 420
+
+function dayPart(minutes: number) {
+  const h = minutes / 60
+  if (h < 5) return 'Night'
+  if (h < 12) return 'Morning'
+  if (h < 17) return 'Afternoon'
+  if (h < 21) return 'Evening'
+  return 'Night'
+}
+
+const pad = (n: number) => String(n).padStart(2, '0')
 
 /**
- * The loading screen shown on every load: a counter, a line that grows with
- * it and a lighter field behind the line. The button pauses it (the screen
- * turns orange and the line catches a little knot at its tip) and resumes
- * it. At 100% the screen lifts away and the page's own entrance begins.
+ * The loading screen: it loads the visitor's day. Written on the page itself
+ * (the rules draw in behind it), a large italic clock counts from 00:00 to
+ * the time it is now, while a pen line inks a 24-hour timeline along one of
+ * the rules and the hour ticks fill in. It rests on the current time for a
+ * beat, then lifts away and the headline rolls onto the same page.
  */
 function Loader({ onReveal }: { onReveal: () => void }) {
-  const [pct, setPct] = useState(0)
-  const [paused, setPaused] = useState(false)
+  const [target] = useState(() => {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  })
+  const [mins, setMins] = useState(0)
   const [leaving, setLeaving] = useState(false)
   const [gone, setGone] = useState(false)
-  const pausedRef = useRef(false)
   const revealRef = useRef(onReveal)
 
   useEffect(() => {
@@ -187,22 +202,15 @@ function Loader({ onReveal }: { onReveal: () => void }) {
   }, [onReveal])
 
   useEffect(() => {
-    pausedRef.current = paused
-  }, [paused])
-
-  useEffect(() => {
     let raf = 0
-    let last = performance.now()
-    let t = 0
     const timers: number[] = []
+    const start = performance.now()
     const frame = (now: number) => {
-      const dt = now - last
-      last = now
-      if (!pausedRef.current) t = Math.min(LOAD_MS, t + dt)
-      // eased, so it slows a little near the end like a real load
-      const x = t / LOAD_MS
-      setPct(Math.round(100 * (1 - Math.pow(1 - x, 2.2))))
-      if (t < LOAD_MS) {
+      const x = Math.min(1, (now - start) / COUNT_MS)
+      // ease in-out: the clock gathers speed through the day, then settles on now
+      const e = x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
+      setMins(Math.round(e * target))
+      if (x < 1) {
         raf = requestAnimationFrame(frame)
         return
       }
@@ -210,8 +218,8 @@ function Loader({ onReveal }: { onReveal: () => void }) {
         window.setTimeout(() => {
           setLeaving(true)
           revealRef.current()
-          timers.push(window.setTimeout(() => setGone(true), 750))
-        }, 220),
+          timers.push(window.setTimeout(() => setGone(true), 650))
+        }, HOLD_MS),
       )
     }
     raf = requestAnimationFrame(frame)
@@ -219,37 +227,37 @@ function Loader({ onReveal }: { onReveal: () => void }) {
       cancelAnimationFrame(raf)
       timers.forEach((id) => window.clearTimeout(id))
     }
-  }, [])
+  }, [target])
 
   if (gone) return null
+  const done = mins === target
+  const at = (mins / 1440) * 100
   return (
-    <div
-      role="status"
-      aria-label={`Loading Desknoty, ${pct}%`}
-      className={cn('nb-loader', paused && 'nb-loader-paused', leaving && 'nb-loader-out')}
-    >
-      <div aria-hidden="true" className="nb-loader-field" style={{ width: `${pct}%` }} />
-      <p aria-hidden="true" className="nb-loader-count">
-        {pct}
-        <span>%</span>
-      </p>
-      <svg aria-hidden="true" className="nb-loader-line" preserveAspectRatio="none">
-        <line x1="0" y1="50%" x2={`${pct}%`} y2="50%" />
-      </svg>
-      <span aria-hidden="true" className="nb-loader-knot" style={{ left: `${pct}%` }}>
-        <svg viewBox="0 0 44 40" width="44" height="40">
-          <path d="M0 20 h10 c4 0 4 -16 9 -16 s3 30 8 30 s3 -14 8 -14 h9" />
-        </svg>
-      </span>
-      <button
-        type="button"
-        onClick={() => setPaused((p) => !p)}
-        disabled={leaving}
-        aria-label={paused ? 'Resume loading' : 'Pause loading'}
-        className="nb-loader-button"
-      >
-        {paused ? <RotateCcw className="h-[18px] w-[18px]" strokeWidth={2} /> : <Pause className="h-[16px] w-[16px]" strokeWidth={2.2} />}
-      </button>
+    <div role="status" aria-label="Loading your day" className={cn('nb-loader', leaving && 'nb-loader-out')}>
+      <div className="nb-loader-stack">
+        <p aria-hidden="true" className="nb-loader-label">
+          <span>{done ? 'Now' : 'Loading your day'}</span>
+          <span className="nb-loader-part">{dayPart(mins)}</span>
+        </p>
+        <p aria-hidden="true" className="nb-loader-clock">
+          {pad(Math.floor(mins / 60))}
+          <span className="nb-loader-colon">:</span>
+          {pad(mins % 60)}
+        </p>
+        <div aria-hidden="true" className="nb-loader-day">
+          <span className="nb-loader-ink" style={{ width: `${at}%` }} />
+          <span className="nb-loader-nib" style={{ left: `${at}%` }} />
+          {Array.from({ length: 25 }, (_, h) => (
+            <span
+              key={h}
+              className={cn('nb-loader-tick', h % 6 === 0 && 'nb-loader-tick-major', h * 60 <= mins && 'nb-loader-tick-on')}
+              style={{ left: `${(h / 24) * 100}%` }}
+            >
+              {h % 6 === 0 && <em>{pad(h)}</em>}
+            </span>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
