@@ -758,6 +758,13 @@ html.lp-cursor-on * {
   padding-top: calc(var(--rule) * 2);
   grid-template-columns: minmax(0, 1fr) minmax(220px, 300px);
   align-items: start;
+  max-width: 1180px;
+}
+@media (min-width: 861px) and (min-height: 760px) {
+  .nb-grid {
+    /* centre the entry on tall screens, still landing on a rule */
+    padding-top: max(calc(var(--rule) * 2), round(down, calc((100svh - var(--rule) * 16) / 2), var(--rule)));
+  }
 }
 .nb-title {
   font-size: clamp(3rem, 7.4vw, 6.6rem);
