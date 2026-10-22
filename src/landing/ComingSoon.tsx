@@ -313,7 +313,8 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
           />
         </label>
         <button type="submit" className="vx-cta" tabIndex={disabled ? -1 : 0} disabled={state === 'sending' || done}>
-          {state === 'sending' ? 'Joining…' : done ? 'Joined' : 'Join Waitlist'}
+          {state === 'sending' ? 'Joining…' : done ? 'Joined' : 'Join waitlist'}
+          {!done && <ArrowRight aria-hidden="true" className="h-[17px] w-[17px]" strokeWidth={2.4} />}
         </button>
       </form>
       {state === 'error' && (
