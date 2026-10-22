@@ -6,7 +6,6 @@ import { cn } from '../lib/id'
 import { Logo, ButtonArrow } from './components/primitives'
 import { SITE, useDocumentMeta } from './seo'
 import { useEarlyAccess } from './useEarlyAccess'
-import type { EarlyAccess } from './useEarlyAccess'
 
 /**
  * Coming Soon — a page from the notebook.
@@ -47,7 +46,6 @@ export function ComingSoon() {
   const [ticked, setTicked] = useState(false)
   const signup = useRef<HTMLDivElement | null>(null)
   const [joined, setJoined] = useState(false)
-  const [invite, setInvite] = useState(false)
 
   useEffect(() => {
     setDate(new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))
@@ -116,16 +114,6 @@ export function ComingSoon() {
 
             <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1000ms' } as CSSProperties}>
               <Waitlist joined={joined} onJoined={() => setJoined(true)} />
-            </div>
-
-            <div className="nb-in nb-invite" style={{ '--t': '1150ms' } as CSSProperties}>
-              {invite ? (
-                <Control ea={ea} />
-              ) : (
-                <button type="button" onClick={() => setInvite(true)} className="nb-or underline underline-offset-4 hover:text-lp-ink">
-                  Already have an invite code?
-                </button>
-              )}
             </div>
           </section>
 
@@ -423,105 +411,6 @@ function Waitlist({ joined, onJoined }: { joined: boolean; onJoined: () => void 
           ×
         </button>
       </div>
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------ control --- */
-
-function Control({ ea }: { ea: EarlyAccess }) {
-  const errorId = 'nb-invite-error'
-  const passed = ea.progress
-  return (
-    <div>
-      <div className="nb-slot">
-        {ea.phase === 'swipe' ? (
-          <div
-            ref={ea.trackRef}
-            role="button"
-            tabIndex={0}
-            aria-label="Enter with an invite — drag the handle right, or press Enter"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight') {
-                e.preventDefault()
-                ea.swipeByKeyboard()
-              }
-            }}
-            onPointerDown={ea.onPointerDown}
-            className={cn('nb-track group relative flex h-[60px] w-full touch-none items-center select-none', ea.shake && 'cs-shake')}
-          >
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute top-[6px] left-[6px] h-[48px] rounded-[10px] bg-white/[0.12]"
-              style={{
-                width: ea.knobX + 48,
-                transition: ea.dragging ? 'none' : 'width .5s cubic-bezier(.22,1,.36,1)',
-              }}
-            />
-            <span
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-x-0 pl-12 text-center text-[15px] font-medium tracking-[-0.005em] text-white"
-              style={{ opacity: Math.max(0, 1 - passed * 1.8) }}
-            >
-              Slide to enter with an invite
-            </span>
-            <div
-              aria-hidden="true"
-              className="absolute top-[6px] left-[6px]"
-              style={{
-                transform: `translateX(${ea.knobX}px)`,
-                transition: ea.dragging ? 'none' : 'transform .5s cubic-bezier(.22,1,.36,1)',
-              }}
-            >
-              <span className="nb-knob grid h-[48px] w-[48px] place-items-center rounded-[10px] bg-white text-lp-ink">
-                <ArrowRight className="h-[18px] w-[18px]" strokeWidth={2.2} />
-              </span>
-            </div>
-          </div>
-        ) : (
-          <form
-            onSubmit={ea.submit}
-            className={cn('nb-form cs-pop flex h-[60px] w-full items-center gap-1.5 p-[6px]', ea.isWrong && 'nb-form-wrong', ea.shake && 'cs-shake')}
-          >
-            <input
-              value={ea.code}
-              onChange={(e) => {
-                ea.setCode(e.target.value)
-                if (ea.isWrong) ea.setPhase('code')
-              }}
-              disabled={ea.isChecking || ea.leaving}
-              placeholder="Your invite code"
-              aria-label="Invite code"
-              aria-invalid={ea.isWrong}
-              aria-describedby={ea.isWrong ? errorId : undefined}
-              autoComplete="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              autoFocus
-              className="h-full min-w-0 flex-1 bg-transparent px-3.5 text-[16px] text-lp-ink placeholder:text-lp-muted"
-              style={{ outline: 'none' }}
-            />
-            <button
-              type="submit"
-              disabled={ea.isChecking || ea.leaving}
-              className="nb-submit group/btn inline-flex h-[48px] shrink-0 items-center gap-2 rounded-[10px] px-4.5 text-[15px] font-medium text-white disabled:opacity-70"
-            >
-              {ea.isChecking ? 'Checking…' : ea.leaving ? 'Opening…' : 'Enter'}
-              <ButtonArrow />
-            </button>
-          </form>
-        )}
-      </div>
-
-      <p className="nb-row nb-hint nb-on-rule text-[14px] text-lp-body" role={ea.isWrong ? 'alert' : undefined} id={ea.isWrong ? errorId : undefined}>
-        {ea.isWrong ? (
-          <span className="text-[#b42318]">That code didn’t work. Check it and try again.</span>
-        ) : ea.phase === 'swipe' ? (
-          'Slide to enter with your invite code.'
-        ) : (
-          'Type the code from your invite.'
-        )}
-      </p>
     </div>
   )
 }
