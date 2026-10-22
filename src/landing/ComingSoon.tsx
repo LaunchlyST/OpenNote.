@@ -48,7 +48,6 @@ export function ComingSoon() {
     new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
   )
   const [count, setCount] = useState<number | null>(null)
-  const [typing, setTyping] = useState(false)
 
   const setP = useCallback((p: number) => {
     pRef.current = p
@@ -200,13 +199,12 @@ export function ComingSoon() {
               </span>
             </h1>
             <p className="vx-body vx-line" style={{ '--i': 3 } as CSSProperties}>
-              Write notes, plan tasks, and keep track of what matters without switching between apps.<span className="vx-dot" aria-hidden="true" />
+              Write notes, plan tasks, and keep track of what matters without switching between apps.
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
               <Waitlist
                 disabled={open}
                 onJoined={() => setCount((c) => (c === null ? c : c + 1))}
-                onTyping={setTyping}
               />
             </div>
             {(
@@ -241,7 +239,6 @@ export function ComingSoon() {
           </button>
         </section>
 
-        <PointerArrow frame={frame} ready={settled} hidden={typing || open || dragging} />
 
         <p className="vx-hint" aria-hidden="true">
           Have an invite? <span>Slide the page</span>
@@ -253,15 +250,7 @@ export function ComingSoon() {
 
 /* ----------------------------------------------------------- waitlist --- */
 
-function Waitlist({
-  disabled,
-  onJoined,
-  onTyping,
-}: {
-  disabled: boolean
-  onJoined: () => void
-  onTyping: (typing: boolean) => void
-}) {
+function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => void }) {
   const [email, setEmail] = useState('')
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'done'>('idle')
   const [error, setError] = useState('')
@@ -293,7 +282,6 @@ function Waitlist({
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error ?? OFFLINE)
       setState('done')
-      onTyping(true)
       setToast(true)
       onJoined()
     } catch (err) {
@@ -314,7 +302,6 @@ function Waitlist({
             value={done ? 'You’re on the list.' : email}
             onChange={(e) => {
               setEmail(e.target.value)
-              onTyping(e.target.value.length > 0)
               if (state === 'error') setState('idle')
             }}
             readOnly={done}
@@ -451,67 +438,4 @@ function TileField({ reduced }: { reduced: boolean }) {
   }, [reduced])
 
   return <canvas ref={canvas} aria-hidden="true" className="vx-tiles" />
-}
-
-/* ------------------------------------------------------ pointer arrow --- */
-
-/**
- * A hand-drawn arrow from the sheet's round handle down to the Join button.
- * The two move with the layout, so the curve is measured, not fixed.
- */
-function PointerArrow({
-  frame,
-  ready,
-  hidden,
-}: {
-  frame: React.RefObject<HTMLDivElement | null>
-  ready: boolean
-  hidden: boolean
-}) {
-  const [d, setD] = useState<{ line: string; head: string } | null>(null)
-
-  useEffect(() => {
-    const measure = () => {
-      const f = frame.current
-      const from = f?.querySelector('.vx-dot')
-      const to = f?.querySelector('.vx-cta')
-      if (!f || !from || !to || window.innerWidth < 1100) return setD(null)
-      const fr = f.getBoundingClientRect()
-      const a = from.getBoundingClientRect()
-      const b = to.getBoundingClientRect()
-      // a single smooth curve from the circle's centre to just above the button
-      const x1 = a.left - fr.left + a.width / 2
-      const y1 = a.top - fr.top + a.height / 2
-      const x2 = b.left - fr.left + b.width * 0.55
-      const y2 = b.top - fr.top - 9
-      const ang = Math.atan2(y2 - (y1 + (y2 - y1) * 0.2), x2 - (x1 + 28))
-      const hx = (t: number, r: number) => x2 - Math.cos(ang + t) * r
-      const hy = (t: number, r: number) => y2 - Math.sin(ang + t) * r
-      setD({
-        line: `M${x1} ${y1} Q ${x1 + 28} ${y1 + (y2 - y1) * 0.2}, ${x2} ${y2 - 2}`,
-        head: `M${x2} ${y2} L ${hx(0.45, 9)} ${hy(0.45, 9)} L ${hx(-0.45, 9)} ${hy(-0.45, 9)} Z`,
-      })
-    }
-    // only measure once the sheet has landed; then again after fonts load and on any layout change
-    if (!ready) return setD(null)
-    measure()
-    void document.fonts?.ready.then(measure)
-    const ro = new ResizeObserver(measure)
-    if (frame.current) ro.observe(frame.current)
-    const copy = frame.current?.querySelector('.vx-copy')
-    if (copy) ro.observe(copy)
-    window.addEventListener('resize', measure)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', measure)
-    }
-  }, [frame, ready])
-
-  if (!d) return null
-  return (
-    <svg className={cn('vx-arrow', hidden && 'vx-arrow-gone')} aria-hidden="true">
-      <path d={d.line} pathLength={1} />
-      <path className="vx-arrow-head" d={d.head} pathLength={1} />
-    </svg>
-  )
 }
