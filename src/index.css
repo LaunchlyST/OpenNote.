@@ -2528,3 +2528,38 @@ html.lp-cursor-on * {
 .vx-settled .vx-frame {
   box-shadow: none;
 }
+/* headline: a typeset line, then a written one */
+.vx-title {
+  letter-spacing: -0.06em;
+}
+.vx-title-b {
+  font-family: var(--font-editorial);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 1.12em;
+  line-height: 0.92;
+  letter-spacing: -0.035em;
+  color: #2f6a35;
+  padding-left: 0.02em;
+}
+.vx-body {
+  margin-top: 30px;
+  max-width: 27rem;
+  font-size: clamp(17px, 1.35vw, 19px);
+  line-height: 1.5;
+  color: #6b766f;
+  text-wrap: pretty;
+}
+.vx-lead {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--forest);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+.vx-body {
+  max-width: 31rem;
+}
+.vx-lead {
+  text-wrap: balance;
+}

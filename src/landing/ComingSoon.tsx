@@ -190,13 +190,13 @@ export function ComingSoon() {
               <span className="vx-line" style={{ '--i': 0 } as CSSProperties}>
                 Your day
               </span>
-              <span className="vx-line" style={{ '--i': 1 } as CSSProperties}>
+              <span className="vx-line vx-title-b" style={{ '--i': 1 } as CSSProperties}>
                 starts here.
               </span>
             </h1>
             <p className="vx-body vx-line" style={{ '--i': 2 } as CSSProperties}>
-              The easier way to work with your clients and plan your week. Join the waitlist and be the first to know
-              when we launch.
+              <span className="vx-lead">The easier way to work with your clients and plan your week.</span>
+              Join the waitlist and be the first to know when we launch.
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
               <Waitlist disabled={open} onJoined={() => setCount((c) => (c === null ? c : c + 1))} />
