@@ -1617,3 +1617,21 @@ html.lp-cursor-on * {
   width: 45%;
   background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0));
 }
+.nb-cover-word {
+  animation: nb-word 0.35s ease;
+}
+.wl-share {
+  font-weight: 600;
+  color: #4f6bed;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.wl-share:hover {
+  color: #3149c9;
+}
+@keyframes nb-word {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
