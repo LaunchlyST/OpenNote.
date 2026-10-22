@@ -101,3 +101,11 @@ earlyAccessRouter.post('/api/waitlist', (req: Request, res: Response) => {
   db.prepare('INSERT OR IGNORE INTO waitlist (email, createdAt) VALUES (?, ?)').run(email, new Date().toISOString())
   res.json({ ok: true })
 })
+
+/** How many people are on the waitlist — shown as social proof on the page. */
+earlyAccessRouter.get('/api/waitlist/count', (_req: Request, res: Response) => {
+  db.exec('CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, createdAt TEXT NOT NULL);')
+  const row = db.prepare('SELECT COUNT(*) AS n FROM waitlist').get() as { n: number }
+  res.set('Cache-Control', 'no-store')
+  res.json({ count: row.n })
+})

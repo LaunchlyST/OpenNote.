@@ -1393,3 +1393,227 @@ html.lp-cursor-on * {
     font-size: clamp(2.9rem, 14.5vw, 4.6rem);
   }
 }
+
+/* ---- waitlist card (Coming Soon) ------------------------------------ */
+.wl-page {
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 5vw, 64px);
+  background: #2b8fd6;
+  color: var(--color-lp-ink, #191919);
+}
+.wl-scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.wl-bg {
+  position: absolute;
+  inset: 0;
+  filter: saturate(1.1) brightness(0.92);
+}
+.wl-card {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  width: min(1180px, 100%);
+  min-height: min(720px, calc(100svh - 64px));
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: 0 40px 80px -30px rgba(0, 20, 40, 0.55);
+}
+.wl-left {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(28px, 4.5vw, 56px);
+  background: linear-gradient(110deg, #fff 55%, rgba(255, 255, 255, 0.85) 75%, rgba(255, 255, 255, 0) 100%);
+  margin-right: -140px;
+  padding-right: calc(clamp(28px, 4.5vw, 56px) + 140px);
+}
+.wl-copy {
+  margin-top: auto;
+  margin-bottom: auto;
+  padding-top: 40px;
+}
+.wl-right {
+  position: relative;
+}
+.wl-right .wl-scene {
+  position: absolute;
+  inset: 0;
+}
+.wl-title {
+  font-family: 'Nunito', ui-rounded, system-ui, sans-serif;
+  font-weight: 900;
+  font-size: clamp(3rem, 6.4vw, 5.8rem);
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+  color: #102a1a;
+  margin: 0;
+}
+.wl-title .nb-mask {
+  padding-bottom: 0.08em;
+}
+.wl-title-b {
+  color: #4f6bed;
+}
+.wl-body {
+  margin: 20px 0 32px;
+  max-width: 30rem;
+  font-size: clamp(17px, 1.6vw, 20px);
+  line-height: 1.45;
+  color: #3d4a42;
+}
+.wl-bar {
+  max-width: 440px;
+}
+.wl-bar-done {
+  box-shadow:
+    inset 0 0 0 1.5px #16a34a,
+    0 10px 24px -16px rgba(25, 25, 25, 0.35);
+}
+.wl-pill {
+  cursor: pointer;
+}
+.wl-pill-ready {
+  cursor: grab;
+  animation: wl-tease 2.2s ease-in-out infinite;
+}
+.wl-pill-ready:active {
+  cursor: grabbing;
+  animation: none;
+}
+@keyframes wl-tease {
+  0%,
+  70%,
+  100% {
+    translate: 0 0;
+  }
+  80% {
+    translate: -10px 0;
+  }
+  90% {
+    translate: 0 0;
+  }
+}
+.wl-proof {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 28px;
+  font-size: 15px;
+  font-weight: 500;
+  color: #1f2a24;
+}
+.wl-faces {
+  display: flex;
+}
+.wl-faces span {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-left: -9px;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.wl-faces span:first-child {
+  margin-left: 0;
+}
+.wl-balloons {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  pointer-events: none;
+  overflow: hidden;
+}
+.wl-balloon {
+  position: absolute;
+  bottom: -160px;
+  border-radius: 50% 50% 48% 48% / 55% 55% 45% 45%;
+  box-shadow: inset -8px -10px 0 rgba(0, 0, 0, 0.12), inset 8px 8px 14px rgba(255, 255, 255, 0.35);
+  animation: wl-float linear forwards;
+  opacity: 0;
+}
+.wl-balloon::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1.5px;
+  height: 70px;
+  background: rgba(0, 0, 0, 0.25);
+}
+@keyframes wl-float {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0);
+  }
+  10% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(var(--sway), -60vh);
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(0, -125vh);
+  }
+}
+@media (max-width: 860px) {
+  .wl-card {
+    grid-template-columns: 1fr;
+  }
+  .wl-left {
+    margin-right: 0;
+    padding-right: clamp(28px, 4.5vw, 56px);
+    background: #fff;
+  }
+  .wl-right {
+    min-height: 220px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl-balloons,
+  .wl-pill-ready {
+    animation: none;
+  }
+  .wl-balloons {
+    display: none;
+  }
+}
+.wl-live {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 999px;
+  background: #16a34a;
+  vertical-align: 1px;
+  animation: nb-pulse 1.8s ease-out infinite;
+}
+.wl-card {
+  background: #fff;
+}
+.wl-left {
+  margin-right: 0;
+  padding-right: clamp(28px, 4.5vw, 56px);
+  background: #fff;
+}
+.wl-right::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  inset: 0 auto 0 0;
+  width: 45%;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0));
+}
