@@ -107,14 +107,14 @@ export function ComingSoon() {
             </h1>
 
             <p className="nb-in nb-body nb-on-rule" style={{ '--t': '700ms' } as CSSProperties}>
-              A simpler way to manage your{' '}
+              The easier way to{' '}
               <span className="nb-scribble">
-                notes, tasks and plans
+                work with your clients
                 <svg aria-hidden="true" viewBox="0 0 200 12" preserveAspectRatio="none">
                   <path d="M2 8 C 50 2, 110 2, 198 7" />
                 </svg>
               </span>
-              . Join the waitlist and be first in.
+              .
             </p>
 
             <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1000ms' } as CSSProperties}>
