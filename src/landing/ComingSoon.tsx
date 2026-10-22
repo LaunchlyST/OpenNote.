@@ -224,6 +224,13 @@ export function ComingSoon() {
             )}
           </div>
 
+          <div className="vx-spine" aria-hidden="true">
+            <span className="vx-spine-mark">Desknoty</span>
+            <span className="vx-spine-line">
+              Client work, <em>without the chaos.</em>
+            </span>
+          </div>
+
           <button
             type="button"
             className="vx-edge"

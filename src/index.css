@@ -2839,3 +2839,90 @@ html.lp-cursor-on * {
     width: auto;
   }
 }
+/* the sheet's spine: what stays visible when the page is slid aside */
+.vx-spine {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 12%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pad) 0;
+  pointer-events: none;
+  opacity: clamp(0, calc((var(--p) - 0.55) * 2.5), 1);
+  transition: opacity 0.3s ease;
+}
+.vx-spine-mark,
+.vx-spine-line {
+  writing-mode: vertical-rl;
+  rotate: 180deg;
+  white-space: nowrap;
+}
+.vx-spine-mark {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(16, 38, 15, 0.5);
+}
+.vx-spine-line {
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-weight: 700;
+  font-variation-settings: 'opsz' 96;
+  font-size: clamp(1.6rem, 2.4vw, 2.4rem);
+  letter-spacing: -0.03em;
+  color: var(--forest);
+  margin-bottom: 40px;
+}
+.vx-spine-line em {
+  font-style: normal;
+  color: #2f7a3a;
+}
+/* a second sheet underneath, so the open page reads as paper, not a bar */
+.vx-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 10px -10px -10px 10px;
+  z-index: -1;
+  background: #fbfcfa;
+  box-shadow: 0 0 0 1px rgba(16, 38, 15, 0.06);
+  opacity: clamp(0, var(--p), 1);
+}
+.vx-sheet {
+  isolation: isolate;
+}
+@media (max-width: 760px) {
+  .vx-spine {
+    top: auto;
+    left: 0;
+    width: auto;
+    height: 14%;
+    flex-direction: row;
+    padding: 0 var(--pad);
+  }
+  .vx-spine-mark,
+  .vx-spine-line {
+    writing-mode: horizontal-tb;
+    rotate: none;
+  }
+  .vx-spine-line {
+    font-size: 1.15rem;
+    margin: 0;
+  }
+  .vx-spine-mark {
+    display: none;
+  }
+  .vx-sheet::before {
+    inset: 10px 10px -10px -10px;
+  }
+}
+@media (min-width: 761px) {
+  .vx-spine-line {
+    font-size: clamp(1.3rem, 1.7vw, 1.7rem);
+    margin-bottom: 0;
+    max-height: calc(50% - 60px);
+  }
+}
