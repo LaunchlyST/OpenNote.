@@ -1333,3 +1333,44 @@ html.lp-cursor-on * {
 .nb-toast-x:hover {
   color: #fff;
 }
+
+/* ---- hand-written description -------------------------------------- */
+.nb-body {
+  font-family: 'Nunito', ui-rounded, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: 0;
+  color: #232320;
+}
+.nb-scribble {
+  position: relative;
+  white-space: nowrap;
+  font-weight: 800;
+  color: #4f6bed;
+}
+.nb-scribble svg {
+  position: absolute;
+  left: -2px;
+  bottom: -5px;
+  width: calc(100% + 4px);
+  height: 10px;
+  overflow: visible;
+}
+.nb-scribble path {
+  fill: none;
+  stroke: #4f6bed;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  animation: nb-scribble 0.8s 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.nb-still .nb-scribble path {
+  animation: none;
+  stroke-dashoffset: 0;
+}
+@keyframes nb-scribble {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
