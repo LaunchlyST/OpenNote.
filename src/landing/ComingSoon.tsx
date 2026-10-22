@@ -481,7 +481,7 @@ function PointerArrow({
       const b = to.getBoundingClientRect()
       // from the circle after "else.", loop out to the right and drop onto the button
       const x1 = a.left - fr.left + a.width / 2
-      const y1 = a.bottom - fr.top + 2
+      const y1 = a.top - fr.top + a.height / 2
       const x2 = b.left - fr.left + b.width * 0.6
       const y2 = b.top - fr.top - 10
       const c1x = x1 + 36
