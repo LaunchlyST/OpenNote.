@@ -25,7 +25,7 @@ import { useEarlyAccess } from './useEarlyAccess'
  * handle does the same.
  */
 
-const WIPE = '#2b8dd6'
+const WIPE = '#10260f'
 const INTRO_HOLD = 650
 const OFFLINE = 'We can’t reach the server right now. Please try again in a moment.'
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
@@ -134,6 +134,7 @@ export function ComingSoon() {
       )}
       style={{ '--p': pRef.current } as CSSProperties}
     >
+      <TileField reduced={ea.reduced} />
       <div
         ref={frame}
         className="vx-frame"
@@ -324,4 +325,109 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
       )}
     </div>
   )
+}
+
+/* --------------------------------------------------------- tile field --- */
+
+const CELL = 38
+const GAP = 3
+
+/**
+ * The background: a quiet grid of tiles on white. Two soft green lights
+ * follow the pointer — one close behind it, one lagging further — and the
+ * tiles under them light up. With no pointer (phones), the lights drift.
+ */
+function TileField({ reduced }: { reduced: boolean }) {
+  const canvas = useRef<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    const el = canvas.current
+    const ctx = el?.getContext('2d')
+    if (!el || !ctx) return
+    const dpr = Math.min(2, window.devicePixelRatio || 1)
+    let w = 0
+    let h = 0
+    const size = () => {
+      w = el.clientWidth
+      h = el.clientHeight
+      el.width = w * dpr
+      el.height = h * dpr
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+    size()
+
+    const target = { x: w * 0.72, y: h * 0.4 }
+    const a = { ...target }
+    const b = { x: w * 0.6, y: h * 0.6 }
+    let pointer = false
+    let raf = 0
+    const start = performance.now()
+    const noise = Array.from({ length: 997 }, () => Math.random())
+
+    const draw = (t: number) => {
+      if (!pointer) {
+        // idle drift, slow
+        const s = (t - start) / 1000
+        target.x = w * (0.62 + 0.22 * Math.sin(s * 0.23))
+        target.y = h * (0.45 + 0.25 * Math.sin(s * 0.31 + 1))
+      }
+      a.x += (target.x - a.x) * 0.12
+      a.y += (target.y - a.y) * 0.12
+      b.x += (a.x - b.x) * 0.035
+      b.y += (a.y - b.y) * 0.035
+
+      ctx.clearRect(0, 0, w, h)
+      const step = CELL + GAP
+      const cols = Math.ceil(w / step) + 1
+      const rows = Math.ceil(h / step) + 1
+      const ox = (w - cols * step) / 2
+      const oy = (h - rows * step) / 2
+      const ra = 2 * 115 * 115
+      const rb = 2 * 165 * 165
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = ox + c * step
+          const y = oy + r * step
+          const cx = x + CELL / 2
+          const cy = y + CELL / 2
+          const ia = Math.exp(-((cx - a.x) ** 2 + (cy - a.y) ** 2) / ra)
+          const ib = Math.exp(-((cx - b.x) ** 2 + (cy - b.y) ** 2) / rb) * 0.75
+          // the near light is pale mint with a bright core, the lagging one a deeper green;
+          // each tile carries a fixed flicker so the field has texture, as in a real panel
+          const n = noise[(r * 131 + c * 17) % noise.length]
+          const i = Math.min(1, (ia + ib) * (0.85 + n * 0.3))
+          const mix = ia / (ia + ib + 1e-6)
+          const core = Math.max(0, ia - 0.6) * 2.2
+          const red = Math.round(30 + 110 * mix + 90 * core)
+          const grn = Math.round(150 + 70 * mix + 30 * core)
+          const blu = Math.round(95 + 55 * mix + 80 * core)
+          ctx.fillStyle = `rgba(${red},${grn},${blu},${0.035 + i * 0.78})`
+          ctx.beginPath()
+          ctx.roundRect(x, y, CELL, CELL, 4)
+          ctx.fill()
+        }
+      }
+      if (!reduced) raf = requestAnimationFrame(draw)
+    }
+
+    const move = (e: PointerEvent) => {
+      pointer = true
+      const rect = el.getBoundingClientRect()
+      target.x = e.clientX - rect.left
+      target.y = e.clientY - rect.top
+    }
+    const leave = () => (pointer = false)
+    window.addEventListener('pointermove', move)
+    document.addEventListener('pointerleave', leave)
+    window.addEventListener('resize', size)
+    raf = requestAnimationFrame(draw)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('pointermove', move)
+      document.removeEventListener('pointerleave', leave)
+      window.removeEventListener('resize', size)
+    }
+  }, [reduced])
+
+  return <canvas ref={canvas} aria-hidden="true" className="vx-tiles" />
 }

@@ -2463,3 +2463,68 @@ html.lp-cursor-on * {
     animation: none;
   }
 }
+
+/* ===== white field with lit tiles ===================================== */
+.vx {
+  --sky: #ffffff;
+  position: relative;
+  isolation: isolate;
+}
+.vx-tiles {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+}
+.vx-frame {
+  background: transparent;
+}
+/* the sheet now reads as paper lying on the field: a hairline and a soft shadow */
+.vx-sheet {
+  box-shadow:
+    0 0 0 1px rgba(16, 38, 15, 0.08),
+    0 30px 70px -40px rgba(16, 38, 15, 0.35);
+}
+.vx-sheet::after {
+  display: none;
+}
+.vx-sky {
+  color: var(--forest);
+}
+.vx-date {
+  color: var(--forest);
+}
+.vx-hint {
+  color: rgba(16, 38, 15, 0.65);
+}
+.vx-hint span {
+  color: var(--forest);
+}
+.vx-code input {
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: inset 0 0 0 1.5px var(--mint-line);
+  color: var(--forest);
+}
+.vx-code input::placeholder {
+  color: #7a8f7e;
+}
+.vx-code input:focus {
+  box-shadow: inset 0 0 0 1.5px var(--forest);
+}
+.vx-code button {
+  background: var(--forest);
+  color: #fff;
+}
+.vx-back {
+  color: var(--forest);
+}
+.vx-edge {
+  box-shadow:
+    0 0 0 1px rgba(16, 38, 15, 0.1),
+    0 6px 20px -8px rgba(16, 38, 15, 0.4);
+}
+.vx-frame,
+.vx-settled .vx-frame {
+  box-shadow: none;
+}
