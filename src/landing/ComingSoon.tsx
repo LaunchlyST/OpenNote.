@@ -200,7 +200,7 @@ export function ComingSoon() {
               </span>
             </h1>
             <p className="vx-body vx-line" style={{ '--i': 2 } as CSSProperties}>
-              Plan your week, keep every client on track and never miss a deadline. Join the waitlist to be first in.
+              One calm place for your clients, your tasks and your week. Get early access before everyone else.
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
               <Waitlist disabled={open} onJoined={() => setCount((c) => (c === null ? c : c + 1))} />
@@ -208,18 +208,8 @@ export function ComingSoon() {
             {(
               <p className="vx-proof vx-line" style={{ '--i': 4 } as CSSProperties} aria-live="polite">
                 <span className="vx-live" aria-hidden="true" />
-                <span>
-                  {count === null ? (
-                    'Waitlist open'
-                  ) : count === 0 ? (
-                    'Be the first on the waitlist'
-                  ) : (
-                    <>
-                      <strong>{count.toLocaleString()}</strong> {count === 1 ? 'person is' : 'people are'} on the
-                      waitlist
-                    </>
-                  )}
-                </span>
+                <span>Already on the waitlist</span>
+                <span className="vx-count">{count === null ? '—' : count.toLocaleString()}</span>
               </p>
             )}
           </div>
@@ -300,6 +290,10 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
 
   return (
     <div className="vx-join">
+      <svg className={cn('vx-arrow', (email || done) && 'vx-arrow-gone')} viewBox="0 0 120 110" aria-hidden="true">
+        <path d="M70 6 C 112 14, 120 58, 92 80 C 78 91, 58 96, 34 96" />
+        <path className="vx-arrow-head" d="M46 84 L 32 96 L 47 107" />
+      </svg>
       <form onSubmit={submit} noValidate className="vx-form">
         <label className={cn('vx-field', state === 'error' && 'vx-field-wrong', done && 'vx-field-done')}>
           <Mail aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
