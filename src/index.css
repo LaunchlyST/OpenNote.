@@ -2651,3 +2651,24 @@ html.lp-cursor-on * {
   grid-template-columns: 48px 1fr auto;
   font-size: 16px;
 }
+.vx-title-b {
+  font-size: 1em;
+  white-space: nowrap;
+}
+@media (max-width: 760px) {
+  .vx-title {
+    font-size: clamp(2.6rem, 12.5vw, 3.8rem);
+  }
+  .vx-copy {
+    padding-top: 7vh;
+  }
+  .vx-body {
+    margin: 16px 0 24px;
+  }
+  .vx-sheet {
+    height: 84%;
+  }
+  .vx-hint {
+    top: calc(84% + 9% + 2px);
+  }
+}

@@ -207,14 +207,14 @@ export function ComingSoon() {
           <div className="vx-copy">
             <h1 id="vx-title" className="vx-title">
               <span className="vx-line" style={{ '--i': 0 } as CSSProperties}>
-                Your day
+                Client work,
               </span>
               <span className="vx-line vx-title-b" style={{ '--i': 1 } as CSSProperties}>
-                starts here.
+                without the chaos.
               </span>
             </h1>
             <p className="vx-body vx-line" style={{ '--i': 2 } as CSSProperties}>
-              <span className="vx-lead">The easier way to work with your clients and plan your week.</span>
+              <span className="vx-lead">Plan your week, keep every client on track and never miss a deadline.</span>
               Join the waitlist and be the first to know when we launch.
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
