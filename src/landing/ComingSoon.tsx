@@ -48,6 +48,16 @@ export function ComingSoon() {
     new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
   )
   const [count, setCount] = useState<number | null>(null)
+  // an example of the visitor's day, pinned around their own clock
+  const [agenda] = useState(() => {
+    const h = new Date().getHours()
+    const at = (d: number) => `${String((h + d + 24) % 24).padStart(2, '0')}:00`
+    return [
+      { time: at(-2), text: 'Call with Northwind', state: 'done' },
+      { time: at(0), text: 'Send the proposal to Studio Lumen', state: 'now' },
+      { time: at(2), text: 'Plan next week', state: 'next' },
+    ]
+  })
 
   const setP = useCallback((p: number) => {
     pRef.current = p
@@ -145,6 +155,15 @@ export function ComingSoon() {
       >
         {/* the sky: today's date, and the invite door */}
         <div className="vx-sky">
+          <ol className="vx-agenda" aria-label="An example day in Desknoty">
+            {agenda.map((item, i) => (
+              <li key={item.text} data-state={item.state} style={{ '--i': i } as CSSProperties}>
+                <span className="vx-agenda-t">{item.time}</span>
+                <span className="vx-agenda-x">{item.text}</span>
+                {item.state === 'now' && <span className="vx-agenda-now">Now</span>}
+              </li>
+            ))}
+          </ol>
           <p className="vx-date" aria-hidden={!open}>
             {date}
           </p>
