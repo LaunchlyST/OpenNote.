@@ -147,9 +147,8 @@ export function ComingSoon() {
         {/* the sky: today's date, and the invite door */}
         <div className="vx-sky">
           <p className="vx-hook" aria-hidden={open}>
-            <span style={{ '--i': 0 } as CSSProperties}>Every client.</span>
-            <span style={{ '--i': 1 } as CSSProperties}>Every deadline.</span>
-            <span style={{ '--i': 2 } as CSSProperties}>One calm week.</span>
+            <span style={{ '--i': 0 } as CSSProperties}>Too many things to remember.</span>
+            <span style={{ '--i': 1 } as CSSProperties}>One place for everything.</span>
           </p>
           <p className="vx-date" aria-hidden={!open}>
             {date}
@@ -213,8 +212,9 @@ export function ComingSoon() {
             {(
               <p className="vx-proof vx-line" style={{ '--i': 4 } as CSSProperties} aria-live="polite">
                 <span className="vx-live" aria-hidden="true" />
-                <span>Already on the waitlist</span>
-                <span className="vx-count">{count === null ? '—' : count.toLocaleString()}</span>
+                <span className="vx-count" aria-label={`${count ?? 0} people have joined the waitlist`}>
+                  {(count ?? 0).toLocaleString()}
+                </span>
               </p>
             )}
           </div>
@@ -479,18 +479,17 @@ function PointerArrow({
       const fr = f.getBoundingClientRect()
       const a = from.getBoundingClientRect()
       const b = to.getBoundingClientRect()
-      // from the circle after "else.", loop out to the right and drop onto the button
+      // a single smooth curve from the circle's centre to just above the button
       const x1 = a.left - fr.left + a.width / 2
       const y1 = a.top - fr.top + a.height / 2
-      const x2 = b.left - fr.left + b.width * 0.6
-      const y2 = b.top - fr.top - 10
-      const c1x = x1 + 36
-      const c1y = y1 + 18
-      const c2x = x2 + 34
-      const c2y = y2 - 26
+      const x2 = b.left - fr.left + b.width * 0.55
+      const y2 = b.top - fr.top - 9
+      const ang = Math.atan2(y2 - (y1 + (y2 - y1) * 0.2), x2 - (x1 + 28))
+      const hx = (t: number, r: number) => x2 - Math.cos(ang + t) * r
+      const hy = (t: number, r: number) => y2 - Math.sin(ang + t) * r
       setD({
-        line: `M${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`,
-        head: `M${x2 - 10} ${y2 - 11} L ${x2} ${y2} L ${x2 + 9} ${y2 - 12}`,
+        line: `M${x1} ${y1} Q ${x1 + 28} ${y1 + (y2 - y1) * 0.2}, ${x2} ${y2 - 2}`,
+        head: `M${x2} ${y2} L ${hx(0.45, 9)} ${hy(0.45, 9)} L ${hx(-0.45, 9)} ${hy(-0.45, 9)} Z`,
       })
     }
     // only measure once the sheet has landed; then again after fonts load and on any layout change

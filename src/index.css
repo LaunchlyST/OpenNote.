@@ -3080,3 +3080,48 @@ html.lp-cursor-on * {
     display: none;
   }
 }
+/* arrow, refined: thin, even, a solid head */
+.vx-arrow path {
+  stroke-width: 1.6;
+  stroke: #2f7a3a;
+}
+.vx-arrow .vx-arrow-head {
+  fill: #2f7a3a;
+  stroke: none;
+  opacity: 0;
+  animation: vx-fade 0.25s 0.9s ease forwards !important;
+}
+@keyframes vx-fade {
+  to {
+    opacity: 1;
+  }
+}
+.vx-dot {
+  width: 8px;
+  height: 8px;
+  border: 0;
+  background: #2f7a3a;
+}
+/* count: just the number */
+.vx-count {
+  min-width: 30px;
+  height: 24px;
+  font-size: 13px;
+}
+/* right-hand statement: the two new lines */
+.vx-hook {
+  font-size: clamp(1.6rem, 2.5vw, 2.6rem);
+  line-height: 1.08;
+}
+.vx-hook {
+  white-space: normal;
+  width: min(440px, calc(40% - var(--pad) - 56px));
+  text-align: right;
+  text-wrap: balance;
+}
+.vx-hook span {
+  display: block;
+}
+.vx-hook span + span {
+  margin-top: 0.15em;
+}
