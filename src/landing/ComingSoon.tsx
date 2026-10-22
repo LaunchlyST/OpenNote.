@@ -47,6 +47,7 @@ export function ComingSoon() {
   const [ticked, setTicked] = useState(false)
   const signup = useRef<HTMLDivElement | null>(null)
   const [joined, setJoined] = useState(false)
+  const [invite, setInvite] = useState(false)
 
   useEffect(() => {
     setDate(new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))
@@ -113,8 +114,8 @@ export function ComingSoon() {
                 <svg aria-hidden="true" viewBox="0 0 200 12" preserveAspectRatio="none">
                   <path d="M2 8 C 50 2, 110 2, 198 7" />
                 </svg>
-              </span>
-              .
+              </span>{' '}
+              and plan your week.
             </p>
 
             <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1000ms' } as CSSProperties}>
@@ -122,8 +123,13 @@ export function ComingSoon() {
             </div>
 
             <div className="nb-in nb-invite" style={{ '--t': '1150ms' } as CSSProperties}>
-              <p className="nb-or">Already have an invite?</p>
-              <Control ea={ea} />
+              {invite ? (
+                <Control ea={ea} />
+              ) : (
+                <button type="button" onClick={() => setInvite(true)} className="nb-or underline underline-offset-4 hover:text-lp-ink">
+                  Already have an invite code?
+                </button>
+              )}
             </div>
           </section>
 
