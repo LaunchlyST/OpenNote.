@@ -90,10 +90,6 @@ export function ComingSoon() {
 
         <main className="nb-grid">
           <section aria-labelledby="nb-title" className="nb-main">
-            <p className="nb-in nb-badge" style={{ '--t': '150ms' } as CSSProperties}>
-              <span className="nb-badge-dot" aria-hidden="true" />
-              Coming soon · Waitlist open
-            </p>
             <h1 id="nb-title" className="nb-title">
               <span className="nb-mask">
                 <span className="nb-roll nb-line-a" style={{ '--t': '250ms' } as CSSProperties}>

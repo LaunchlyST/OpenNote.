@@ -1374,3 +1374,22 @@ html.lp-cursor-on * {
     stroke-dashoffset: 0;
   }
 }
+
+/* ---- rounded headline ---------------------------------------------- */
+.nb-line-a,
+.nb-line-b {
+  font-family: 'Nunito', ui-rounded, system-ui, sans-serif;
+  font-style: normal;
+  font-weight: 900;
+  font-size: clamp(3.4rem, 7.6vw, 7rem);
+  letter-spacing: -0.035em;
+}
+.nb-line-b {
+  color: #4f6bed;
+}
+@media (max-width: 640px) {
+  .nb-line-a,
+  .nb-line-b {
+    font-size: clamp(2.9rem, 14.5vw, 4.6rem);
+  }
+}
