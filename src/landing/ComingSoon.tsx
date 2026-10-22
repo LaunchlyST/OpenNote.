@@ -194,14 +194,14 @@ export function ComingSoon() {
           <div className="vx-copy">
             <h1 id="vx-title" className="vx-title">
               <span className="vx-line" style={{ '--i': 0 } as CSSProperties}>
-                Client work,
+                Too many things to remember.
               </span>
               <span className="vx-line vx-title-b" style={{ '--i': 1 } as CSSProperties}>
-                without the chaos.
+                One place for everything.
               </span>
             </h1>
-            <p className="vx-body vx-line" style={{ '--i': 2 } as CSSProperties}>
-              One calm place for your clients, your tasks and your week. Get early access before everyone else.
+            <p className="vx-body vx-line" style={{ '--i': 3 } as CSSProperties}>
+              Write notes, plan tasks, and keep track of what matters without switching between apps.<span className="vx-dot" aria-hidden="true" />
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
               <Waitlist
@@ -222,7 +222,7 @@ export function ComingSoon() {
           <div className="vx-spine" aria-hidden="true">
             <span className="vx-spine-mark">Desknoty</span>
             <span className="vx-spine-line">
-              Client work, <em>without the chaos.</em>
+              Bring it all <em>together.</em>
             </span>
           </div>
 
@@ -241,7 +241,7 @@ export function ComingSoon() {
           </button>
         </section>
 
-        <PointerArrow frame={frame} hidden={typing || open || dragging} />
+        <PointerArrow frame={frame} ready={settled} hidden={typing || open || dragging} />
 
         <p className="vx-hint" aria-hidden="true">
           Have an invite? <span>Slide the page</span>
@@ -459,40 +459,54 @@ function TileField({ reduced }: { reduced: boolean }) {
  * A hand-drawn arrow from the sheet's round handle down to the Join button.
  * The two move with the layout, so the curve is measured, not fixed.
  */
-function PointerArrow({ frame, hidden }: { frame: React.RefObject<HTMLDivElement | null>; hidden: boolean }) {
+function PointerArrow({
+  frame,
+  ready,
+  hidden,
+}: {
+  frame: React.RefObject<HTMLDivElement | null>
+  ready: boolean
+  hidden: boolean
+}) {
   const [d, setD] = useState<{ line: string; head: string } | null>(null)
 
   useEffect(() => {
     const measure = () => {
       const f = frame.current
-      const from = f?.querySelector('.vx-edge')
+      const from = f?.querySelector('.vx-dot')
       const to = f?.querySelector('.vx-cta')
       if (!f || !from || !to || window.innerWidth < 1100) return setD(null)
       const fr = f.getBoundingClientRect()
       const a = from.getBoundingClientRect()
       const b = to.getBoundingClientRect()
-      // start just below-left of the circle, end above the button's right half
-      const x1 = a.left - fr.left + 4
-      const y1 = a.bottom - fr.top + 6
-      const x2 = b.left - fr.left + b.width * 0.7
-      const y2 = b.top - fr.top - 12
-      const c1x = x1 - 10
-      const c1y = y1 + (y2 - y1) * 0.9
-      const c2x = x2 + (x1 - x2) * 0.55
-      const c2y = y2 - 46
+      // from the circle after "else.", loop out to the right and drop onto the button
+      const x1 = a.left - fr.left + a.width / 2
+      const y1 = a.bottom - fr.top + 2
+      const x2 = b.left - fr.left + b.width * 0.6
+      const y2 = b.top - fr.top - 10
+      const c1x = x1 + 36
+      const c1y = y1 + 18
+      const c2x = x2 + 34
+      const c2y = y2 - 26
       setD({
         line: `M${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`,
-        head: `M${x2 - 11} ${y2 - 9} L ${x2} ${y2} L ${x2 + 4} ${y2 - 14}`,
+        head: `M${x2 - 10} ${y2 - 11} L ${x2} ${y2} L ${x2 + 9} ${y2 - 12}`,
       })
     }
+    // only measure once the sheet has landed; then again after fonts load and on any layout change
+    if (!ready) return setD(null)
     measure()
-    const late = window.setTimeout(measure, 1600)
+    void document.fonts?.ready.then(measure)
+    const ro = new ResizeObserver(measure)
+    if (frame.current) ro.observe(frame.current)
+    const copy = frame.current?.querySelector('.vx-copy')
+    if (copy) ro.observe(copy)
     window.addEventListener('resize', measure)
     return () => {
-      window.clearTimeout(late)
+      ro.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [frame])
+  }, [frame, ready])
 
   if (!d) return null
   return (

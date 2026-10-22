@@ -3015,3 +3015,68 @@ html.lp-cursor-on * {
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
 }
+/* three-line headline */
+.vx-title {
+  font-size: clamp(2.4rem, 3.9vw, 3.9rem);
+  line-height: 1.04;
+}
+.vx-title-m {
+  color: rgba(16, 38, 15, 0.42);
+}
+.vx-title-b {
+  white-space: normal;
+}
+@media (max-width: 760px) {
+  .vx-title {
+    font-size: clamp(2rem, 9vw, 2.6rem);
+  }
+}
+@media (min-width: 761px) {
+  .vx-title {
+    font-size: clamp(2.2rem, 3.4vw, 3.6rem);
+  }
+  .vx-title .vx-line {
+    white-space: nowrap;
+  }
+}
+/* the arrow draws in when it appears, not on a fixed clock */
+.vx-shown .vx-arrow path,
+.vx-arrow path {
+  animation: nb-ink 0.8s 0.2s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+.vx-arrow .vx-arrow-head {
+  animation-delay: 0.95s !important;
+}
+.vx-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-left: 8px;
+  border-radius: 999px;
+  border: 2px solid #2f7a3a;
+  vertical-align: 1px;
+}
+/* two-line headline: large, wraps cleanly where it must */
+@media (min-width: 761px) {
+  .vx-title {
+    font-size: clamp(2.6rem, 4.6vw, 4.8rem);
+    line-height: 1;
+  }
+  .vx-title .vx-line {
+    white-space: normal;
+    text-wrap: balance;
+  }
+}
+.vx-title .vx-line + .vx-line {
+  margin-top: 0.12em;
+}
+@media (max-width: 760px) {
+  .vx-title {
+    font-size: clamp(2.3rem, 10.5vw, 3rem);
+  }
+}
+@media (max-width: 1100px) {
+  .vx-dot {
+    display: none;
+  }
+}
