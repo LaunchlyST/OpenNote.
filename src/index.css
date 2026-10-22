@@ -2999,3 +2999,19 @@ html.lp-cursor-on * {
   outline: none;
   box-shadow: none;
 }
+/* the arrow now lives across the frame, from the handle to the button */
+.vx-arrow {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+}
+.vx-arrow path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.vx-shown .vx-arrow .vx-arrow-head {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}

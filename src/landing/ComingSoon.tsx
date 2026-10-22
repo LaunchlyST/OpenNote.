@@ -48,6 +48,7 @@ export function ComingSoon() {
     new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
   )
   const [count, setCount] = useState<number | null>(null)
+  const [typing, setTyping] = useState(false)
 
   const setP = useCallback((p: number) => {
     pRef.current = p
@@ -203,7 +204,11 @@ export function ComingSoon() {
               One calm place for your clients, your tasks and your week. Get early access before everyone else.
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
-              <Waitlist disabled={open} onJoined={() => setCount((c) => (c === null ? c : c + 1))} />
+              <Waitlist
+                disabled={open}
+                onJoined={() => setCount((c) => (c === null ? c : c + 1))}
+                onTyping={setTyping}
+              />
             </div>
             {(
               <p className="vx-proof vx-line" style={{ '--i': 4 } as CSSProperties} aria-live="polite">
@@ -236,6 +241,8 @@ export function ComingSoon() {
           </button>
         </section>
 
+        <PointerArrow frame={frame} hidden={typing || open || dragging} />
+
         <p className="vx-hint" aria-hidden="true">
           Have an invite? <span>Slide the page</span>
         </p>
@@ -246,7 +253,15 @@ export function ComingSoon() {
 
 /* ----------------------------------------------------------- waitlist --- */
 
-function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => void }) {
+function Waitlist({
+  disabled,
+  onJoined,
+  onTyping,
+}: {
+  disabled: boolean
+  onJoined: () => void
+  onTyping: (typing: boolean) => void
+}) {
   const [email, setEmail] = useState('')
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'done'>('idle')
   const [error, setError] = useState('')
@@ -278,6 +293,7 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error ?? OFFLINE)
       setState('done')
+      onTyping(true)
       setToast(true)
       onJoined()
     } catch (err) {
@@ -290,10 +306,6 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
 
   return (
     <div className="vx-join">
-      <svg className={cn('vx-arrow', (email || done) && 'vx-arrow-gone')} viewBox="0 0 120 110" aria-hidden="true">
-        <path d="M70 6 C 112 14, 120 58, 92 80 C 78 91, 58 96, 34 96" />
-        <path className="vx-arrow-head" d="M46 84 L 32 96 L 47 107" />
-      </svg>
       <form onSubmit={submit} noValidate className="vx-form">
         <label className={cn('vx-field', state === 'error' && 'vx-field-wrong', done && 'vx-field-done')}>
           <Mail aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
@@ -302,6 +314,7 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
             value={done ? 'You’re on the list.' : email}
             onChange={(e) => {
               setEmail(e.target.value)
+              onTyping(e.target.value.length > 0)
               if (state === 'error') setState('idle')
             }}
             readOnly={done}
@@ -438,4 +451,54 @@ function TileField({ reduced }: { reduced: boolean }) {
   }, [reduced])
 
   return <canvas ref={canvas} aria-hidden="true" className="vx-tiles" />
+}
+
+/* ------------------------------------------------------ pointer arrow --- */
+
+/**
+ * A hand-drawn arrow from the sheet's round handle down to the Join button.
+ * The two move with the layout, so the curve is measured, not fixed.
+ */
+function PointerArrow({ frame, hidden }: { frame: React.RefObject<HTMLDivElement | null>; hidden: boolean }) {
+  const [d, setD] = useState<{ line: string; head: string } | null>(null)
+
+  useEffect(() => {
+    const measure = () => {
+      const f = frame.current
+      const from = f?.querySelector('.vx-edge')
+      const to = f?.querySelector('.vx-cta')
+      if (!f || !from || !to || window.innerWidth < 1100) return setD(null)
+      const fr = f.getBoundingClientRect()
+      const a = from.getBoundingClientRect()
+      const b = to.getBoundingClientRect()
+      // start just below-left of the circle, end above the button's right half
+      const x1 = a.left - fr.left + 4
+      const y1 = a.bottom - fr.top + 6
+      const x2 = b.left - fr.left + b.width * 0.7
+      const y2 = b.top - fr.top - 12
+      const c1x = x1 - 10
+      const c1y = y1 + (y2 - y1) * 0.9
+      const c2x = x2 + (x1 - x2) * 0.55
+      const c2y = y2 - 46
+      setD({
+        line: `M${x1} ${y1} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${x2} ${y2}`,
+        head: `M${x2 - 11} ${y2 - 9} L ${x2} ${y2} L ${x2 + 4} ${y2 - 14}`,
+      })
+    }
+    measure()
+    const late = window.setTimeout(measure, 1600)
+    window.addEventListener('resize', measure)
+    return () => {
+      window.clearTimeout(late)
+      window.removeEventListener('resize', measure)
+    }
+  }, [frame])
+
+  if (!d) return null
+  return (
+    <svg className={cn('vx-arrow', hidden && 'vx-arrow-gone')} aria-hidden="true">
+      <path d={d.line} pathLength={1} />
+      <path className="vx-arrow-head" d={d.head} pathLength={1} />
+    </svg>
+  )
 }
