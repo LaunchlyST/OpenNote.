@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { ArrowLeft, Bell, Check, Mail, UserRound } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Bell, Check, Mail } from 'lucide-react'
 import { apiUrl } from '../lib/api-base'
 import { cn } from '../lib/id'
 import { Logo } from './components/primitives'
@@ -9,28 +9,42 @@ import { SITE, useDocumentMeta } from './seo'
 import { useEarlyAccess } from './useEarlyAccess'
 
 /**
- * Coming Soon — the waitlist.
+ * Coming Soon — a page from the notebook.
  *
- * A painted morning scene fills the screen; a white card sits on it, its
- * left half holding the headline and the email bar, its right half a window
- * onto the scene (a desk by the window with the day's notebook on it). The
- * page opens with the "open your day" loader.
+ * A ruled sheet of warm paper: punched holes, a red margin, a "Date" field.
+ * The headline is typeset, then "starts here." is written in by pen and
+ * circled. Pen notes in the margin lead the eye: a scribbled line runs
+ * from "be the first to know" down into the email bar. A sticky note
+ * carries the live waitlist count.
  *
- * Joining: type an email, then swipe the dark "Join waitlist" pill LEFT
- * across the bar (or press Enter / click it). Balloons float up the screen
- * and a notification confirms we will be in touch.
+ * Joining: type an email, swipe the ink pill LEFT across the bar (or press
+ * Enter / click). The checklist's last item ticks itself off, balloons
+ * rise, and a notification confirms we will be in touch.
  */
 
 const WIPE = '#191919'
 
+const TODO = [
+  { text: 'Think of your ideas', done: true },
+  { text: 'Plan what you want to achieve', done: true },
+]
+/** When each finished item gets its tick and its line, in ms after load. */
+const TICK_AT = [1250, 1600]
+const STRIKE_DELAY = 220
+
 export function ComingSoon() {
   useDocumentMeta(`Coming Soon — ${SITE.name}`, SITE.description)
   const ea = useEarlyAccess({ wipe: WIPE })
+  const [date, setDate] = useState('')
   const [ready, setReady] = useState(ea.reduced)
+  const [ticked, setTicked] = useState(false)
+  const [joined, setJoined] = useState(false)
   const [count, setCount] = useState<number | null>(null)
   const [party, setParty] = useState(0)
+  const signup = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
+    setDate(new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))
     document.body.classList.add('lp-body')
     // live: refresh the waitlist count every 15s
     const load = () =>
@@ -46,126 +60,178 @@ export function ComingSoon() {
     }
   }, [])
 
-  const joined = () => {
+  useEffect(() => {
+    if (!ready) return
+    const id = window.setTimeout(() => setTicked(true), ea.reduced ? 0 : 60)
+    return () => window.clearTimeout(id)
+  }, [ready, ea.reduced])
+
+  const onJoined = () => {
+    setJoined(true)
     setCount((c) => (c === null ? c : c + 1))
     setParty((n) => n + 1)
   }
 
+  /** "Join the waitlist" in the checklist takes the visitor to the email bar. */
+  const goToSignup = () => {
+    const box = signup.current
+    if (!box) return
+    box.scrollIntoView({ behavior: ea.reduced ? 'auto' : 'smooth', block: 'center' })
+    box.querySelector<HTMLElement>('input')?.focus({ preventScroll: true })
+    box.classList.remove('nb-nudge')
+    void box.offsetWidth
+    box.classList.add('nb-nudge')
+  }
+
   return (
-    <div className={cn('wl-page relative min-h-svh overflow-hidden', ea.reduced && 'nb-still', !ready && 'nb-hold')}>
+    <div
+      className={cn(
+        'nb-page nb-pro relative min-h-svh overflow-hidden text-lp-ink',
+        ea.reduced && 'nb-still',
+        !ready && 'nb-hold',
+      )}
+    >
       {!ea.reduced && <Loader onReveal={() => setReady(true)} />}
-      <Scene className="wl-bg" />
+      <div aria-hidden="true" className="nb-paper pointer-events-none absolute inset-0" />
+      <div aria-hidden="true" className="nb-rules pointer-events-none absolute inset-x-0 bottom-0" />
+      <div aria-hidden="true" className="nb-margin pointer-events-none absolute inset-y-0" />
+      <div aria-hidden="true" className="nb-holes pointer-events-none absolute inset-y-0">
+        <span />
+        <span />
+        <span />
+      </div>
+      <div aria-hidden="true" className="nb-vignette pointer-events-none absolute inset-0" />
 
-      <main className="wl-card nb-in" style={{ '--t': '80ms' } as CSSProperties}>
-        <section className="wl-left" aria-labelledby="wl-title">
-          <Logo size="lg" />
+      <div className="nb-sheet relative">
+        <header className="nb-head nb-in flex items-end justify-between" style={{ '--t': '80ms' } as CSSProperties}>
+          <Logo />
+          <p className="nb-date flex items-baseline gap-2.5">
+            <span className="text-[12px] font-medium tracking-[0.02em] text-lp-muted">Date</span>
+            <span className="nb-date-field font-editorial text-[19px] italic">{date || ' '}</span>
+          </p>
+        </header>
 
-          <div className="wl-copy">
-            <h1 id="wl-title" className="wl-title">
+        <main className="nb-grid">
+          <section aria-labelledby="nb-title" className="nb-main">
+            <h1 id="nb-title" className="nb-title">
               <span className="nb-mask">
-                <span className="nb-roll" style={{ '--t': '250ms' } as CSSProperties}>
+                <span className="nb-roll nb-line-a" style={{ '--t': '250ms' } as CSSProperties}>
                   Your day
                 </span>
               </span>
-              <span className="nb-mask">
-                <span className="nb-roll wl-title-b" style={{ '--t': '400ms' } as CSSProperties}>
-                  starts here.
+              <span className="nb-pen-line">
+                <span className="nb-pen" style={{ '--t': '520ms' } as CSSProperties}>
+                  starts{' '}
+                  <span className="nb-circled">
+                    here.
+                    <svg className="nb-ring" viewBox="0 0 300 120" preserveAspectRatio="none" aria-hidden="true">
+                      <path d="M40 70 C 30 20, 230 4, 280 46 C 312 80, 190 116, 96 108 C 30 102, 8 66, 70 30" />
+                    </svg>
+                  </span>
                 </span>
               </span>
             </h1>
-            <p className="wl-body nb-in" style={{ '--t': '650ms' } as CSSProperties}>
-              The easier way to work with your clients and plan your week. Join the waitlist and be the first to know
-              when we launch.
+
+            <p className="nb-in nb-body nb-on-rule" style={{ '--t': '900ms' } as CSSProperties}>
+              The easier way to{' '}
+              <span className="nb-scribble">
+                work with your clients
+                <svg aria-hidden="true" viewBox="0 0 200 12" preserveAspectRatio="none">
+                  <path d="M2 8 C 50 2, 110 2, 198 7" />
+                </svg>
+              </span>{' '}
+              and plan your week.
             </p>
 
-            <div className="nb-in" style={{ '--t': '850ms' } as CSSProperties}>
-              <Waitlist reduced={ea.reduced} onJoined={joined} />
+            <div className="nb-cue nb-in" style={{ '--t': '1100ms' } as CSSProperties}>
+              <p className="nb-hand">Join the waitlist &amp; be the first to know when we launch</p>
+              <svg className="nb-zig" viewBox="0 0 140 90" aria-hidden="true">
+                <path d="M8 6 C 40 2, 64 10, 58 24 L 30 36 L 74 48 L 40 60 C 60 72, 96 80, 124 74" />
+                <path className="nb-zig-head" d="M110 64 L 126 74 L 112 86" />
+              </svg>
             </div>
 
-            {count !== null && (
-              <p className="wl-proof nb-in" style={{ '--t': '1000ms' } as CSSProperties} aria-live="polite">
-                <span className="wl-faces" aria-hidden="true">
-                  {['#4f6bed', '#f97316', '#16a34a', '#e11d48', '#0ea5e9'].map((c, i) => (
-                    <span key={c} style={{ background: c, zIndex: 5 - i }}>
-                      <UserRound className="h-[17px] w-[17px]" strokeWidth={2.2} />
-                    </span>
-                  ))}
-                </span>
-                <span>
-                  <span className="wl-live" aria-hidden="true" />
-                  {count === 0 ? (
-                    'Be the first to join'
-                  ) : (
-                    <>
-                      <strong>{count.toLocaleString()}</strong> {count === 1 ? 'person has' : 'people have'} joined
-                    </>
-                  )}
-                </span>
-              </p>
-            )}
-          </div>
-        </section>
+            <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1250ms' } as CSSProperties}>
+              <Waitlist reduced={ea.reduced} onJoined={onJoined} />
+            </div>
+          </section>
 
-        <div className="wl-right" aria-hidden="true">
-          <Scene />
-        </div>
-      </main>
+          <section aria-labelledby="nb-todo" className="nb-side">
+            <h2
+              id="nb-todo"
+              className="nb-row nb-on-rule nb-in text-[13px] font-semibold tracking-[0.01em] text-lp-body"
+              style={{ '--t': '850ms' } as CSSProperties}
+            >
+              Before launch
+            </h2>
+            <ol>
+              {TODO.map((item, i) => {
+                const done = item.done && ticked
+                const at = ea.reduced ? 0 : TICK_AT[i]
+                return (
+                  <li
+                    key={item.text}
+                    className="nb-row nb-in flex items-center gap-3"
+                    style={{ '--t': `${930 + i * 80}ms` } as CSSProperties}
+                  >
+                    <Box done={done} delay={at} />
+                    <span className="nb-on-rule relative" style={{ '--d': `${at + STRIKE_DELAY}ms` } as CSSProperties}>
+                      <span className={cn('nb-fade', done && 'text-lp-muted')}>{item.text}</span>
+                      <span
+                        aria-hidden="true"
+                        className="nb-strike absolute top-[54%] left-[-3px] h-[1.6px] w-[calc(100%+6px)] rounded-full bg-lp-ink"
+                        style={{ transform: done ? 'rotate(-0.7deg) scaleX(1)' : 'rotate(-0.7deg) scaleX(0)' }}
+                      />
+                      <span className="sr-only">{done ? ' (done)' : ' (to do)'}</span>
+                    </span>
+                  </li>
+                )
+              })}
+              <li className="nb-row nb-in flex items-center gap-3" style={{ '--t': '1090ms' } as CSSProperties}>
+                <Box done={joined} delay={0} />
+                <button
+                  type="button"
+                  onClick={goToSignup}
+                  className="nb-on-rule nb-waitlist group relative font-medium text-lp-ink"
+                  style={{ '--d': `${STRIKE_DELAY}ms` } as CSSProperties}
+                >
+                  <span aria-hidden="true" className="nb-highlight" />
+                  <span className={cn('relative', joined && 'text-lp-muted')}>Join the waitlist</span>
+                  {!joined && (
+                    <ArrowRight
+                      aria-hidden="true"
+                      className="relative ml-1.5 inline h-[0.9em] w-[0.9em] -translate-y-px transition-transform duration-300 group-hover:translate-x-1"
+                    />
+                  )}
+                  <span
+                    aria-hidden="true"
+                    className="nb-strike absolute top-[54%] left-[-3px] h-[1.6px] w-[calc(100%+6px)] rounded-full bg-lp-ink"
+                    style={{ transform: joined ? 'rotate(-0.7deg) scaleX(1)' : 'rotate(-0.7deg) scaleX(0)' }}
+                  />
+                  <span className="sr-only">{joined ? ' (done)' : ' (to do — go to the email form)'}</span>
+                </button>
+              </li>
+            </ol>
+
+            {count !== null && (
+              <div className="nb-sticky nb-in" style={{ '--t': '1400ms' } as CSSProperties} aria-live="polite">
+                <span className="nb-tape" aria-hidden="true" />
+                <p className="nb-sticky-n">{count === 0 ? 'Be #1!' : count.toLocaleString()}</p>
+                <p className="nb-sticky-t">
+                  {count === 0 ? 'nobody has joined yet' : count === 1 ? 'person on the list' : 'people on the list'}
+                </p>
+                <p className="nb-sticky-live">
+                  <span className="wl-live" aria-hidden="true" />
+                  live
+                </p>
+              </div>
+            )}
+          </section>
+        </main>
+      </div>
 
       {party > 0 && <Balloons key={party} />}
     </div>
-  )
-}
-
-/* ------------------------------------------------------------- scene --- */
-
-/** An original painted-style morning: sky, sun, hills, leaves and a desk with the day's notebook. */
-function Scene({ className }: { className?: string }) {
-  return (
-    <svg className={cn('wl-scene', className)} viewBox="0 0 800 900" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id="wl-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#2b8fd6" />
-          <stop offset="1" stopColor="#9fd3f2" />
-        </linearGradient>
-      </defs>
-      <rect width="800" height="900" fill="url(#wl-sky)" />
-      <circle cx="590" cy="190" r="70" fill="#fde68a" opacity=".9" />
-      <path d="M0 560 Q200 470 400 540 T800 500 V900 H0Z" fill="#3f8f4e" />
-      <path d="M0 640 Q240 560 470 630 T800 600 V900 H0Z" fill="#2f7a3e" />
-      {/* desk + notebook */}
-      <rect x="250" y="600" width="420" height="22" rx="6" fill="#b7793f" />
-      <rect x="290" y="622" width="16" height="200" fill="#8f5a2b" />
-      <rect x="614" y="622" width="16" height="200" fill="#8f5a2b" />
-      <g transform="rotate(-6 450 560)">
-        <rect x="350" y="500" width="200" height="104" rx="8" fill="#f8f6f1" />
-        <rect x="350" y="500" width="200" height="22" rx="8" fill="#191919" />
-        {[0, 1, 2, 3].map((i) => (
-          <line key={i} x1="366" x2="534" y1={540 + i * 16} y2={540 + i * 16} stroke="#c7d2fe" strokeWidth="2" />
-        ))}
-        <path d="M368 535l6 6 10-12" stroke="#16a34a" strokeWidth="4" fill="none" strokeLinecap="round" />
-      </g>
-      <rect x="575" y="540" width="34" height="60" rx="6" fill="#4f6bed" />
-      <path d="M575 556 h-12 a10 10 0 0 0 0 22 h12" stroke="#4f6bed" strokeWidth="6" fill="none" />
-      {/* leaves */}
-      {[
-        [-20, 60, 30, '#1f6b34'],
-        [60, -20, 70, '#2f8f45'],
-        [720, 40, -40, '#1f6b34'],
-        [790, 260, -70, '#3fa556'],
-        [-30, 760, 20, '#2f8f45'],
-        [760, 800, -20, '#1f6b34'],
-      ].map(([x, y, r, c], i) => (
-        <path
-          key={i}
-          d="M0 0 C60 -40 160 -30 220 0 C160 30 60 40 0 0Z"
-          fill={c as string}
-          transform={`translate(${x} ${y}) rotate(${r}) scale(1.4)`}
-        />
-      ))}
-      {[120, 220, 640, 700, 520].map((x, i) => (
-        <circle key={x} cx={x} cy={860 - (i % 2) * 30} r="16" fill="#f97316" />
-      ))}
-    </svg>
   )
 }
 
@@ -448,7 +514,7 @@ function Waitlist({ reduced, onJoined }: { reduced: boolean; onJoined: () => voi
           aria-invalid={state === 'error'}
           autoComplete="email"
           className="h-full min-w-0 flex-1 bg-transparent px-3 text-[16px] text-lp-ink placeholder:text-lp-muted"
-          style={{ outline: 'none', opacity: 1 - progress }}
+          style={{ outline: 'none', opacity: done ? 0 : 1 - progress }}
         />
         {done && (
           <span
@@ -532,3 +598,29 @@ function Waitlist({ reduced, onJoined }: { reduced: boolean; onJoined: () => voi
     </div>
   )
 }
+
+/** A notebook checkbox whose tick draws itself. */
+function Box({ done, delay }: { done: boolean; delay: number }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      data-done={done}
+      className="nb-box h-[17px] w-[17px] shrink-0"
+      style={{ '--d': `${delay}ms` } as CSSProperties}
+    >
+      <rect x="1" y="1" width="18" height="18" rx="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M5 10.6l3.1 3.1L15 6.9"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="nb-tick"
+        style={{ strokeDashoffset: done ? 0 : 20 }}
+      />
+    </svg>
+  )
+}
+
