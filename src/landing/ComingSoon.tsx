@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
-import { ArrowRight } from 'lucide-react'
+import type { CSSProperties, FormEvent } from 'react'
+import { ArrowRight, Bell, Check } from 'lucide-react'
+import { apiUrl } from '../lib/api-base'
 import { cn } from '../lib/id'
 import { Logo, ButtonArrow } from './components/primitives'
 import { SITE, useDocumentMeta } from './seo'
@@ -45,6 +46,7 @@ export function ComingSoon() {
   // Every load replays the finished items being ticked off.
   const [ticked, setTicked] = useState(false)
   const signup = useRef<HTMLDivElement | null>(null)
+  const [joined, setJoined] = useState(false)
 
   useEffect(() => {
     setDate(new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }))
@@ -87,6 +89,10 @@ export function ComingSoon() {
 
         <main className="nb-grid">
           <section aria-labelledby="nb-title" className="nb-main">
+            <p className="nb-in nb-badge" style={{ '--t': '150ms' } as CSSProperties}>
+              <span className="nb-badge-dot" aria-hidden="true" />
+              Coming soon · Waitlist open
+            </p>
             <h1 id="nb-title" className="nb-title">
               <span className="nb-mask">
                 <span className="nb-roll nb-line-a" style={{ '--t': '250ms' } as CSSProperties}>
@@ -101,10 +107,16 @@ export function ComingSoon() {
             </h1>
 
             <p className="nb-in nb-body nb-on-rule" style={{ '--t': '700ms' } as CSSProperties}>
-              A simpler way to manage your notes, tasks and daily plans.
+              A simpler way to manage your notes, tasks and daily plans. Join the waitlist and be the first to
+              know when we open the doors.
             </p>
 
-            <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1150ms' } as CSSProperties}>
+            <div ref={signup} className="nb-in nb-signup" style={{ '--t': '1000ms' } as CSSProperties}>
+              <Waitlist joined={joined} onJoined={() => setJoined(true)} />
+            </div>
+
+            <div className="nb-in nb-invite" style={{ '--t': '1150ms' } as CSSProperties}>
+              <p className="nb-or">Already have an invite?</p>
               <Control ea={ea} />
             </div>
           </section>
@@ -141,7 +153,7 @@ export function ComingSoon() {
                 )
               })}
               <li className="nb-row nb-in flex items-center gap-3" style={{ '--t': '1090ms' } as CSSProperties}>
-                <Box done={false} delay={0} />
+                <Box done={joined} delay={0} />
                 <button
                   type="button"
                   onClick={goToSignup}
@@ -153,7 +165,7 @@ export function ComingSoon() {
                     aria-hidden="true"
                     className="relative ml-1.5 inline h-[0.9em] w-[0.9em] -translate-y-px transition-transform duration-300 group-hover:translate-x-1"
                   />
-                  <span className="sr-only"> (to do — go to the invite slider)</span>
+                  <span className="sr-only">{joined ? ' (done)' : ' (to do — go to the email form)'}</span>
                 </button>
               </li>
             </ol>
@@ -300,6 +312,113 @@ function Box({ done, delay }: { done: boolean; delay: number }) {
   )
 }
 
+/* ----------------------------------------------------------- waitlist --- */
+
+function Waitlist({ joined, onJoined }: { joined: boolean; onJoined: () => void }) {
+  const [email, setEmail] = useState('')
+  const [state, setState] = useState<'idle' | 'sending' | 'error'>('idle')
+  const [error, setError] = useState('')
+  const [toast, setToast] = useState(false)
+
+  useEffect(() => {
+    if (!toast) return
+    const id = window.setTimeout(() => setToast(false), 6000)
+    return () => window.clearTimeout(id)
+  }, [toast])
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    const value = email.trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value)) {
+      setState('error')
+      setError('Please enter a valid email address.')
+      return
+    }
+    setState('sending')
+    try {
+      const res = await fetch(apiUrl('/api/waitlist'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: value }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error ?? 'Something went wrong.')
+      setState('idle')
+      onJoined()
+      setToast(true)
+    } catch (err) {
+      setState('error')
+      setError(err instanceof Error ? err.message : 'Something went wrong. Try again.')
+    }
+  }
+
+  return (
+    <div>
+      <div className="nb-slot">
+        {joined ? (
+          <div className="nb-joined cs-pop flex h-[60px] w-full items-center gap-3 px-4" role="status">
+            <span className="grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-[#d9f99d] text-lp-ink">
+              <Check className="h-[18px] w-[18px]" strokeWidth={2.6} />
+            </span>
+            <span className="text-[15px] font-medium text-lp-ink">You’re on the list! We’ll be in touch soon.</span>
+          </div>
+        ) : (
+          <form
+            onSubmit={submit}
+            noValidate
+            className={cn('nb-form flex h-[60px] w-full items-center gap-1.5 p-[6px]', state === 'error' && 'nb-form-wrong')}
+          >
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                if (state === 'error') setState('idle')
+              }}
+              disabled={state === 'sending'}
+              placeholder="you@email.com"
+              aria-label="Email address"
+              aria-invalid={state === 'error'}
+              autoComplete="email"
+              className="h-full min-w-0 flex-1 bg-transparent px-3.5 text-[16px] text-lp-ink placeholder:text-lp-muted"
+              style={{ outline: 'none' }}
+            />
+            <button
+              type="submit"
+              disabled={state === 'sending'}
+              className="nb-submit inline-flex h-[48px] shrink-0 items-center gap-2 rounded-[10px] px-4.5 text-[15px] font-medium text-white disabled:opacity-70"
+            >
+              {state === 'sending' ? 'Joining…' : 'Join waitlist'}
+              <ButtonArrow />
+            </button>
+          </form>
+        )}
+      </div>
+      <p className="nb-row nb-hint nb-on-rule text-[14px] text-lp-body" role={state === 'error' ? 'alert' : undefined}>
+        {state === 'error' ? (
+          <span className="text-[#b42318]">{error}</span>
+        ) : joined ? (
+          'Keep an eye on your inbox.'
+        ) : (
+          'No spam. One email when we launch.'
+        )}
+      </p>
+
+      <div className={cn('nb-toast', toast && 'nb-toast-on')} role="status" aria-live="polite">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#d9f99d] text-lp-ink">
+          <Bell className="h-[17px] w-[17px]" strokeWidth={2.2} />
+        </span>
+        <span>
+          <strong className="block text-[14px] font-semibold">You’re on the waitlist 🎉</strong>
+          <span className="text-[13px] text-white/70">We’ll send you a notification as soon as possible.</span>
+        </span>
+        <button type="button" aria-label="Dismiss" onClick={() => setToast(false)} className="nb-toast-x">
+          ×
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------ control --- */
 
 function Control({ ea }: { ea: EarlyAccess }) {
@@ -390,7 +509,7 @@ function Control({ ea }: { ea: EarlyAccess }) {
         {ea.isWrong ? (
           <span className="text-[#b42318]">That code didn’t work. Check it and try again.</span>
         ) : ea.phase === 'swipe' ? (
-          'Invite only for now.'
+          'Slide to enter with your invite code.'
         ) : (
           'Type the code from your invite.'
         )}

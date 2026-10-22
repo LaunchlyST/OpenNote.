@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Router } from 'express'
 import type { Request, Response } from 'express'
+import { db } from './db.ts'
 import { env } from './env.ts'
 
 /**
@@ -85,4 +86,18 @@ earlyAccessRouter.post('/api/early-access', (req: Request, res: Response) => {
 earlyAccessRouter.get('/api/early-access/status', (req: Request, res: Response) => {
   res.set('Cache-Control', 'no-store')
   res.json({ unlocked: hasAccess(req) })
+})
+
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
+
+/** Join the launch waitlist. Signing up twice is fine and says the same thing. */
+earlyAccessRouter.post('/api/waitlist', (req: Request, res: Response) => {
+  const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  if (!email || email.length > 254 || !EMAIL.test(email)) {
+    res.status(400).json({ ok: false, error: 'Please enter a valid email address.' })
+    return
+  }
+  db.exec('CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, createdAt TEXT NOT NULL);')
+  db.prepare('INSERT OR IGNORE INTO waitlist (email, createdAt) VALUES (?, ?)').run(email, new Date().toISOString())
+  res.json({ ok: true })
 })
