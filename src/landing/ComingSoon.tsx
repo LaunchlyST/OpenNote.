@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, FormEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { ArrowLeft, Bell, Check, Mail, UserRound } from 'lucide-react'
+import { ArrowLeft, Bell, Check, Mail } from 'lucide-react'
 import { apiUrl } from '../lib/api-base'
 import { cn } from '../lib/id'
 import { Logo } from './components/primitives'
@@ -9,19 +9,23 @@ import { SITE, useDocumentMeta } from './seo'
 import { useEarlyAccess } from './useEarlyAccess'
 
 /**
- * Coming Soon — the waitlist.
+ * Coming Soon — the waitlist, after dark.
  *
- * A painted morning scene fills the screen; a white card sits on it, its
- * left half holding the headline and the email bar, its right half a window
- * onto the scene (a desk by the window with the day's notebook on it). The
- * page opens with the "open your day" loader.
+ * A near-black stage lit by a slow, drifting "grainient" (blurred light
+ * fields under film grain) and a dot grid that fades out from the centre.
+ * The headline rises word by word out of a blur; pieces of the product
+ * (a client call, a task being ticked, a note, the week) float around it
+ * and lean away from the cursor.
  *
- * Joining: type an email, then swipe the dark "Join waitlist" pill LEFT
- * across the bar (or press Enter / click it). Balloons float up the screen
- * and a notification confirms we will be in touch.
+ * Loader: the visitor's clock counts up from 00:00 while a status line
+ * says what is being prepared; then seven shutters lift in a wave to
+ * reveal the page.
+ *
+ * Joining: type an email, then swipe the lime pill LEFT across the bar
+ * (or press Enter / click it). Balloons rise, a notification confirms.
  */
 
-const WIPE = '#191919'
+const WIPE = '#0a0a0c'
 
 export function ComingSoon() {
   useDocumentMeta(`Coming Soon — ${SITE.name}`, SITE.description)
@@ -29,6 +33,9 @@ export function ComingSoon() {
   const [ready, setReady] = useState(ea.reduced)
   const [count, setCount] = useState<number | null>(null)
   const [party, setParty] = useState(0)
+  // joining flips the page out of the upside-down into the party
+  const [flipped, setFlipped] = useState(false)
+  const stage = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     document.body.classList.add('lp-body')
@@ -46,139 +53,262 @@ export function ComingSoon() {
     }
   }, [])
 
+  // the floating cards lean away from the cursor
+  useEffect(() => {
+    if (ea.reduced) return
+    let raf = 0
+    const move = (e: PointerEvent) => {
+      cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        const el = stage.current
+        if (!el) return
+        el.style.setProperty('--mx', String(e.clientX / window.innerWidth - 0.5))
+        el.style.setProperty('--my', String(e.clientY / window.innerHeight - 0.5))
+      })
+    }
+    window.addEventListener('pointermove', move)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('pointermove', move)
+    }
+  }, [ea.reduced])
+
   const joined = () => {
     setCount((c) => (c === null ? c : c + 1))
     setParty((n) => n + 1)
+    setFlipped(true)
   }
 
+  const words: [string, boolean][] = [
+    ['Your', false],
+    ['day', false],
+    ['starts', true],
+    ['here.', true],
+  ]
+
   return (
-    <div className={cn('wl-page relative min-h-svh overflow-hidden', ea.reduced && 'nb-still', !ready && 'nb-hold')}>
+    <div ref={stage} className={cn('px relative min-h-svh overflow-hidden', flipped && 'px-flip', ea.reduced && 'nb-still', !ready && 'px-hold')}>
       {!ea.reduced && <Loader onReveal={() => setReady(true)} />}
-      <Scene className="wl-bg" />
 
-      <main className="wl-card nb-in" style={{ '--t': '80ms' } as CSSProperties}>
-        <section className="wl-left" aria-labelledby="wl-title">
-          <Logo size="lg" />
+      <div aria-hidden="true" className="px-light">
+        <span className="px-blob px-blob-a" />
+        <span className="px-blob px-blob-b" />
+        <span className="px-blob px-blob-c" />
+      </div>
+      <div aria-hidden="true" className="px-grid" />
+      <div aria-hidden="true" className="px-spores">
+        {Array.from({ length: 28 }, (_, i) => (
+          <span
+            key={i}
+            style={
+              {
+                left: `${(i * 37) % 100}%`,
+                animationDelay: `${-((i * 1.7) % 14)}s`,
+                animationDuration: `${10 + ((i * 3) % 9)}s`,
+                '--s': `${2 + (i % 4)}px`,
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+      <div aria-hidden="true" className="px-flash" />
+      <div aria-hidden="true" className="px-party" />
+      <div aria-hidden="true" className="px-grain" />
 
-          <div className="wl-copy">
-            <h1 id="wl-title" className="wl-title">
-              <span className="nb-mask">
-                <span className="nb-roll" style={{ '--t': '250ms' } as CSSProperties}>
-                  Your day
-                </span>
-              </span>
-              <span className="nb-mask">
-                <span className="nb-roll wl-title-b" style={{ '--t': '400ms' } as CSSProperties}>
-                  starts here.
-                </span>
-              </span>
-            </h1>
-            <p className="wl-body nb-in" style={{ '--t': '650ms' } as CSSProperties}>
-              The easier way to work with your clients and plan your week. Join the waitlist and be the first to know
-              when we launch.
-            </p>
+      <header className="px-head px-in" style={{ '--t': '100ms' } as CSSProperties}>
+        <Logo tone="paper" />
+        <span className="px-chip">
+          <span className="wl-live" aria-hidden="true" />
+          Private beta · 2026
+        </span>
+      </header>
 
-            <div className="nb-in" style={{ '--t': '850ms' } as CSSProperties}>
-              <Waitlist reduced={ea.reduced} onJoined={joined} />
-            </div>
+      <Floaters />
 
-            {count !== null && (
-              <p className="wl-proof nb-in" style={{ '--t': '1000ms' } as CSSProperties} aria-live="polite">
-                <span className="wl-faces" aria-hidden="true">
-                  {['#4f6bed', '#f97316', '#16a34a', '#e11d48', '#0ea5e9'].map((c, i) => (
-                    <span key={c} style={{ background: c, zIndex: 5 - i }}>
-                      <UserRound className="h-[17px] w-[17px]" strokeWidth={2.2} />
-                    </span>
-                  ))}
-                </span>
-                <span>
-                  <span className="wl-live" aria-hidden="true" />
-                  {count === 0 ? (
-                    'Be the first to join'
-                  ) : (
-                    <>
-                      <strong>{count.toLocaleString()}</strong> {count === 1 ? 'person has' : 'people have'} joined
-                    </>
-                  )}
-                </span>
-              </p>
-            )}
-          </div>
-        </section>
+      <main className="px-hero">
+        <p className="px-chip px-in" style={{ '--t': '200ms' } as CSSProperties} aria-live="polite">
+          <span className="wl-live" aria-hidden="true" />
+          {count === null || count === 0 ? (
+            'Waitlist open · be the first'
+          ) : (
+            <>
+              <strong>{count.toLocaleString()}</strong>&nbsp;{count === 1 ? 'person has' : 'people have'} joined · live
+            </>
+          )}
+        </p>
 
-        <div className="wl-right" aria-hidden="true">
-          <Scene />
+        <h1 className="px-title" aria-label="Your day starts here.">
+          {words.map(([w, serif], i) => (
+            <span key={w} aria-hidden="true" className={cn('px-word', serif && 'px-serif')} style={{ '--t': `${300 + i * 110}ms` } as CSSProperties}>
+              {w}
+            </span>
+          ))}
+        </h1>
+
+        <p className="px-body px-in" style={{ '--t': '800ms' } as CSSProperties}>
+          The easier way to work with your clients and plan your week.
+        </p>
+
+        <div className="px-cue px-in" style={{ '--t': '900ms' } as CSSProperties}>
+          <p className="px-cue-text">Join the waitlist and be the first to know when we launch.</p>
+          <svg className="px-zig" viewBox="0 0 120 150" aria-hidden="true">
+            <path d="M14 4 C 70 6, 96 24, 72 40 L 40 58 L 84 76 L 44 94 C 30 104, 46 120, 60 140" />
+            <path className="px-zig-head" d="M50 128 L 60 142 L 72 130" />
+          </svg>
+        </div>
+
+        <div className="px-form px-in" style={{ '--t': '950ms' } as CSSProperties}>
+          <Waitlist reduced={ea.reduced} onJoined={joined} />
         </div>
       </main>
 
       {party > 0 && <Balloons key={party} />}
+      {flipped && (
+        <p className="px-banner" aria-hidden="true">
+          {'YOU\'RE IN!'.split('').map((c, i) => (
+            <span key={i} style={{ '--i': i } as CSSProperties}>
+              {c === ' ' ? '\u00a0' : c}
+            </span>
+          ))}
+        </p>
+      )}
     </div>
   )
 }
 
-/* ------------------------------------------------------------- scene --- */
+/* ----------------------------------------------------------- floaters --- */
 
-/** An original painted-style morning: sky, sun, hills, leaves and a desk with the day's notebook. */
-function Scene({ className }: { className?: string }) {
+/** Pieces of the product drifting around the headline (decorative). */
+function Floaters() {
   return (
-    <svg className={cn('wl-scene', className)} viewBox="0 0 800 900" preserveAspectRatio="xMidYMid slice">
-      <defs>
-        <linearGradient id="wl-sky" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#2b8fd6" />
-          <stop offset="1" stopColor="#9fd3f2" />
-        </linearGradient>
-      </defs>
-      <rect width="800" height="900" fill="url(#wl-sky)" />
-      <circle cx="590" cy="190" r="70" fill="#fde68a" opacity=".9" />
-      <path d="M0 560 Q200 470 400 540 T800 500 V900 H0Z" fill="#3f8f4e" />
-      <path d="M0 640 Q240 560 470 630 T800 600 V900 H0Z" fill="#2f7a3e" />
-      {/* desk + notebook */}
-      <rect x="250" y="600" width="420" height="22" rx="6" fill="#b7793f" />
-      <rect x="290" y="622" width="16" height="200" fill="#8f5a2b" />
-      <rect x="614" y="622" width="16" height="200" fill="#8f5a2b" />
-      <g transform="rotate(-6 450 560)">
-        <rect x="350" y="500" width="200" height="104" rx="8" fill="#f8f6f1" />
-        <rect x="350" y="500" width="200" height="22" rx="8" fill="#191919" />
-        {[0, 1, 2, 3].map((i) => (
-          <line key={i} x1="366" x2="534" y1={540 + i * 16} y2={540 + i * 16} stroke="#c7d2fe" strokeWidth="2" />
-        ))}
-        <path d="M368 535l6 6 10-12" stroke="#16a34a" strokeWidth="4" fill="none" strokeLinecap="round" />
-      </g>
-      <rect x="575" y="540" width="34" height="60" rx="6" fill="#4f6bed" />
-      <path d="M575 556 h-12 a10 10 0 0 0 0 22 h12" stroke="#4f6bed" strokeWidth="6" fill="none" />
-      {/* leaves */}
-      {[
-        [-20, 60, 30, '#1f6b34'],
-        [60, -20, 70, '#2f8f45'],
-        [720, 40, -40, '#1f6b34'],
-        [790, 260, -70, '#3fa556'],
-        [-30, 760, 20, '#2f8f45'],
-        [760, 800, -20, '#1f6b34'],
-      ].map(([x, y, r, c], i) => (
-        <path
-          key={i}
-          d="M0 0 C60 -40 160 -30 220 0 C160 30 60 40 0 0Z"
-          fill={c as string}
-          transform={`translate(${x} ${y}) rotate(${r}) scale(1.4)`}
-        />
+    <div aria-hidden="true" className="px-floaters">
+      <div className="px-card px-f1" style={{ '--depth': 26, '--t': '1100ms' } as CSSProperties}>
+        <span className="px-card-tag" style={{ background: '#4f6bed' }} />
+        <div>
+          <p className="px-card-k">Client call · Northwind</p>
+          <p className="px-card-v">Today, 10:30 – 11:00</p>
+        </div>
+      </div>
+      <div className="px-card px-f2" style={{ '--depth': -34, '--t': '1250ms' } as CSSProperties}>
+        <span className="px-tick">
+          <Check className="h-3 w-3" strokeWidth={3.4} />
+        </span>
+        <p className="px-card-v px-strike">Send invoice to Studio Lumen</p>
+      </div>
+      <div className="px-card px-f3 px-note" style={{ '--depth': 18, '--t': '1400ms' } as CSSProperties}>
+        <p className="px-card-k">Note</p>
+        <p className="px-card-v">Moodboard feedback: warmer tones, bigger type.</p>
+      </div>
+      <div className="px-card px-f4 px-week" style={{ '--depth': -22, '--t': '1550ms' } as CSSProperties}>
+        <p className="px-card-k">This week</p>
+        <div className="px-bars">
+          {[46, 72, 38, 88, 60].map((h, i) => (
+            <span key={i} style={{ height: `${h}%` }} data-on={i === 3} />
+          ))}
+        </div>
+        <div className="px-days">
+          {['M', 'T', 'W', 'T', 'F'].map((d, i) => (
+            <span key={i}>{d}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------ loader --- */
+
+const WORDS = ['Opening your notebook', 'Lining up your tasks', 'Finding your clients', 'Planning your week']
+const COUNT_MS = 1700
+const SHUTTERS = 7
+const pad = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * The visitor's own time counts up from 00:00 while a status line names
+ * what is being prepared; then the shutters lift in a wave.
+ */
+function Loader({ onReveal }: { onReveal: () => void }) {
+  const [target] = useState(() => {
+    const d = new Date()
+    return d.getHours() * 60 + d.getMinutes()
+  })
+  const [mins, setMins] = useState(0)
+  const [stage, setStage] = useState<'count' | 'open' | 'gone'>('count')
+  const revealRef = useRef(onReveal)
+
+  useEffect(() => {
+    revealRef.current = onReveal
+  }, [onReveal])
+
+  useEffect(() => {
+    let raf = 0
+    const timers: number[] = []
+    const start = performance.now()
+    const frame = (now: number) => {
+      const x = Math.min(1, (now - start) / COUNT_MS)
+      const e = 1 - Math.pow(1 - x, 4)
+      setMins(Math.round(e * target))
+      if (x < 1) {
+        raf = requestAnimationFrame(frame)
+        return
+      }
+      timers.push(
+        window.setTimeout(() => {
+          setStage('open')
+          timers.push(window.setTimeout(() => revealRef.current(), 350))
+          timers.push(window.setTimeout(() => setStage('gone'), 1500))
+        }, 380),
+      )
+    }
+    raf = requestAnimationFrame(frame)
+    return () => {
+      cancelAnimationFrame(raf)
+      timers.forEach((id) => window.clearTimeout(id))
+    }
+  }, [target])
+
+  if (stage === 'gone') return null
+  const p = target ? mins / target : 1
+  const word = mins === target ? 'Now' : WORDS[Math.min(WORDS.length - 1, Math.floor(p * WORDS.length))]
+
+  return (
+    <div role="status" aria-label="Loading your day" className={cn('px-loader', `px-l-${stage}`)}>
+      {Array.from({ length: SHUTTERS }, (_, i) => (
+        <span key={i} className="px-shutter" style={{ '--i': i } as CSSProperties} />
       ))}
-      {[120, 220, 640, 700, 520].map((x, i) => (
-        <circle key={x} cx={x} cy={860 - (i % 2) * 30} r="16" fill="#f97316" />
-      ))}
-    </svg>
+      <div className="px-l-ui" aria-hidden="true">
+        <div className="px-l-top">
+          <span key={word} className="px-l-word">
+            {word}
+          </span>
+          <span>{Math.round(p * 100)}%</span>
+        </div>
+        <div className="px-l-clock">
+          {pad(Math.floor(mins / 60))}
+          <span className="px-l-colon">:</span>
+          {pad(mins % 60)}
+        </div>
+        <div className="px-l-line">
+          <span style={{ transform: `scaleX(${p})` }} />
+        </div>
+      </div>
+    </div>
   )
 }
 
 /* ---------------------------------------------------------- balloons --- */
 
-const BALLOON_COLORS = ['#4f6bed', '#f97316', '#16a34a', '#e11d48', '#facc15', '#0ea5e9', '#a855f7']
+const BALLOON_COLORS = ['#ff3d6e', '#ffd23f', '#3ec7ff', '#7cf06b', '#b26bff', '#ff8a3d', '#ff5ec4']
+const BALLOON_WORD = 'HAPPYLAUNCH'
 
 function Balloons() {
   const [gone, setGone] = useState(false)
   const [items] = useState(() =>
-    Array.from({ length: 18 }, (_, i) => ({
-      left: Math.random() * 94,
-      delay: Math.random() * 0.9,
+    Array.from({ length: 22 }, (_, i) => ({
+      letter: i < BALLOON_WORD.length ? BALLOON_WORD[i] : '',
+      // the letter balloons rise in a row, spelling the word
+      left: i < BALLOON_WORD.length ? 4 + i * (86 / BALLOON_WORD.length) : Math.random() * 94,
+      delay: i < BALLOON_WORD.length ? 0.3 + i * 0.07 : Math.random() * 1.4,
       dur: 3.2 + Math.random() * 1.6,
       size: 44 + Math.random() * 30,
       sway: (Math.random() - 0.5) * 80,
@@ -207,124 +337,10 @@ function Balloons() {
               '--sway': `${b.sway}px`,
             } as CSSProperties
           }
-        />
-      ))}
-    </div>
-  )
-}
-
-/* ------------------------------------------------------------ loader --- */
-
-/** The loader's status line moves through what the product does. */
-const WORDS = ['Opening your notebook', 'Lining up your tasks', 'Finding your clients', 'Planning your week']
-
-const COUNT_MS = 1500
-const HOLD_MS = 260
-const SEAM_MS = 420
-
-function dayPart(minutes: number) {
-  const h = minutes / 60
-  if (h < 5) return 'Night'
-  if (h < 12) return 'Morning'
-  if (h < 17) return 'Afternoon'
-  if (h < 21) return 'Evening'
-  return 'Night'
-}
-
-const pad = (n: number) => String(n).padStart(2, '0')
-
-/**
- * The loading screen — "open your day". An ink cover with a huge clock that
- * counts from 00:00 to the visitor's own time while their day fills a
- * timeline. On arrival a pen line is drawn across the middle, and the cover
- * splits open along it like a notebook, cutting the clock in two and
- * revealing the page, where the headline rolls in.
- */
-function Loader({ onReveal }: { onReveal: () => void }) {
-  const [target] = useState(() => {
-    const d = new Date()
-    return d.getHours() * 60 + d.getMinutes()
-  })
-  const [mins, setMins] = useState(0)
-  const [stage, setStage] = useState<'count' | 'seam' | 'open' | 'gone'>('count')
-  const revealRef = useRef(onReveal)
-
-  useEffect(() => {
-    revealRef.current = onReveal
-  }, [onReveal])
-
-  useEffect(() => {
-    let raf = 0
-    const timers: number[] = []
-    const start = performance.now()
-    const frame = (now: number) => {
-      const x = Math.min(1, (now - start) / COUNT_MS)
-      // fast through the night and morning, braking hard onto "now"
-      const e = 1 - Math.pow(1 - x, 4)
-      setMins(Math.round(e * target))
-      if (x < 1) {
-        raf = requestAnimationFrame(frame)
-        return
-      }
-      timers.push(
-        window.setTimeout(() => {
-          setStage('seam')
-          timers.push(
-            window.setTimeout(() => {
-              setStage('open')
-              revealRef.current()
-              timers.push(window.setTimeout(() => setStage('gone'), 1000))
-            }, SEAM_MS),
-          )
-        }, HOLD_MS),
-      )
-    }
-    raf = requestAnimationFrame(frame)
-    return () => {
-      cancelAnimationFrame(raf)
-      timers.forEach((id) => window.clearTimeout(id))
-    }
-  }, [target])
-
-  if (stage === 'gone') return null
-  const at = (mins / 1440) * 100
-  const done = mins === target
-
-  // The same face is painted in both halves; each half shows its own side
-  // of the seam, so splitting the cover splits the clock.
-  const face = (
-    <div className="nb-cover-face">
-      <p className="nb-cover-label">
-        <span key={done ? -1 : Math.floor((mins / Math.max(1, target)) * WORDS.length)} className="nb-cover-word">
-          {done ? 'Now' : WORDS[Math.min(WORDS.length - 1, Math.floor((mins / Math.max(1, target)) * WORDS.length))]}
+        >
+          {b.letter}
         </span>
-        <span>{dayPart(mins)}</span>
-      </p>
-      <p className="nb-cover-clock">
-        {pad(Math.floor(mins / 60))}
-        <span className="nb-cover-colon">:</span>
-        {pad(mins % 60)}
-      </p>
-      <div className="nb-cover-day">
-        <span className="nb-cover-ink" style={{ width: `${at}%` }} />
-        {[0, 6, 12, 18, 24].map((h) => (
-          <em key={h} className={cn(h * 60 <= mins && 'nb-cover-on')} style={{ left: `${(h / 24) * 100}%` }}>
-            {pad(h)}
-          </em>
-        ))}
-      </div>
-    </div>
-  )
-
-  return (
-    <div role="status" aria-label="Loading your day" className={cn('nb-cover', `nb-stage-${stage}`)}>
-      <div aria-hidden="true" className="nb-cover-half nb-cover-top">
-        <div className="nb-cover-inner">{face}</div>
-      </div>
-      <div aria-hidden="true" className="nb-cover-half nb-cover-bottom">
-        <div className="nb-cover-inner">{face}</div>
-      </div>
-      <span aria-hidden="true" className="nb-cover-seam" />
+      ))}
     </div>
   )
 }
@@ -448,7 +464,7 @@ function Waitlist({ reduced, onJoined }: { reduced: boolean; onJoined: () => voi
           aria-invalid={state === 'error'}
           autoComplete="email"
           className="h-full min-w-0 flex-1 bg-transparent px-3 text-[16px] text-lp-ink placeholder:text-lp-muted"
-          style={{ outline: 'none', opacity: 1 - progress }}
+          style={{ outline: 'none', opacity: done ? 0 : 1 - progress }}
         />
         {done && (
           <span
