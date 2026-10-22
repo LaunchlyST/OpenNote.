@@ -97,8 +97,14 @@ earlyAccessRouter.post('/api/waitlist', (req: Request, res: Response) => {
     res.status(400).json({ ok: false, error: 'Please enter a valid email address.' })
     return
   }
-  db.exec('CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, createdAt TEXT NOT NULL);')
-  db.prepare('INSERT OR IGNORE INTO waitlist (email, createdAt) VALUES (?, ?)').run(email, new Date().toISOString())
+  try {
+    db.exec('CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, createdAt TEXT NOT NULL);')
+    db.prepare('INSERT OR IGNORE INTO waitlist (email, createdAt) VALUES (?, ?)').run(email, new Date().toISOString())
+  } catch (err) {
+    console.error('[waitlist] could not save signup:', err)
+    res.status(500).json({ ok: false, error: 'We couldn’t save your email just now. Please try again in a minute.' })
+    return
+  }
   res.json({ ok: true })
 })
 

@@ -1877,3 +1877,589 @@ html.lp-cursor-on * {
 .nb-zig {
   margin-bottom: 4px;
 }
+
+/* ===== Coming Soon — the sheet and the sky ============================ */
+.vx {
+  --sky: #2b8dd6;
+  --forest: #10260f;
+  --body: #4a5650;
+  --mint: #effbe8;
+  --mint-line: #d6eec8;
+  --ease: cubic-bezier(0.77, 0, 0.18, 1);
+  --pad: clamp(28px, 5vw, 72px);
+  min-height: 100svh;
+  padding: clamp(20px, 5.5vh, 64px) clamp(20px, 6vw, 96px);
+  background: var(--sky);
+  display: grid;
+  font-family: 'Geist', var(--font-sans);
+  color: var(--forest);
+}
+.vx-frame {
+  position: relative;
+  overflow: hidden;
+  min-height: min(760px, calc(100svh - 2 * clamp(20px, 5.5vh, 64px)));
+  background: var(--sky);
+  touch-action: pan-y;
+  user-select: none;
+}
+.vx-settled .vx-frame {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+
+/* sky */
+.vx-sky {
+  position: absolute;
+  inset: 0;
+  color: #fff;
+}
+.vx-date {
+  position: absolute;
+  left: var(--pad);
+  bottom: calc(var(--pad) * 0.8);
+  font-size: clamp(2.6rem, 7.4vw, 7.2rem);
+  font-weight: 500;
+  line-height: 0.92;
+  letter-spacing: -0.055em;
+  max-width: 9ch;
+}
+.vx-door {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 46%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--pad);
+  opacity: clamp(0, calc((var(--p) - 0.45) * 2.4), 1);
+  translate: calc((1 - clamp(0, var(--p), 1)) * 40px) 0;
+}
+.vx-door-k {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+.vx-door-h {
+  margin: 10px 0 28px;
+  font-size: clamp(2.2rem, 3.6vw, 3.4rem);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.045em;
+}
+.vx-code {
+  display: flex;
+  gap: 12px;
+  max-width: 420px;
+}
+.vx-code input {
+  flex: 1;
+  min-width: 0;
+  height: 56px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+  color: #fff;
+  font-size: 17px;
+  outline: none;
+  user-select: text;
+}
+.vx-code input::placeholder {
+  color: rgba(255, 255, 255, 0.7);
+}
+.vx-code input:focus {
+  box-shadow: inset 0 0 0 1.5px #fff;
+}
+.vx-code-wrong input {
+  box-shadow: inset 0 0 0 1.5px #ffd2cc;
+}
+.vx-code button {
+  height: 56px;
+  padding: 0 24px;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--forest);
+  font-size: 16px;
+  font-weight: 600;
+}
+.vx-code button:disabled {
+  opacity: 0.7;
+}
+.vx-door-note {
+  margin-top: 12px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+.vx-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 40px;
+  align-self: flex-start;
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  opacity: 0.8;
+}
+.vx-back:hover {
+  opacity: 1;
+}
+
+/* the sheet */
+.vx-sheet {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 60%;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pad);
+  background: #fff;
+  translate: calc(var(--p) * -100%) 0;
+  transition: translate 1.15s var(--ease);
+  box-shadow: 30px 0 60px -30px rgba(10, 40, 70, calc(var(--p) * 0.6));
+  cursor: grab;
+}
+.vx-dragging .vx-sheet {
+  transition: none;
+  cursor: grabbing;
+}
+/* the sheet's right edge thins into the sky, as on the reference */
+.vx-sheet::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 22%;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0));
+  pointer-events: none;
+}
+.vx-logo {
+  align-self: flex-start;
+}
+.vx-copy {
+  margin: auto 0;
+  padding: 48px 0 8px;
+  max-width: 600px;
+}
+.vx-title {
+  margin: 0;
+  font-size: clamp(3.2rem, 6.6vw, 6.4rem);
+  font-weight: 600;
+  line-height: 0.98;
+  letter-spacing: -0.058em;
+  color: var(--forest);
+}
+.vx-line {
+  display: block;
+  opacity: 0;
+  translate: 0 0.5em;
+}
+.vx-settled .vx-line,
+.vx-still .vx-line {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 0.9s calc(var(--i) * 90ms) ease,
+    translate 1s calc(var(--i) * 90ms) cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vx-body {
+  margin: 28px 0 44px;
+  max-width: 30rem;
+  font-size: clamp(18px, 1.55vw, 21px);
+  line-height: 1.42;
+  letter-spacing: -0.01em;
+  color: var(--body);
+  translate: 0 18px;
+}
+.vx-form {
+  display: flex;
+  gap: 14px;
+  max-width: 520px;
+}
+.vx-field {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 58px;
+  padding: 0 18px;
+  border-radius: 10px;
+  background: var(--mint);
+  box-shadow: inset 0 0 0 1.5px var(--mint-line);
+  color: #55705a;
+  cursor: text;
+  transition: box-shadow 0.2s ease;
+}
+.vx-field:focus-within {
+  box-shadow: inset 0 0 0 1.5px var(--forest);
+}
+.vx-field-wrong {
+  box-shadow: inset 0 0 0 1.5px #c2412d;
+}
+.vx-field input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: transparent;
+  outline: none;
+  font-size: 17px;
+  color: var(--forest);
+  user-select: text;
+}
+.vx-field input::placeholder {
+  color: #7a8f7e;
+}
+.vx-field-done input {
+  font-weight: 500;
+}
+.vx-cta {
+  height: 58px;
+  padding: 0 26px;
+  border-radius: 10px;
+  background: var(--forest);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+.vx-cta:hover:not(:disabled) {
+  background: #1d3d1b;
+}
+.vx-cta:disabled {
+  opacity: 0.85;
+}
+.vx-cta:focus-visible,
+.vx-code button:focus-visible,
+.vx-edge:focus-visible,
+.vx-back:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+.vx-error {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #b4321f;
+}
+.vx-proof {
+  margin-top: 30px;
+  font-size: 15px;
+  color: var(--body);
+}
+
+/* the sheet's edge: the handle */
+.vx-edge {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  translate: 50% -50%;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--forest);
+  box-shadow: 0 6px 20px -8px rgba(10, 40, 70, 0.45);
+  cursor: grab;
+}
+.vx-edge-grip {
+  display: grid;
+  transition: rotate 0.6s var(--ease);
+}
+.vx-open .vx-edge-grip {
+  rotate: 180deg;
+}
+.vx-hint {
+  position: absolute;
+  right: var(--pad);
+  top: var(--pad);
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.85);
+  opacity: calc(1 - var(--p) * 3);
+  transition: opacity 0.4s ease;
+}
+.vx-hint span {
+  color: #fff;
+  font-weight: 600;
+}
+.vx:not(.vx-settled) .vx-hint,
+.vx:not(.vx-settled) .vx-edge {
+  opacity: 0;
+}
+.vx-settled .vx-edge {
+  transition: opacity 0.6s 0.5s ease;
+}
+
+/* notification */
+.vx-toast {
+  position: fixed;
+  z-index: 60;
+  left: 50%;
+  bottom: 28px;
+  display: grid;
+  gap: 2px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: var(--forest, #10260f);
+  color: #fff;
+  font-family: 'Geist', var(--font-sans);
+  font-size: 14px;
+  opacity: 0;
+  translate: -50% 16px;
+  pointer-events: none;
+  transition:
+    opacity 0.3s ease,
+    translate 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vx-toast span {
+  color: rgba(255, 255, 255, 0.75);
+}
+.vx-toast-on {
+  opacity: 1;
+  translate: -50% 0;
+}
+
+/* phones: the sheet lies on top, the sky below; slide it up */
+@media (max-width: 760px) {
+  .vx {
+    padding: 0;
+  }
+  .vx-frame {
+    min-height: 100svh;
+    touch-action: none;
+  }
+  .vx-sheet {
+    inset: 0 0 auto 0;
+    width: auto;
+    height: 84%;
+    translate: 0 calc(var(--p) * -100%);
+    box-shadow: 0 30px 60px -30px rgba(10, 40, 70, calc(var(--p) * 0.6));
+  }
+  .vx-sheet::after {
+    top: 100%;
+    left: 0;
+    right: 0;
+    bottom: auto;
+    width: auto;
+    height: 18%;
+    background: linear-gradient(#fff, rgba(255, 255, 255, 0));
+  }
+  .vx-copy {
+    padding-top: 32px;
+  }
+  .vx-title {
+    font-size: clamp(3rem, 15vw, 4.4rem);
+  }
+  .vx-body {
+    margin: 20px 0 30px;
+    font-size: 17px;
+  }
+  .vx-form {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .vx-cta {
+    width: 100%;
+  }
+  .vx-proof {
+    margin-top: 20px;
+  }
+  .vx-edge {
+    top: auto;
+    bottom: 0;
+    right: 50%;
+    translate: 50% 50%;
+  }
+  .vx-edge-grip {
+    rotate: 90deg;
+  }
+  .vx-open .vx-edge-grip {
+    rotate: -90deg;
+  }
+  .vx-hint {
+    top: auto;
+    right: auto;
+    left: var(--pad);
+    bottom: 22px;
+  }
+  .vx-date {
+    top: var(--pad);
+    bottom: auto;
+    font-size: clamp(2.4rem, 13vw, 3.6rem);
+  }
+  .vx-door {
+    top: auto;
+    left: 0;
+    width: auto;
+    padding-bottom: 72px;
+    translate: 0 calc((1 - clamp(0, var(--p), 1)) * 40px);
+  }
+  .vx-code {
+    flex-direction: column;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vx-sheet,
+  .vx-line {
+    transition: none !important;
+  }
+}
+/* refinement 1 */
+.vx:not(.vx-settled) .vx-door {
+  opacity: 0;
+}
+.vx-date {
+  left: auto;
+  right: var(--pad);
+  text-align: right;
+  font-size: clamp(2.4rem, 5.4vw, 5.4rem);
+  transition: opacity 0.5s ease;
+  opacity: calc(1 - clamp(0, var(--p) - 0.2, 1) * 0.65);
+}
+.vx:not(.vx-settled) .vx-date {
+  opacity: 1;
+}
+.vx-sheet {
+  translate: calc(var(--p) * -88%) 0;
+}
+.vx-door {
+  justify-content: flex-start;
+  padding-top: calc(var(--pad) * 2.2);
+}
+@media (max-width: 760px) {
+  .vx-sheet {
+    translate: 0 calc(var(--p) * -86%);
+  }
+  .vx-date {
+    left: var(--pad);
+    right: auto;
+    text-align: left;
+    top: auto;
+    bottom: 26px;
+    font-size: clamp(2rem, 10vw, 2.8rem);
+  }
+  .vx-door {
+    top: 18%;
+    bottom: auto;
+    padding-top: var(--pad);
+  }
+  .vx-hint {
+    bottom: auto;
+    top: calc(84% + 22px);
+  }
+}
+/* refinement 2 */
+.vx-settled .vx-frame {
+  box-shadow: none;
+}
+.vx-sheet::after {
+  width: 26%;
+  background: linear-gradient(
+    90deg,
+    #fff 0%,
+    rgba(255, 255, 255, 0.86) 18%,
+    rgba(255, 255, 255, 0.55) 42%,
+    rgba(255, 255, 255, 0.2) 70%,
+    rgba(255, 255, 255, 0) 100%
+  );
+}
+@media (max-width: 760px) {
+  .vx-field {
+    flex: none;
+  }
+  .vx-sheet {
+    height: 80%;
+  }
+  .vx-sheet::after {
+    width: auto;
+    height: 9%;
+    background: linear-gradient(#fff, rgba(255, 255, 255, 0.5) 45%, rgba(255, 255, 255, 0));
+  }
+  .vx-copy {
+    margin: 0;
+    padding-top: 13vh;
+  }
+  .vx-hint {
+    top: calc(80% + 9% + 4px);
+    left: 0;
+    right: 0;
+    text-align: center;
+  }
+  .vx-date {
+    opacity: calc(clamp(0, var(--p) - 0.4, 1) * 1.6);
+  }
+  .vx:not(.vx-settled) .vx-date {
+    opacity: 1;
+    top: 50%;
+    bottom: auto;
+    translate: 0 -50%;
+    font-size: clamp(2.6rem, 13vw, 3.6rem);
+  }
+}
+/* motion pass: words rise as the sheet lands, not after */
+.vx-shown .vx-line {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 0.8s calc(var(--i) * 80ms) ease,
+    translate 1s calc(var(--i) * 80ms) cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vx-sheet {
+  transition: translate 1.1s cubic-bezier(0.83, 0, 0.17, 1);
+}
+.vx-open .vx-sheet,
+.vx-settled:not(.vx-open) .vx-sheet {
+  transition-duration: 0.85s;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (max-width: 760px) {
+  .vx-code input,
+  .vx-code button {
+    flex: none;
+  }
+  .vx-back-arrow {
+    rotate: -90deg;
+  }
+}
+.vx-proof {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vx-proof strong {
+  font-weight: 600;
+  color: var(--forest);
+}
+.vx-live {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #3fa34d;
+}
+.vx-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: inherit;
+  animation: vx-live 2s ease-out infinite;
+}
+@keyframes vx-live {
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vx-live::after {
+    animation: none;
+  }
+}
