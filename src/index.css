@@ -2672,3 +2672,92 @@ html.lp-cursor-on * {
     top: calc(84% + 9% + 2px);
   }
 }
+/* type, final: one display face, one text face */
+.vx-title,
+.vx-title-b {
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-style: normal;
+  font-weight: 700;
+  font-variation-settings: 'opsz' 96;
+  letter-spacing: -0.045em;
+  line-height: 0.96;
+}
+.vx-title {
+  font-size: clamp(3.2rem, 6.4vw, 6.2rem);
+}
+.vx-title-b {
+  font-size: 1em;
+  color: #2f7a3a;
+  padding-left: 0;
+}
+.vx-body {
+  margin-top: 28px;
+  max-width: 30rem;
+  font-size: clamp(18px, 1.45vw, 20px);
+  line-height: 1.5;
+  letter-spacing: -0.012em;
+  color: #4a5650;
+}
+.vx-hint {
+  font-size: 18px;
+}
+/* the hook on the field */
+.vx-hook {
+  position: absolute;
+  right: var(--pad);
+  top: calc(var(--pad) + 90px);
+  display: grid;
+  justify-items: end;
+  margin: 0;
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-weight: 700;
+  font-variation-settings: 'opsz' 96;
+  font-size: clamp(1.8rem, 3vw, 3rem);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+  color: var(--forest);
+  white-space: nowrap;
+  opacity: calc(1 - clamp(0, var(--p) - 0.2, 1) * 1.5);
+}
+.vx-hook span {
+  opacity: 0;
+  translate: 0 10px;
+}
+.vx-hook span:last-child {
+  color: #2f7a3a;
+}
+.vx-shown .vx-hook span,
+.vx-still .vx-hook span {
+  opacity: 1;
+  translate: 0 0;
+  transition:
+    opacity 0.7s calc(500ms + var(--i) * 120ms) ease,
+    translate 0.9s calc(500ms + var(--i) * 120ms) cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (max-width: 760px) {
+  .vx-hook {
+    display: none;
+  }
+  .vx-title {
+    font-size: clamp(2.6rem, 12vw, 3.6rem);
+  }
+  .vx-hint {
+    font-size: 16px;
+  }
+}
+.vx-title {
+  font-size: clamp(3rem, 5.4vw, 5.4rem);
+}
+.vx-title,
+.vx-title-b {
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.vx-hook {
+  letter-spacing: -0.025em;
+}
+@media (max-width: 760px) {
+  .vx-title-b {
+    white-space: normal;
+  }
+}

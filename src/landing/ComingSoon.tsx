@@ -48,16 +48,6 @@ export function ComingSoon() {
     new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }),
   )
   const [count, setCount] = useState<number | null>(null)
-  // an example of the visitor's day, pinned around their own clock
-  const [agenda] = useState(() => {
-    const h = new Date().getHours()
-    const at = (d: number) => `${String((h + d + 24) % 24).padStart(2, '0')}:00`
-    return [
-      { time: at(-2), text: 'Call with Northwind', state: 'done' },
-      { time: at(0), text: 'Send the proposal to Studio Lumen', state: 'now' },
-      { time: at(2), text: 'Plan next week', state: 'next' },
-    ]
-  })
 
   const setP = useCallback((p: number) => {
     pRef.current = p
@@ -155,15 +145,11 @@ export function ComingSoon() {
       >
         {/* the sky: today's date, and the invite door */}
         <div className="vx-sky">
-          <ol className="vx-agenda" aria-label="An example day in Desknoty">
-            {agenda.map((item, i) => (
-              <li key={item.text} data-state={item.state} style={{ '--i': i } as CSSProperties}>
-                <span className="vx-agenda-t">{item.time}</span>
-                <span className="vx-agenda-x">{item.text}</span>
-                {item.state === 'now' && <span className="vx-agenda-now">Now</span>}
-              </li>
-            ))}
-          </ol>
+          <p className="vx-hook" aria-hidden={open}>
+            <span style={{ '--i': 0 } as CSSProperties}>Every client.</span>
+            <span style={{ '--i': 1 } as CSSProperties}>Every deadline.</span>
+            <span style={{ '--i': 2 } as CSSProperties}>One calm week.</span>
+          </p>
           <p className="vx-date" aria-hidden={!open}>
             {date}
           </p>
@@ -214,17 +200,18 @@ export function ComingSoon() {
               </span>
             </h1>
             <p className="vx-body vx-line" style={{ '--i': 2 } as CSSProperties}>
-              <span className="vx-lead">Plan your week, keep every client on track and never miss a deadline.</span>
-              Join the waitlist and be the first to know when we launch.
+              Plan your week, keep every client on track and never miss a deadline. Join the waitlist to be first in.
             </p>
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
               <Waitlist disabled={open} onJoined={() => setCount((c) => (c === null ? c : c + 1))} />
             </div>
-            {count !== null && (
+            {(
               <p className="vx-proof vx-line" style={{ '--i': 4 } as CSSProperties} aria-live="polite">
                 <span className="vx-live" aria-hidden="true" />
                 <span>
-                  {count === 0 ? (
+                  {count === null ? (
+                    'Waitlist open'
+                  ) : count === 0 ? (
                     'Be the first on the waitlist'
                   ) : (
                     <>
