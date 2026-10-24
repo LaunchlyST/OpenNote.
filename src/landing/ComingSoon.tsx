@@ -255,10 +255,11 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'done'>('idle')
   const [error, setError] = useState('')
   const [toast, setToast] = useState(false)
+  const [already, setAlready] = useState(false)
 
   useEffect(() => {
     if (!toast) return
-    const id = window.setTimeout(() => setToast(false), 6000)
+    const id = window.setTimeout(() => setToast(false), 9000)
     return () => window.clearTimeout(id)
   }, [toast])
 
@@ -281,6 +282,7 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
       if (!res) throw new Error(OFFLINE)
       const body = await res.json().catch(() => null)
       if (!res.ok) throw new Error(body?.error ?? OFFLINE)
+      setAlready(Boolean(body?.alreadyJoined))
       setState('done')
       setToast(true)
       onJoined()
@@ -299,7 +301,7 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
           <Mail aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
           <input
             type="email"
-            value={done ? 'You’re on the list.' : email}
+            value={done ? (already ? 'Already on the list.' : 'You’re on the list. Check your inbox.') : email}
             onChange={(e) => {
               setEmail(e.target.value)
               if (state === 'error') setState('idle')
@@ -326,8 +328,20 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
 
       {createPortal(
         <div className={cn('vx-toast', toast && 'vx-toast-on')} role="status" aria-live="polite">
-          <strong>You’re on the waitlist.</strong>
-          <span>We’ll send you a notification as soon as possible.</span>
+          <span className="vx-toast-icon" aria-hidden="true">
+            <Mail className="h-[18px] w-[18px]" />
+          </span>
+          <span>
+            <strong>{already ? 'You’re already on the list' : 'You’re on the waitlist'}</strong>
+            <span>
+              {already
+                ? 'We’ll email you as soon as Desknoty launches.'
+                : 'Check your inbox: we’ve sent you a confirmation, and we’ll email you again when Desknoty launches.'}
+            </span>
+          </span>
+          <button type="button" className="vx-toast-x" aria-label="Dismiss" onClick={() => setToast(false)}>
+            ×
+          </button>
         </div>,
         document.body,
       )}

@@ -6,7 +6,15 @@
  * for the inbox preview line. Every value that reaches the HTML is escaped.
  */
 
-export type EmailKind = 'reset-password' | 'verify-email' | 'test'
+export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup'
+
+/** What a template may fill in. `email` and `count` are used by the waitlist emails. */
+export interface EmailData {
+  url: string
+  name?: string
+  email?: string
+  count?: number
+}
 
 export interface RenderedEmail {
   subject: string
@@ -75,9 +83,14 @@ function text(heading: string, paragraphs: string[], action: string, url: string
   return [`Desknoty`, '', heading, '', ...paragraphs.flatMap((p) => [p, '']), `${action}:`, url, '', '—', footnote].join('\n')
 }
 
-export function renderEmail(kind: EmailKind, data: { url: string; name?: string }): RenderedEmail {
+export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
   const hello = data.name ? `Hi ${data.name},` : 'Hi,'
   const footnote = 'You received this email because of activity on your Desknoty account. Desknoty will never ask for your password by email.'
+
+  const waitlistFootnote =
+    kind === 'waitlist-signup'
+      ? 'You receive these emails because this address is set as the Desknoty waitlist contact.'
+      : 'You received this email because this address was added to the Desknoty waitlist. Reply to this email if that wasn’t you.'
 
   const spec = {
     'reset-password': {
@@ -98,6 +111,29 @@ export function renderEmail(kind: EmailKind, data: { url: string; name?: string 
       paragraphs: [hello, 'Thanks for signing up for Desknoty. Confirm your email address to finish creating your account.'],
       action: 'Confirm email',
     },
+    'waitlist-welcome': {
+      subject: 'You’re on the Desknoty waitlist',
+      preheader: 'Thanks for joining. We’ll email you the moment Desknoty launches.',
+      heading: 'You’re on the list',
+      paragraphs: [
+        'Hi,',
+        'Thanks for joining the Desknoty waitlist. Desknoty is one place to write notes, plan tasks and keep track of what matters, without switching between apps.',
+        'We’ll send you another email as soon as Desknoty launches, so you can be one of the first in. Nothing else to do for now.',
+      ],
+      action: 'Visit Desknoty',
+    },
+    'waitlist-signup': {
+      subject: `New waitlist signup: ${data.email ?? 'someone'}`,
+      preheader: `${data.email ?? 'Someone'} just joined the Desknoty waitlist.`,
+      heading: 'Someone joined your waitlist',
+      paragraphs: [
+        `${data.email ?? 'A new visitor'} just joined the Desknoty waitlist.`,
+        typeof data.count === 'number'
+          ? `That makes ${data.count} ${data.count === 1 ? 'person' : 'people'} on the list.`
+          : 'They were sent a welcome email.',
+      ],
+      action: 'Open Desknoty',
+    },
     test: {
       subject: 'Desknoty test email',
       preheader: 'Your Desknoty email setup is working.',
@@ -109,7 +145,7 @@ export function renderEmail(kind: EmailKind, data: { url: string; name?: string 
 
   return {
     subject: spec.subject,
-    html: layout({ ...spec, url: data.url, footnote }),
-    text: text(spec.heading, spec.paragraphs, spec.action, data.url, footnote),
+    html: layout({ ...spec, url: data.url, footnote: kind.startsWith('waitlist') ? waitlistFootnote : footnote }),
+    text: text(spec.heading, spec.paragraphs, spec.action, data.url, kind.startsWith('waitlist') ? waitlistFootnote : footnote),
   }
 }

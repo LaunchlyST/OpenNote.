@@ -3023,3 +3023,44 @@ html.lp-cursor-on * {
 .vx-hook span + span {
   margin-top: 0.15em;
 }
+/* signup confirmation: top of the screen, hard to miss */
+.vx-toast {
+  top: 24px;
+  bottom: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: min(460px, calc(100vw - 32px));
+  padding: 16px 16px 16px 18px;
+  border-radius: 14px;
+  translate: -50% -16px;
+  box-shadow: 0 20px 50px -20px rgba(16, 38, 15, 0.6);
+}
+.vx-toast-on {
+  translate: -50% 0;
+}
+.vx-toast strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+}
+.vx-toast-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: #3fa34d;
+  color: #fff;
+}
+.vx-toast-x {
+  margin-left: auto;
+  font-size: 20px;
+  line-height: 1;
+  color: rgba(255, 255, 255, 0.6);
+}
+.vx-toast-x:hover {
+  color: #fff;
+}
+.vx-toast-on { pointer-events: auto; }

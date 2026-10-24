@@ -1,7 +1,7 @@
 import { db } from '../db.ts'
 import { env } from '../env.ts'
 import { renderEmail } from './templates.ts'
-import type { EmailKind } from './templates.ts'
+import type { EmailData, EmailKind } from './templates.ts'
 import { createTransport } from './transport.ts'
 import type { Transport } from './transport.ts'
 
@@ -50,7 +50,7 @@ function log(message: string) {
 
 export type EnqueueResult = { queued: true; id: number } | { queued: false; reason: 'rate-limited' | 'invalid-recipient' }
 
-export function enqueueEmail(kind: EmailKind, to: string, data: { url: string; name?: string }): EnqueueResult {
+export function enqueueEmail(kind: EmailKind, to: string, data: EmailData): EnqueueResult {
   const recipient = to.trim().toLowerCase()
   // A single address, no header injection.
   if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(recipient)) {
