@@ -146,8 +146,9 @@ export function ComingSoon() {
         {/* the sky: today's date, and the invite door */}
         <div className="vx-sky">
           <p className="vx-hook" aria-hidden={open}>
-            <span style={{ '--i': 0 } as CSSProperties}>Too many things to remember.</span>
-            <span style={{ '--i': 1 } as CSSProperties}>One place for everything.</span>
+            <span style={{ '--i': 0 } as CSSProperties}>Write it down.</span>
+            <span style={{ '--i': 1 } as CSSProperties}>Plan it out.</span>
+            <span style={{ '--i': 2 } as CSSProperties}>Get it done.</span>
           </p>
           <p className="vx-date" aria-hidden={!open}>
             {date}
