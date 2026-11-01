@@ -33,9 +33,10 @@ const OFFLINE = 'We can’t reach the server right now. Please try again in a mo
  * Where signups go when Desknoty's own API isn't reachable — the static
  * GitHub Pages build has no server. FormSubmit (formsubmit.co) relays each
  * signup to this inbox and sends the visitor an automatic confirmation. The
- * first signup triggers a one-time activation email to this address.
+ * value is FormSubmit's alias for the owner's inbox (issued on activation),
+ * so the address itself is not in the page source.
  */
-const WAITLIST_INBOX = 'ronaldouk91@gmail.com'
+const WAITLIST_INBOX = '4908c18163e17ae03477d8bbd4048d5c'
 
 /** Sends a signup through FormSubmit. Resolves true when it was accepted. */
 async function relaySignup(email: string): Promise<boolean> {
