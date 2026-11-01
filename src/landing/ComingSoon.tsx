@@ -38,6 +38,27 @@ const OFFLINE = 'We can’t reach the server right now. Please try again in a mo
  */
 const WAITLIST_INBOX = '4908c18163e17ae03477d8bbd4048d5c'
 
+/**
+ * Emails that already joined from this browser. FormSubmit can't tell a repeat
+ * signup from a new one, so the page remembers locally and doesn't resend.
+ */
+const JOINED_KEY = 'desknoty.waitlist.joined'
+function joinedHere(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(JOINED_KEY) ?? '[]')
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+function rememberJoined(email: string) {
+  try {
+    localStorage.setItem(JOINED_KEY, JSON.stringify([...new Set([...joinedHere(), email])]))
+  } catch {
+    /* storage blocked: nothing to remember with */
+  }
+}
+
 /** Sends a signup through FormSubmit. Resolves true when it was accepted. */
 async function relaySignup(email: string): Promise<boolean> {
   const res = await fetch(`https://formsubmit.co/ajax/${WAITLIST_INBOX}`, {
@@ -311,8 +332,13 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
       const body = res ? await res.json().catch(() => null) : null
       // no API behind this page (no answer, or a static host's error page): relay instead
       if (!res || body === null) {
-        if (!(await relaySignup(value))) throw new Error(OFFLINE)
-        setAlready(false)
+        const key = value.toLowerCase()
+        const repeat = joinedHere().includes(key)
+        if (!repeat) {
+          if (!(await relaySignup(value))) throw new Error(OFFLINE)
+          rememberJoined(key)
+        }
+        setAlready(repeat)
         setState('done')
         setToast(true)
         onJoined()
