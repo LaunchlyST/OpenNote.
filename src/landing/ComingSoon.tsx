@@ -28,6 +28,34 @@ import { useEarlyAccess } from './useEarlyAccess'
 const WIPE = '#10260f'
 const INTRO_HOLD = 650
 const OFFLINE = 'We can’t reach the server right now. Please try again in a moment.'
+
+/**
+ * Where signups go when Desknoty's own API isn't reachable — the static
+ * GitHub Pages build has no server. FormSubmit (formsubmit.co) relays each
+ * signup to this inbox and sends the visitor an automatic confirmation. The
+ * first signup triggers a one-time activation email to this address.
+ */
+const WAITLIST_INBOX = 'ronaldouk91@gmail.com'
+
+/** Sends a signup through FormSubmit. Resolves true when it was accepted. */
+async function relaySignup(email: string): Promise<boolean> {
+  const res = await fetch(`https://formsubmit.co/ajax/${WAITLIST_INBOX}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      email,
+      _subject: `New Desknoty waitlist signup: ${email}`,
+      _template: 'table',
+      _captcha: 'false',
+      _autoresponse:
+        'Thanks for joining the Desknoty waitlist! Desknoty is one place to write notes, plan tasks and keep track of what matters. We’ll email you again as soon as Desknoty launches.',
+    }),
+  }).catch(() => null)
+  if (!res?.ok) return false
+  const body = (await res.json().catch(() => null)) as { success?: string | boolean } | null
+  // "false" with an activation message still means FormSubmit took the request
+  return body !== null && body.success !== undefined
+}
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 export function ComingSoon() {
@@ -208,11 +236,11 @@ export function ComingSoon() {
                 onJoined={() => setCount((c) => (c === null ? c : c + 1))}
               />
             </div>
-            {(
+            {count !== null && (
               <p className="vx-proof vx-line" style={{ '--i': 4 } as CSSProperties} aria-live="polite">
                 <span className="vx-live" aria-hidden="true" />
-                <span className="vx-count" aria-label={`${count ?? 0} people have joined the waitlist`}>
-                  {(count ?? 0).toLocaleString()}
+                <span className="vx-count" aria-label={`${count} people have joined the waitlist`}>
+                  {count.toLocaleString()}
                 </span>
               </p>
             )}
@@ -279,9 +307,16 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: value }),
       }).catch(() => null)
-      // no answer at all, or a proxy error page: the API isn't reachable
-      if (!res) throw new Error(OFFLINE)
-      const body = await res.json().catch(() => null)
+      const body = res ? await res.json().catch(() => null) : null
+      // no API behind this page (no answer, or a static host's error page): relay instead
+      if (!res || body === null) {
+        if (!(await relaySignup(value))) throw new Error(OFFLINE)
+        setAlready(false)
+        setState('done')
+        setToast(true)
+        onJoined()
+        return
+      }
       if (!res.ok) throw new Error(body?.error ?? OFFLINE)
       setAlready(Boolean(body?.alreadyJoined))
       setState('done')
