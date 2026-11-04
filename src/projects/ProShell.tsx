@@ -19,6 +19,9 @@ import {
   Workflow,
   Zap,
   BellRing,
+  ChevronDown,
+  ChevronsDownUp,
+  ChevronsUpDown,
   LayoutTemplate,
   Megaphone,
 } from 'lucide-react'
@@ -92,6 +95,7 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
 
 const ALL = GROUPS.flatMap((g) => g.items)
 const COLLAPSE_KEY = 'desknoty.pro.rail-collapsed'
+const GROUPS_KEY = 'desknoty.pro.closed-groups'
 
 export function ProShell({ project }: { project: ProjectSummary }) {
   const { navigate } = useRouter()
@@ -113,6 +117,24 @@ export function ProShell({ project }: { project: ProjectSummary }) {
       /* storage blocked */
     }
   }, [collapsed])
+
+  // sections whose items are hidden; only the section name shows
+  const [closed, setClosed] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(GROUPS_KEY) ?? '[]')
+    } catch {
+      return []
+    }
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem(GROUPS_KEY, JSON.stringify(closed))
+    } catch {
+      /* storage blocked */
+    }
+  }, [closed])
+  const toggleGroup = (t: string) => setClosed((c) => (c.includes(t) ? c.filter((x) => x !== t) : [...c, t]))
+  const allClosed = closed.length === GROUPS.length
 
   const item = ALL.find((i) => i.id === active) ?? ALL[0]
   const ink = theme.dark ? 'text-white' : 'text-[#191919]'
@@ -148,15 +170,35 @@ export function ProShell({ project }: { project: ProjectSummary }) {
           </button>
         </div>
 
+ {!collapsed && (
+          <div className="flex justify-end px-4 pb-1">
+            <button
+              type="button"
+              onClick={() => setClosed(allClosed ? [] : GROUPS.map((g) => g.title))}
+              className={cn('inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11.5px] font-medium transition', theme.dark ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-[#8f8e8a] hover:bg-black/[0.04] hover:text-[#191919]')}
+            >
+              {allClosed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
+              {allClosed ? 'Show all' : 'Hide all'}
+            </button>
+          </div>
+        )}
         <nav aria-label="Pro" className="pro-rail-nav scroll-area min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           {GROUPS.map((g) => (
             <div key={g.title} className="mt-3 first:mt-1">
               {collapsed ? (
                 <div className={cn('mx-auto my-2 h-px w-6', theme.dark ? 'bg-white/10' : 'bg-[#ececea]')} />
               ) : (
-                <p className={cn('px-3 pb-1.5 text-[11.5px] font-medium', muted)}>{g.title}</p>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.title)}
+                  aria-expanded={!closed.includes(g.title)}
+                  className={cn('flex w-full items-center justify-between rounded-[8px] px-3 pb-1.5 pt-0.5 text-[11.5px] font-medium transition', muted, theme.dark ? 'hover:text-white' : 'hover:text-[#191919]')}
+                >
+                  {g.title}
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', closed.includes(g.title) && '-rotate-90')} />
+                </button>
               )}
-              {g.items.map((it) => {
+              {(collapsed || !closed.includes(g.title)) && g.items.map((it) => {
                 const on = it.id === active && !settingsOpen
                 return (
                   <button
