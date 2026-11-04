@@ -79,12 +79,18 @@ const MESSAGES: Record<string, string> = {
   INVALID_EMAIL: 'Please enter a valid email address.',
   INVALID_PASSWORD: 'Your current password is incorrect.',
   INVALID_TOKEN: 'This reset link is invalid or has expired. Please request a new one.',
+  SIGNUP_CLOSED: 'Sign-up is invite only for now. Join the waitlist instead.',
 }
+
+/** No auth server behind this page (the static site) or it is down. */
+const NO_SERVER = 'Accounts aren’t open on this site yet. Join the waitlist and we’ll email you when they are.'
 
 type ClientError = { code?: string; message?: string; status?: number } | null | undefined
 
 function fail(error: ClientError, fallback = 'Something went wrong. Please try again.'): never {
   if (error?.status === 429) throw new Error('Too many attempts. Please wait a moment and try again.')
+  // a static host answers auth routes with 404/405; a missing server with 5xx or nothing
+  if (!error?.code && (!error?.status || [404, 405, 502, 503, 504].includes(error.status))) throw new Error(NO_SERVER)
   throw new Error((error?.code && MESSAGES[error.code]) || error?.message || fallback)
 }
 
