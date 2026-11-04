@@ -19,6 +19,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import { ProBackdrop } from './ProBackdrop'
+import { ProHome } from './ProHome'
 import { useProTheme } from './proTheme'
 import { useAuth } from '../auth'
 import { useRouter } from '../router'
@@ -529,49 +530,6 @@ function Empty({ title, body, action }: { title: string; body?: string; action?:
   )
 }
 
-/** Pro only: a greeting that knows the time of day, and live totals. */
-function ProHero({ name, projects, action }: { name: string; projects: ProjectSummary[] | null; action: ReactNode }) {
-  const [now, setNow] = useState(() => new Date())
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 30_000)
-    return () => window.clearInterval(id)
-  }, [])
-  const h = now.getHours()
-  const part = h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
-  const first = name.trim().split(/\s+/)[0] || 'there'
-  const stats = [
-    { label: 'Projects', value: projects?.length ?? 0 },
-    { label: 'Events', value: (projects ?? []).reduce((n, p) => n + p.eventCount, 0) },
-    { label: 'Notes', value: (projects ?? []).reduce((n, p) => n + p.noteCount, 0) },
-  ]
-  return (
-    <section className="pro-hero">
-      <div className="flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <p className="pro-eyebrow">
-            <span className="pro-live" aria-hidden="true" />
-            {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} ·{' '}
-            {now.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
-          </p>
-          <h1 className="pro-title">
-            {part}, <span className="pro-name">{first}</span>.
-          </h1>
-          <p className="pro-sub">Your Pro workspace. Pick up a project or start something new.</p>
-        </div>
-        {action}
-      </div>
-      <dl className="mt-7 grid grid-cols-3 gap-3 sm:max-w-lg">
-        {stats.map((s) => (
-          <div key={s.label} className="pro-stat">
-            <dt>{s.label}</dt>
-            <dd>{s.value}</dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  )
-}
-
 /* ------------------------------------------------------------------ */
 /* Page                                                                 */
 /* ------------------------------------------------------------------ */
@@ -691,12 +649,31 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
       style={pro ? { background: theme.canvas } : undefined}
     >
       {pro && <ProBackdrop dark={Boolean(theme.dark)} />}
+      {pro ? (
+        <ProHome
+          name={user?.fullName ?? ''}
+          projects={projects}
+          error={error}
+          onRetry={load}
+          account={<AccountMenu />}
+          onCreate={() => setDialog({ kind: 'create' })}
+          onOpen={(p) => navigate(paths.project(p.id))}
+          onRename={(p) => setDialog({ kind: 'rename', project: p })}
+          onDuplicate={async (p) => {
+            try {
+              const copy = await projectsApi.duplicate(p.id)
+              setProjects((list) => [copy, ...(list ?? [])])
+            } catch (e) {
+              flash((e as Error).message)
+            }
+          }}
+          onDelete={(p) => setDialog({ kind: 'delete', project: p })}
+        />
+      ) : (
       <div className="relative z-10 contents-wrapper flex min-h-full flex-col">
       {top}
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 pb-10 pt-7 sm:px-6">
-        {pro ? (
-          <ProHero name={user?.fullName ?? ''} projects={projects} action={createButton} />
-        ) : (
+        {(
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-[24px] font-semibold tracking-[-0.03em] text-[#191919]">My Projects</h1>
@@ -781,7 +758,6 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
                 <div className="mt-3 grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" data-testid="project-grid">
                   {visible.map((p) => (
                     <ProjectCard
-                      pro={pro}
                       key={p.id}
                       project={p}
                       onOpen={() => navigate(paths.project(p.id))}
@@ -809,6 +785,7 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
         )}
       </main>
       </div>
+      )}
 
       {dialog?.kind === 'create' && (
         <CreateDialog
