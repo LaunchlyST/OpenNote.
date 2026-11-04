@@ -4104,3 +4104,32 @@ html.lp-cursor-on * {
 .dk-round:disabled {
   opacity: 0.35;
 }
+/* restored: big greeting and pill search */
+.ph-kicker {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+.ph-hello {
+  margin-top: 14px;
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-variation-settings: 'opsz' 96;
+  font-weight: 700;
+  font-size: clamp(3rem, 7.2vw, 6.4rem);
+  line-height: 0.92;
+  letter-spacing: -0.05em;
+  color: var(--ink);
+}
+.dk-sub {
+  margin-top: 18px;
+  font-size: 16px;
+  color: var(--soft);
+}
+.dk-search {
+  width: min(440px, 40vw);
+  height: 42px;
+  border-radius: 999px;
+  padding: 0 8px 0 14px;
+}

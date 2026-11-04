@@ -114,7 +114,6 @@ export function ProHome(props: Props) {
   }, [])
 
   const h = now.getHours()
-  const part = h < 5 ? 'Late night' : h < 12 ? 'Morning' : h < 18 ? 'Afternoon' : 'Evening'
   const first = name.trim().split(/\s+/)[0] || 'there'
   const brief = !projects
     ? 'Getting your desk ready.'
@@ -136,7 +135,7 @@ export function ProHome(props: Props) {
         </a>
         <button type="button" className="dk-search" onClick={() => setPalette(true)}>
           <Search className="h-4 w-4" />
-          <span>Find a project</span>
+          <span>Jump to a project…</span>
           <kbd>
             <Command className="h-3 w-3" />K
           </kbd>
@@ -145,16 +144,13 @@ export function ProHome(props: Props) {
       </header>
 
       <section className="dk-brief">
-        <p className="dk-date">
-          {now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} ·{' '}
-          {pad(now.getHours())}:{pad(now.getMinutes())}
-        </p>
-        <h1 className="dk-line">
-          <span className="dk-hi">
-            {part}, {first}.
-          </span>{' '}
-          {brief}
+        <p className="ph-kicker">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+        <h1 className="ph-hello">
+          Good {h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'},
+          <br />
+          <span className="pro-name">{first}.</span>
         </h1>
+        <p className="dk-sub">{brief}</p>
       </section>
 
       {error ? (
