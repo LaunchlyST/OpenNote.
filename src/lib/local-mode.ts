@@ -1,17 +1,17 @@
 import { API_BASE } from './api-base'
-import { hasStaticAccess } from '../landing/useEarlyAccess'
 
 /**
  * Local mode: the app without a server.
  *
  * The static build (GitHub Pages) has no API, so accounts, projects and
- * preferences cannot be stored anywhere. For a browser that has redeemed the
- * invite code, this module answers the app's own API requests from
- * localStorage instead — same paths, same JSON — so the app runs unchanged.
+ * preferences cannot be stored anywhere. This module answers the app's own
+ * API requests from localStorage instead — same paths, same JSON — so the app
+ * runs unchanged. Sign-up is limited to ALLOWED_EMAIL_SHA256, and the
+ * password is kept as a PBKDF2 hash.
  *
  * It switches on only when the real API does not answer. Wherever a server
- * runs, every request goes to it as before. Data saved here lives in this
- * browser only: it is not an account, and clearing site data removes it.
+ * runs, every request goes to it as before. Accounts and data saved here live
+ * in this browser only, and clearing site data removes them.
  */
 
 const STORE = 'desknoty.local.v1'
@@ -36,8 +36,15 @@ interface LocalProject {
   openedAt: string | null
 }
 
+interface LocalAccount {
+  email: string
+  salt: string
+  hash: string
+}
+
 interface LocalState {
   signedIn: boolean
+  account?: LocalAccount
   user: LocalUser
   projects: LocalProject[]
   preferences: Record<string, unknown>
@@ -102,8 +109,30 @@ function session(state: LocalState) {
 
 const id = () => `prj_${crypto.randomUUID()}`
 
+/**
+ * Who may create an account on this device: SHA-256 of the allowed emails, so
+ * the addresses themselves are not in the page source.
+ */
+const ALLOWED_EMAIL_SHA256 = ['b51200d565a693046e5c8b0947276b013806e82312429a7ad98663e057756962']
+
+const hex = (buf: ArrayBuffer) => Array.from(new Uint8Array(buf), (b) => b.toString(16).padStart(2, '0')).join('')
+const sha256 = async (text: string) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+
+/** PBKDF2-SHA256, so the stored password can't be read back. */
+async function hashPassword(password: string, salt: string): Promise<string> {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: 210_000 },
+    key,
+    256,
+  )
+  return hex(bits)
+}
+
+const authError = (status: number, code: string, message: string) => json(status, { code, message })
+
 /** Answers one API request from local storage. */
-function handle(method: string, path: string, search: string, body: Record<string, unknown>): Response {
+async function handle(method: string, path: string, search: string, body: Record<string, unknown>): Promise<Response> {
   const state = load()
   const now = new Date().toISOString()
 
@@ -113,14 +142,44 @@ function handle(method: string, path: string, search: string, body: Record<strin
   if (path.startsWith('/api/auth/')) {
     const route = path.slice('/api/auth'.length)
     if (route === '/get-session') return json(200, session(state))
-    if (route === '/sign-in/email' || route === '/sign-up/email') {
-      if (typeof body.email === 'string' && body.email.includes('@')) state.user.email = body.email.trim().toLowerCase()
-      if (typeof body.name === 'string' && body.name.trim()) state.user.name = body.name.trim()
-      else if (state.user.name === 'You') state.user.name = state.user.email.split('@')[0]
+    if (route === '/sign-up/email') {
+      const email = String(body.email ?? '').trim().toLowerCase()
+      const password = String(body.password ?? '')
+      if (!ALLOWED_EMAIL_SHA256.includes(await sha256(email))) {
+        return authError(403, 'SIGNUP_CLOSED', 'Sign-up is invite only for now. Join the waitlist instead.')
+      }
+      if (state.account) return authError(422, 'USER_ALREADY_EXISTS', 'An account with that email already exists.')
+      if (password.length < 10) return authError(400, 'PASSWORD_TOO_SHORT', 'Your password must be at least 10 characters.')
+      const salt = crypto.randomUUID()
+      state.account = { email, salt, hash: await hashPassword(password, salt) }
+      state.user.email = email
+      state.user.name = String(body.name ?? '').trim() || email.split('@')[0]
+      state.user.createdAt = now
       state.signedIn = true
       save(state)
-      const s = session(state)!
-      return json(200, { token: 'local', user: s.user, redirect: false })
+      return json(200, { token: 'local', user: session(state)!.user })
+    }
+    if (route === '/sign-in/email') {
+      const email = String(body.email ?? '').trim().toLowerCase()
+      const a = state.account
+      if (!a || a.email !== email || (await hashPassword(String(body.password ?? ''), a.salt)) !== a.hash) {
+        return authError(401, 'INVALID_EMAIL_OR_PASSWORD', 'Incorrect email or password. Please try again.')
+      }
+      state.signedIn = true
+      save(state)
+      return json(200, { token: 'local', user: session(state)!.user, redirect: false })
+    }
+    if (route === '/change-password') {
+      const a = state.account
+      if (!a || (await hashPassword(String(body.currentPassword ?? ''), a.salt)) !== a.hash) {
+        return authError(400, 'INVALID_PASSWORD', 'Your current password is incorrect.')
+      }
+      const next = String(body.newPassword ?? '')
+      if (next.length < 10) return authError(400, 'PASSWORD_TOO_SHORT', 'Your password must be at least 10 characters.')
+      a.salt = crypto.randomUUID()
+      a.hash = await hashPassword(next, a.salt)
+      save(state)
+      return json(200, { status: true })
     }
     if (route === '/sign-out') {
       state.signedIn = false
@@ -133,8 +192,8 @@ function handle(method: string, path: string, search: string, body: Record<strin
       save(state)
       return json(200, { status: true })
     }
-    if (route === '/change-password' || route === '/request-password-reset' || route === '/send-verification-email') {
-      return json(400, { code: 'LOCAL_MODE', message: 'Passwords and emails aren’t used on this device. Your data stays in this browser.' })
+    if (route === '/request-password-reset' || route === '/send-verification-email') {
+      return json(400, { code: 'LOCAL_MODE', message: 'Email links aren’t available on this device. Your account lives in this browser.' })
     }
     return json(404, { message: 'Not available on this device.' })
   }
@@ -227,7 +286,6 @@ let decided: Promise<boolean> | null = null
 
 /** Whether this page runs without an API (asked once, then remembered for the page). */
 function useLocal(realFetch: typeof fetch): Promise<boolean> {
-  if (!hasStaticAccess()) return Promise.resolve(false)
   decided ??= realFetch(`${API_BASE}/api/auth-config`)
     .then(async (res) => {
       const body = await res.json().catch(() => null)
