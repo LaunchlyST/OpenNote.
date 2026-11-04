@@ -39,6 +39,28 @@ const OFFLINE = 'We can’t reach the server right now. Please try again in a mo
 const WAITLIST_INBOX = '4908c18163e17ae03477d8bbd4048d5c'
 
 /**
+ * The live count on the static site. Abacus (abacus.jasoncameron.dev) is a
+ * free counter: it stores one number and nothing about who joined. Each new
+ * relayed signup adds one; BASE covers the signups made before it existed.
+ */
+const COUNTER = 'https://abacus.jasoncameron.dev'
+const COUNTER_KEY = 'desknoty-com/waitlist'
+const COUNTER_BASE = 1
+
+async function readCounter(): Promise<number | null> {
+  const res = await fetch(`${COUNTER}/get/${COUNTER_KEY}`).catch(() => null)
+  if (res?.status === 404) return COUNTER_BASE // nobody counted yet
+  const body = res?.ok ? ((await res.json().catch(() => null)) as { value?: number } | null) : null
+  return typeof body?.value === 'number' ? COUNTER_BASE + body.value : null
+}
+
+async function bumpCounter(): Promise<number | null> {
+  const res = await fetch(`${COUNTER}/hit/${COUNTER_KEY}`).catch(() => null)
+  const body = res?.ok ? ((await res.json().catch(() => null)) as { value?: number } | null) : null
+  return typeof body?.value === 'number' ? COUNTER_BASE + body.value : null
+}
+
+/**
  * Emails that already joined from this browser. FormSubmit can't tell a repeat
  * signup from a new one, so the page remembers locally and doesn't resend.
  */
@@ -107,11 +129,16 @@ export function ComingSoon() {
   useEffect(() => {
     document.body.classList.add('lp-body')
     setP(pRef.current)
+    // the API's exact count when there is a server; otherwise the public counter
     const load = () =>
       fetch(apiUrl('/api/waitlist/count'))
         .then((r) => (r.ok ? r.json() : null))
-        .then((d) => typeof d?.count === 'number' && setCount(d.count))
-        .catch(() => {})
+        .catch(() => null)
+        .then(async (d) => {
+          if (typeof d?.count === 'number') return setCount(d.count)
+          const n = await readCounter()
+          if (n !== null) setCount(n)
+        })
     void load()
     const id = window.setInterval(load, 15000)
     // the first scene: sky and date, then the sheet slides in over it
@@ -255,7 +282,7 @@ export function ComingSoon() {
             <div className="vx-line" style={{ '--i': 3 } as CSSProperties}>
               <Waitlist
                 disabled={open}
-                onJoined={() => setCount((c) => (c === null ? c : c + 1))}
+                onJoined={(n) => setCount((c) => (typeof n === 'number' ? n : c === null ? c : c + 1))}
               />
             </div>
             {count !== null && (
@@ -301,7 +328,7 @@ export function ComingSoon() {
 
 /* ----------------------------------------------------------- waitlist --- */
 
-function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => void }) {
+function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: (count?: number) => void }) {
   const [email, setEmail] = useState('')
   const [state, setState] = useState<'idle' | 'sending' | 'error' | 'done'>('idle')
   const [error, setError] = useState('')
@@ -334,14 +361,16 @@ function Waitlist({ disabled, onJoined }: { disabled: boolean; onJoined: () => v
       if (!res || body === null) {
         const key = value.toLowerCase()
         const repeat = joinedHere().includes(key)
+        let total: number | null = null
         if (!repeat) {
           if (!(await relaySignup(value))) throw new Error(OFFLINE)
           rememberJoined(key)
+          total = await bumpCounter()
         }
         setAlready(repeat)
         setState('done')
         setToast(true)
-        onJoined()
+        if (!repeat) onJoined(total ?? undefined)
         return
       }
       if (!res.ok) throw new Error(body?.error ?? OFFLINE)

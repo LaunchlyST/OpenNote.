@@ -3064,3 +3064,9 @@ html.lp-cursor-on * {
   color: #fff;
 }
 .vx-toast-on { pointer-events: auto; }
+@media (min-width: 761px) {
+  .vx-date {
+    font-size: clamp(2.2rem, 4.2vw, 4.4rem);
+    max-width: calc(40% - var(--pad) - 40px);
+  }
+}
