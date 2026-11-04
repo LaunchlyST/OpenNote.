@@ -192,7 +192,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
                   type="button"
                   onClick={() => toggleGroup(g.title)}
                   aria-expanded={!closed.includes(g.title)}
-                  className={cn('flex w-full items-center justify-between rounded-[8px] px-3 pb-1.5 pt-0.5 text-[11.5px] font-medium transition', muted, theme.dark ? 'hover:text-white' : 'hover:text-[#191919]')}
+                  className={cn('flex w-full items-center gap-1 rounded-[8px] px-3 pb-1.5 pt-0.5 text-[11.5px] font-medium transition', muted, theme.dark ? 'hover:text-white' : 'hover:text-[#191919]')}
                 >
                   {g.title}
                   <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', closed.includes(g.title) && '-rotate-90')} />
