@@ -3124,3 +3124,190 @@ html.lp-cursor-on * {
 .pro-rail-nav {
   mask-image: linear-gradient(#000 calc(100% - 28px), transparent);
 }
+
+/* ---- Pro dashboard (My Projects) ------------------------------------- */
+.contents-wrapper {
+  flex: 1 0 auto;
+}
+.pro-hero {
+  padding-bottom: 4px;
+}
+.pro-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: #5f5e5b;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(8px);
+}
+.pro-live {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #65a30d;
+  box-shadow: 0 0 0 0 rgba(101, 163, 13, 0.5);
+  animation: nb-pulse 1.8s ease-out infinite;
+}
+.pro-title {
+  margin-top: 16px;
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-variation-settings: 'opsz' 96;
+  font-weight: 700;
+  font-size: clamp(2.2rem, 4.4vw, 3.6rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: #191919;
+}
+.pro-name {
+  background: linear-gradient(100deg, #3f7d20 0%, #6d4bd8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.pro-sub {
+  margin-top: 10px;
+  font-size: 15px;
+  color: #5f5e5b;
+}
+.pro-stat {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06);
+  backdrop-filter: blur(10px);
+}
+.pro-stat dt {
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #8f8e8a;
+}
+.pro-stat dd {
+  margin-top: 2px;
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #191919;
+  font-variant-numeric: tabular-nums;
+}
+/* glass project cards with a spotlight that follows the pointer */
+.pro-card {
+  overflow: hidden;
+  border-color: rgba(0, 0, 0, 0.07);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px);
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
+}
+.pro-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(220px circle at var(--sx, 50%) var(--sy, 50%), rgba(196, 242, 122, 0.35), transparent 60%);
+  transition: opacity 0.3s ease;
+}
+.pro-card > * {
+  position: relative;
+  z-index: 1;
+}
+.pro-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(63, 125, 32, 0.35);
+  box-shadow: 0 24px 44px -26px rgba(16, 24, 40, 0.45);
+}
+.pro-card:hover::before {
+  opacity: 1;
+}
+
+/* dark themes (Midnight): flip the page's ink */
+.pro-dark {
+  color-scheme: dark;
+}
+.pro-dark .pro-eyebrow,
+.pro-dark .pro-stat {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+.pro-dark .pro-title,
+.pro-dark .pro-stat dd {
+  color: #fff;
+}
+.pro-dark .pro-name {
+  background-image: linear-gradient(100deg, #c4f27a 0%, #b9a6ff 100%);
+}
+.pro-dark .pro-sub,
+.pro-dark .pro-stat dt {
+  color: rgba(255, 255, 255, 0.6);
+}
+.pro-dark .pro-card {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+}
+.pro-dark .pro-card:hover {
+  border-color: rgba(196, 242, 122, 0.4);
+  box-shadow: 0 24px 44px -24px rgba(0, 0, 0, 0.8);
+}
+.pro-dark .pro-card::before {
+  background: radial-gradient(220px circle at var(--sx, 50%) var(--sy, 50%), rgba(196, 242, 122, 0.16), transparent 60%);
+}
+.pro-dark .text-\[\#191919\],
+.pro-dark .text-\[\#37352f\] {
+  color: #fff;
+}
+.pro-dark .text-\[\#8f8e8a\],
+.pro-dark .text-\[\#a3a29e\],
+.pro-dark .text-\[\#6b6a66\] {
+  color: rgba(255, 255, 255, 0.55);
+}
+.pro-dark input[type='search'],
+.pro-dark select {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+.pro-dark input[type='search']::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+.pro-dark select option {
+  color: #191919;
+}
+.pro-dark [role='menu'],
+.pro-dark [role='menu'] * {
+  color: #37352f;
+}
+.pro-dark nav[aria-label='Project pages'] button:not([aria-current='page']) {
+  color: rgba(255, 255, 255, 0.55);
+}
+.pro-dark nav[aria-label='Project pages'] button[aria-current='page'] {
+  background: #fff;
+  color: #191919;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro-card,
+  .pro-card:hover {
+    transform: none;
+  }
+}
+.pro-dark header a > span > span.font-semibold {
+  color: #fff;
+}
+.pro-dark header button[aria-haspopup] {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+.pro-dark header button[aria-haspopup]:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
