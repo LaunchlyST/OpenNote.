@@ -48,6 +48,40 @@ export function playExitWipe(done: () => void, gradient: string) {
   }, 720)
 }
 
+/**
+ * The static build (GitHub Pages) has no API to redeem the code. There the
+ * page checks the code itself against this SHA-256 of the launch invite and
+ * remembers the pass in this browser. That only gates a teaser — the static
+ * files are public anyway — so wherever the API runs, the API decides.
+ */
+const STATIC_CODE_SHA256 = '2542be58d05bdc019e38297537f5b86bb1290aa2bc3685ee39f0b0dae0ab875d'
+export const STATIC_ACCESS_KEY = 'desknoty.access'
+
+async function sha256(text: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
+/** True when the static fallback accepts the code (and remembers it). */
+export async function redeemStatically(code: string): Promise<boolean> {
+  if ((await sha256(code)) !== STATIC_CODE_SHA256) return false
+  try {
+    localStorage.setItem(STATIC_ACCESS_KEY, STATIC_CODE_SHA256)
+  } catch {
+    /* storage blocked: the pass lasts only for this visit */
+  }
+  return true
+}
+
+/** Whether this browser redeemed the code through the static fallback. */
+export function hasStaticAccess(): boolean {
+  try {
+    return localStorage.getItem(STATIC_ACCESS_KEY) === STATIC_CODE_SHA256
+  } catch {
+    return false
+  }
+}
+
 interface Options {
   /** The gradient used by the exit wipe, matched to the concept's palette. */
   wipe: string
@@ -196,7 +230,14 @@ export function useEarlyAccess({ wipe }: Options) {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ code: attempt }),
-      })
+      }).catch(() => null)
+      const body = res ? await res.json().catch(() => null) : null
+      // no API behind this page (static build): check the code here instead
+      if (!res || body === null) {
+        if (!(await redeemStatically(attempt))) throw new Error('invalid')
+        leave()
+        return
+      }
       if (!res.ok) throw new Error('invalid')
       leave()
     } catch {
