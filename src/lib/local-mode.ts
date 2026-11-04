@@ -103,6 +103,8 @@ function session(state: LocalState) {
       createdAt: state.user.createdAt,
       updatedAt: state.user.createdAt,
       role: 'user',
+      // the one account this device allows is the owner's: Pro on the house
+      plan: 'pro',
     },
   }
 }
@@ -214,10 +216,9 @@ async function handle(method: string, path: string, search: string, body: Record
     const parts = path.slice('/api/projects'.length).split('/').filter(Boolean).map(decodeURIComponent)
     const query = new URLSearchParams(search)
     const ws = (parts.length ? undefined : (query.get('workspace') ?? body.workspace)) as string | undefined
-    if (ws === 'pro') return json(403, { error: 'Desknoty Pro is coming soon.' })
 
     if (!parts.length && method === 'GET') {
-      const list = state.projects.filter((p) => p.workspace === 'free').sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      const list = state.projects.filter((p) => p.workspace === (ws === 'pro' ? 'pro' : 'free')).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       return json(200, { projects: list.map(summary) })
     }
     if (!parts.length && method === 'POST') {
@@ -226,7 +227,7 @@ async function handle(method: string, path: string, search: string, body: Record
       const color = String(body.color ?? 'lime')
       const p: LocalProject = {
         id: id(),
-        workspace: 'free',
+        workspace: ws === 'pro' ? 'pro' : 'free',
         name,
         color,
         description: String(body.description ?? '').slice(0, 280),

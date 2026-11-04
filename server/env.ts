@@ -88,6 +88,14 @@ export const env = {
    * When set, only these emails may create an account (comma-separated).
    * Empty means anyone can sign up.
    */
+  /**
+   * Accounts given Pro for free once their email is verified (comma-separated).
+   * Anyone not listed keeps their plan. Paid Pro is not on sale yet.
+   */
+  proEmails: (process.env.PRO_EMAILS ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean),
   signupAllowlist: (process.env.SIGNUP_ALLOWLIST ?? '')
     .split(',')
     .map((entry) => entry.trim().toLowerCase())

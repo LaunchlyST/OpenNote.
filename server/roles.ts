@@ -19,12 +19,16 @@ export function syncRoles(): { admins: string[] } {
   }>
 
   const setRole = db.prepare('UPDATE "user" SET role = ? WHERE id = ?')
+  // PRO_EMAILS: Pro on the house for these verified accounts. Only ever grants.
+  const pro = new Set(env.proEmails)
+  const grantPro = db.prepare(`UPDATE "user" SET plan = 'pro' WHERE id = ? AND (plan IS NULL OR plan != 'pro')`)
   const admins: string[] = []
   db.transaction(() => {
     for (const row of rows) {
       const wanted = allow.has(row.email.toLowerCase()) && Boolean(row.emailVerified) ? 'admin' : 'user'
       if (wanted === 'admin') admins.push(row.email)
       if (row.role !== wanted) setRole.run(wanted, row.id)
+      if (pro.has(row.email.toLowerCase()) && row.emailVerified) grantPro.run(row.id)
     }
   })()
   return { admins }
