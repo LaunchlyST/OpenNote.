@@ -1,3 +1,5 @@
+// No server behind this page (the static site)? The app keeps working from this browser's storage.
+import './local-mode-boot'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
