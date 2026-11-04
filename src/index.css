@@ -3070,3 +3070,57 @@ html.lp-cursor-on * {
     max-width: calc(40% - var(--pad) - 40px);
   }
 }
+
+/* ---- Pro workspace ---------------------------------------------------- */
+.pro-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fff;
+  background: linear-gradient(120deg, #3f7d20, #6d4bd8);
+}
+.pro-aurora {
+  position: relative;
+  isolation: isolate;
+  background: linear-gradient(135deg, #1f3b17 0%, #2f5d23 40%, #4b3aa8 100%);
+  box-shadow: 0 16px 30px -18px rgba(47, 93, 35, 0.8);
+}
+.pro-aurora-glow {
+  position: absolute;
+  inset: -40%;
+  z-index: -1;
+  background:
+    radial-gradient(35% 35% at 30% 30%, rgba(196, 242, 122, 0.55), transparent 70%),
+    radial-gradient(35% 35% at 70% 70%, rgba(167, 139, 250, 0.55), transparent 70%);
+  animation: pro-aurora 9s ease-in-out infinite alternate;
+}
+@keyframes pro-aurora {
+  to {
+    transform: rotate(160deg) scale(1.15);
+  }
+}
+.pro-aurora-bar {
+  width: 38%;
+  animation: pro-bar 3.2s ease-in-out infinite;
+}
+@keyframes pro-bar {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(280%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pro-aurora-glow,
+  .pro-aurora-bar {
+    animation: none;
+  }
+}
+/* the menu fades out under the Pro card instead of being cut */
+.pro-rail-nav {
+  mask-image: linear-gradient(#000 calc(100% - 28px), transparent);
+}

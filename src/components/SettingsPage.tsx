@@ -539,13 +539,14 @@ function ThemeCard({ id, label, icon, active, soon }: { id: string; label: strin
   )
 }
 
-function AppearanceSection() {
+function AppearanceSection({ extra }: { extra?: ReactNode }) {
   const { settings, updateSettings } = useApp()
   const { preferences } = usePreferences()
   const { save, state } = usePrefSaver()
 
   return (
     <SectionShell title="Appearance" description="Theme, accent colour and motion.">
+      {extra}
       <SettingsCard title="Theme" icon={<Sun className="h-3.5 w-3.5" />} description="Desknoty currently ships in Light. Dark and System are being designed.">
         <div className="grid gap-3 px-5 py-4 sm:grid-cols-3">
           <ThemeCard id="light" label="Light" icon={<Sun className="h-3.5 w-3.5" />} active />
@@ -1267,7 +1268,11 @@ function DeploySection() {
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
 
-export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
+export function SettingsPage({
+  onBack,
+  backLabel = 'Back to calendar',
+  extraAppearance,
+}: { onBack?: () => void; backLabel?: string; extraAppearance?: ReactNode } = {}) {
   const { settingsSection, setSettingsSection } = useApp()
   const { user } = useAuth()
   const { status } = usePreferences()
@@ -1312,7 +1317,7 @@ export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
               className="-ml-2 mb-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-medium text-[#5f5e5b] transition hover:bg-white hover:text-[#191919]"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Back to calendar
+              {backLabel}
             </button>
           )}
           <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-[#191919] sm:text-[36px]">Settings</h1>
@@ -1356,7 +1361,7 @@ export function SettingsPage({ onBack }: { onBack?: () => void } = {}) {
             {active.id === 'profile' && <ProfileSection key={user?.id ?? 'signed-out'} />}
             {active.id === 'account' && <AccountSection />}
             {active.id === 'general' && <GeneralSection />}
-            {active.id === 'appearance' && <AppearanceSection />}
+            {active.id === 'appearance' && <AppearanceSection extra={extraAppearance} />}
             {active.id === 'notifications' && <NotificationsSection />}
             {active.id === 'calendar' && <CalendarPreferencesSection />}
             {active.id === 'security' && <SecuritySection />}

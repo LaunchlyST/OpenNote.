@@ -8,6 +8,7 @@ import { WorkspacePicker } from './projects/WorkspacePicker'
 import { MyProjects } from './projects/MyProjects'
 import { PageChrome, Spinner, btn } from './projects/Chrome'
 import { ProjectContext } from './projects/context'
+import { ProShell } from './projects/ProShell'
 import { ApiError, parseWorkspaceRoute, paths, projectsApi } from './projects/api'
 import type { ProjectSummary } from './projects/api'
 import { useAuth } from './auth'
@@ -183,36 +184,6 @@ function CalendarShell() {
           <NotesPanel />
         </Drawer>
       )}
-    </div>
-  )
-}
-
-/**
- * A Pro project for now: the sidebar, and an empty page where the Pro tools
- * will go. Pro features are not built yet.
- */
-function ProShell({ project }: { project: ProjectSummary }) {
-  const { navigate } = useRouter()
-  return (
-    <div className="flex h-full w-full overflow-hidden bg-white">
-      <div className="hidden lg:flex">
-        <Sidebar />
-      </div>
-      <main className="flex min-w-0 flex-1 flex-col bg-white">
-        <header className="flex h-16 items-center gap-3 border-b border-[#ececea] px-5">
-          <button
-            type="button"
-            onClick={() => navigate(paths.dashboard('pro'))}
-            className="inline-flex items-center gap-1.5 text-[14px] text-[#4a4a46] hover:text-[#191919]"
-          >
-            ← Back to Projects
-          </button>
-          <span className="text-[14px] font-semibold text-[#191919]">{project.name}</span>
-        </header>
-        <div className="grid flex-1 place-items-center">
-          <p className="text-[14px] text-[#8f8e8a]">Pro tools are on the way.</p>
-        </div>
-      </main>
     </div>
   )
 }
