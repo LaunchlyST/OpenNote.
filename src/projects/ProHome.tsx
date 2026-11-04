@@ -72,7 +72,6 @@ export function ProHome(props: Props) {
   const list = useMemo(() => [...(projects ?? [])].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)), [projects])
   const [sel, setSel] = useState(0)
   const at = Math.min(sel, Math.max(0, list.length - 1))
-  const current = list[at]
 
   // real data for every project, read without marking them opened
   const [peeks, setPeeks] = useState<Record<string, Peek>>({})
@@ -102,6 +101,7 @@ export function ProHome(props: Props) {
   const todayProjects = new Set(today.map((e) => e.project.id)).size
 
   const [palette, setPalette] = useState(false)
+  const [opened, setOpened] = useState<{ i: number; rect: DOMRect } | null>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -175,210 +175,301 @@ export function ProHome(props: Props) {
           </button>
         </div>
       ) : (
-        <main className="dk-desk">
-          <Deck list={list} at={at} setAt={setSel} onOpen={onOpen} onCreate={onCreate} props={props} peeks={peeks} now={now} />
-          {current && <Page project={current} peek={peeks[current.id]} now={now} onOpen={onOpen} onSaved={(id, p) => setPeeks((m) => ({ ...m, [id]: p }))} />}
-          <aside className="dk-next" aria-label="Coming up">
+        <main className="or">
+          <section className="or-strip" aria-label="Coming up">
             <h2 className="dk-label">Coming up</h2>
             {upcoming.length === 0 ? (
               <p className="dk-quiet">No upcoming events in any project.</p>
             ) : (
-              <ol>
-                {upcoming.slice(0, 6).map((e) => (
+              <ol className="or-chips">
+                {upcoming.slice(0, 8).map((e) => (
                   <li key={e.project.id + e.id}>
                     <button
                       type="button"
                       onClick={() => setSel(list.findIndex((p) => p.id === e.project.id))}
-                      className="dk-next-row"
+                      className="or-chip"
                       style={{ '--c': (COLORS[e.project.color] ?? COLORS.lime).dot } as CSSProperties}
                     >
-                      <span className="dk-next-when">{when(e.start, now)}</span>
-                      <span className="dk-next-title">{e.title}</span>
-                      <span className="dk-next-proj">{e.project.name}</span>
+                      <span className="or-chip-when">{when(e.start, now)}</span>
+                      <span className="or-chip-title">{e.title}</span>
+                      <span className="or-chip-proj">{e.project.name}</span>
                     </button>
                   </li>
                 ))}
               </ol>
             )}
-          </aside>
+          </section>
+          <Orbit
+            list={list}
+            at={at}
+            setAt={setSel}
+            peeks={peeks}
+            now={now}
+            onCreate={onCreate}
+            onExpand={(i, rect) => setOpened({ i, rect })}
+            props={props}
+          />
         </main>
       )}
 
+      {opened && list[opened.i] && (
+        <Sheet rect={opened.rect} project={list[opened.i]} onClose={() => setOpened(null)}>
+          <Page
+            project={list[opened.i]}
+            peek={peeks[list[opened.i].id]}
+            now={now}
+            onOpen={onOpen}
+            onSaved={(id, p) => setPeeks((m) => ({ ...m, [id]: p }))}
+          />
+        </Sheet>
+      )}
       {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => setSel(i)} onOpen={onOpen} onCreate={onCreate} />}
     </div>
   )
 }
 
-/* ---------------------------------------------------------------- deck --- */
+/* --------------------------------------------------------------- orbit --- */
 
-function Deck({
+const STEP = 300 // px between card centres at the front
+
+/**
+ * A depth carousel with real physics. Position is continuous (in cards); each
+ * card's tilt, depth, scale and light come from its distance to the centre.
+ * Dragging moves the position 1:1; letting go projects the landing card from
+ * the release velocity and a spring pulls the stack onto it (magnetic snap).
+ */
+function Orbit({
   list,
   at,
   setAt,
-  onOpen,
-  onCreate,
-  props,
   peeks,
   now,
+  onCreate,
+  onExpand,
+  props,
 }: {
-  peeks: Record<string, Peek>
-  now: Date
   list: ProjectSummary[]
   at: number
   setAt: (i: number) => void
-  onOpen: (p: ProjectSummary) => void
+  peeks: Record<string, Peek>
+  now: Date
   onCreate: () => void
+  onExpand: (i: number, rect: DOMRect) => void
   props: Props
 }) {
-  const [dx, setDx] = useState(0)
-  const [dragging, setDragging] = useState(false)
-  const start = useRef<{ x: number; t: number; moved: boolean } | null>(null)
-  const wheel = useRef({ acc: 0, last: 0 })
-  const go = useCallback((i: number) => setAt(Math.max(0, Math.min(list.length - 1, i))), [list.length, setAt])
+  const [pos, setPos] = useState(at)
+  const p = useRef({ pos: at, vel: 0, target: at, raf: 0, dragging: false })
+  const drag = useRef<{ x: number; from: number; lastX: number; lastT: number; v: number; moved: boolean } | null>(null)
+  const wheelIdle = useRef(0)
+  const max = list.length - 1
+  const still = reduced()
+
+  const run = useCallback(() => {
+    const s = p.current
+    cancelAnimationFrame(s.raf)
+    const tick = () => {
+      if (s.dragging) return
+      if (still) {
+        s.pos = s.target
+        s.vel = 0
+      } else {
+        // critically-damped-ish spring toward the target card
+        s.vel += (s.target - s.pos) * 0.09
+        s.vel *= 0.72
+        s.pos += s.vel
+      }
+      setPos(s.pos)
+      if (Math.abs(s.target - s.pos) > 0.0008 || Math.abs(s.vel) > 0.0008) s.raf = requestAnimationFrame(tick)
+      else {
+        s.pos = s.target
+        setPos(s.pos)
+      }
+    }
+    s.raf = requestAnimationFrame(tick)
+  }, [still])
+
+  const snapTo = useCallback(
+    (i: number) => {
+      const t = Math.max(0, Math.min(max, Math.round(i)))
+      p.current.target = t
+      setAt(t)
+      run()
+    },
+    [max, run, setAt],
+  )
+
+  // outside changes (index list, coming-up chips, palette) glide the stack there
+  useEffect(() => {
+    if (p.current.target !== at && !p.current.dragging) snapTo(at)
+  }, [at, snapTo])
+  useEffect(() => () => cancelAnimationFrame(p.current.raf), [])
 
   const down = (e: ReactPointerEvent) => {
-    if ((e.target as HTMLElement).closest('button:not(.dk-card-face), [role="menu"]')) return
-    start.current = { x: e.clientX, t: performance.now(), moved: false }
+    if ((e.target as HTMLElement).closest('[role="menu"], .or-more')) return
+    const s = p.current
+    cancelAnimationFrame(s.raf)
+    s.dragging = true
+    drag.current = { x: e.clientX, from: s.pos, lastX: e.clientX, lastT: performance.now(), v: 0, moved: false }
     ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
   const move = (e: ReactPointerEvent) => {
-    const s = start.current
-    if (!s) return
-    const d = e.clientX - s.x
-    if (Math.abs(d) > 4) {
-      s.moved = true
-      setDragging(true)
-    }
-    // rubber band at the ends
-    const edge = (d > 0 && at === 0) || (d < 0 && at === list.length - 1)
-    setDx(edge ? d * 0.25 : d)
+    const d = drag.current
+    if (!d) return
+    const dx = e.clientX - d.x
+    if (Math.abs(dx) > 5) d.moved = true
+    const t = performance.now()
+    const dt = Math.max(1, t - d.lastT)
+    d.v = 0.8 * d.v + 0.2 * ((e.clientX - d.lastX) / dt) // px/ms, smoothed
+    d.lastX = e.clientX
+    d.lastT = t
+    let next = d.from - dx / STEP
+    if (next < 0) next *= 0.35 // rubber band
+    if (next > max) next = max + (next - max) * 0.35
+    p.current.pos = next
+    setPos(next)
   }
-  const up = () => {
-    const s = start.current
-    start.current = null
-    setDragging(false)
-    if (!s) return
-    const v = dx / Math.max(1, performance.now() - s.t) // px per ms: a flick counts
-    if (dx < -90 || v < -0.6) go(at + 1)
-    else if (dx > 90 || v > 0.6) go(at - 1)
-    setDx(0)
+  const up = (e: ReactPointerEvent) => {
+    const d = drag.current
+    drag.current = null
+    p.current.dragging = false
+    if (!d) return
+    if (!d.moved) {
+      // a tap: centre card opens, any other card comes to the front
+      // pointer capture retargets events to the stage: find the card under the finger
+      const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+      const card = hit?.closest<HTMLElement>('[data-orbit-i]')
+      if (card) {
+        const i = Number(card.dataset.orbitI)
+        if (i === Math.round(p.current.pos)) onExpand(i, card.getBoundingClientRect())
+        else snapTo(i)
+      } else snapTo(p.current.pos)
+      return
+    }
+    // momentum: project where the flick would coast to, then snap
+    snapTo(p.current.pos - (d.v * 260) / STEP)
   }
   const onWheel = (e: React.WheelEvent) => {
-    if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) return
-    const w = wheel.current
-    const t = performance.now()
-    if (t - w.last > 260) w.acc = 0
-    w.last = t
-    w.acc += e.deltaX
-    if (Math.abs(w.acc) > 60) {
-      go(at + Math.sign(w.acc))
-      w.acc = 0
-      w.last = t + 200 // settle before the next step
-    }
+    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0
+    if (!delta) return
+    const s = p.current
+    cancelAnimationFrame(s.raf)
+    s.pos = Math.max(-0.3, Math.min(max + 0.3, s.pos + delta / STEP))
+    setPos(s.pos)
+    window.clearTimeout(wheelIdle.current)
+    wheelIdle.current = window.setTimeout(() => snapTo(s.pos), 110)
   }
   const onKey = (e: ReactKeyboardEvent) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') (e.preventDefault(), go(at + 1))
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') (e.preventDefault(), go(at - 1))
-    if (e.key === 'Home') (e.preventDefault(), go(0))
-    if (e.key === 'End') (e.preventDefault(), go(list.length - 1))
-    if (e.key === 'Enter') onOpen(list[at])
+    const k = e.key
+    if (k === 'ArrowRight') (e.preventDefault(), snapTo(p.current.target + 1))
+    else if (k === 'ArrowLeft') (e.preventDefault(), snapTo(p.current.target - 1))
+    else if (k === 'Home') (e.preventDefault(), snapTo(0))
+    else if (k === 'End') (e.preventDefault(), snapTo(max))
+    else if (k === 'Enter' || k === ' ') {
+      e.preventDefault()
+      const el = document.querySelector<HTMLElement>(`[data-orbit-i="${p.current.target}"]`)
+      if (el) onExpand(p.current.target, el.getBoundingClientRect())
+    }
   }
 
-  const still = reduced()
   return (
-    <section className="dk-deckwrap" aria-label="Projects">
+    <section className="or-stage-wrap" aria-label="Projects">
+      <div className="or-head">
+        <h2 className="dk-label">Projects</h2>
+        <span className="dk-count">
+          <b>{pad(at + 1)}</b> / {pad(list.length)}
+        </span>
+      </div>
       <div
-        className={cn('dk-deck', dragging && 'dk-dragging')}
+        className="or-stage"
         role="listbox"
-        aria-label="Projects, use the arrow keys to flip"
-        aria-activedescendant={`dk-card-${list[at]?.id}`}
         tabIndex={0}
-        onKeyDown={onKey}
+        aria-label="Projects. Arrow keys to move, Enter to open"
+        aria-activedescendant={`or-${list[at]?.id}`}
         onPointerDown={down}
         onPointerMove={move}
         onPointerUp={up}
         onPointerCancel={up}
         onWheel={onWheel}
+        onKeyDown={onKey}
       >
-        {list.map((p, i) => {
-          const d = i - at
-          if (d < -1 || d > 4) return null
+        <div className="or-floor" aria-hidden="true" />
+        {list.map((proj, i) => {
+          const d = i - pos
+          const ad = Math.abs(d)
+          if (ad > 3.6) return null
+          const side = Math.max(-1, Math.min(1, d))
+          const x = d * STEP * (1 - Math.min(ad, 3) * 0.14)
+          const style = {
+            transform: `translate3d(calc(-50% + ${x}px), -50%, ${-ad * 140}px) rotateY(${-side * Math.min(ad, 1) * 34}deg) scale(${1 - Math.min(ad, 3) * 0.05})`,
+            zIndex: 100 - Math.round(ad * 10),
+            opacity: ad > 3 ? Math.max(0, 3.6 - ad) / 0.6 : 1 - Math.min(ad, 3) * 0.12,
+            filter: still || ad < 0.05 ? undefined : `blur(${Math.min(ad, 3) * 0.9}px) saturate(${1 - Math.min(ad, 2) * 0.15})`,
+          } as CSSProperties
           return (
-            <Card
-              key={p.id}
-              project={p}
+            <OrbitCard
+              key={proj.id}
+              project={proj}
               index={i}
               total={list.length}
-              depth={d}
-              dx={d === 0 ? dx : 0}
-              still={still}
-              onPick={() => (d === 0 ? !start.current?.moved && onOpen(p) : go(i))}
-              props={props}
-              peek={peeks[p.id]}
+              front={ad < 0.5}
+              style={style}
+              peek={peeks[proj.id]}
               now={now}
+              props={props}
             />
           )
         })}
       </div>
 
-      <div className="dk-deck-bar">
-        <span className="dk-count">
-          <b>{pad(at + 1)}</b> / {pad(list.length)}
-        </span>
+      <div className="or-controls">
+        <div className="or-dots" role="tablist" aria-label="All projects">
+          {list.map((proj, i) => (
+            <button
+              key={proj.id}
+              type="button"
+              role="tab"
+              aria-selected={i === at}
+              aria-label={proj.name}
+              title={proj.name}
+              onClick={() => snapTo(i)}
+              style={{ '--c': (COLORS[proj.color] ?? COLORS.lime).dot } as CSSProperties}
+            />
+          ))}
+        </div>
         <div className="flex gap-1.5">
-          <button type="button" className="dk-round" aria-label="Previous project" disabled={at === 0} onClick={() => go(at - 1)}>
+          <button type="button" className="dk-round" aria-label="Previous project" disabled={at === 0} onClick={() => snapTo(at - 1)}>
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <button type="button" className="dk-round" aria-label="Next project" disabled={at === list.length - 1} onClick={() => go(at + 1)}>
+          <button type="button" className="dk-round" aria-label="Next project" disabled={at === max} onClick={() => snapTo(at + 1)}>
             <ArrowRight className="h-4 w-4" />
           </button>
-          <button type="button" className="dk-round dk-round-add" aria-label="New project" onClick={onCreate}>
-            <Plus className="h-4 w-4" />
+          <button type="button" className="or-new" onClick={onCreate}>
+            <Plus className="h-4 w-4" /> New project
           </button>
         </div>
       </div>
-
-      {/* the index: every project, numbered, one click away */}
-      <ol className="dk-index" aria-label="All projects">
-        {list.map((p, i) => (
-          <li key={p.id}>
-            <button
-              type="button"
-              aria-current={i === at ? 'true' : undefined}
-              onClick={() => go(i)}
-              style={{ '--c': (COLORS[p.color] ?? COLORS.lime).dot } as CSSProperties}
-            >
-              <span>{pad(i + 1)}</span>
-              {p.name}
-            </button>
-          </li>
-        ))}
-      </ol>
+      <p className="or-hint">Drag, swipe or use ← → · Click the front card to open it</p>
     </section>
   )
 }
 
-function Card({
+function OrbitCard({
   project,
   index,
   total,
-  depth,
-  dx,
-  still,
-  onPick,
-  props,
+  front,
+  style,
   peek,
   now,
+  props,
 }: {
-  peek?: Peek
-  now: Date
   project: ProjectSummary
   index: number
   total: number
-  depth: number
-  dx: number
-  still: boolean
-  onPick: () => void
+  front: boolean
+  style: CSSProperties
+  peek?: Peek
+  now: Date
   props: Props
 }) {
   const c = COLORS[project.color] ?? COLORS.lime
@@ -390,84 +481,132 @@ function Card({
     document.addEventListener('mousedown', off)
     return () => document.removeEventListener('mousedown', off)
   }, [menu])
-
-  // depth 0 is on top; behind cards fan back and right; -1 has been flicked away
-  const t =
-    depth < 0
-      ? 'translate3d(-70%, 30px, 0) rotate(-14deg)'
-      : depth === 0
-        ? `translate3d(${dx}px, ${Math.abs(dx) * 0.06}px, 0) rotate(${dx * 0.03}deg)`
-        : `translate3d(${depth * 22}px, ${depth * -16}px, 0) rotate(${depth * 2.4}deg) scale(${1 - depth * 0.045})`
-  const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[#37352f] transition hover:bg-[#f3f3f1]'
-  // live counts once the project has been read; the summary until then
   const events = peek?.events.length ?? project.eventCount
   const notes = peek?.notes.length ?? project.noteCount
-  const next = peek?.events
-    .filter((e) => Date.parse(e.end) > now.getTime())
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0]
+  const next = peek?.events.filter((e) => Date.parse(e.end) > now.getTime()).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0]
+  const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[#37352f] transition hover:bg-[#f3f3f1]'
 
   return (
     <article
-      id={`dk-card-${project.id}`}
-      data-project-card={project.id}
+      id={`or-${project.id}`}
       role="option"
-      aria-selected={depth === 0}
-      className={cn('dk-card', depth === 0 && 'dk-card-top')}
-      style={
-        {
-          '--c': c.dot,
-          '--cbg': c.bg,
-          '--ctext': c.text,
-          transform: t,
-          zIndex: 50 - Math.max(depth, -1) * 2 - (depth < 0 ? 60 : 0),
-          opacity: depth < 0 ? 0 : depth > 3 ? 0 : 1 - depth * 0.08,
-          transition: still ? 'none' : undefined,
-        } as CSSProperties
-      }
+      aria-selected={front}
+      data-orbit-i={index}
+      data-project-card={project.id}
+      className={cn('or-card', front && 'or-card-front')}
+      style={{ ...style, '--c': c.dot, '--cbg': c.bg, '--ct': c.text } as CSSProperties}
     >
-      <button type="button" className="dk-card-face" tabIndex={-1} onClick={onPick} aria-label={depth === 0 ? `Open ${project.name}` : `Show ${project.name}`}>
-        <span className="dk-card-band" aria-hidden="true" />
-        <span className="dk-card-no">
+      <span className="or-card-ghost" aria-hidden="true">
+        {pad(index + 1)}
+      </span>
+      <div className="or-card-top">
+        <span className="or-card-no">
           {pad(index + 1)}
-          <i>/{pad(total)}</i>
+          <i> / {pad(total)}</i>
         </span>
-        {next && (
-          <span className="dk-card-next">
-            <span>Next</span>
-            {next.title}
-            <em>{when(next.start, now)}</em>
-          </span>
+        {front && (
+          <div ref={ref} className="relative" onPointerDown={(e) => e.stopPropagation()}>
+            <button type="button" aria-label={`Actions for ${project.name}`} aria-haspopup="menu" aria-expanded={menu} className="or-more" onClick={() => setMenu((m) => !m)}>
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
+            {menu && (
+              <div role="menu" className="absolute right-0 z-30 mt-1 w-40 rounded-xl border border-[#ececea] bg-white p-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.3)]">
+                <button type="button" role="menuitem" className={item} onClick={() => { setMenu(false); props.onRename(project) }}>
+                  <Pencil className="h-4 w-4" /> Rename
+                </button>
+                <button type="button" role="menuitem" className={item} onClick={() => { setMenu(false); props.onDuplicate(project) }}>
+                  <Copy className="h-4 w-4" /> Duplicate
+                </button>
+                <button type="button" role="menuitem" className={cn(item, 'text-[#b4453c] hover:bg-[#fdf3f2]')} onClick={() => { setMenu(false); props.onDelete(project) }}>
+                  <Trash2 className="h-4 w-4" /> Delete
+                </button>
+              </div>
+            )}
+          </div>
         )}
-        <span className="dk-card-name">{project.name}</span>
-        {project.description && <span className="dk-card-desc">{project.description}</span>}
-        <span className="dk-card-foot">
+      </div>
+      <div className="or-card-body">
+        <h3 className="or-card-name">{project.name}</h3>
+        {project.description && <p className="or-card-desc">{project.description}</p>}
+        <div className="or-card-next">
+          {next ? (
+            <>
+              <span>Next · {when(next.start, now)}</span>
+              {next.title}
+            </>
+          ) : (
+            <span>Nothing scheduled</span>
+          )}
+        </div>
+        <div className="or-card-foot">
           <span>
             {events} {events === 1 ? 'event' : 'events'} · {notes} {notes === 1 ? 'note' : 'notes'}
           </span>
           <span>{edited(project.updatedAt)}</span>
-        </span>
-      </button>
-      {depth === 0 && (
-        <div ref={ref} className="absolute right-4 top-4 z-10">
-          <button type="button" aria-label={`Actions for ${project.name}`} aria-haspopup="menu" aria-expanded={menu} className="dk-more" onClick={() => setMenu((m) => !m)}>
-            <MoreHorizontal className="h-4 w-4" />
-          </button>
-          {menu && (
-            <div role="menu" className="absolute right-0 z-30 mt-1 w-40 rounded-xl border border-[#ececea] bg-white p-1 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.3)]">
-              <button type="button" role="menuitem" className={item} onClick={() => { setMenu(false); props.onRename(project) }}>
-                <Pencil className="h-4 w-4" /> Rename
-              </button>
-              <button type="button" role="menuitem" className={item} onClick={() => { setMenu(false); props.onDuplicate(project) }}>
-                <Copy className="h-4 w-4" /> Duplicate
-              </button>
-              <button type="button" role="menuitem" className={cn(item, 'text-[#b4453c] hover:bg-[#fdf3f2]')} onClick={() => { setMenu(false); props.onDelete(project) }}>
-                <Trash2 className="h-4 w-4" /> Delete
-              </button>
-            </div>
-          )}
         </div>
-      )}
+      </div>
     </article>
+  )
+}
+
+/* --------------------------------------------------------------- sheet --- */
+
+/** The front card grows into this sheet from where it sat (and shrinks back). */
+function Sheet({ rect, project, onClose, children }: { rect: DOMRect; project: ProjectSummary; onClose: () => void; children: React.ReactNode }) {
+  const c = COLORS[project.color] ?? COLORS.lime
+  const box = useRef<HTMLDivElement | null>(null)
+  const [phase, setPhase] = useState<'from' | 'in' | 'out'>(reduced() ? 'in' : 'from')
+  const close = useCallback(() => {
+    if (reduced()) return onClose()
+    setPhase('out')
+    window.setTimeout(onClose, 420)
+  }, [onClose])
+  useEffect(() => {
+    if (phase !== 'from') return
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => setPhase('in')))
+    return () => cancelAnimationFrame(id)
+  }, [phase])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [close])
+
+  const W = Math.min(920, window.innerWidth - 32)
+  const H = Math.min(680, window.innerHeight - 48)
+  const L = (window.innerWidth - W) / 2
+  const T = (window.innerHeight - H) / 2
+  const fromT = `translate(${rect.left - L}px, ${rect.top - T}px) scale(${rect.width / W}, ${rect.height / H})`
+  return (
+    <div className={cn('or-veil', phase === 'in' && 'or-veil-on')} onMouseDown={close}>
+      <div
+        ref={box}
+        role="dialog"
+        aria-modal="true"
+        aria-label={project.name}
+        className="or-sheet"
+        onMouseDown={(e) => e.stopPropagation()}
+        style={
+          {
+            left: L,
+            top: T,
+            width: W,
+            height: H,
+            transform: phase === 'in' ? 'none' : fromT,
+            borderRadius: phase === 'in' ? 24 : 22,
+            '--c': c.dot,
+            '--cbg': c.bg,
+          } as CSSProperties
+        }
+      >
+        <div className={cn('or-sheet-in', phase === 'in' && 'or-sheet-in-on')}>
+          <button type="button" className="or-close" onClick={close} aria-label="Close">
+            Esc
+          </button>
+          {children}
+        </div>
+      </div>
+    </div>
   )
 }
 
