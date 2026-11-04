@@ -246,6 +246,7 @@ async function handle(method: string, path: string, search: string, body: Record
     const action = parts[1]
 
     if (!action && method === 'GET') {
+      if (new URLSearchParams(search).get('peek') === '1') return json(200, { project: summary(p), data: p.data })
       p.openedAt = now
       save(state)
       return json(200, { project: summary(p), data: p.data })

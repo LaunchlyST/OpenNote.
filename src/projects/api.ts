@@ -55,6 +55,12 @@ export const projectsApi = {
     }).then((r) => r.project),
   open: (id: string) =>
     call<{ project: ProjectSummary; data: ProjectData }>(`/${encodeURIComponent(id)}`),
+  /** Reads a project's data without marking it opened. */
+  peek: (id: string) =>
+    call<{ project: ProjectSummary; data: ProjectData }>(`/${encodeURIComponent(id)}?peek=1`),
+  /** Replaces a project's data (the calendar does this on every edit). */
+  save: (id: string, data: ProjectData) =>
+    call<{ ok: true }>(`/${encodeURIComponent(id)}/data`, { method: 'PUT', body: JSON.stringify({ data }) }),
   update: (id: string, patch: Partial<ProjectInput>) =>
     call<{ project: ProjectSummary }>(`/${encodeURIComponent(id)}`, {
       method: 'PATCH',

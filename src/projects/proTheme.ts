@@ -17,7 +17,7 @@ export interface ProTheme {
 }
 
 export const PRO_THEMES: ProTheme[] = [
-  { id: 'paper', label: 'Paper', canvas: '#f7f7f5', rail: '#ffffff' },
+  { id: 'paper', label: 'Paper', canvas: '#f4f1ea', rail: '#fffdf8' },
   {
     id: 'mint',
     label: 'Mint',

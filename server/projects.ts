@@ -236,6 +236,8 @@ export function projectsRouter() {
   r.get('/:id', (req: Authed, res) => {
     const row = load(req, res)
     if (!row) return
+    // ?peek=1 reads without marking the project opened (dashboard previews)
+    if (req.query.peek === '1') return void res.json({ project: summary(row), data: JSON.parse(row.data) })
     const openedAt = new Date().toISOString()
     db.prepare('UPDATE project SET openedAt = ? WHERE id = ?').run(openedAt, row.id)
     res.json({ project: summary({ ...row, openedAt }), data: JSON.parse(row.data) })

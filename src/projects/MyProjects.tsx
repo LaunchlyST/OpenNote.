@@ -18,7 +18,6 @@ import {
   Search,
   Trash2,
 } from 'lucide-react'
-import { ProBackdrop } from './ProBackdrop'
 import { ProHome } from './ProHome'
 import { useProTheme } from './proTheme'
 import { useAuth } from '../auth'
@@ -648,7 +647,6 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
       )}
       style={pro ? { background: theme.canvas } : undefined}
     >
-      {pro && <ProBackdrop dark={Boolean(theme.dark)} />}
       {pro ? (
         <ProHome
           name={user?.fullName ?? ''}
