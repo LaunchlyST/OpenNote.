@@ -84,6 +84,14 @@ export const env = {
     .split(',')
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean),
+  /**
+   * When set, only these emails may create an account (comma-separated).
+   * Empty means anyone can sign up.
+   */
+  signupAllowlist: (process.env.SIGNUP_ALLOWLIST ?? '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean),
   smtp: smtpSettings(),
   mail: {
     /**

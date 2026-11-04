@@ -99,7 +99,16 @@ export const auth = betterAuth({
   databaseHooks: {
     user: {
       // Re-evaluate roles when an account is created or its email is verified.
-      create: { after: async () => { syncRoles() } },
+      create: {
+        // SIGNUP_ALLOWLIST closes sign-up to everyone else, for every sign-up
+        // route (email and Google alike). Existing accounts are unaffected.
+        before: async (user) => {
+          if (env.signupAllowlist.length && !env.signupAllowlist.includes(String(user.email).toLowerCase())) {
+            throw new APIError('FORBIDDEN', { message: 'Sign-up is invite only for now. Join the waitlist instead.', code: 'SIGNUP_CLOSED' })
+          }
+        },
+        after: async () => { syncRoles() },
+      },
       update: { after: async () => { syncRoles() } },
     },
   },
