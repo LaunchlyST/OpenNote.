@@ -123,7 +123,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
       {/* ---- the Pro rail ---- */}
       <aside
         className={cn(
-          'relative m-3 hidden shrink-0 flex-col rounded-[22px] border backdrop-blur-xl transition-[width] duration-300 lg:flex',
+          'relative m-3 hidden shrink-0 flex-col overflow-hidden rounded-[22px] border transition-[width] duration-300 lg:flex',
           theme.dark ? 'border-white/10' : 'border-[#ececea]',
           collapsed ? 'w-[76px]' : 'w-[264px]',
         )}
@@ -240,8 +240,8 @@ export function ProShell({ project }: { project: ProjectSummary }) {
       {/* ---- main ---- */}
       <main className="relative flex min-w-0 flex-1 flex-col">
         {settingsOpen ? (
-          <div className="absolute inset-0 z-20 flex flex-col bg-canvas-warm">
-            <SettingsPage onBack={closeSettings} backLabel="Back to Pro" extraAppearance={<ProThemePicker />} />
+          <div className="absolute inset-3 left-0 z-20 flex flex-col overflow-hidden rounded-[22px] bg-[#fafaf9] shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
+            <SettingsPage onBack={closeSettings} backLabel="Back to Pro" embedded extraAppearance={<ProThemePicker />} />
           </div>
         ) : (
           <>
@@ -277,8 +277,8 @@ export function ProThemePicker() {
   const [theme, choose] = useProTheme()
   return (
     <div className="mb-6 rounded-[22px] border border-[#ececea] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
-      <p className="text-[14px] font-semibold text-[#191919]">Dashboard background</p>
-      <p className="mt-0.5 text-[12.5px] text-[#6b6a66]">Pro only. Saved in this browser.</p>
+      <p className="text-[14px] font-semibold text-[#191919]">Pro dashboard theme</p>
+      <p className="mt-0.5 text-[12.5px] text-[#6b6a66]">Colours the Pro sidebar and page. Saved in this browser.</p>
       <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
         {PRO_THEMES.map((t) => (
           <button
@@ -293,7 +293,7 @@ export function ProThemePicker() {
                 'block h-16 rounded-[14px] border transition',
                 t.id === theme.id ? 'border-[#191919] ring-2 ring-[#191919]/15' : 'border-[#ececea] group-hover:border-[#c9c8c4]',
               )}
-              style={{ background: t.canvas }}
+              style={{ background: t.rail }}
             />
             <span className="mt-1.5 block text-[12.5px] font-medium text-[#3a3a37]">{t.label}</span>
           </button>

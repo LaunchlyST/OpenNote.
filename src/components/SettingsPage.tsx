@@ -1272,7 +1272,14 @@ export function SettingsPage({
   onBack,
   backLabel = 'Back to calendar',
   extraAppearance,
-}: { onBack?: () => void; backLabel?: string; extraAppearance?: ReactNode } = {}) {
+  embedded = false,
+}: {
+  onBack?: () => void
+  backLabel?: string
+  extraAppearance?: ReactNode
+  /** Inside another app frame (Pro): no logo bar or background of its own. */
+  embedded?: boolean
+} = {}) {
   const { settingsSection, setSettingsSection } = useApp()
   const { user } = useAuth()
   const { status } = usePreferences()
@@ -1292,24 +1299,26 @@ export function SettingsPage({
   }, [active.id])
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-[#fafaf9]">
+    <div className={cn('relative flex h-full min-h-0 flex-col overflow-hidden', !embedded && 'bg-[#fafaf9]')}>
       {/* Soft background glow — same material as My Projects and the welcome page */}
-      <div
+      {!embedded && <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
         style={{
           background:
             'radial-gradient(60% 55% at 30% 0%, rgba(190,242,100,0.20), transparent 70%), radial-gradient(45% 45% at 80% 10%, rgba(167,139,250,0.10), transparent 70%)',
         }}
-      />
+      />}
       <header className="relative z-10 shrink-0">
-        <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-4 sm:px-6">
-          <a href="/" aria-label="Desknoty home">
-            <Logo size="sm" />
-          </a>
-          <AccountMenu />
-        </div>
-        <div className="mx-auto max-w-[1080px] px-4 pb-2 pt-2 sm:px-6">
+        {!embedded && (
+          <div className="mx-auto flex h-16 max-w-[1080px] items-center justify-between px-4 sm:px-6">
+            <a href="/" aria-label="Desknoty home">
+              <Logo size="sm" />
+            </a>
+            <AccountMenu />
+          </div>
+        )}
+        <div className={cn('mx-auto max-w-[1080px] px-4 pb-2 sm:px-6', embedded ? 'pt-6' : 'pt-2')}>
           {onBack && (
             <button
               type="button"

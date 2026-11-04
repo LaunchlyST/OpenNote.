@@ -10,56 +10,58 @@ export interface ProTheme {
   label: string
   /** The page behind everything. */
   canvas: string
-  /** Sidebar surface. */
+  /** The sidebar panel: this is where the theme shows. */
   rail: string
   /** Text and lines on the rail, for dark themes. */
   dark?: boolean
 }
 
 export const PRO_THEMES: ProTheme[] = [
-  { id: 'paper', label: 'Paper', canvas: '#fafaf9', rail: 'rgba(255,255,255,0.86)' },
+  { id: 'paper', label: 'Paper', canvas: '#f7f7f5', rail: '#ffffff' },
   {
     id: 'mint',
     label: 'Mint',
-    canvas: 'radial-gradient(70% 60% at 15% 0%, #dff7c8 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #d4f3ea 0%, transparent 70%), #f6fbf3',
-    rail: 'rgba(255,255,255,0.72)',
+    canvas: '#f3f8ef',
+    rail: 'linear-gradient(180deg, #e6f7d6 0%, #d8f1e6 55%, #f4fbef 100%)',
   },
   {
     id: 'sky',
     label: 'Sky',
-    canvas: 'radial-gradient(70% 60% at 10% 0%, #d6e9ff 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #e3ddff 0%, transparent 70%), #f5f8fd',
-    rail: 'rgba(255,255,255,0.72)',
+    canvas: '#f2f6fc',
+    rail: 'linear-gradient(180deg, #dcebff 0%, #e4e0ff 55%, #f5f8ff 100%)',
   },
   {
     id: 'lavender',
     label: 'Lavender',
-    canvas: 'radial-gradient(70% 60% at 20% 0%, #ece3ff 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #ffe3f1 0%, transparent 70%), #faf7fd',
-    rail: 'rgba(255,255,255,0.72)',
+    canvas: '#f8f5fc',
+    rail: 'linear-gradient(180deg, #ece2ff 0%, #fde3f0 55%, #faf6ff 100%)',
   },
   {
     id: 'sunset',
     label: 'Sunset',
-    canvas: 'radial-gradient(70% 60% at 10% 0%, #ffe2c8 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #ffd6dc 0%, transparent 70%), #fdf8f4',
-    rail: 'rgba(255,255,255,0.72)',
+    canvas: '#fcf7f3',
+    rail: 'linear-gradient(180deg, #ffe0c4 0%, #ffd8de 55%, #fff6f1 100%)',
   },
   {
     id: 'midnight',
     label: 'Midnight',
     canvas: 'radial-gradient(70% 60% at 10% 0%, #23314f 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #2b2346 0%, transparent 70%), #0f1320',
-    rail: 'rgba(22,26,40,0.78)',
+    rail: 'linear-gradient(180deg, #1c2742 0%, #231d3c 55%, #141a2b 100%)',
     dark: true,
   },
 ]
 
 const KEY = 'desknoty.pro.theme'
+/** Pro starts dark, so it reads as its own space; any theme can be picked. */
+const DEFAULT = PRO_THEMES.find((t) => t.id === 'midnight')!
 const EVENT = 'desknoty:pro-theme'
 
 function read(): ProTheme {
   try {
     const id = localStorage.getItem(KEY)
-    return PRO_THEMES.find((t) => t.id === id) ?? PRO_THEMES[0]
+    return PRO_THEMES.find((t) => t.id === id) ?? DEFAULT
   } catch {
-    return PRO_THEMES[0]
+    return DEFAULT
   }
 }
 
