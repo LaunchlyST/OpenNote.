@@ -1329,8 +1329,24 @@ export function SettingsPage({
               {backLabel}
             </button>
           )}
-          <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-[#191919] sm:text-[36px]">Settings</h1>
-          <p className="mt-1 text-[14px] text-[#5f5e5b]">Manage your account, workspace and calendar preferences.</p>
+          {embedded ? (
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[#8f8e8a]">Pro workspace</p>
+                <h1 className="mt-1.5 text-[34px] font-semibold leading-none tracking-[-0.04em] text-[#191919] sm:text-[42px]">
+                  Settings<span className="text-[#6d4bd8]">.</span>
+                </h1>
+                <p className="mt-2.5 max-w-[34rem] text-[15px] leading-relaxed text-[#5f5e5b]">
+                  Make Desknoty yours: your profile, how it looks, and how it works for you.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
+              <h1 className="text-[30px] font-semibold leading-tight tracking-[-0.035em] text-[#191919] sm:text-[36px]">Settings</h1>
+              <p className="mt-1 text-[14px] text-[#5f5e5b]">Manage your account, workspace and calendar preferences.</p>
+            </>
+          )}
         </div>
       </header>
 
