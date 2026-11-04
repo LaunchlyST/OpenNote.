@@ -1318,7 +1318,7 @@ export function SettingsPage({
             <AccountMenu />
           </div>
         )}
-        <div className={cn('mx-auto max-w-[1080px] px-4 pb-2 sm:px-6', embedded ? 'pt-6' : 'pt-2')}>
+        <div className={cn('px-4 pb-2 sm:px-6', embedded ? 'pt-6 lg:pl-6' : 'mx-auto max-w-[1080px] pt-2')}>
           {onBack && (
             <button
               type="button"
@@ -1335,7 +1335,7 @@ export function SettingsPage({
       </header>
 
       <div ref={scrollRef} className="scroll-area relative z-10 min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <div className="mx-auto flex w-full max-w-[1080px] flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-10">
+        <div className={cn('flex w-full flex-col gap-6 px-4 py-6 sm:px-6 lg:flex-row lg:gap-10', embedded ? 'lg:pl-6' : 'mx-auto max-w-[1080px]')}>
           <nav aria-label="Settings sections" className="shrink-0 lg:sticky lg:top-6 lg:w-[210px] lg:self-start">
             <div className="no-scrollbar -mx-4 flex gap-1 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:rounded-[22px] lg:border lg:border-[#ececea] lg:bg-white lg:p-2 lg:shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
               {sections.map((s) => {
@@ -1349,11 +1349,13 @@ export function SettingsPage({
                     className={cn(
                       'flex shrink-0 items-center gap-2.5 rounded-[10px] px-3 py-2 text-left text-[13px] transition-colors lg:w-full',
                       isActive
-                        ? 'bg-[#ecfccb] font-semibold text-[#191919]'
+                        ? embedded
+                          ? 'bg-[#191919] font-semibold text-white shadow-[0_6px_16px_-8px_rgba(16,24,40,0.6)]'
+                          : 'bg-[#ecfccb] font-semibold text-[#191919]'
                         : 'font-medium text-[#5f5e5b] hover:bg-[#f4f4f2] hover:text-[#191919]',
                     )}
                   >
-                    <span className={cn('shrink-0', isActive ? 'text-[#3f6212]' : 'text-[#a3a29e]')}>{s.icon}</span>
+                    <span className={cn('shrink-0', isActive ? (embedded ? 'text-[#c4f27a]' : 'text-[#3f6212]') : 'text-[#a3a29e]')}>{s.icon}</span>
                     <span className="whitespace-nowrap">{s.label}</span>
                   </button>
                 )
@@ -1361,7 +1363,7 @@ export function SettingsPage({
             </div>
           </nav>
 
-          <div className="min-w-0 flex-1 pb-8">
+          <div className={cn('min-w-0 flex-1 pb-8', embedded && 'mx-auto max-w-[860px]')}>
             {status === 'error' && (
               <p className="mb-4 rounded-xl border border-[#f0cfcc] bg-[#fdf3f2] px-4 py-2.5 text-[12.5px] text-[#9c3a32]">
                 Your saved preferences could not be loaded. Changes may not save until you refresh.
