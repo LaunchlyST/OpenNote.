@@ -4437,3 +4437,71 @@ html.lp-cursor-on * {
 .or-page:disabled {
   opacity: 0.35;
 }
+/* Pro header, laid out like Free's My Projects */
+.fx-head {
+  padding: 28px 0 6px;
+}
+.fx-title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+.fx-sub {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+.fx-create {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(#2c2c68, #171740);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 26px -12px rgba(27, 27, 70, 0.85);
+}
+.fx-create:hover {
+  background: linear-gradient(#35357e, #1e1e52);
+}
+.fx-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(384px, 100%);
+  height: 40px;
+  margin-top: 20px;
+  padding: 0 8px 0 12px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  color: var(--faint);
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.fx-search:hover {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.fx-search span {
+  flex: 1;
+  text-align: left;
+}
+/* bottom controls: one centred bar */
+.or-controls {
+  justify-content: center;
+  gap: 18px;
+  padding: 10px 14px;
+  margin: 8px auto 0;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line), 0 14px 30px -22px rgba(0, 0, 0, 0.45);
+}
+.or-dots {
+  max-width: none;
+  align-items: center;
+}

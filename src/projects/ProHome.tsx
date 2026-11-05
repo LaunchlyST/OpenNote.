@@ -144,34 +144,25 @@ export function ProHome(props: Props) {
         </div>
       </header>
 
-      <section className="dk-brief dk-hero">
-        <div className="min-w-0">
-          <p className="ph-kicker">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-          <h1 className="ph-hello">
-            Good {h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}, <span className="pro-name">{first}.</span>
-          </h1>
-          <p className="dk-sub">{brief}</p>
-          <div className="dk-actions">
-            <button type="button" className="dk-primary" onClick={onCreate}>
-              <Plus className="h-4 w-4" /> New project
-            </button>
-              <button type="button" className="dk-search" onClick={() => setPalette(true)}>
+      <section className="fx-head">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="fx-title">My Projects</h1>
+            <p className="fx-sub">
+              Good {h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}, {first}. {brief}
+            </p>
+          </div>
+          <button type="button" className="fx-create" onClick={onCreate}>
+            <Plus className="h-[18px] w-[18px]" /> Create Project
+          </button>
+        </div>
+        <button type="button" className="fx-search" onClick={() => setPalette(true)}>
           <Search className="h-4 w-4" />
-          <span>Jump to a project…</span>
+          <span>Search your projects...</span>
           <kbd>
             <Command className="h-3 w-3" />K
           </kbd>
         </button>
-          </div>
-        </div>
-        <div className="dk-today" aria-hidden="true">
-          <span className="dk-today-day">{now.toLocaleDateString(undefined, { weekday: 'short' })}</span>
-          <span className="dk-today-num">{now.getDate()}</span>
-          <span className="dk-today-month">{now.toLocaleDateString(undefined, { month: 'long' })}</span>
-          <span className="dk-today-time">
-            {pad(now.getHours())}:{pad(now.getMinutes())}
-          </span>
-        </div>
       </section>
 
       {error ? (
@@ -483,7 +474,7 @@ function Orbit({
           </button>
         </div>
       </div>
-      <p className="or-hint">Drag, swipe or use ← → · Click the front card to open it</p>
+      
     </section>
   )
 }
