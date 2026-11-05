@@ -5,13 +5,13 @@ import {
   Bot,
   CalendarClock,
   ChartNoAxesCombined,
-  FileText,
   FolderKanban,
   LayoutDashboard,
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
+  Store,
   Settings,
   Sparkles,
   Users,
@@ -31,6 +31,7 @@ import { SettingsPage } from '../components/SettingsPage'
 import { AppIcon } from '../landing/components/primitives'
 import { cn } from '../lib/id'
 import { paths } from './api'
+import { SellerStudio } from './seller/SellerStudio'
 import type { ProjectSummary } from './api'
 import { PRO_THEMES, useProTheme } from './proTheme'
 import { themeNeeds, themeUnlocked, useStreak } from './streak'
@@ -77,7 +78,7 @@ const GROUPS: Array<{ title: string; items: Item[] }> = [
   {
     title: 'Creator',
     items: [
-      { id: 'pages', label: 'Pages', icon: <FileText className={I} /> },
+      { id: 'seller', label: 'Seller', icon: <Store className={I} /> },
       { id: 'templates', label: 'Templates', icon: <LayoutTemplate className={I} /> },
       { id: 'brand', label: 'Brand kit', icon: <Palette className={I} /> },
       { id: 'campaigns', label: 'Campaigns', icon: <Megaphone className={I} /> },
@@ -311,6 +312,11 @@ export function ProShell({ project }: { project: ProjectSummary }) {
               <span className={cn('text-[13.5px]', muted)}>/</span>
               <span className={cn('text-[13.5px] font-semibold', ink)}>{project.name}</span>
             </header>
+            {active === 'seller' ? (
+              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8">
+                <SellerStudio />
+              </div>
+            ) : (
             <div className="grid flex-1 place-items-center px-6">
               <div className="text-center">
                 <span className={cn('mx-auto grid h-12 w-12 place-items-center rounded-[14px]', theme.dark ? 'bg-white/10 text-white' : 'bg-white text-[#191919] shadow-[0_1px_2px_rgba(16,24,40,0.06),inset_0_0_0_1px_#ececea]')}>
@@ -320,6 +326,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
                 <p className={cn('mt-1 text-[14px]', muted)}>This Pro tool is on the way.</p>
               </div>
             </div>
+            )}
           </>
         )}
       </main>
