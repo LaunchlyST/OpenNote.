@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { CalendarPlus, ArrowLeft, ArrowRight, ArrowUpRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { CalendarPlus, ArrowLeft, ArrowRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { COLORS } from '../lib/colors'
 import { cn } from '../lib/id'
 import { AppIcon } from '../landing/components/primitives'
@@ -104,7 +103,6 @@ export function ProHome(props: Props) {
   const todayProjects = new Set(today.map((e) => e.project.id)).size
 
   const [palette, setPalette] = useState(false)
-  const [opened, setOpened] = useState<{ i: number; rect: DOMRect } | null>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -219,23 +217,12 @@ export function ProHome(props: Props) {
             peeks={peeks}
             now={now}
             onCreate={onCreate}
-            onExpand={(i, rect) => setOpened({ i, rect })}
+            onExpand={(i) => onOpen(list[i])}
             props={props}
           />
         </main>
       )}
 
-      {opened && list[opened.i] && (
-        <Sheet rect={opened.rect} project={list[opened.i]} onClose={() => setOpened(null)}>
-          <Page
-            project={list[opened.i]}
-            peek={peeks[list[opened.i].id]}
-            now={now}
-            onOpen={onOpen}
-            onSaved={(id, p) => setPeeks((m) => ({ ...m, [id]: p }))}
-          />
-        </Sheet>
-      )}
       {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => setSel(i)} onOpen={onOpen} onCreate={onCreate} />}
     </div>
   )
@@ -577,190 +564,6 @@ function OrbitCard({
         </div>
       </div>
     </article>
-  )
-}
-
-/* --------------------------------------------------------------- sheet --- */
-
-/** The front card grows into this sheet from where it sat (and shrinks back). */
-function Sheet({ rect, project, onClose, children }: { rect: DOMRect; project: ProjectSummary; onClose: () => void; children: React.ReactNode }) {
-  const c = COLORS[project.color] ?? COLORS.lime
-  const box = useRef<HTMLDivElement | null>(null)
-  const [phase, setPhase] = useState<'from' | 'in' | 'out'>(reduced() ? 'in' : 'from')
-  const close = useCallback(() => {
-    if (reduced()) return onClose()
-    setPhase('out')
-    window.setTimeout(onClose, 420)
-  }, [onClose])
-  useEffect(() => {
-    if (phase !== 'from') return
-    const id = requestAnimationFrame(() => requestAnimationFrame(() => setPhase('in')))
-    return () => cancelAnimationFrame(id)
-  }, [phase])
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && close()
-    window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
-  }, [close])
-
-  const W = Math.min(920, window.innerWidth - 32)
-  const H = Math.min(680, window.innerHeight - 48)
-  const L = (window.innerWidth - W) / 2
-  const T = (window.innerHeight - H) / 2
-  const fromT = `translate(${rect.left - L}px, ${rect.top - T}px) scale(${rect.width / W}, ${rect.height / H})`
-  // portalled to <body> so nothing on the page can sit above the sheet
-  return createPortal(
-    <div className={cn('or-veil', phase === 'in' && 'or-veil-on')} onMouseDown={close}>
-      <div
-        ref={box}
-        role="dialog"
-        aria-modal="true"
-        aria-label={project.name}
-        className="or-sheet"
-        onMouseDown={(e) => e.stopPropagation()}
-        style={
-          {
-            left: L,
-            top: T,
-            width: W,
-            height: H,
-            transform: phase === 'in' ? 'none' : fromT,
-            borderRadius: phase === 'in' ? 24 : 22,
-            '--c': c.dot,
-            '--cbg': c.bg,
-          } as CSSProperties
-        }
-      >
-        <div className={cn('or-sheet-in', phase === 'in' && 'or-sheet-in-on')}>
-          <button type="button" className="or-close" onClick={close} aria-label="Close">
-            Esc
-          </button>
-          {children}
-        </div>
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
-/* ---------------------------------------------------------------- page --- */
-
-function Page({
-  project,
-  peek,
-  now,
-  onOpen,
-  onSaved,
-}: {
-  project: ProjectSummary
-  peek: Peek | undefined
-  now: Date
-  onOpen: (p: ProjectSummary) => void
-  onSaved: (id: string, p: Peek) => void
-}) {
-  const c = COLORS[project.color] ?? COLORS.lime
-  const [note, setNote] = useState('')
-  const [state, setState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
-  useEffect(() => {
-    setNote('')
-    setState('idle')
-  }, [project.id])
-
-  const next = (peek?.events ?? [])
-    .filter((e) => Date.parse(e.end) > now.getTime())
-    .sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
-    .slice(0, 3)
-  const notes = [...(peek?.notes ?? [])].sort((a, b) => b.createdAt - a.createdAt).slice(0, 3)
-
-  const add = async () => {
-    const text = note.trim()
-    if (!text || !peek) return
-    setState('saving')
-    const [title, ...rest] = text.split('\n')
-    const fresh: Nt = { id: `note_${crypto.randomUUID()}`, title: title.slice(0, 120), body: rest.join('\n'), createdAt: Date.now() }
-    const raw = { ...(peek.raw as unknown as Record<string, unknown>), notes: [fresh, ...peek.notes] } as unknown as ProjectData
-    try {
-      await projectsApi.save(project.id, raw)
-      onSaved(project.id, { ...peek, notes: [fresh, ...peek.notes], raw })
-      setNote('')
-      setState('saved')
-      window.setTimeout(() => setState((s) => (s === 'saved' ? 'idle' : s)), 2200)
-    } catch {
-      setState('error')
-    }
-  }
-
-  return (
-    <section key={project.id} className="dk-page" aria-label={`${project.name} details`} style={{ '--c': c.dot } as CSSProperties}>
-      <p className="dk-label">
-        <span className="dk-dot" /> Selected project
-      </p>
-      <h2 className="dk-page-title">{project.name}</h2>
-      {project.description && <p className="dk-page-desc">{project.description}</p>}
-
-      <div className="dk-cols">
-        <div>
-          <h3 className="dk-label">Next in this project</h3>
-          {!peek ? (
-            <p className="dk-quiet">Reading…</p>
-          ) : next.length === 0 ? (
-            <p className="dk-quiet">Nothing scheduled.</p>
-          ) : (
-            <ul className="dk-items">
-              {next.map((e) => (
-                <li key={e.id}>
-                  <span className="dk-item-when">{when(e.start, now)}</span>
-                  {e.title}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <h3 className="dk-label">Latest notes</h3>
-          {!peek ? (
-            <p className="dk-quiet">Reading…</p>
-          ) : notes.length === 0 ? (
-            <p className="dk-quiet">No notes yet.</p>
-          ) : (
-            <ul className="dk-items">
-              {notes.map((n) => (
-                <li key={n.id}>{n.title || 'Untitled note'}</li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-
-      <form
-        className="dk-capture"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void add()
-        }}
-      >
-        <input
-          value={note}
-          onChange={(e) => {
-            setNote(e.target.value)
-            if (state !== 'saving') setState('idle')
-          }}
-          placeholder={`Jot a note into ${project.name}…`}
-          aria-label={`New note for ${project.name}`}
-          disabled={!peek || state === 'saving'}
-        />
-        <button type="submit" disabled={!note.trim() || state === 'saving'}>
-          {state === 'saving' ? 'Saving…' : 'Add note'}
-        </button>
-      </form>
-      <p className="dk-capture-msg" role="status">
-        {state === 'saved' ? `Saved to ${project.name}.` : state === 'error' ? 'Couldn’t save that note. Try again.' : ''}
-      </p>
-
-      <button type="button" className="dk-open" onClick={() => onOpen(project)}>
-        Open {project.name} <ArrowUpRight className="h-4 w-4" />
-      </button>
-    </section>
   )
 }
 
