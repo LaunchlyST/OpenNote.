@@ -4505,3 +4505,10 @@ html.lp-cursor-on * {
   max-width: none;
   align-items: center;
 }
+.or-blank {
+  margin-top: 10px;
+  cursor: default;
+}
+.or-blank:hover {
+  border-color: var(--line);
+}

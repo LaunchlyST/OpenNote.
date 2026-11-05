@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { ArrowLeft, ArrowRight, ArrowUpRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { CalendarPlus, ArrowLeft, ArrowRight, ArrowUpRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { COLORS } from '../lib/colors'
 import { cn } from '../lib/id'
 import { AppIcon } from '../landing/components/primitives'
@@ -187,7 +187,11 @@ export function ProHome(props: Props) {
           <section className="or-strip" aria-label="Coming up">
             <h2 className="dk-label">Coming up</h2>
             {upcoming.length === 0 ? (
-              <p className="dk-quiet">No upcoming events in any project.</p>
+              <div className="dk-blank or-blank">
+                <CalendarPlus className="h-6 w-6" />
+                <span>Nothing coming up yet</span>
+                <small>Add events inside a project and the next ones show up here.</small>
+              </div>
             ) : (
               <ol className="or-chips">
                 {upcoming.slice(0, 8).map((e) => (
