@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   ArrowLeft,
@@ -20,8 +20,6 @@ import {
   Zap,
   BellRing,
   ChevronDown,
-  ChevronsDownUp,
-  ChevronsUpDown,
   LayoutTemplate,
   Megaphone,
 } from 'lucide-react'
@@ -135,8 +133,26 @@ export function ProShell({ project }: { project: ProjectSummary }) {
       /* storage blocked */
     }
   }, [closed])
-  const toggleGroup = (t: string) => setClosed((c) => (c.includes(t) ? c.filter((x) => x !== t) : [...c, t]))
-  const allClosed = closed.length === GROUPS.length
+  // the clicked section name stays exactly where it was on screen
+  const navRef = useRef<HTMLElement | null>(null)
+  const anchor = useRef<{ el: HTMLElement; top: number } | null>(null)
+  const toggleGroup = (t: string, el: HTMLElement) => {
+    anchor.current = { el, top: el.getBoundingClientRect().top }
+    setClosed((c) => (c.includes(t) ? c.filter((x) => x !== t) : [...c, t]))
+  }
+  useLayoutEffect(() => {
+    const a = anchor.current
+    const nav = navRef.current
+    anchor.current = null
+    if (!a || !nav) return
+    const spacer = nav.querySelector<HTMLElement>('[data-rail-spacer]')
+    if (spacer) spacer.style.height = '0px'
+    const want = nav.scrollTop + a.el.getBoundingClientRect().top - a.top
+    // a shorter menu cannot stay scrolled this far: pad the bottom so it can
+    const room = nav.scrollHeight - nav.clientHeight
+    if (spacer && want > room) spacer.style.height = `${want - room}px`
+    nav.scrollTop = want
+  }, [closed])
 
   const item = ALL.find((i) => i.id === active) ?? ALL[0]
   const ink = theme.dark ? 'text-white' : 'text-[#191919]'
@@ -172,19 +188,8 @@ export function ProShell({ project }: { project: ProjectSummary }) {
           </button>
         </div>
 
- {!collapsed && (
-          <div className="flex justify-end px-4 pb-1">
-            <button
-              type="button"
-              onClick={() => setClosed(allClosed ? [] : GROUPS.map((g) => g.title))}
-              className={cn('inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-[11.5px] font-medium transition', theme.dark ? 'text-white/60 hover:bg-white/10 hover:text-white' : 'text-[#8f8e8a] hover:bg-black/[0.04] hover:text-[#191919]')}
-            >
-              {allClosed ? <ChevronsUpDown className="h-3.5 w-3.5" /> : <ChevronsDownUp className="h-3.5 w-3.5" />}
-              {allClosed ? 'Show all' : 'Hide all'}
-            </button>
-          </div>
-        )}
-        <nav aria-label="Pro" className="pro-rail-nav scroll-area min-h-0 flex-1 overflow-y-auto px-3 pb-4">
+
+        <nav ref={navRef} aria-label="Pro" className="pro-rail-nav scroll-area min-h-0 flex-1 overflow-y-auto px-3 pb-4">
           {GROUPS.map((g) => (
             <div key={g.title} className="mt-3 first:mt-1">
               {collapsed ? (
@@ -192,7 +197,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
               ) : (
                 <button
                   type="button"
-                  onClick={() => toggleGroup(g.title)}
+                  onClick={(e) => toggleGroup(g.title, e.currentTarget)}
                   aria-expanded={!closed.includes(g.title)}
                   className={cn('flex w-full items-center gap-1 rounded-[8px] px-3 pb-1.5 pt-0.5 text-[11.5px] font-medium transition', muted, theme.dark ? 'hover:text-white' : 'hover:text-[#191919]')}
                 >
@@ -233,6 +238,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
               })}
             </div>
           ))}
+          <div data-rail-spacer aria-hidden="true" />
         </nav>
 
         {/* the wow: a live aurora card that breathes with the Pro accent */}
