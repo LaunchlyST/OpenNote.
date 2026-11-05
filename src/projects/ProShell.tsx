@@ -205,7 +205,9 @@ export function ProShell({ project }: { project: ProjectSummary }) {
                   <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', closed.includes(g.title) && '-rotate-90')} />
                 </button>
               )}
-              {(collapsed || !closed.includes(g.title)) && g.items.map((it) => {
+              {/* a closed section keeps its place: items are hidden, not removed */}
+              <div className={cn(!collapsed && closed.includes(g.title) && 'invisible')} aria-hidden={!collapsed && closed.includes(g.title) || undefined} inert={!collapsed && closed.includes(g.title) || undefined}>
+              {g.items.map((it) => {
                 const on = it.id === active && !settingsOpen
                 return (
                   <button
@@ -236,6 +238,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
                   </button>
                 )
               })}
+              </div>
             </div>
           ))}
           <div data-rail-spacer aria-hidden="true" />
