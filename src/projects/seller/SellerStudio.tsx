@@ -58,11 +58,13 @@ export function SellerStudio() {
   return (
     <div className={cn('ss', current === 'start' && 'ss-solo')}>
       <section className="ss-editor" aria-label="Store builder">
+        {current !== 'start' && (
         <header className="ss-head">
           <p className="ss-kicker">Seller · Digital products</p>
           <h1>Your store</h1>
           <p className="ss-lede">Sell downloads and templates from one link. Desknoty takes {PLATFORM_FEE_PERCENT}% of every sale.</p>
         </header>
+        )}
 
         {current === 'start' ? (
           <StartCard
@@ -182,15 +184,32 @@ function StartCard({ onConnected }: { onConnected: (p: Partial<StoreDraft>) => v
 
   return (
     <div className="ss-start">
+      <div className="ss-start-top">
+        <span className="ss-start-brand">
+          <Store className="h-4 w-4" /> Seller
+        </span>
+        <span className="ss-start-fee">0% platform fee</span>
+      </div>
       <div className="ss-start-card">
         <span className="ss-start-icon">
-          <Store className="h-6 w-6" />
+          <Store className="h-7 w-7" strokeWidth={1.8} />
         </span>
         <h2>Start your store</h2>
         <p>Connect TikTok to create your store in 2 minutes.</p>
         <button type="button" className="ss-tt" onClick={connect}>
           <TikTokMark /> Connect TikTok
         </button>
+        <ol className="ss-start-steps" aria-label="What happens next">
+          <li>
+            <b>1</b> Connect TikTok
+          </li>
+          <li>
+            <b>2</b> Pick your link
+          </li>
+          <li>
+            <b>3</b> Add a product
+          </li>
+        </ol>
         {error && (
           <div className="ss-start-err" role="alert">
             TikTok connection failed. Try again.
