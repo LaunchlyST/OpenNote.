@@ -5529,3 +5529,8 @@ select.ss-input option {
 .ss-start-manual {
   margin-top: 18px;
 }
+/* square panels */
+.ss,
+.ss-editor {
+  border-radius: 0;
+}
