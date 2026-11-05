@@ -71,9 +71,10 @@ export const PRO_THEMES: ProTheme[] = [
   },
 ]
 
-const KEY = 'desknoty.pro.theme'
-/** Pro starts dark, so it reads as its own space; any theme can be picked. */
-const DEFAULT = PRO_THEMES.find((t) => t.id === 'midnight')!
+// v2: everyone starts again on Paper, the look the dashboard was designed in
+const KEY = 'desknoty.pro.theme.v2'
+/** Pro starts on warm Paper; any theme can be picked. */
+const DEFAULT = PRO_THEMES[0]
 const EVENT = 'desknoty:pro-theme'
 
 function read(): ProTheme {
