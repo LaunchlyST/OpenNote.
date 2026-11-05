@@ -5433,3 +5433,9 @@ select.ss-input option {
   box-shadow: none;
   padding: 24px 8px;
 }
+.ss-solo {
+  grid-template-columns: 1fr;
+}
+.ss-solo .ss-editor {
+  min-height: min(760px, calc(100svh - 140px));
+}

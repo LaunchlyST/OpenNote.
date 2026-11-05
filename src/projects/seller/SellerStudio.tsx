@@ -56,7 +56,7 @@ export function SellerStudio() {
       : `${store.handle || 'yourname'}.desknoty.com`
 
   return (
-    <div className="ss">
+    <div className={cn('ss', current === 'start' && 'ss-solo')}>
       <section className="ss-editor" aria-label="Store builder">
         <header className="ss-head">
           <p className="ss-kicker">Seller · Digital products</p>
@@ -107,6 +107,8 @@ export function SellerStudio() {
         )}
       </section>
 
+      {/* before TikTok is connected, the white panel covers the whole studio */}
+      {current !== 'start' && (
       <aside className="ss-preview" aria-label="Live preview">
         <div className="ss-preview-bar">
           <div className="ss-seg" role="tablist" aria-label="Preview size">
@@ -120,7 +122,6 @@ export function SellerStudio() {
           <button
             type="button"
             className="ss-ghost"
-            disabled={current === 'start'}
             onClick={() => {
               void navigator.clipboard?.writeText(`https://${link}`).then(() => {
                 setCopied(true)
@@ -134,18 +135,12 @@ export function SellerStudio() {
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
           <div className="ss-screen">
-            {current !== 'start' && order(current) >= order('link') && <div className="ss-addr">{link}</div>}
-            {current === 'start' ? (
-              <div className="ss-empty">
-                <span className="ss-ph-avatar" />
-                <p>Your store will appear here</p>
-              </div>
-            ) : (
-              <StorePage store={store} />
-            )}
+            {order(current) >= order('link') && <div className="ss-addr">{link}</div>}
+            <StorePage store={store} />
           </div>
         </div>
       </aside>
+      )}
     </div>
   )
 }
