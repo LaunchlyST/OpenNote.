@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { CalendarPlus, ArrowLeft, ArrowRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { COLORS } from '../lib/colors'
 import { cn } from '../lib/id'
 import { AppIcon } from '../landing/components/primitives'
@@ -186,13 +186,26 @@ export function ProHome(props: Props) {
       ) : (
         <main className="or">
           <section className="or-strip" aria-label="Coming up">
-            <h2 className="dk-label">Coming up</h2>
+            <h2 className="dk-label">{upcoming.length ? 'Coming up' : 'Jump back in'}</h2>
             {upcoming.length === 0 ? (
-              <div className="dk-blank or-blank">
-                <CalendarPlus className="h-6 w-6" />
-                <span>Nothing coming up yet</span>
-                <small>Add events inside a project and the next ones show up here.</small>
-              </div>
+              <ol className="or-chips">
+                {list.slice(0, 4).map((p, i) => (
+                  <li key={p.id}>
+                    <button
+                      type="button"
+                      onClick={() => setSel(i)}
+                      className="or-chip"
+                      style={{ '--c': (COLORS[p.color] ?? COLORS.lime).dot } as CSSProperties}
+                    >
+                      <span className="or-chip-when">{edited(p.updatedAt)}</span>
+                      <span className="or-chip-title">{p.name}</span>
+                      <span className="or-chip-proj">
+                        {p.eventCount} events · {p.noteCount} notes
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ol>
             ) : (
               <ol className="or-chips">
                 {upcoming.slice(0, 8).map((e) => (
@@ -218,7 +231,6 @@ export function ProHome(props: Props) {
             setAt={setSel}
             peeks={peeks}
             now={now}
-            onCreate={onCreate}
             onExpand={(i) => onOpen(list[i])}
             props={props}
           />
@@ -247,7 +259,6 @@ function Orbit({
   setAt,
   peeks,
   now,
-  onCreate,
   onExpand,
   props,
 }: {
@@ -256,7 +267,6 @@ function Orbit({
   setAt: (i: number) => void
   peeks: Record<string, Peek>
   now: Date
-  onCreate: () => void
   onExpand: (i: number, rect: DOMRect) => void
   props: Props
 }) {
@@ -460,11 +470,11 @@ function Orbit({
           <button type="button" className="dk-round" aria-label="Previous project" disabled={at === 0} onClick={() => snapTo(at - 1)}>
             <ArrowLeft className="h-4 w-4" />
           </button>
+          <span className="or-counter" aria-live="polite">
+            <b>{pad(at + 1)}</b> / {pad(list.length)}
+          </span>
           <button type="button" className="dk-round" aria-label="Next project" disabled={at === max} onClick={() => snapTo(at + 1)}>
             <ArrowRight className="h-4 w-4" />
-          </button>
-          <button type="button" className="or-new" onClick={onCreate}>
-            <Plus className="h-4 w-4" /> New project
           </button>
         </div>
       </div>

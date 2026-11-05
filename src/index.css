@@ -4518,3 +4518,28 @@ html.lp-cursor-on * {
 .fx-create-row {
   margin-top: 20px;
 }
+/* bottom bar: dots · ← 01/09 → */
+.or-controls {
+  gap: 14px;
+  padding: 8px 10px 8px 18px;
+}
+.or-counter {
+  min-width: 64px;
+  text-align: center;
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-size: 14px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.or-counter b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.or-controls .dk-round {
+  width: 36px;
+  height: 36px;
+  background: var(--paper);
+}
+.or-controls .flex {
+  align-items: center;
+}
