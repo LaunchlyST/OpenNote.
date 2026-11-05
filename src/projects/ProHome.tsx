@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import { CalendarPlus, ArrowLeft, ArrowRight, ArrowUpRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { COLORS } from '../lib/colors'
@@ -607,7 +608,8 @@ function Sheet({ rect, project, onClose, children }: { rect: DOMRect; project: P
   const L = (window.innerWidth - W) / 2
   const T = (window.innerHeight - H) / 2
   const fromT = `translate(${rect.left - L}px, ${rect.top - T}px) scale(${rect.width / W}, ${rect.height / H})`
-  return (
+  // portalled to <body> so nothing on the page can sit above the sheet
+  return createPortal(
     <div className={cn('or-veil', phase === 'in' && 'or-veil-on')} onMouseDown={close}>
       <div
         ref={box}
@@ -636,7 +638,8 @@ function Sheet({ rect, project, onClose, children }: { rect: DOMRect; project: P
           {children}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
