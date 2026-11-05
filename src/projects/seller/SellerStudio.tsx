@@ -232,7 +232,7 @@ function TikTokDone({ store }: { store: StoreDraft }) {
   return (
     <p className="ss-muted">
       {store.tiktok.connected ? 'Connected as ' : 'Set up by hand as '}
-      <b className="text-[#f4f4f5]">@{store.tiktok.username}</b>
+      <b className="text-[#111114]">@{store.tiktok.username}</b>
       {store.tiktok.manual && ' · you can connect TikTok later'}
     </p>
   )
@@ -267,9 +267,9 @@ function LinkStep({ store, patch, next }: { store: StoreDraft; patch: (p: Partia
           label="Your link"
           hint={
             problem ? (
-              <span className="text-[#ff8a80]">● {problem === 'That name is reserved.' ? 'Taken' : problem}</span>
+              <span className="text-[#b42318]">● {problem === 'That name is reserved.' ? 'Taken' : problem}</span>
             ) : (
-              <span className="text-[#c8ff3d]">● Available</span>
+              <span className="text-[#2f7a1d]">● Available</span>
             )
           }
         >
@@ -287,7 +287,7 @@ function LinkStep({ store, patch, next }: { store: StoreDraft; patch: (p: Partia
         </Field>
       ) : (
         <>
-          <Field label="Your domain" hint={l.domain && dProblem ? <span className="text-[#ff8a80]">{dProblem}</span> : undefined}>
+          <Field label="Your domain" hint={l.domain && dProblem ? <span className="text-[#b42318]">{dProblem}</span> : undefined}>
             <div className="flex gap-2">
               <input
                 className="ss-input"

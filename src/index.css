@@ -5368,3 +5368,68 @@ select.ss-input option {
 .ss-addr + .sp {
   padding-top: 18px;
 }
+/* the left side is one white panel; start card and steps live inside it */
+.ss-editor {
+  --bg: #f6f6f7;
+  --sf: #ffffff;
+  --bd: #e6e6ea;
+  --tx: #111114;
+  --mu: #6b6b76;
+  display: flex;
+  flex-direction: column;
+  min-height: 720px;
+  padding: 28px;
+  border-radius: 24px;
+  color: var(--tx);
+  background: #fff;
+  box-shadow: 0 30px 60px -36px rgba(0, 0, 0, 0.7);
+}
+.ss-editor .ss-primary {
+  color: #0b0b0f;
+  background: #c8ff3d;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.ss-editor .ss-step {
+  background: var(--sf);
+}
+.ss-editor .ss-step-open {
+  box-shadow: inset 0 0 0 1.5px var(--tx);
+}
+.ss-editor .ss-step-done .ss-dot {
+  color: #0b0b0f;
+  background: #c8ff3d;
+}
+.ss-editor .ss-input:focus {
+  box-shadow: inset 0 0 0 1.5px var(--tx);
+}
+.ss-editor .ss-opt-on,
+.ss-editor .ss-preset[aria-pressed='true'] {
+  box-shadow: inset 0 0 0 1.5px var(--tx);
+}
+.ss-editor .ss-chips button[aria-pressed='true'] {
+  color: #fff;
+  background: var(--tx);
+}
+.ss-editor .ss-note {
+  background: #f6f9ee;
+  box-shadow: inset 0 0 0 1px #e2ecc9;
+}
+.ss-editor .ss-badge-pro {
+  color: var(--tx);
+}
+.ss-editor .ss-chip-status {
+  color: #9a6400;
+  background: #fff5df;
+}
+.ss-editor .ss-tiktok {
+  color: #fff;
+}
+/* start state: the message fills the panel, centred, no inner card */
+.ss-start {
+  flex: 1;
+  min-height: 0;
+}
+.ss-start-card {
+  box-shadow: none;
+  padding: 24px 8px;
+}
