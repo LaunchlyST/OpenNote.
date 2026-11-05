@@ -43,6 +43,26 @@ export const PRO_THEMES: ProTheme[] = [
     rail: 'linear-gradient(180deg, #ffe0c4 0%, #ffd8de 55%, #fff6f1 100%)',
   },
   {
+    id: 'gold',
+    label: 'Gold',
+    canvas: '#fbf6ea',
+    rail: 'linear-gradient(180deg, #f8e7b5 0%, #f2d98f 55%, #fcf5e2 100%)',
+  },
+  {
+    id: 'aurora',
+    label: 'Aurora',
+    canvas: 'radial-gradient(70% 60% at 15% 0%, #12403a 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #1d2f5c 0%, transparent 70%), #0b1416',
+    rail: 'linear-gradient(180deg, #123f3a 0%, #1b2d57 60%, #0f1a22 100%)',
+    dark: true,
+  },
+  {
+    id: 'legend',
+    label: 'Legend',
+    canvas: 'radial-gradient(70% 60% at 15% 0%, #3a2a0c 0%, transparent 70%), #110d06',
+    rail: 'linear-gradient(180deg, #3d2c0b 0%, #251a07 60%, #140f06 100%)',
+    dark: true,
+  },
+  {
     id: 'midnight',
     label: 'Midnight',
     canvas: 'radial-gradient(70% 60% at 10% 0%, #23314f 0%, transparent 70%), radial-gradient(60% 60% at 100% 100%, #2b2346 0%, transparent 70%), #0f1320',

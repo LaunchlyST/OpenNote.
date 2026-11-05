@@ -35,6 +35,7 @@ import { cn } from '../lib/id'
 import { paths } from './api'
 import type { ProjectSummary } from './api'
 import { PRO_THEMES, useProTheme } from './proTheme'
+import { themeNeeds, themeUnlocked, useStreak } from './streak'
 
 /**
  * The Pro workspace for a project. The tools themselves are not built yet:
@@ -102,6 +103,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
   const { user } = useAuth()
   const { settingsOpen, openSettings, closeSettings } = useApp()
   const [theme] = useProTheme()
+  const streak = useStreak()
   const [active, setActive] = useState('overview')
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -268,7 +270,9 @@ export function ProShell({ project }: { project: ProjectSummary }) {
             {!collapsed && 'Settings'}
           </button>
           <div className={cn('mt-2 flex items-center gap-3 px-2', collapsed && 'justify-center px-0')}>
-            <Avatar name={user?.fullName ?? 'You'} src={user?.avatar} size={34} />
+            <span className={cn('rounded-full', Math.max(streak.count, streak.best) >= 30 && 'sk-ring')}>
+              <Avatar name={user?.fullName ?? 'You'} src={user?.avatar} size={34} />
+            </span>
             {!collapsed && (
               <span className="min-w-0">
                 <span className={cn('block truncate text-[13.5px] font-semibold', ink)}>{user?.fullName}</span>
@@ -317,18 +321,23 @@ export function ProShell({ project }: { project: ProjectSummary }) {
 /** Settings → Appearance, Pro only: the dashboard background. */
 export function ProThemePicker() {
   const [theme, choose] = useProTheme()
+  const streak = useStreak()
   return (
     <div className="mb-6 rounded-[22px] border border-[#ececea] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,0.04)]">
       <p className="text-[14px] font-semibold text-[#191919]">Pro dashboard theme</p>
       <p className="mt-0.5 text-[12.5px] text-[#6b6a66]">Colours the Pro sidebar and page. Saved in this browser.</p>
-      <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
-        {PRO_THEMES.map((t) => (
+      <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-5">
+        {PRO_THEMES.map((t) => {
+          const open = themeUnlocked(t.id, Math.max(streak.count, streak.best))
+          return (
           <button
             key={t.id}
             type="button"
+            disabled={!open}
             onClick={() => choose(t.id)}
             aria-pressed={t.id === theme.id}
-            className="group text-left"
+            title={open ? t.label : `Reach a ${themeNeeds(t.id)}-day streak to unlock`}
+            className={cn('group relative text-left', !open && 'cursor-not-allowed opacity-55')}
           >
             <span
               className={cn(
@@ -337,9 +346,13 @@ export function ProThemePicker() {
               )}
               style={{ background: t.rail }}
             />
-            <span className="mt-1.5 block text-[12.5px] font-medium text-[#3a3a37]">{t.label}</span>
+            <span className="mt-1.5 block text-[12.5px] font-medium text-[#3a3a37]">
+              {t.label}
+              {!open && <span className="ml-1 text-[11px] text-[#8f8e8a]">🔒 {themeNeeds(t.id)}d</span>}
+            </span>
           </button>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

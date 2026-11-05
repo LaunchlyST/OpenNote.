@@ -160,7 +160,7 @@ function ComingSoonLink({ label, name }: { label: string; name?: string }) {
  * still picks up a soft background on hover and while its popover is open.
  * The labels are placeholders; swap them in `HeaderLinks` once the sections exist.
  */
-function HeaderLinks() {
+export function HeaderLinks() {
   return (
     <div className="inline-flex items-center gap-0.5">
       <ComingSoonLink label="Coming Soon" name="Features" />

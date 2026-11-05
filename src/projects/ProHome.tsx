@@ -7,6 +7,8 @@ import { AppIcon } from '../landing/components/primitives'
 import { projectsApi } from './api'
 import type { ProjectSummary } from './api'
 import type { ProjectData } from '../store'
+import { StreakChip } from './StreakChip'
+import { HeaderLinks } from './MyProjects'
 
 /**
  * The Pro home — "the desk".
@@ -133,24 +135,43 @@ export function ProHome(props: Props) {
           <span className="dk-brand">Desknoty</span>
           <span className="dk-pro">Pro</span>
         </a>
-        <button type="button" className="dk-search" onClick={() => setPalette(true)}>
+        <nav aria-label="Explore Desknoty" className="dk-links hidden md:block">
+          <HeaderLinks />
+        </nav>
+        <div className="flex items-center gap-2 justify-self-end">
+          <StreakChip />
+          {account}
+        </div>
+      </header>
+
+      <section className="dk-brief dk-hero">
+        <div className="min-w-0">
+          <p className="ph-kicker">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
+          <h1 className="ph-hello">
+            Good {h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}, <span className="pro-name">{first}.</span>
+          </h1>
+          <p className="dk-sub">{brief}</p>
+          <div className="dk-actions">
+            <button type="button" className="dk-primary" onClick={onCreate}>
+              <Plus className="h-4 w-4" /> New project
+            </button>
+              <button type="button" className="dk-search" onClick={() => setPalette(true)}>
           <Search className="h-4 w-4" />
           <span>Jump to a project…</span>
           <kbd>
             <Command className="h-3 w-3" />K
           </kbd>
         </button>
-        <div className="justify-self-end">{account}</div>
-      </header>
-
-      <section className="dk-brief">
-        <p className="ph-kicker">{now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}</p>
-        <h1 className="ph-hello">
-          Good {h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'},
-          <br />
-          <span className="pro-name">{first}.</span>
-        </h1>
-        <p className="dk-sub">{brief}</p>
+          </div>
+        </div>
+        <div className="dk-today" aria-hidden="true">
+          <span className="dk-today-day">{now.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+          <span className="dk-today-num">{now.getDate()}</span>
+          <span className="dk-today-month">{now.toLocaleDateString(undefined, { month: 'long' })}</span>
+          <span className="dk-today-time">
+            {pad(now.getHours())}:{pad(now.getMinutes())}
+          </span>
+        </div>
       </section>
 
       {error ? (
@@ -227,6 +248,7 @@ export function ProHome(props: Props) {
 /* --------------------------------------------------------------- orbit --- */
 
 const STEP = 300 // px between card centres at the front
+const PER = 6 // projects per slide
 
 /**
  * A depth carousel with real physics. Position is continuous (in cards); each
@@ -259,6 +281,8 @@ function Orbit({
   const wheelIdle = useRef(0)
   const max = list.length - 1
   const still = reduced()
+  const slide = Math.floor(at / PER)
+  const slides = Math.ceil(list.length / PER)
 
   const run = useCallback(() => {
     const s = p.current
@@ -390,6 +414,8 @@ function Orbit({
       >
         <div className="or-floor" aria-hidden="true" />
         {list.map((proj, i) => {
+          // 6 projects per slide: only this slide's cards are on the stage
+          if (Math.floor(i / PER) !== slide) return null
           const d = i - pos
           const ad = Math.abs(d)
           if (ad > 3.6) return null
@@ -419,7 +445,7 @@ function Orbit({
 
       <div className="or-controls">
         <div className="or-dots" role="tablist" aria-label="All projects">
-          {list.map((proj, i) => (
+          {list.map((proj, i) => Math.floor(i / PER) !== slide ? null : (
             <button
               key={proj.id}
               type="button"
@@ -432,6 +458,19 @@ function Orbit({
             />
           ))}
         </div>
+        {slides > 1 && (
+          <div className="or-pages">
+            <button type="button" className="or-page" disabled={slide === 0} onClick={() => snapTo((slide - 1) * PER)}>
+              ← Prev 6
+            </button>
+            <span>
+              Slide <b>{slide + 1}</b> / {slides}
+            </span>
+            <button type="button" className="or-page" disabled={slide === slides - 1} onClick={() => snapTo((slide + 1) * PER)}>
+              Next 6 →
+            </button>
+          </div>
+        )}
         <div className="flex gap-1.5">
           <button type="button" className="dk-round" aria-label="Previous project" disabled={at === 0} onClick={() => snapTo(at - 1)}>
             <ArrowLeft className="h-4 w-4" />
