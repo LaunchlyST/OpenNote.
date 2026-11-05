@@ -151,17 +151,19 @@ export function ProHome(props: Props) {
               Good {h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening'}, {first}. {brief}
             </p>
           </div>
-          <button type="button" className="fx-create" onClick={onCreate}>
-            <Plus className="h-[18px] w-[18px]" /> Create Project
-          </button>
-        </div>
-        <button type="button" className="fx-search" onClick={() => setPalette(true)}>
+          <button type="button" className="fx-search" onClick={() => setPalette(true)}>
           <Search className="h-4 w-4" />
           <span>Search your projects...</span>
           <kbd>
             <Command className="h-3 w-3" />K
           </kbd>
         </button>
+        </div>
+        <div className="fx-create-row">
+          <button type="button" className="fx-create" onClick={onCreate}>
+            <Plus className="h-[18px] w-[18px]" /> Create Project
+          </button>
+        </div>
       </section>
 
       {error ? (

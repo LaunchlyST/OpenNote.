@@ -4512,3 +4512,9 @@ html.lp-cursor-on * {
 .or-blank:hover {
   border-color: var(--line);
 }
+.fx-head .fx-search {
+  margin-top: 0;
+}
+.fx-create-row {
+  margin-top: 20px;
+}
