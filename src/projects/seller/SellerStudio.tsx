@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
-import { Check, Copy, ExternalLink, ImagePlus, Landmark, Lock, Monitor, Package, Smartphone, Store } from 'lucide-react'
+import { Check, Copy, ExternalLink, Globe, ImagePlus, Landmark, Lock, Monitor, Package, Smartphone, Store } from 'lucide-react'
 import { cn } from '../../lib/id'
-import { useAuth } from '../../auth'
 import { StorePage } from './StorePage'
 import {
   BUTTON_STYLES,
@@ -10,46 +9,51 @@ import {
   FONTS,
   PLATFORM_FEE_PERCENT,
   PRESETS,
+  TIKTOK_CLIENT_KEY,
+  domainProblem,
   emptyProduct,
   handleProblem,
   loadStore,
   saveStore,
+  toHandle,
 } from './model'
-import type { Product, StoreDraft } from './model'
+import type { Product, StepId, StoreDraft } from './model'
 
 /**
- * Seller Studio: a creator storefront builder with a live phone preview.
+ * Seller Studio. Starts from zero: an empty "Start your store" card, then
+ * Connect TikTok → store link → customise → bank → first product. Progress
+ * is saved, so coming back continues on the same step.
  *
- * Everything here is a draft saved in this browser. Taking money, TikTok
- * login, receipts and public handle.desknoty.com pages need a running
- * server plus Stripe, TikTok and Resend accounts; until those exist the
- * steps that depend on them say so instead of pretending to work.
+ * Drafts live in this browser. TikTok login, Stripe, domain checks and
+ * public store pages need a running server and the provider accounts;
+ * until those exist, those steps say so plainly.
  */
 
-type StepId = 'profile' | 'customize' | 'bank' | 'product'
-const STEPS: Array<{ id: StepId; title: string }> = [
-  { id: 'profile', title: 'Your profile' },
-  { id: 'customize', title: 'Name & customise your page' },
+const FLOW: Array<{ id: Exclude<StepId, 'start'>; title: string }> = [
+  { id: 'tiktok', title: 'Connect TikTok' },
+  { id: 'link', title: 'Choose your store link' },
+  { id: 'customize', title: 'Customise your page' },
   { id: 'bank', title: 'Connect your bank' },
-  { id: 'product', title: 'Add your digital product' },
+  { id: 'product', title: 'Add your first product' },
 ]
+const order = (id: StepId) => (id === 'start' ? -1 : FLOW.findIndex((s) => s.id === id))
 
 export function SellerStudio() {
-  const { user } = useAuth()
-  const [store, setStore] = useState<StoreDraft>(() => loadStore(user?.fullName ?? '', user?.avatar ?? null))
-  const [step, setStep] = useState<StepId>(store.name ? 'customize' : 'profile')
+  const [store, setStore] = useState<StoreDraft>(loadStore)
   const [view, setView] = useState<'mobile' | 'desktop'>('mobile')
   const [copied, setCopied] = useState(false)
   useEffect(() => saveStore(store), [store])
 
   const patch = (p: Partial<StoreDraft>) => setStore((s) => ({ ...s, ...p }))
-  const done: Record<StepId, boolean> = {
-    profile: Boolean(store.name.trim()),
-    customize: Boolean(store.handle) && !handleProblem(store.handle),
-    bank: store.payoutsEnabled,
-    product: store.products.some((p) => p.title.trim()),
-  }
-  const link = store.handle ? `${store.handle}.desknoty.com` : 'yourname.desknoty.com'
+  const reach = (id: StepId) => setStore((s) => (order(id) > order(s.step) ? { ...s, step: id } : s))
+  const current = store.step
+  const [open, setOpen] = useState<StepId>(current)
+  useEffect(() => setOpen(current), [current])
+
+  const link =
+    store.link.mode === 'domain' && store.link.domainStatus === 'connected'
+      ? store.link.domain
+      : `${store.handle || 'yourname'}.desknoty.com`
 
   return (
     <div className="ss">
@@ -57,35 +61,50 @@ export function SellerStudio() {
         <header className="ss-head">
           <p className="ss-kicker">Seller · Digital products</p>
           <h1>Your store</h1>
-          <p className="ss-lede">
-            Sell downloads and templates from one link. Desknoty takes {PLATFORM_FEE_PERCENT}% of every sale.
-          </p>
+          <p className="ss-lede">Sell downloads and templates from one link. Desknoty takes {PLATFORM_FEE_PERCENT}% of every sale.</p>
         </header>
 
-        <ol className="ss-steps">
-          {STEPS.map((s, i) => {
-            const open = s.id === step
-            return (
-              <li key={s.id} className={cn('ss-step', open && 'ss-step-open', done[s.id] && 'ss-step-done')}>
-                <button type="button" className="ss-step-head" onClick={() => setStep(s.id)} aria-expanded={open}>
-                  <span className="ss-dot" aria-hidden="true">
-                    {done[s.id] ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : i + 1}
-                  </span>
-                  <span className="ss-step-title">{s.title}</span>
-                  <span className="ss-step-state">{done[s.id] ? 'Done' : open ? 'In progress' : ''}</span>
-                </button>
-                {open && (
-                  <div className="ss-step-body">
-                    {s.id === 'profile' && <ProfileStep store={store} patch={patch} next={() => setStep('customize')} />}
-                    {s.id === 'customize' && <CustomizeStep store={store} patch={patch} next={() => setStep('bank')} />}
-                    {s.id === 'bank' && <BankStep store={store} next={() => setStep('product')} />}
-                    {s.id === 'product' && <ProductStep store={store} setStore={setStore} />}
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ol>
+        {current === 'start' ? (
+          <StartCard
+            onConnected={(t) => {
+              patch({ ...t, step: 'link' })
+            }}
+          />
+        ) : (
+          <ol className="ss-steps">
+            {FLOW.map((s, i) => {
+              const done = order(current) > i || (s.id === 'product' && store.products.some((p) => p.title.trim()))
+              const locked = order(current) < i
+              const isOpen = open === s.id && !locked
+              return (
+                <li key={s.id} className={cn('ss-step', isOpen && 'ss-step-open', done && 'ss-step-done', locked && 'ss-step-locked')}>
+                  <button
+                    type="button"
+                    className="ss-step-head"
+                    disabled={locked}
+                    onClick={() => setOpen(s.id)}
+                    aria-expanded={isOpen}
+                  >
+                    <span className="ss-dot" aria-hidden="true">
+                      {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : locked ? <Lock className="h-3 w-3" /> : i + 1}
+                    </span>
+                    <span className="ss-step-title">{s.title}</span>
+                    <span className="ss-step-state">{done ? 'Done' : locked ? 'Locked' : 'In progress'}</span>
+                  </button>
+                  {isOpen && (
+                    <div className="ss-step-body">
+                      {s.id === 'tiktok' && <TikTokDone store={store} />}
+                      {s.id === 'link' && <LinkStep store={store} patch={patch} next={() => reach('customize')} />}
+                      {s.id === 'customize' && <CustomizeStep store={store} patch={patch} next={() => reach('bank')} />}
+                      {s.id === 'bank' && <BankStep store={store} next={() => reach('product')} />}
+                      {s.id === 'product' && <ProductStep store={store} setStore={setStore} />}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ol>
+        )}
       </section>
 
       <aside className="ss-preview" aria-label="Live preview">
@@ -101,6 +120,7 @@ export function SellerStudio() {
           <button
             type="button"
             className="ss-ghost"
+            disabled={current === 'start'}
             onClick={() => {
               void navigator.clipboard?.writeText(`https://${link}`).then(() => {
                 setCopied(true)
@@ -114,26 +134,214 @@ export function SellerStudio() {
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
           <div className="ss-screen">
-            {store.name.trim() ? (
-              <StorePage store={store} />
-            ) : (
+            {current !== 'start' && order(current) >= order('link') && <div className="ss-addr">{link}</div>}
+            {current === 'start' ? (
               <div className="ss-empty">
-                <Store className="h-6 w-6" />
-                <p>Add your name to start your store</p>
-                <button type="button" onClick={() => setStep('profile')}>
-                  Set up profile
-                </button>
+                <span className="ss-ph-avatar" />
+                <p>Your store will appear here</p>
               </div>
+            ) : (
+              <StorePage store={store} />
             )}
           </div>
         </div>
-        <p className="ss-url">{link}</p>
       </aside>
     </div>
   )
 }
 
-/* -------------------------------------------------------------- steps --- */
+/* -------------------------------------------------------- step 0 / 1 --- */
+
+function TikTokMark() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden="true">
+      <path fill="currentColor" d="M16.6 5.8A4.3 4.3 0 0 1 15.5 3h-3.1v12.4a2.6 2.6 0 1 1-2.6-2.6c.3 0 .5 0 .8.1V9.7a5.7 5.7 0 1 0 4.9 5.7V9.1a7.3 7.3 0 0 0 4.3 1.4V7.4a4.3 4.3 0 0 1-3.2-1.6Z" />
+    </svg>
+  )
+}
+
+/** The first thing a new seller sees. */
+function StartCard({ onConnected }: { onConnected: (p: Partial<StoreDraft>) => void }) {
+  const [error, setError] = useState(false)
+  const [manual, setManual] = useState(false)
+  const [name, setName] = useState('')
+  const [user, setUser] = useState('')
+  const connect = () => {
+    // TikTok Login Kit needs a TikTok developer app and Desknoty's server to
+    // exchange the code; without a client key the connection cannot start.
+    if (!TIKTOK_CLIENT_KEY) {
+      setError(true)
+      return
+    }
+    const state = crypto.randomUUID()
+    sessionStorage.setItem('desknoty.tiktok.state', state)
+    const q = new URLSearchParams({
+      client_key: TIKTOK_CLIENT_KEY,
+      scope: 'user.info.basic,user.info.profile',
+      response_type: 'code',
+      redirect_uri: `${window.location.origin}/api/tiktok/callback`,
+      state,
+    })
+    window.location.href = `https://www.tiktok.com/v2/auth/authorize/?${q}`
+  }
+
+  return (
+    <div className="ss-start">
+      <div className="ss-start-card">
+        <span className="ss-start-icon">
+          <Store className="h-6 w-6" />
+        </span>
+        <h2>Start your store</h2>
+        <p>Connect TikTok to create your store in 2 minutes.</p>
+        <button type="button" className="ss-tt" onClick={connect}>
+          <TikTokMark /> Connect TikTok
+        </button>
+        {error && (
+          <div className="ss-start-err" role="alert">
+            TikTok connection failed. Try again.
+            <small>TikTok login isn’t switched on for Desknoty yet.</small>
+            {!manual && (
+              <button type="button" onClick={() => setManual(true)}>
+                Continue without TikTok
+              </button>
+            )}
+          </div>
+        )}
+        {manual && (
+          <form
+            className="ss-start-manual"
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (!name.trim() || !user.trim()) return
+              onConnected({ tiktok: { connected: false, manual: true, username: user.replace(/^@/, '') }, name: name.trim(), handle: toHandle(user) })
+            }}
+          >
+            <input className="ss-input ss-input-light" placeholder="Display name" value={name} onChange={(e) => setName(e.target.value)} />
+            <input className="ss-input ss-input-light" placeholder="@username" value={user} onChange={(e) => setUser(e.target.value)} />
+            <button type="submit" className="ss-tt" disabled={!name.trim() || !user.trim()}>
+              Continue
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TikTokDone({ store }: { store: StoreDraft }) {
+  return (
+    <p className="ss-muted">
+      {store.tiktok.connected ? 'Connected as ' : 'Set up by hand as '}
+      <b className="text-[#f4f4f5]">@{store.tiktok.username}</b>
+      {store.tiktok.manual && ' · you can connect TikTok later'}
+    </p>
+  )
+}
+
+/* ------------------------------------------------------------ step 2 --- */
+
+function LinkStep({ store, patch, next }: { store: StoreDraft; patch: (p: Partial<StoreDraft>) => void; next: () => void }) {
+  const l = store.link
+  const setLink = (x: Partial<StoreDraft['link']>) => patch({ link: { ...l, ...x } })
+  const problem = handleProblem(store.handle)
+  const dProblem = l.domain ? domainProblem(l.domain) : 'Enter your domain'
+  const ok = l.mode === 'free' ? !problem : l.domainStatus === 'connected'
+
+  return (
+    <div className="ss-stack">
+      <div className="ss-options">
+        <button type="button" className={cn('ss-opt', l.mode === 'free' && 'ss-opt-on')} onClick={() => setLink({ mode: 'free' })} aria-pressed={l.mode === 'free'}>
+          <span className="ss-badge">Free</span>
+          <b>Free Desknoty link</b>
+          <small>yourname.desknoty.com</small>
+        </button>
+        <button type="button" className={cn('ss-opt', l.mode === 'domain' && 'ss-opt-on')} onClick={() => setLink({ mode: 'domain' })} aria-pressed={l.mode === 'domain'}>
+          <span className="ss-badge ss-badge-pro">Pro</span>
+          <b>Use your own domain</b>
+          <small>e.g. shop.yourname.com</small>
+        </button>
+      </div>
+
+      {l.mode === 'free' ? (
+        <Field
+          label="Your link"
+          hint={
+            problem ? (
+              <span className="text-[#ff8a80]">● {problem === 'That name is reserved.' ? 'Taken' : problem}</span>
+            ) : (
+              <span className="text-[#c8ff3d]">● Available</span>
+            )
+          }
+        >
+          <div className="ss-affix">
+            <input
+              className="ss-input"
+              value={store.handle}
+              maxLength={30}
+              onChange={(e) => patch({ handle: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+              placeholder="yourname"
+              autoFocus
+            />
+            <span>.desknoty.com</span>
+          </div>
+        </Field>
+      ) : (
+        <>
+          <Field label="Your domain" hint={l.domain && dProblem ? <span className="text-[#ff8a80]">{dProblem}</span> : undefined}>
+            <div className="flex gap-2">
+              <input
+                className="ss-input"
+                value={l.domain}
+                onChange={(e) => setLink({ domain: e.target.value.trim().toLowerCase(), domainStatus: 'none' })}
+                placeholder="shop.yourname.com"
+              />
+              <button type="button" className="ss-ghost shrink-0" disabled={Boolean(dProblem)} onClick={() => setLink({ domainStatus: 'waiting' })}>
+                <Globe className="h-3.5 w-3.5" /> Connect domain
+              </button>
+            </div>
+          </Field>
+          {l.domainStatus !== 'none' && (
+            <div className="ss-dns">
+              <p>At the company you bought your domain from, add this DNS record:</p>
+              <div className="ss-dns-row">
+                <span>Type</span>
+                <code>CNAME</code>
+                <span>Name</span>
+                <code>{l.domain.split('.')[0]}</code>
+                <span>Value</span>
+                <code>cname.vercel-dns.com</code>
+                <button type="button" className="ss-ghost" onClick={() => void navigator.clipboard?.writeText('cname.vercel-dns.com')}>
+                  <Copy className="h-3.5 w-3.5" /> Copy
+                </button>
+              </div>
+              <span className="ss-chip-status">
+                ● {l.domainStatus === 'waiting' ? 'Waiting for DNS' : l.domainStatus === 'verifying' ? 'Verifying' : 'Connected ✓'}
+              </span>
+              <p className="ss-muted">
+                Checking DNS and connecting the domain needs Desknoty hosted on Vercel, so it stays on “Waiting for DNS” for
+                now. You keep {store.handle || 'yourname'}.desknoty.com as your link meanwhile.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      <button
+        type="button"
+        className="ss-primary"
+        disabled={!ok && !(l.mode === 'domain' && !problem)}
+        onClick={() => {
+          if (l.mode === 'domain' && l.domainStatus !== 'connected') setLink({ mode: 'free' })
+          next()
+        }}
+      >
+        {l.mode === 'domain' && l.domainStatus !== 'connected' ? `Continue with ${store.handle || 'yourname'}.desknoty.com` : 'Continue'}
+      </button>
+    </div>
+  )
+}
+
+/* --------------------------------------------------------- steps 3-5 --- */
 
 function Field({ label, hint, children }: { label: string; hint?: ReactNode; children: ReactNode }) {
   return (
@@ -152,60 +360,26 @@ function readImage(file: File, cb: (url: string) => void) {
   r.readAsDataURL(file)
 }
 
-function ProfileStep({ store, patch, next }: { store: StoreDraft; patch: (p: Partial<StoreDraft>) => void; next: () => void }) {
+function CustomizeStep({ store, patch, next }: { store: StoreDraft; patch: (p: Partial<StoreDraft>) => void; next: () => void }) {
+  const theme = store.theme
+  const setTheme = (t: Partial<StoreDraft['theme']>) => patch({ theme: { ...theme, ...t } })
   return (
     <div className="ss-stack">
-      <div className="ss-note">
-        <b>Continue with TikTok</b> is coming: it needs a TikTok developer app linked to Desknoty. For now, add your details by hand.
-      </div>
-      <button type="button" className="ss-tiktok" disabled title="Needs a TikTok developer app">
-        <span aria-hidden="true">♪</span> Continue with TikTok
-        <Lock className="ml-auto h-3.5 w-3.5" />
-      </button>
-      <Field label="Display name">
-        <input className="ss-input" value={store.name} maxLength={60} onChange={(e) => patch({ name: e.target.value })} placeholder="e.g. Matas Studio" />
-      </Field>
       <div className="ss-row">
         <span className="ss-avatar" style={store.avatar ? { backgroundImage: `url(${store.avatar})` } : undefined}>
           {!store.avatar && (store.name.trim().charAt(0).toUpperCase() || '?')}
         </span>
         <label className="ss-ghost cursor-pointer">
-          <ImagePlus className="h-3.5 w-3.5" /> Upload photo
+          <ImagePlus className="h-3.5 w-3.5" /> Change photo
           <input type="file" accept="image/*" className="sr-only" onChange={(e) => e.target.files?.[0] && readImage(e.target.files[0], (avatar) => patch({ avatar }))} />
         </label>
       </div>
-      <button type="button" className="ss-primary" disabled={!store.name.trim()} onClick={next}>
-        Continue
-      </button>
-    </div>
-  )
-}
-
-function CustomizeStep({ store, patch, next }: { store: StoreDraft; patch: (p: Partial<StoreDraft>) => void; next: () => void }) {
-  const problem = store.handle ? handleProblem(store.handle) : null
-  const theme = store.theme
-  const setTheme = (t: Partial<StoreDraft['theme']>) => patch({ theme: { ...theme, ...t } })
-  return (
-    <div className="ss-stack">
-      <Field
-        label="Store link"
-        hint={problem ? <span className="text-[#ff8a80]">{problem}</span> : store.handle ? `✓ ${store.handle}.desknoty.com is free to claim` : '3–30 characters: letters, numbers and hyphens'}
-      >
-        <div className="ss-affix">
-          <input
-            className="ss-input"
-            value={store.handle}
-            maxLength={30}
-            onChange={(e) => patch({ handle: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-            placeholder="yourname"
-          />
-          <span>.desknoty.com</span>
-        </div>
+      <Field label="Display name">
+        <input className="ss-input" value={store.name} maxLength={60} onChange={(e) => patch({ name: e.target.value })} />
       </Field>
       <Field label="Bio" hint={`${store.bio.length}/160`}>
         <textarea className="ss-input" rows={2} maxLength={160} value={store.bio} onChange={(e) => patch({ bio: e.target.value })} placeholder="What you make, in one line" />
       </Field>
-
       <div>
         <span className="ss-label">Theme</span>
         <div className="ss-presets">
@@ -216,7 +390,7 @@ function CustomizeStep({ store, patch, next }: { store: StoreDraft; patch: (p: P
               aria-pressed={theme.preset === p.id}
               onClick={() => setTheme({ preset: p.id, accent: p.accent })}
               className="ss-preset"
-              style={{ '--bg': p.bg, '--ink': p.ink, '--ac': p.accent } as CSSProperties}
+              style={{ '--bg': p.bg, '--ac': p.accent } as CSSProperties}
             >
               <span className="ss-preset-swatch">
                 <i />
@@ -262,7 +436,7 @@ function CustomizeStep({ store, patch, next }: { store: StoreDraft; patch: (p: P
           </Field>
         ))}
       </div>
-      <button type="button" className="ss-primary" disabled={!store.handle || Boolean(problem)} onClick={next}>
+      <button type="button" className="ss-primary" disabled={!store.name.trim()} onClick={next}>
         Continue
       </button>
     </div>
@@ -272,9 +446,7 @@ function CustomizeStep({ store, patch, next }: { store: StoreDraft; patch: (p: P
 function BankStep({ store, next }: { store: StoreDraft; next: () => void }) {
   return (
     <div className="ss-stack">
-      <p className="ss-big">
-        Get 100% of every sale sent straight to your bank. Desknoty takes {PLATFORM_FEE_PERCENT}%.
-      </p>
+      <p className="ss-big">Get 100% of every sale sent straight to your bank. Desknoty takes {PLATFORM_FEE_PERCENT}%.</p>
       <p className="ss-muted">Stripe’s own card processing fee still applies.</p>
       <div className="ss-status">
         <Landmark className="h-4 w-4" />
@@ -285,8 +457,8 @@ function BankStep({ store, next }: { store: StoreDraft; next: () => void }) {
         Connect bank account <Lock className="h-3.5 w-3.5" />
       </button>
       <div className="ss-note">
-        Connecting a bank needs a Stripe account with Connect switched on and Desknoty’s server online. Until then you can
-        build and draft products; publishing unlocks once payouts are active.
+        Connecting a bank needs a Stripe account with Connect switched on and Desknoty’s server online. You can still add
+        products as drafts; publishing unlocks once payouts are active.
       </div>
       <button type="button" className="ss-ghost self-start" onClick={next}>
         Skip for now and add a product
@@ -298,8 +470,7 @@ function BankStep({ store, next }: { store: StoreDraft; next: () => void }) {
 function ProductStep({ store, setStore }: { store: StoreDraft; setStore: React.Dispatch<React.SetStateAction<StoreDraft>> }) {
   const [editing, setEditing] = useState<string | null>(store.products[0]?.id ?? null)
   const product = store.products.find((p) => p.id === editing)
-  const update = (id: string, p: Partial<Product>) =>
-    setStore((s) => ({ ...s, products: s.products.map((x) => (x.id === id ? { ...x, ...p } : x)) }))
+  const update = (id: string, p: Partial<Product>) => setStore((s) => ({ ...s, products: s.products.map((x) => (x.id === id ? { ...x, ...p } : x)) }))
   const add = () => {
     const p = emptyProduct()
     setStore((s) => ({ ...s, products: [...s.products, p] }))
@@ -309,17 +480,18 @@ function ProductStep({ store, setStore }: { store: StoreDraft; setStore: React.D
 
   return (
     <div className="ss-stack">
-      <div className="ss-chips">
-        {store.products.map((p) => (
-          <button key={p.id} type="button" aria-pressed={p.id === editing} onClick={() => setEditing(p.id)}>
-            {p.title.trim() || 'Untitled product'}
+      {store.products.length > 0 && (
+        <div className="ss-chips">
+          {store.products.map((p) => (
+            <button key={p.id} type="button" aria-pressed={p.id === editing} onClick={() => setEditing(p.id)}>
+              {p.title.trim() || 'Untitled product'}
+            </button>
+          ))}
+          <button type="button" className="ss-chip-add" onClick={add}>
+            + New product
           </button>
-        ))}
-        <button type="button" className="ss-chip-add" onClick={add}>
-          + New product
-        </button>
-      </div>
-
+        </div>
+      )}
       {!product ? (
         <button type="button" className="ss-blank" onClick={add}>
           <Package className="h-5 w-5" /> Add your first digital product
@@ -367,10 +539,7 @@ function ProductStep({ store, setStore }: { store: StoreDraft; setStore: React.D
               <input className="ss-input" value={product.url} onChange={(e) => update(product.id, { url: e.target.value })} placeholder="https://" />
             </Field>
           ) : (
-            <div className="ss-note">
-              File uploads (up to 2 GB, kept private) need Desknoty’s file storage, which comes with the server. Your product
-              is saved as a draft until then.
-            </div>
+            <div className="ss-note">File uploads (up to 2 GB, kept private) need Desknoty’s file storage, which comes with the server. Your product is saved as a draft until then.</div>
           )}
           <div className="ss-row">
             <span className="ss-cover" style={product.cover ? { backgroundImage: `url(${product.cover})` } : undefined} />

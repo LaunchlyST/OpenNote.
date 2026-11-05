@@ -17,7 +17,13 @@ export interface Product {
   published: boolean
 }
 
+export type StepId = 'start' | 'tiktok' | 'link' | 'customize' | 'bank' | 'product'
+
 export interface StoreDraft {
+  /** The furthest step reached; reopening the studio continues here. */
+  step: StepId
+  tiktok: { connected: boolean; manual: boolean; username: string }
+  link: { mode: 'free' | 'domain'; domain: string; domainStatus: 'none' | 'waiting' | 'verifying' | 'connected' }
   name: string
   handle: string
   bio: string
@@ -85,9 +91,10 @@ export function emptyProduct(): Product {
   }
 }
 
-const KEY = 'desknoty.seller.store.v1'
+// v2: the onboarding flow starts from zero
+const KEY = 'desknoty.seller.store.v2'
 
-export function loadStore(name: string, avatar: string | null): StoreDraft {
+export function loadStore(): StoreDraft {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) return JSON.parse(raw) as StoreDraft
@@ -95,10 +102,13 @@ export function loadStore(name: string, avatar: string | null): StoreDraft {
     /* fresh draft */
   }
   return {
-    name,
+    step: 'start',
+    tiktok: { connected: false, manual: false, username: '' },
+    link: { mode: 'free', domain: '', domainStatus: 'none' },
+    name: '',
     handle: '',
     bio: '',
-    avatar,
+    avatar: null,
     theme: { preset: 'clean', accent: '#111114', font: 'geist', button: 'rounded', background: 'solid' },
     socials: { instagram: '', youtube: '', x: '', website: '' },
     payoutsEnabled: false,
@@ -113,3 +123,18 @@ export function saveStore(s: StoreDraft) {
     /* storage full (large images) or blocked: keeps working for this visit */
   }
 }
+
+/** A TikTok username as a store handle: lowercase, hyphens for anything else. */
+export function toHandle(u: string): string {
+  return u.toLowerCase().replace(/^@/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30)
+}
+
+/** A plausible custom domain like shop.example.com. */
+export function domainProblem(d: string): string | null {
+  if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(d)) return 'Enter a domain like shop.yourname.com'
+  if (d.endsWith('desknoty.com')) return 'Use your own domain here, not desknoty.com'
+  return null
+}
+
+/** TikTok Login Kit needs a client key from a TikTok developer app. */
+export const TIKTOK_CLIENT_KEY = (import.meta.env.VITE_TIKTOK_CLIENT_KEY ?? '').trim()
