@@ -27,6 +27,9 @@ const App = lazy(() => import('./App'))
 // Coming Soon page is untouched. Safe to remove after a concept is chosen.
 const DesignPreview = lazy(() => import('./design/DesignPreview'))
 
+// Public seller storefronts at /store/<handle>. No account needed; never gated.
+const PublicStore = lazy(() => import('./store/PublicStore'))
+
 function screenForPath(path: string): Screen | undefined {
   if (path === '/app/signin' || path === '/signin') return 'signin'
   if (path === '/app/signup' || path === '/signup') return 'signup'
@@ -125,6 +128,13 @@ function Routes() {
     return (
       <Suspense fallback={<RouteFallback />}>
         <DesignPreview />
+      </Suspense>
+    )
+  }
+  if (path.startsWith('/store/') && path.length > '/store/'.length) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <PublicStore path={path} />
       </Suspense>
     )
   }

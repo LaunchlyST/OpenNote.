@@ -105,7 +105,8 @@ export function ProShell({ project }: { project: ProjectSummary }) {
   const { settingsOpen, openSettings, closeSettings } = useApp()
   const [theme] = useProTheme()
   const streak = useStreak()
-  const [active, setActive] = useState('overview')
+  // ?tool=seller: back from Stripe onboarding or TikTok login, open Seller
+  const [active, setActive] = useState(() => (new URLSearchParams(window.location.search).get('tool') === 'seller' ? 'seller' : 'overview'))
   const [collapsed, setCollapsed] = useState(() => {
     try {
       return localStorage.getItem(COLLAPSE_KEY) === '1'

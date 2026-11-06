@@ -6,7 +6,7 @@
  * for the inbox preview line. Every value that reaches the HTML is escaped.
  */
 
-export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch'
+export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt'
 
 /** What a template may fill in. `email` and `count` are used by the waitlist emails. */
 export interface EmailData {
@@ -87,6 +87,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
   const hello = data.name ? `Hi ${data.name},` : 'Hi,'
   const footnote = 'You received this email because of activity on your Desknoty account. Desknoty will never ask for your password by email.'
 
+  const receiptFootnote = 'You received this email because you bought a digital product from a store hosted on Desknoty. Payments are processed by Stripe on the seller’s behalf.'
   const waitlistFootnote =
     kind === 'waitlist-signup'
       ? 'You receive these emails because this address is set as the Desknoty waitlist contact.'
@@ -110,6 +111,17 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
       heading: 'Confirm your email address',
       paragraphs: [hello, 'Thanks for signing up for Desknoty. Confirm your email address to finish creating your account.'],
       action: 'Confirm email',
+    },
+    'order-receipt': {
+      subject: `Your download: ${data.name ?? 'your purchase'}`,
+      preheader: `Thanks for buying from ${data.email ?? 'this store'}. Your download is ready.`,
+      heading: 'Your download is ready',
+      paragraphs: [
+        'Hi,',
+        `Thanks for buying ${data.name ?? 'your product'} from ${data.email ?? 'this store'}. Payment is confirmed.`,
+        'Use the button below any time to get a fresh download link. Keep this email: the link is private to your order.',
+      ],
+      action: 'Get your download',
     },
     'waitlist-welcome': {
       subject: 'You’re on the Desknoty waitlist',
@@ -156,7 +168,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
 
   return {
     subject: spec.subject,
-    html: layout({ ...spec, url: data.url, footnote: kind.startsWith('waitlist') ? waitlistFootnote : footnote }),
-    text: text(spec.heading, spec.paragraphs, spec.action, data.url, kind.startsWith('waitlist') ? waitlistFootnote : footnote),
+    html: layout({ ...spec, url: data.url, footnote: kind.startsWith('waitlist') ? waitlistFootnote : kind === 'order-receipt' ? receiptFootnote : footnote }),
+    text: text(spec.heading, spec.paragraphs, spec.action, data.url, kind.startsWith('waitlist') ? waitlistFootnote : kind === 'order-receipt' ? receiptFootnote : footnote),
   }
 }

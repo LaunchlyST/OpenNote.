@@ -1,43 +1,93 @@
-/** Seller Studio data: one store draft per browser (no server yet). */
+/** Seller Studio data, as the Desknoty server stores it. */
+import { apiUrl } from '../../lib/api-base'
 
-/** Desknoty's cut of each sale. Sellers keep the rest, minus Stripe's fee. */
+/** Desknoty's cut of each sale. Stripe's own processing fee is separate and charged by Stripe. */
 export const PLATFORM_FEE_PERCENT = 0
 
-export interface Product {
+export type BlockType = 'header' | 'text' | 'image' | 'links' | 'featured' | 'grid' | 'faq' | 'footer'
+
+export interface Block {
   id: string
-  type: 'download' | 'link' | 'bundle'
-  title: string
-  short: string
-  price: string
-  currency: string
-  pwyw: boolean
-  cover: string | null
-  url: string
-  thanks: string
-  published: boolean
+  type: BlockType
+  hidden: boolean
+  data: Record<string, any>
 }
 
-export type StepId = 'start' | 'tiktok' | 'link' | 'customize' | 'bank' | 'product'
-
-export interface StoreDraft {
-  /** The furthest step reached; reopening the studio continues here. */
-  step: StepId
-  tiktok: { connected: boolean; manual: boolean; username: string }
-  link: { mode: 'free' | 'domain'; domain: string; domainStatus: 'none' | 'waiting' | 'verifying' | 'connected' }
+export interface Page {
   name: string
-  handle: string
   bio: string
   avatar: string | null
-  theme: {
-    preset: string
-    accent: string
-    font: string
-    button: 'rounded' | 'pill' | 'sharp'
-    background: 'solid' | 'gradient'
-  }
+  theme: { preset: string; accent: string; font: string; button: 'rounded' | 'pill' | 'sharp'; background: 'solid' | 'gradient' }
   socials: { instagram: string; youtube: string; x: string; website: string }
-  payoutsEnabled: boolean
-  products: Product[]
+  blocks: Block[]
+}
+
+/** What the storefront renderer needs to know about a product. */
+export interface ShopProduct {
+  id: string
+  title: string
+  description: string
+  cover: string | null
+  priceMinor: number
+  currency: string
+}
+
+/** The seller's own (draft) view of a product. */
+export interface DraftProduct extends ShopProduct {
+  file: { name: string; size: number; type: string } | null
+  listed: boolean
+  published: boolean
+  changed: boolean
+  problem: string | null
+}
+
+export type PayoutStatus = 'not_connected' | 'incomplete' | 'pending' | 'ready'
+
+export interface StoreView {
+  id: string
+  handle: string
+  url: string
+  draft: Page
+  published: Page | null
+  publishedAt: string | null
+  unpublishedChanges: boolean
+  tiktok: { username: string; displayName: string; avatarUrl: string } | null
+  payouts: { status: PayoutStatus; accountId: string | null; checkoutReady: boolean }
+  products: DraftProduct[]
+}
+
+export interface SellerSetup {
+  stripe: boolean
+  webhook: boolean
+  tiktok: boolean
+  platformFeePercent: number
+}
+
+export const BLOCKS: Array<{ type: BlockType; label: string; hint: string }> = [
+  { type: 'header', label: 'Profile header', hint: 'Photo, name, bio and socials' },
+  { type: 'text', label: 'Text', hint: 'A heading and a paragraph' },
+  { type: 'image', label: 'Image', hint: 'A picture with a caption' },
+  { type: 'links', label: 'Links', hint: 'Buttons to anywhere' },
+  { type: 'featured', label: 'Featured product', hint: 'One product, big' },
+  { type: 'grid', label: 'Product grid', hint: 'The products you pick' },
+  { type: 'faq', label: 'FAQ', hint: 'Questions and answers' },
+  { type: 'footer', label: 'Footer', hint: 'A closing line' },
+]
+export const blockLabel = (t: BlockType) => BLOCKS.find((b) => b.type === t)?.label ?? t
+
+export function newBlock(type: BlockType): Block {
+  const id = `blk_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+  const data: Record<BlockType, Record<string, unknown>> = {
+    header: { showSocials: true },
+    text: { heading: 'About', body: '' },
+    image: { media: null, alt: '', caption: '' },
+    links: { links: [{ label: 'My YouTube', url: '' }] },
+    featured: { productId: null, note: '' },
+    grid: { heading: 'Shop', productIds: [] },
+    faq: { heading: 'FAQ', items: [{ q: 'How do I get my download?', a: 'Right after paying, and by email.' }] },
+    footer: { text: '' },
+  }
+  return { id, type, hidden: false, data: data[type] }
 }
 
 export const PRESETS = [
@@ -58,14 +108,20 @@ export const FONTS = [
 export const BUTTON_STYLES = ['rounded', 'pill', 'sharp'] as const
 
 export const CURRENCIES = [
-  { code: 'GBP', symbol: '£' },
-  { code: 'USD', symbol: '$' },
-  { code: 'EUR', symbol: '€' },
+  { code: 'gbp', label: 'GBP', symbol: '£' },
+  { code: 'usd', label: 'USD', symbol: '$' },
+  { code: 'eur', label: 'EUR', symbol: '€' },
 ]
 
-const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog'])
+export function formatPrice(minor: number, currency: string) {
+  const sym = CURRENCIES.find((c) => c.code === currency)?.symbol ?? ''
+  const v = minor / 100
+  return `${sym}${v.toFixed(v % 1 ? 2 : 0)}`
+}
 
-/** Why a store handle can't be used, or null if it's fine. */
+const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog', 'store', 'desknoty', 'support'])
+
+/** Why a store handle can't be used, or null if it's fine (the server checks again, and for uniqueness). */
 export function handleProblem(h: string): string | null {
   if (h.length < 3) return 'At least 3 characters.'
   if (h.length > 30) return 'At most 30 characters.'
@@ -75,66 +131,56 @@ export function handleProblem(h: string): string | null {
   return null
 }
 
-export function emptyProduct(): Product {
-  return {
-    id: crypto.randomUUID(),
-    type: 'download',
-    title: '',
-    short: '',
-    price: '9',
-    currency: 'GBP',
-    pwyw: false,
-    cover: null,
-    url: '',
-    thanks: '',
-    published: false,
-  }
-}
-
-// v2: the onboarding flow starts from zero
-const KEY = 'desknoty.seller.store.v2'
-
-export function loadStore(): StoreDraft {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) return JSON.parse(raw) as StoreDraft
-  } catch {
-    /* fresh draft */
-  }
-  return {
-    step: 'start',
-    tiktok: { connected: false, manual: false, username: '' },
-    link: { mode: 'free', domain: '', domainStatus: 'none' },
-    name: '',
-    handle: '',
-    bio: '',
-    avatar: null,
-    theme: { preset: 'clean', accent: '#111114', font: 'geist', button: 'rounded', background: 'solid' },
-    socials: { instagram: '', youtube: '', x: '', website: '' },
-    payoutsEnabled: false,
-    products: [],
-  }
-}
-
-export function saveStore(s: StoreDraft) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(s))
-  } catch {
-    /* storage full (large images) or blocked: keeps working for this visit */
-  }
-}
-
-/** A TikTok username as a store handle: lowercase, hyphens for anything else. */
+/** A username as a store handle: lowercase, hyphens for anything else. */
 export function toHandle(u: string): string {
   return u.toLowerCase().replace(/^@/, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30)
 }
 
-/** A plausible custom domain like shop.example.com. */
-export function domainProblem(d: string): string | null {
-  if (!/^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/.test(d)) return 'Enter a domain like shop.yourname.com'
-  if (d.endsWith('desknoty.com')) return 'Use your own domain here, not desknoty.com'
+export const mediaUrl = (id: string | null | undefined) => (id ? apiUrl(`/api/store-media/${id}`) : null)
+
+/* ------------------------------------------------ old browser drafts --- */
+
+/** The pre-server draft that Seller Studio used to keep in this browser. */
+export interface LegacyDraft {
+  name: string
+  handle: string
+  bio: string
+  avatar: string | null
+  theme: { preset: string; accent: string; font: string; button: string; background: string }
+  socials: { instagram: string; youtube: string; x: string; website: string }
+  products: Array<{ title: string; short: string; price: string; currency: string; cover: string | null }>
+}
+const LEGACY_KEYS = ['desknoty.seller.store.v2', 'desknoty.seller.store.v1']
+
+export function readLegacyDraft(): LegacyDraft | null {
+  for (const k of LEGACY_KEYS) {
+    try {
+      const raw = localStorage.getItem(k)
+      if (!raw) continue
+      const d = JSON.parse(raw) as Partial<LegacyDraft>
+      const products = (d.products ?? []).filter((p) => p && p.title?.trim())
+      if (!d.name?.trim() && !products.length) continue
+      return {
+        name: d.name ?? '',
+        handle: d.handle ?? '',
+        bio: d.bio ?? '',
+        avatar: d.avatar ?? null,
+        theme: { preset: 'clean', accent: '#111114', font: 'geist', button: 'rounded', background: 'solid', ...(d.theme ?? {}) },
+        socials: { instagram: '', youtube: '', x: '', website: '', ...(d.socials ?? {}) },
+        products,
+      }
+    } catch {
+      /* unreadable: skip */
+    }
+  }
   return null
 }
-
-/** TikTok Login Kit needs a client key from a TikTok developer app. */
-export const TIKTOK_CLIENT_KEY = (import.meta.env.VITE_TIKTOK_CLIENT_KEY ?? '').trim()
+export function forgetLegacyDraft() {
+  for (const k of LEGACY_KEYS) {
+    try {
+      localStorage.removeItem(k)
+    } catch {
+      /* blocked */
+    }
+  }
+}

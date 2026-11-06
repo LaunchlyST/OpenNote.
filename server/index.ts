@@ -18,6 +18,7 @@ import { projectsRouter } from './projects.ts'
 import { preferencesRouter } from './preferences.ts'
 import { earlyAccessRouter } from './early-access.ts'
 import { launchRouter } from './launch.ts'
+import { sellerRouter, stripeWebhookHandler } from './seller.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
@@ -68,6 +69,9 @@ app.use((req, res, next) => {
 // Better Auth must see the raw request body, so it is mounted before any
 // body parser.
 app.all('/api/auth/*splat', toNodeHandler(auth))
+
+// Stripe signs the raw body, so its webhook is mounted before the JSON parser.
+app.post('/api/stripe/webhook', ...stripeWebhookHandler())
 
 app.use(express.json({ limit: '2mb' }))
 
@@ -131,6 +135,9 @@ app.use('/api/preferences', preferencesRouter())
 // on the server, and remembered in an httpOnly signed cookie.
 app.use(earlyAccessRouter)
 app.use(launchRouter)
+
+// Seller Studio: stores, products, payouts, checkout and downloads.
+app.use(sellerRouter())
 
 // Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())

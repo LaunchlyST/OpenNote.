@@ -30,7 +30,9 @@
     "db:migrate": "tsx server/migrate.ts",
     "admin:verify": "tsx scripts/grant-admin.ts",
     "mail:test": "tsx scripts/mail-test.ts",
-    "serve": "NODE_ENV=production tsx server/index.ts"
+    "serve": "NODE_ENV=production tsx server/index.ts",
+    "test:seller": "tsx scripts/seller-smoke.ts",
+    "test:e2e:seller": "tsx scripts/e2e-seller.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -42,6 +44,7 @@
     "nodemailer": "^10.0.13",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "stripe": "^17.7.0",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
