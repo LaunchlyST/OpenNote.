@@ -1,4 +1,4 @@
-import { db } from './db.ts'
+import { sql } from './db.ts'
 import { env } from './env.ts'
 
 /**
@@ -9,34 +9,30 @@ import { env } from './env.ts'
  * with the owner's email first. Everyone else is a plain `user` — including
  * an account that was removed from the list since the last run.
  */
-export function syncRoles(): { admins: string[] } {
+export async function syncRoles(): Promise<{ admins: string[] }> {
   const allow = new Set(env.adminEmails)
-  const rows = db.prepare('SELECT id, email, emailVerified, role FROM "user"').all() as Array<{
-    id: string
-    email: string
-    emailVerified: number
-    role: string | null
-  }>
+  const rows = await sql.all<{ id: string; email: string; emailVerified: number | boolean; role: string | null }>(
+    'SELECT id, email, "emailVerified", role FROM "user"',
+  )
 
-  const setRole = db.prepare('UPDATE "user" SET role = ? WHERE id = ?')
   // PRO_EMAILS: Pro on the house for these verified accounts. Only ever grants.
   const pro = new Set(env.proEmails)
-  const grantPro = db.prepare(`UPDATE "user" SET plan = 'pro' WHERE id = ? AND (plan IS NULL OR plan != 'pro')`)
   const admins: string[] = []
-  db.transaction(() => {
+  await sql.tx(async (tx) => {
     for (const row of rows) {
       const wanted = allow.has(row.email.toLowerCase()) && Boolean(row.emailVerified) ? 'admin' : 'user'
       if (wanted === 'admin') admins.push(row.email)
-      if (row.role !== wanted) setRole.run(wanted, row.id)
-      if (pro.has(row.email.toLowerCase()) && row.emailVerified) grantPro.run(row.id)
+      if (row.role !== wanted) await tx.run('UPDATE "user" SET role = ? WHERE id = ?', wanted, row.id)
+      if (pro.has(row.email.toLowerCase()) && row.emailVerified)
+        await tx.run(`UPDATE "user" SET plan = 'pro' WHERE id = ? AND (plan IS NULL OR plan != 'pro')`, row.id)
     }
-  })()
+  })
   return { admins }
 }
 
 /** Marks an address verified and re-runs the role sync. Local CLI use only. */
-export function verifyEmail(email: string): boolean {
-  const info = db.prepare('UPDATE "user" SET emailVerified = 1 WHERE lower(email) = lower(?)').run(email)
-  syncRoles()
+export async function verifyEmail(email: string): Promise<boolean> {
+  const info = await sql.run('UPDATE "user" SET "emailVerified" = ? WHERE lower(email) = lower(?)', true, email)
+  await syncRoles()
   return info.changes > 0
 }

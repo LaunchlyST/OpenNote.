@@ -19,7 +19,7 @@ if (!env.adminEmails.includes(email)) {
   process.exit(1)
 }
 await applyMigrations({ quiet: true })
-if (!verifyEmail(email)) {
+if (!await verifyEmail(email)) {
   console.error(`No OpenNote account uses ${email} yet. Sign up first, then run this again.`)
   process.exit(1)
 }

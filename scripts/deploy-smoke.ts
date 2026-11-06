@@ -167,7 +167,7 @@ try {
     check('an unverified admin email is refused', early.status === 403, `got ${early.status}`)
 
     const { verifyEmail } = await import('../server/roles.ts')
-    verifyEmail('owner@opennote.test')
+    await verifyEmail('owner@opennote.test')
     const cookie = await signIn('owner@opennote.test')
     const before = hookHits.length
 
@@ -212,8 +212,7 @@ try {
   server.close()
   hook.close()
   // Release the SQLite handle before deleting the file, or Windows refuses.
-  const { db } = await import('../server/db.ts')
-  db.close()
+  const { sql } = await import('../server/db.ts')
   await new Promise((r) => setTimeout(r, 100))
   rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }

@@ -2,7 +2,7 @@ import { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 
 /**
  * Account-wide preferences (General, Appearance, Notifications). One JSON row
@@ -65,18 +65,18 @@ export function cleanPreferences(input: unknown): Partial<Preferences> | string 
   return out as Partial<Preferences>
 }
 
-export function ensurePreferenceTables() {
-  db.exec(`
+export async function ensurePreferenceTables() {
+  await sql.exec(`
     CREATE TABLE IF NOT EXISTS user_preferences (
-      userId TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+      "userId" TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
       data TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      "updatedAt" TEXT NOT NULL
     );
   `)
 }
 
-function read(userId: string): Preferences {
-  const row = db.prepare<[string], { data: string }>('SELECT data FROM user_preferences WHERE userId = ?').get(userId)
+async function read(userId: string): Promise<Preferences> {
+  const row = await sql.get<{ data: string }>('SELECT data FROM user_preferences WHERE "userId" = ?', userId)
   if (!row) return { ...DEFAULT_PREFERENCES }
   const saved = cleanPreferences(JSON.parse(row.data))
   return { ...DEFAULT_PREFERENCES, ...(typeof saved === 'string' ? {} : saved) }
@@ -103,17 +103,20 @@ async function requireUser(req: Authed, res: Response, next: NextFunction) {
 export function preferencesRouter() {
   const r = Router()
   r.use(requireUser)
-  r.get('/', (req: Authed, res) => {
-    res.set('Cache-Control', 'no-store').json({ preferences: read(req.userId!) })
+  r.get('/', async (req: Authed, res) => {
+    res.set('Cache-Control', 'no-store').json({ preferences: await read(req.userId!) })
   })
-  r.patch('/', (req: Authed, res) => {
+  r.patch('/', async (req: Authed, res) => {
     const patch = cleanPreferences((req.body as { preferences?: unknown } | undefined)?.preferences)
     if (typeof patch === 'string') return void res.status(400).json({ error: patch })
-    const next = { ...read(req.userId!), ...patch }
-    db.prepare(
-      `INSERT INTO user_preferences (userId, data, updatedAt) VALUES (?, ?, ?)
-       ON CONFLICT(userId) DO UPDATE SET data = excluded.data, updatedAt = excluded.updatedAt`,
-    ).run(req.userId!, JSON.stringify(next), new Date().toISOString())
+    const next = { ...(await read(req.userId!)), ...patch }
+    await sql.run(
+      `INSERT INTO user_preferences ("userId", data, "updatedAt") VALUES (?, ?, ?)
+       ON CONFLICT ("userId") DO UPDATE SET data = excluded.data, "updatedAt" = excluded."updatedAt"`,
+      req.userId!,
+      JSON.stringify(next),
+      new Date().toISOString(),
+    )
     res.set('Cache-Control', 'no-store').json({ preferences: next })
   })
   return r

@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 
 /**
  * Subscription plans and what each one unlocks.
@@ -33,8 +33,8 @@ export function planOf(user: { plan?: string | null } | undefined | null): PlanI
 }
 
 /** Gives every existing account without a plan the Free plan. Never downgrades. */
-export function backfillPlans() {
-  db.prepare("UPDATE \"user\" SET plan = 'free' WHERE plan IS NULL OR plan = ''").run()
+export async function backfillPlans() {
+  await sql.run("UPDATE \"user\" SET plan = 'free' WHERE plan IS NULL OR plan = ''")
 }
 
 /** Express guard for Pro-only endpoints. The check happens here, not in the UI. */

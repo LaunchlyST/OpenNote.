@@ -4,7 +4,7 @@ import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 import { deployRouter } from './deploy.ts'
 import { env, googleConfigured, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
@@ -22,7 +22,7 @@ import { sellerRouter, stripeWebhookHandler } from './seller.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
-const { admins } = syncRoles()
+const { admins } = await syncRoles()
 startMailWorker()
 {
   const problem = productionMailProblem()
@@ -98,22 +98,18 @@ async function requireUser(req: AuthedRequest, res: Response, next: NextFunction
   }
 }
 
-const getWorkspace = db.prepare<[string], { data: string; updatedAt: string }>(
-  'SELECT data, updatedAt FROM workspace WHERE userId = ?',
-)
-const putWorkspace = db.prepare(
-  `INSERT INTO workspace (userId, data, updatedAt) VALUES (?, ?, ?)
-   ON CONFLICT(userId) DO UPDATE SET data = excluded.data, updatedAt = excluded.updatedAt`,
-)
+const GET_WORKSPACE = 'SELECT data, "updatedAt" FROM workspace WHERE "userId" = ?'
+const PUT_WORKSPACE = `INSERT INTO workspace ("userId", data, "updatedAt") VALUES (?, ?, ?)
+   ON CONFLICT ("userId") DO UPDATE SET data = excluded.data, "updatedAt" = excluded."updatedAt"`
 
 /** The signed-in user's own workspace. There is no way to address anyone else's. */
-app.get('/api/workspace', requireUser, (req: AuthedRequest, res) => {
-  const row = getWorkspace.get(req.userId!)
+app.get('/api/workspace', requireUser, async (req: AuthedRequest, res) => {
+  const row = await sql.get<{ data: string; updatedAt: string }>(GET_WORKSPACE, req.userId!)
   res.set('Cache-Control', 'no-store')
   res.json(row ? { data: JSON.parse(row.data), updatedAt: row.updatedAt } : { data: null })
 })
 
-app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
+app.put('/api/workspace', requireUser, async (req: AuthedRequest, res) => {
   const data = (req.body as { data?: unknown } | undefined)?.data
   const problem = validateWorkspace(data)
   if (problem) {
@@ -121,7 +117,7 @@ app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
     return
   }
   const updatedAt = new Date().toISOString()
-  putWorkspace.run(req.userId!, JSON.stringify(data), updatedAt)
+  await sql.run(PUT_WORKSPACE, req.userId!, JSON.stringify(data), updatedAt)
   res.json({ ok: true, updatedAt })
 })
 
@@ -168,7 +164,7 @@ app.get('/api/admin/mail-log', requireUser, async (req: AuthedRequest, res) => {
     res.status(403).json({ error: 'Administrators only.' })
     return
   }
-  res.set('Cache-Control', 'no-store').json({ transport: transportName(), messages: outboxLog(100) })
+  res.set('Cache-Control', 'no-store').json({ transport: transportName(), messages: await outboxLog(100) })
 })
 
 // Development inbox: read what OpenNote "sent", without any mail server.

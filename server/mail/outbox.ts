@@ -1,4 +1,5 @@
-import { db } from '../db.ts'
+import { sql } from '../db.ts'
+import type { Sql } from '../sql.ts'
 import { env } from '../env.ts'
 import { renderEmail } from './templates.ts'
 import type { EmailData, EmailKind } from './templates.ts'
@@ -50,7 +51,11 @@ function log(message: string) {
 
 export type EnqueueResult = { queued: true; id: number } | { queued: false; reason: 'rate-limited' | 'invalid-recipient' }
 
-export function enqueueEmail(kind: EmailKind, to: string, data: EmailData): EnqueueResult {
+/**
+ * Queues one email. Pass `via` to write it inside an open transaction (so the
+ * message is only queued if the rest of that transaction commits).
+ */
+export async function enqueueEmail(kind: EmailKind, to: string, data: EmailData, via: Sql = sql): Promise<EnqueueResult> {
   const recipient = to.trim().toLowerCase()
   // A single address, no header injection.
   if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(recipient)) {
@@ -59,48 +64,60 @@ export function enqueueEmail(kind: EmailKind, to: string, data: EmailData): Enqu
   }
 
   const now = Date.now()
-  const recent = db
-    .prepare("SELECT count(*) AS n FROM email_outbox WHERE recipient = ? AND createdAt > ? AND status != 'skipped'")
-    .get(recipient, now - HOUR) as { n: number }
-  if (recent.n >= env.mail.perRecipientPerHour) {
-    db.prepare(
-      "INSERT INTO email_outbox (kind, recipient, subject, status, nextAttemptAt, lastError, createdAt) VALUES (?, ?, ?, 'skipped', ?, 'rate limited', ?)",
-    ).run(kind, recipient, kind, now, now)
+  const recent = await via.get<{ n: number }>(
+    `SELECT CAST(COUNT(*) AS INTEGER) AS n FROM email_outbox WHERE recipient = ? AND "createdAt" > ? AND status != 'skipped'`,
+    recipient,
+    now - HOUR,
+  )
+  if ((recent?.n ?? 0) >= env.mail.perRecipientPerHour) {
+    await via.run(
+      `INSERT INTO email_outbox (kind, recipient, subject, status, "nextAttemptAt", "lastError", "createdAt") VALUES (?, ?, ?, 'skipped', ?, 'rate limited', ?)`,
+      kind,
+      recipient,
+      kind,
+      now,
+      now,
+    )
     log(`rate-limited ${kind} for ${maskEmail(recipient)}`)
     return { queued: false, reason: 'rate-limited' }
   }
 
   const email = renderEmail(kind, data)
-  const info = db
-    .prepare(
-      'INSERT INTO email_outbox (kind, recipient, subject, html, text, nextAttemptAt, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    )
-    .run(kind, recipient, email.subject, email.html, email.text, now, now)
-  log(`queued ${kind} #${info.lastInsertRowid} for ${maskEmail(recipient)}`)
+  const row = await via.get<{ id: number }>(
+    'INSERT INTO email_outbox (kind, recipient, subject, html, text, "nextAttemptAt", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id',
+    kind,
+    recipient,
+    email.subject,
+    email.html,
+    email.text,
+    now,
+    now,
+  )
+  const id = Number(row!.id)
+  log(`queued ${kind} #${id} for ${maskEmail(recipient)}`)
   kick()
-  return { queued: true, id: Number(info.lastInsertRowid) }
+  return { queued: true, id }
 }
 
 async function sendDue() {
   const now = Date.now()
-  const due = db
-    .prepare(
-      "SELECT id, kind, recipient, subject, html, text, attempts FROM email_outbox WHERE status IN ('queued','retrying') AND nextAttemptAt <= ? ORDER BY id LIMIT 20",
-    )
-    .all(now) as Row[]
+  const due = await sql.all<Row>(
+    `SELECT id, kind, recipient, subject, html, text, attempts FROM email_outbox WHERE status IN ('queued','retrying') AND "nextAttemptAt" <= ? ORDER BY id LIMIT 20`,
+    now,
+  )
 
   for (const row of due) {
     // Claim the row so a second worker (or a restart) cannot send it twice.
-    const claimed = db
-      .prepare("UPDATE email_outbox SET status = 'sending' WHERE id = ? AND status IN ('queued','retrying')")
-      .run(row.id)
+    const claimed = await sql.run(`UPDATE email_outbox SET status = 'sending' WHERE id = ? AND status IN ('queued','retrying')`, row.id)
     if (!claimed.changes) continue
 
     try {
       await transport.send({ id: row.id, to: row.recipient, subject: row.subject, html: row.html, text: row.text })
-      db.prepare(
-        "UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, sentAt = ?, lastError = NULL, html = NULL, text = NULL WHERE id = ?",
-      ).run(Date.now(), row.id)
+      await sql.run(
+        `UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, "sentAt" = ?, "lastError" = NULL, html = NULL, text = NULL WHERE id = ?`,
+        Date.now(),
+        row.id,
+      )
       log(`sent ${row.kind} #${row.id} to ${maskEmail(row.recipient)} via ${transport.name}`)
     } catch (err) {
       const attempts = row.attempts + 1
@@ -110,22 +127,29 @@ async function sendDue() {
       const code = (err as { responseCode?: number }).responseCode
       const permanent = typeof code === 'number' && code >= 500 && code < 600
       if (permanent || attempts >= env.mail.maxAttempts) {
-        db.prepare(
-          "UPDATE email_outbox SET status = 'failed', attempts = ?, lastError = ?, html = NULL, text = NULL WHERE id = ?",
-        ).run(attempts, reason, row.id)
+        await sql.run(
+          `UPDATE email_outbox SET status = 'failed', attempts = ?, "lastError" = ?, html = NULL, text = NULL WHERE id = ?`,
+          attempts,
+          reason,
+          row.id,
+        )
         log(`gave up on ${row.kind} #${row.id} after ${attempts} attempt(s)${permanent ? ' (permanent error)' : ''}: ${reason}`)
       } else {
         const delay = Math.min(HOUR, BASE_DELAY * 4 ** (attempts - 1))
-        db.prepare(
-          "UPDATE email_outbox SET status = 'retrying', attempts = ?, lastError = ?, nextAttemptAt = ? WHERE id = ?",
-        ).run(attempts, reason, Date.now() + delay, row.id)
+        await sql.run(
+          `UPDATE email_outbox SET status = 'retrying', attempts = ?, "lastError" = ?, "nextAttemptAt" = ? WHERE id = ?`,
+          attempts,
+          reason,
+          Date.now() + delay,
+          row.id,
+        )
         log(`retrying ${row.kind} #${row.id} in ${Math.round(delay / 1000)}s: ${reason}`)
       }
     }
   }
 
   // Housekeeping: old log rows go after 30 days.
-  db.prepare('DELETE FROM email_outbox WHERE createdAt < ?').run(now - KEEP_LOG_FOR)
+  await sql.run('DELETE FROM email_outbox WHERE "createdAt" < ?', now - KEEP_LOG_FOR)
 }
 
 /** Runs one pass of the worker. Concurrent calls share the same pass. */
@@ -142,7 +166,7 @@ function kick() {
 
 /** Starts the background worker. A message stuck in "sending" by a crash is retried. */
 export function startMailWorker(intervalMs = 5_000) {
-  db.prepare("UPDATE email_outbox SET status = 'retrying' WHERE status = 'sending'").run()
+  void sql.run(`UPDATE email_outbox SET status = 'retrying' WHERE status = 'sending'`).catch((err) => console.error('[mail] worker error', err))
   timer ??= setInterval(() => void processOutbox().catch((err) => console.error('[mail] worker error', err)), intervalMs)
   timer.unref()
   log(`worker started (transport: ${transport.name})`)
@@ -159,9 +183,8 @@ export function transportName() {
 
 /** Delivery log for the admin/dev view: never includes bodies or links. */
 export function outboxLog(limit = 50) {
-  return db
-    .prepare(
-      'SELECT id, kind, recipient, subject, status, attempts, lastError, createdAt, sentAt FROM email_outbox ORDER BY id DESC LIMIT ?',
-    )
-    .all(limit) as Array<Record<string, unknown>>
+  return sql.all<Record<string, unknown>>(
+    'SELECT id, kind, recipient, subject, status, attempts, "lastError", "createdAt", "sentAt" FROM email_outbox ORDER BY id DESC LIMIT ?',
+    limit,
+  )
 }

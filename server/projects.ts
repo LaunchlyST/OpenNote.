@@ -3,7 +3,7 @@ import { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 import { planOf } from './plans.ts'
 import { validateWorkspace } from './workspace.ts'
 
@@ -18,26 +18,26 @@ export type WorkspaceId = 'free' | 'pro'
 
 const COLORS = new Set(['orange', 'lime', 'pink', 'purple', 'yellow', 'blue'])
 
-export function ensureProjectTables() {
-  db.exec(`
+export async function ensureProjectTables() {
+  await sql.exec(`
     CREATE TABLE IF NOT EXISTS project (
       id TEXT PRIMARY KEY,
-      userId TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+      "userId" TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
       workspace TEXT NOT NULL CHECK (workspace IN ('free', 'pro')),
       name TEXT NOT NULL,
       color TEXT NOT NULL,
       description TEXT NOT NULL DEFAULT '',
       data TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL,
-      openedAt TEXT
+      "createdAt" TEXT NOT NULL,
+      "updatedAt" TEXT NOT NULL,
+      "openedAt" TEXT
     );
-    CREATE INDEX IF NOT EXISTS project_owner ON project (userId, workspace);
+    CREATE INDEX IF NOT EXISTS project_owner ON project ("userId", workspace);
 
     -- Users whose old single-calendar workspace has been copied into a project.
     CREATE TABLE IF NOT EXISTS project_import (
-      userId TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
-      importedAt TEXT NOT NULL
+      "userId" TEXT PRIMARY KEY REFERENCES "user"(id) ON DELETE CASCADE,
+      "importedAt" TEXT NOT NULL
     );
   `)
 }
@@ -108,11 +108,11 @@ const summary = (r: ProjectRow) => {
 }
 
 /** Copies a pre-projects workspace into a "My Calendar" project, once per user. */
-function importLegacy(userId: string) {
-  const done = db.prepare('SELECT 1 FROM project_import WHERE userId = ?').get(userId)
+async function importLegacy(userId: string) {
+  const done = await sql.get('SELECT 1 AS one FROM project_import WHERE "userId" = ?', userId)
   if (done) return
-  db.transaction(() => {
-    const legacy = db.prepare<[string], { data: string }>('SELECT data FROM workspace WHERE userId = ?').get(userId)
+  await sql.tx(async (tx) => {
+    const legacy = await tx.get<{ data: string }>('SELECT data FROM workspace WHERE "userId" = ?', userId)
     if (legacy) {
       const cleaned = stripDemoContent(JSON.parse(legacy.data) as Record<string, unknown>)
       const hasContent =
@@ -120,14 +120,19 @@ function importLegacy(userId: string) {
         (cleaned.notes as unknown[]).length > 0
       if (hasContent) {
         const now = new Date().toISOString()
-        db.prepare(
-          `INSERT INTO project (id, userId, workspace, name, color, description, data, createdAt, updatedAt)
+        await tx.run(
+          `INSERT INTO project (id, "userId", workspace, name, color, description, data, "createdAt", "updatedAt")
            VALUES (?, ?, 'free', 'My Calendar', 'lime', 'Imported from your earlier calendar.', ?, ?, ?)`,
-        ).run(`prj_${randomUUID()}`, userId, JSON.stringify(cleaned), now, now)
+          `prj_${randomUUID()}`,
+          userId,
+          JSON.stringify(cleaned),
+          now,
+          now,
+        )
       }
     }
-    db.prepare('INSERT INTO project_import (userId, importedAt) VALUES (?, ?)').run(userId, new Date().toISOString())
-  })()
+    await tx.run('INSERT INTO project_import ("userId", "importedAt") VALUES (?, ?) ON CONFLICT ("userId") DO NOTHING', userId, new Date().toISOString())
+  })
 }
 
 interface Authed extends Request {
@@ -171,6 +176,14 @@ const cleanColor = (v: unknown) => (typeof v === 'string' && COLORS.has(v) ? v :
 const cleanDescription = (v: unknown) =>
   v === undefined || v === null ? '' : typeof v === 'string' && v.length <= 500 ? v.trim() : null
 
+function insertProject(r: ProjectRow) {
+  return sql.run(
+    `INSERT INTO project (id, "userId", workspace, name, color, description, data, "createdAt", "updatedAt", "openedAt")
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    r.id, r.userId, r.workspace, r.name, r.color, r.description, r.data, r.createdAt, r.updatedAt, r.openedAt,
+  )
+}
+
 export function projectsRouter() {
   const r = Router()
   r.use(requireUser)
@@ -179,11 +192,9 @@ export function projectsRouter() {
     next()
   })
 
-  const owned = db.prepare<[string, string], ProjectRow>('SELECT * FROM project WHERE id = ? AND userId = ?')
-
   /** Loads a project the caller owns, and whose workspace their plan allows. */
-  function load(req: Authed, res: Response): ProjectRow | null {
-    const row = owned.get(String(req.params.id), req.userId!)
+  async function load(req: Authed, res: Response): Promise<ProjectRow | null> {
+    const row = await sql.get<ProjectRow>('SELECT * FROM project WHERE id = ? AND "userId" = ?', String(req.params.id), req.userId!)
     if (!row) {
       res.status(404).json({ error: 'Project not found.' })
       return null
@@ -192,17 +203,15 @@ export function projectsRouter() {
     return row
   }
 
-  r.get('/', (req: Authed, res) => {
+  r.get('/', async (req: Authed, res) => {
     const workspace = req.query.workspace
     if (!workspaceAllowed(req, res, workspace)) return
-    if (workspace === 'free') importLegacy(req.userId!)
-    const rows = db
-      .prepare<[string, string], ProjectRow>('SELECT * FROM project WHERE userId = ? AND workspace = ? ORDER BY updatedAt DESC')
-      .all(req.userId!, workspace)
+    if (workspace === 'free') await importLegacy(req.userId!)
+    const rows = await sql.all<ProjectRow>('SELECT * FROM project WHERE "userId" = ? AND workspace = ? ORDER BY "updatedAt" DESC', req.userId!, workspace)
     res.json({ projects: rows.map(summary) })
   })
 
-  r.post('/', (req: Authed, res) => {
+  r.post('/', async (req: Authed, res) => {
     const body = (req.body ?? {}) as Record<string, unknown>
     if (!workspaceAllowed(req, res, body.workspace)) return
     const name = cleanName(body.name)
@@ -211,7 +220,7 @@ export function projectsRouter() {
     if (!name) return void res.status(400).json({ error: 'Give the project a name (up to 80 characters).' })
     if (!color) return void res.status(400).json({ error: 'Unknown colour.' })
     if (description === null) return void res.status(400).json({ error: 'Description is too long.' })
-    const count = db.prepare<[string], { n: number }>('SELECT COUNT(*) AS n FROM project WHERE userId = ?').get(req.userId!)!.n
+    const count = (await sql.get<{ n: number }>('SELECT CAST(COUNT(*) AS INTEGER) AS n FROM project WHERE "userId" = ?', req.userId!))?.n ?? 0
     if (count >= 500) return void res.status(400).json({ error: 'You have reached the project limit.' })
     const now = new Date().toISOString()
     const row: ProjectRow = {
@@ -226,25 +235,22 @@ export function projectsRouter() {
       updatedAt: now,
       openedAt: now,
     }
-    db.prepare(
-      `INSERT INTO project (id, userId, workspace, name, color, description, data, createdAt, updatedAt, openedAt)
-       VALUES (@id, @userId, @workspace, @name, @color, @description, @data, @createdAt, @updatedAt, @openedAt)`,
-    ).run(row)
+    await insertProject(row)
     res.status(201).json({ project: summary(row) })
   })
 
-  r.get('/:id', (req: Authed, res) => {
-    const row = load(req, res)
+  r.get('/:id', async (req: Authed, res) => {
+    const row = await load(req, res)
     if (!row) return
     // ?peek=1 reads without marking the project opened (dashboard previews)
     if (req.query.peek === '1') return void res.json({ project: summary(row), data: JSON.parse(row.data) })
     const openedAt = new Date().toISOString()
-    db.prepare('UPDATE project SET openedAt = ? WHERE id = ?').run(openedAt, row.id)
+    await sql.run('UPDATE project SET "openedAt" = ? WHERE id = ?', openedAt, row.id)
     res.json({ project: summary({ ...row, openedAt }), data: JSON.parse(row.data) })
   })
 
-  r.patch('/:id', (req: Authed, res) => {
-    const row = load(req, res)
+  r.patch('/:id', async (req: Authed, res) => {
+    const row = await load(req, res)
     if (!row) return
     const body = (req.body ?? {}) as Record<string, unknown>
     const next = { ...row }
@@ -264,25 +270,23 @@ export function projectsRouter() {
       next.description = description
     }
     next.updatedAt = new Date().toISOString()
-    db.prepare('UPDATE project SET name = ?, color = ?, description = ?, updatedAt = ? WHERE id = ?').run(
-      next.name, next.color, next.description, next.updatedAt, row.id,
-    )
+    await sql.run('UPDATE project SET name = ?, color = ?, description = ?, "updatedAt" = ? WHERE id = ?', next.name, next.color, next.description, next.updatedAt, row.id)
     res.json({ project: summary(next) })
   })
 
-  r.put('/:id/data', (req: Authed, res) => {
-    const row = load(req, res)
+  r.put('/:id/data', async (req: Authed, res) => {
+    const row = await load(req, res)
     if (!row) return
     const data = (req.body as { data?: unknown } | undefined)?.data
     const problem = validateWorkspace(data)
     if (problem) return void res.status(400).json({ error: `Invalid project data: ${problem}.` })
     const updatedAt = new Date().toISOString()
-    db.prepare('UPDATE project SET data = ?, updatedAt = ? WHERE id = ?').run(JSON.stringify(data), updatedAt, row.id)
+    await sql.run('UPDATE project SET data = ?, "updatedAt" = ? WHERE id = ?', JSON.stringify(data), updatedAt, row.id)
     res.json({ ok: true, updatedAt })
   })
 
-  r.post('/:id/duplicate', (req: Authed, res) => {
-    const row = load(req, res)
+  r.post('/:id/duplicate', async (req: Authed, res) => {
+    const row = await load(req, res)
     if (!row) return
     const now = new Date().toISOString()
     const copy: ProjectRow = {
@@ -293,17 +297,14 @@ export function projectsRouter() {
       updatedAt: now,
       openedAt: null,
     }
-    db.prepare(
-      `INSERT INTO project (id, userId, workspace, name, color, description, data, createdAt, updatedAt, openedAt)
-       VALUES (@id, @userId, @workspace, @name, @color, @description, @data, @createdAt, @updatedAt, @openedAt)`,
-    ).run(copy)
+    await insertProject(copy)
     res.status(201).json({ project: summary(copy) })
   })
 
-  r.delete('/:id', (req: Authed, res) => {
-    const row = load(req, res)
+  r.delete('/:id', async (req: Authed, res) => {
+    const row = await load(req, res)
     if (!row) return
-    db.prepare('DELETE FROM project WHERE id = ? AND userId = ?').run(row.id, req.userId!)
+    await sql.run('DELETE FROM project WHERE id = ? AND "userId" = ?', row.id, req.userId!)
     res.json({ ok: true })
   })
 

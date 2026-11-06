@@ -17,13 +17,13 @@ export async function applyMigrations({ quiet = false } = {}) {
   } else if (!quiet) {
     console.log('Auth tables are up to date.')
   }
-  ensureAppTables()
+  await ensureAppTables()
   const { ensureProjectTables } = await import('./projects.ts')
-  ensureProjectTables()
+  await ensureProjectTables()
   const { ensurePreferenceTables } = await import('./preferences.ts')
-  ensurePreferenceTables()
+  await ensurePreferenceTables()
   const { ensureSellerTables } = await import('./seller.ts')
-  ensureSellerTables()
+  await ensureSellerTables()
   const { backfillPlans } = await import('./plans.ts')
-  backfillPlans()
+  await backfillPlans()
 }

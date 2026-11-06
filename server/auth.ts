@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth'
 import { admin } from 'better-auth/plugins'
-import { db } from './db.ts'
+import { authDatabase } from './db.ts'
 import { env, googleConfigured, requireEmailVerification } from './env.ts'
 import { passwordProblem } from './password-policy.ts'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
@@ -11,7 +11,7 @@ export const auth = betterAuth({
   appName: 'Desknoty',
   baseURL: env.baseURL,
   secret: env.secret,
-  database: db,
+  database: authDatabase,
   trustedOrigins: [env.baseURL, ...env.trustedOrigins],
 
   emailAndPassword: {
@@ -26,7 +26,7 @@ export const auth = betterAuth({
     // Queued, not sent inline: the response time is the same whether or not
     // the account exists, and a slow mail server never blocks the request.
     sendResetPassword: async ({ user, url }) => {
-      enqueueEmail('reset-password', user.email, { url, name: user.name })
+      await enqueueEmail('reset-password', user.email, { url, name: user.name })
     },
   },
 
@@ -36,7 +36,7 @@ export const auth = betterAuth({
     sendOnSignIn: true,
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
-      enqueueEmail('verify-email', user.email, { url, name: user.name })
+      await enqueueEmail('verify-email', user.email, { url, name: user.name })
     },
   },
 
@@ -107,9 +107,9 @@ export const auth = betterAuth({
             throw new APIError('FORBIDDEN', { message: 'Sign-up is invite only for now. Join the waitlist instead.', code: 'SIGNUP_CLOSED' })
           }
         },
-        after: async () => { syncRoles() },
+        after: async () => { await syncRoles() },
       },
-      update: { after: async () => { syncRoles() } },
+      update: { after: async () => { await syncRoles() } },
     },
   },
 
