@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { COLORS } from '../lib/colors'
 import { cn } from '../lib/id'
@@ -62,7 +62,6 @@ function edited(iso: string) {
   return `Edited ${Math.round(h / 24)} d ago`
 }
 
-const reduced = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
 export function ProHome(props: Props) {
   const { name, projects, error, onRetry, account, onCreate, onOpen } = props
@@ -74,8 +73,6 @@ export function ProHome(props: Props) {
 
   // last edited first: that is "where I left off"
   const list = useMemo(() => [...(projects ?? [])].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)), [projects])
-  const [sel, setSel] = useState(0)
-  const at = Math.min(sel, Math.max(0, list.length - 1))
 
   // real data for every project, read without marking them opened
   const [peeks, setPeeks] = useState<Record<string, Peek>>({})
@@ -211,7 +208,7 @@ export function ProHome(props: Props) {
                   <li key={e.project.id + e.id}>
                     <button
                       type="button"
-                      onClick={() => setSel(list.findIndex((p) => p.id === e.project.id))}
+                      onClick={() => onOpen(e.project)}
                       className="or-chip"
                       style={{ '--c': (COLORS[e.project.color] ?? COLORS.lime).dot } as CSSProperties}
                     >
@@ -225,15 +222,7 @@ export function ProHome(props: Props) {
             )}
           </section>
           )}
-          <Orbit
-            list={list}
-            at={at}
-            setAt={setSel}
-            peeks={peeks}
-            now={now}
-            onExpand={(i) => onOpen(list[i])}
-            props={props}
-          />
+          <ProjectGrid list={list} peeks={peeks} now={now} props={props} />
         </main>
       )}
       </>
@@ -247,15 +236,13 @@ export function ProHome(props: Props) {
         onDone={() => turn(side === 'videos' ? 'projects' : 'videos')}
       />
 
-      {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => setSel(i)} onOpen={onOpen} onCreate={onCreate} />}
+      {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => onOpen(list[i])} onOpen={onOpen} onCreate={onCreate} />}
     </div>
   )
 }
 
 /* --------------------------------------------------------------- orbit --- */
 
-const STEP = 300 // px between card centres at the front
-const PER = 6 // projects per slide
 
 /**
  * A depth carousel with real physics. Position is continuous (in cards); each
@@ -263,255 +250,44 @@ const PER = 6 // projects per slide
  * Dragging moves the position 1:1; letting go projects the landing card from
  * the release velocity and a spring pulls the stack onto it (magnetic snap).
  */
-function Orbit({
-  list,
-  at,
-  setAt,
-  peeks,
-  now,
-  onExpand,
-  props,
-}: {
-  list: ProjectSummary[]
-  at: number
-  setAt: (i: number) => void
-  peeks: Record<string, Peek>
-  now: Date
-  onExpand: (i: number, rect: DOMRect) => void
-  props: Props
-}) {
-  const [pos, setPos] = useState(at)
-  const p = useRef({ pos: at, vel: 0, target: at, raf: 0, dragging: false })
-  const drag = useRef<{ x: number; from: number; lastX: number; lastT: number; v: number; moved: boolean } | null>(null)
-  const wheelIdle = useRef(0)
-  const max = list.length - 1
-  const still = reduced()
-  const slide = Math.floor(at / PER)
-  const slides = Math.ceil(list.length / PER)
-
-  const run = useCallback(() => {
-    const s = p.current
-    cancelAnimationFrame(s.raf)
-    const tick = () => {
-      if (s.dragging) return
-      if (still) {
-        s.pos = s.target
-        s.vel = 0
-      } else {
-        // critically-damped-ish spring toward the target card
-        s.vel += (s.target - s.pos) * 0.09
-        s.vel *= 0.72
-        s.pos += s.vel
-      }
-      setPos(s.pos)
-      if (Math.abs(s.target - s.pos) > 0.0008 || Math.abs(s.vel) > 0.0008) s.raf = requestAnimationFrame(tick)
-      else {
-        s.pos = s.target
-        setPos(s.pos)
-      }
-    }
-    s.raf = requestAnimationFrame(tick)
-  }, [still])
-
-  const snapTo = useCallback(
-    (i: number) => {
-      const t = Math.max(0, Math.min(max, Math.round(i)))
-      p.current.target = t
-      setAt(t)
-      run()
-    },
-    [max, run, setAt],
-  )
-
-  // outside changes (index list, coming-up chips, palette) glide the stack there
-  useEffect(() => {
-    if (p.current.target !== at && !p.current.dragging) snapTo(at)
-  }, [at, snapTo])
-  useEffect(() => () => cancelAnimationFrame(p.current.raf), [])
-
-  const down = (e: ReactPointerEvent) => {
-    if ((e.target as HTMLElement).closest('[role="menu"], .or-more')) return
-    const s = p.current
-    cancelAnimationFrame(s.raf)
-    s.dragging = true
-    drag.current = { x: e.clientX, from: s.pos, lastX: e.clientX, lastT: performance.now(), v: 0, moved: false }
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-  }
-  const move = (e: ReactPointerEvent) => {
-    const d = drag.current
-    if (!d) return
-    const dx = e.clientX - d.x
-    if (Math.abs(dx) > 5) d.moved = true
-    const t = performance.now()
-    const dt = Math.max(1, t - d.lastT)
-    d.v = 0.8 * d.v + 0.2 * ((e.clientX - d.lastX) / dt) // px/ms, smoothed
-    d.lastX = e.clientX
-    d.lastT = t
-    let next = d.from - dx / STEP
-    if (next < 0) next *= 0.35 // rubber band
-    if (next > max) next = max + (next - max) * 0.35
-    p.current.pos = next
-    setPos(next)
-  }
-  const up = (e: ReactPointerEvent) => {
-    const d = drag.current
-    drag.current = null
-    p.current.dragging = false
-    if (!d) return
-    if (!d.moved) {
-      // a tap: centre card opens, any other card comes to the front
-      // pointer capture retargets events to the stage: find the card under the finger
-      const hit = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
-      const card = hit?.closest<HTMLElement>('[data-orbit-i]')
-      if (card) {
-        const i = Number(card.dataset.orbitI)
-        if (i === Math.round(p.current.pos)) onExpand(i, card.getBoundingClientRect())
-        else snapTo(i)
-      } else snapTo(p.current.pos)
-      return
-    }
-    // momentum: project where the flick would coast to, then snap
-    snapTo(p.current.pos - (d.v * 260) / STEP)
-  }
-  const onWheel = (e: React.WheelEvent) => {
-    const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0
-    if (!delta) return
-    const s = p.current
-    cancelAnimationFrame(s.raf)
-    s.pos = Math.max(-0.3, Math.min(max + 0.3, s.pos + delta / STEP))
-    setPos(s.pos)
-    window.clearTimeout(wheelIdle.current)
-    wheelIdle.current = window.setTimeout(() => snapTo(s.pos), 110)
-  }
-  const onKey = (e: ReactKeyboardEvent) => {
-    const k = e.key
-    if (k === 'ArrowRight') (e.preventDefault(), snapTo(p.current.target + 1))
-    else if (k === 'ArrowLeft') (e.preventDefault(), snapTo(p.current.target - 1))
-    else if (k === 'Home') (e.preventDefault(), snapTo(0))
-    else if (k === 'End') (e.preventDefault(), snapTo(max))
-    else if (k === 'Enter' || k === ' ') {
-      e.preventDefault()
-      const el = document.querySelector<HTMLElement>(`[data-orbit-i="${p.current.target}"]`)
-      if (el) onExpand(p.current.target, el.getBoundingClientRect())
-    }
-  }
-
+function ProjectGrid({ list, peeks, now, props }: { list: ProjectSummary[]; peeks: Record<string, Peek>; now: Date; props: Props }) {
+  const [page, setPage] = useState(0)
+  const pages = Math.max(1, Math.ceil(list.length / GRID))
+  const pg = Math.min(page, pages - 1)
   return (
-    <section className="or-stage-wrap" aria-label="Projects">
+    <>
       <div className="or-head">
         <h2 className="dk-label">Projects</h2>
         <span className="dk-count">
-          <b>{pad(at + 1)}</b> / {pad(list.length)}
+          <b>{pad(list.length)}</b> {list.length === 1 ? 'project' : 'projects'}
         </span>
       </div>
-      <div
-        className="or-stage"
-        role="listbox"
-        tabIndex={0}
-        aria-label="Projects. Arrow keys to move, Enter to open"
-        aria-activedescendant={`or-${list[at]?.id}`}
-        onPointerDown={down}
-        onPointerMove={move}
-        onPointerUp={up}
-        onPointerCancel={up}
-        onWheel={onWheel}
-        onKeyDown={onKey}
-      >
-        <div className="or-floor" aria-hidden="true" />
-        {list.map((proj, i) => {
-          // 6 projects per slide: only this slide's cards are on the stage
-          if (Math.floor(i / PER) !== slide) return null
-          const d = i - pos
-          const ad = Math.abs(d)
-          if (ad > 3.6) return null
-          const side = Math.max(-1, Math.min(1, d))
-          const x = d * STEP * (1 - Math.min(ad, 3) * 0.14)
-          const style = {
-            transform: `translate3d(calc(-50% + ${x}px), -50%, ${-ad * 140}px) rotateY(${-side * Math.min(ad, 1) * 34}deg) scale(${1 - Math.min(ad, 3) * 0.05})`,
-            zIndex: 100 - Math.round(ad * 10),
-            opacity: ad > 3 ? Math.max(0, 3.6 - ad) / 0.6 : 1 - Math.min(ad, 3) * 0.12,
-            filter: still || ad < 0.05 ? undefined : `blur(${Math.min(ad, 3) * 0.9}px) saturate(${1 - Math.min(ad, 2) * 0.15})`,
-          } as CSSProperties
-          return (
-            <OrbitCard
-              key={proj.id}
-              project={proj}
-              index={i}
-              total={list.length}
-              front={ad < 0.5}
-              style={style}
-              peek={peeks[proj.id]}
-              now={now}
-              props={props}
-            />
-          )
-        })}
+      <div className="pg-grid" role="list">
+        {list.slice(pg * GRID, pg * GRID + GRID).map((p, i) => (
+          <ProjectCard key={p.id} project={p} index={pg * GRID + i} delay={i} peek={peeks[p.id]} now={now} props={props} />
+        ))}
       </div>
-
-      <div className="or-controls">
-        <div className="or-dots" role="tablist" aria-label="All projects">
-          {list.map((proj, i) => Math.floor(i / PER) !== slide ? null : (
-            <button
-              key={proj.id}
-              type="button"
-              role="tab"
-              aria-selected={i === at}
-              aria-label={proj.name}
-              title={proj.name}
-              onClick={() => snapTo(i)}
-              style={{ '--c': (COLORS[proj.color] ?? COLORS.lime).dot } as CSSProperties}
-            />
-          ))}
-        </div>
-        {slides > 1 && (
-          <div className="or-pages">
-            <button type="button" className="or-page" disabled={slide === 0} onClick={() => snapTo((slide - 1) * PER)}>
-              ← Prev 6
-            </button>
-            <span>
-              Slide <b>{slide + 1}</b> / {slides}
-            </span>
-            <button type="button" className="or-page" disabled={slide === slides - 1} onClick={() => snapTo((slide + 1) * PER)}>
-              Next 6 →
-            </button>
-          </div>
-        )}
-        <div className="flex gap-1.5">
-          <button type="button" className="dk-round" aria-label="Previous project" disabled={at === 0} onClick={() => snapTo(at - 1)}>
+      {pages > 1 && (
+        <div className="vg-pager">
+          <button type="button" className="dk-round" aria-label="Previous page" disabled={pg === 0} onClick={() => setPage(pg - 1)}>
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <span className="or-counter" aria-live="polite">
-            <b>{pad(at + 1)}</b> / {pad(list.length)}
-          </span>
-          <button type="button" className="dk-round" aria-label="Next project" disabled={at === max} onClick={() => snapTo(at + 1)}>
+          {Array.from({ length: pages }, (_, n) => (
+            <button key={n} type="button" className={cn('vg-num', n === pg && 'vg-num-on')} aria-label={`Page ${n + 1}`} aria-current={n === pg ? 'page' : undefined} onClick={() => setPage(n)}>
+              {n + 1}
+            </button>
+          ))}
+          <button type="button" className="dk-round" aria-label="Next page" disabled={pg === pages - 1} onClick={() => setPage(pg + 1)}>
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>
-      </div>
-      
-    </section>
+      )}
+    </>
   )
 }
+const GRID = 8
 
-function OrbitCard({
-  project,
-  index,
-  total,
-  front,
-  style,
-  peek,
-  now,
-  props,
-}: {
-  project: ProjectSummary
-  index: number
-  total: number
-  front: boolean
-  style: CSSProperties
-  peek?: Peek
-  now: Date
-  props: Props
-}) {
+function ProjectCard({ project, index, delay, peek, now, props }: { project: ProjectSummary; index: number; delay: number; peek?: Peek; now: Date; props: Props }) {
   const c = COLORS[project.color] ?? COLORS.lime
   const [menu, setMenu] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -525,27 +301,19 @@ function OrbitCard({
   const notes = peek?.notes.length ?? project.noteCount
   const next = peek?.events.filter((e) => Date.parse(e.end) > now.getTime()).sort((a, b) => Date.parse(a.start) - Date.parse(b.start))[0]
   const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-[#37352f] transition hover:bg-[#f3f3f1]'
-
   return (
-    <article
-      id={`or-${project.id}`}
-      role="option"
-      aria-selected={front}
-      data-orbit-i={index}
-      data-project-card={project.id}
-      className={cn('or-card', front && 'or-card-front')}
-      style={{ ...style, '--c': c.dot, '--cbg': c.bg, '--ct': c.text } as CSSProperties}
-    >
-      <span className="or-card-ghost" aria-hidden="true">
-        {pad(index + 1)}
-      </span>
-      <div className="or-card-top">
-        <span className="or-card-no">
-          {pad(index + 1)}
-          <i> / {pad(total)}</i>
+    <div role="listitem" className="pg-card" data-project-card={project.id} style={{ '--c': c.dot, '--cbg': c.bg, '--ct': c.text, '--i': delay } as CSSProperties}>
+      <button type="button" className="pg-hit" aria-label={`Open ${project.name}`} onClick={() => props.onOpen(project)} />
+      <div className="pg-cover">
+        <span className="pg-no">{pad(index + 1)}</span>
+        <span className="pg-open" aria-hidden="true">
+          Open <ArrowRight className="h-3.5 w-3.5" />
         </span>
-        {front && (
-          <div ref={ref} className="relative" onPointerDown={(e) => e.stopPropagation()}>
+      </div>
+      <div className="pg-body">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="pg-name">{project.name}</h3>
+          <div ref={ref} className="relative z-[2]">
             <button type="button" aria-label={`Actions for ${project.name}`} aria-haspopup="menu" aria-expanded={menu} className="or-more" onClick={() => setMenu((m) => !m)}>
               <MoreHorizontal className="h-4 w-4" />
             </button>
@@ -563,29 +331,17 @@ function OrbitCard({
               </div>
             )}
           </div>
-        )}
-      </div>
-      <div className="or-card-body">
-        <h3 className="or-card-name">{project.name}</h3>
-        {project.description && <p className="or-card-desc">{project.description}</p>}
-        <div className="or-card-next">
-          {next ? (
-            <>
-              <span>Next · {when(next.start, now)}</span>
-              {next.title}
-            </>
-          ) : (
-            <span>Nothing scheduled</span>
-          )}
         </div>
-        <div className="or-card-foot">
+        {project.description && <p className="pg-desc">{project.description}</p>}
+        <p className="pg-next">{next ? <>Next · {when(next.start, now)} — {next.title}</> : 'Nothing scheduled'}</p>
+        <div className="pg-foot">
           <span>
             {events} {events === 1 ? 'event' : 'events'} · {notes} {notes === 1 ? 'note' : 'notes'}
           </span>
           <span>{edited(project.updatedAt)}</span>
         </div>
       </div>
-    </article>
+    </div>
   )
 }
 
