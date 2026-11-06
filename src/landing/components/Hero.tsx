@@ -20,14 +20,14 @@ export function Hero() {
         </h1>
         <p className="lp-hero-sub">Your calendar, tasks and notes in one place.</p>
         <div className="mt-8 flex w-full flex-col items-center justify-center gap-3 sm:w-auto sm:flex-row">
-          <Button href={primary.href} variant="primary" size="lg" className="w-full sm:w-auto" arrow>
+          <Button href={primary.href} variant="inverse" size="lg" className="w-full sm:w-auto" arrow>
             {primary.label}
           </Button>
           <a href="#preview" className="lp-hero-link">
             Try the demo <span aria-hidden="true">↓</span>
           </a>
         </div>
-        <p className="mt-4 text-[13.5px] text-lp-body">Free plan, no card required.</p>
+        <p className="lp-hero-free mt-4 text-[13.5px]">Free plan, no card required.</p>
 
         <div className="lp-hero-stage">
           <HeroWeek />

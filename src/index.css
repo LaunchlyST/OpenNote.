@@ -6902,36 +6902,27 @@ select.ss-input option {
 .lp-paper .lp-hero { background: transparent; }
 .lp-glimmer {
   position: absolute;
-  left: 50%;
-  top: 40px;
-  width: min(1100px, 140vw);
-  height: 560px;
-  transform: translateX(-50%);
+  inset: 0 0 auto 0;
+  height: min(820px, 100svh);
+  background: linear-gradient(#3a3f8e, #62649a 70%, #000);
   pointer-events: none;
-  mask-image: radial-gradient(60% 60% at 50% 40%, #000 30%, transparent 75%);
-  -webkit-mask-image: radial-gradient(60% 60% at 50% 40%, #000 30%, transparent 75%);
+  overflow: hidden;
 }
-.lp-glim {
-  position: absolute;
-  left: 50%;
-  border-radius: 50%;
-  filter: blur(48px);
-  transform: translateX(-50%);
-  animation: lp-glim 14s ease-in-out infinite alternate;
-}
-.lp-glim-a { top: 40px; width: 70%; height: 180px; background: rgba(163, 230, 53, 0.42); }
-.lp-glim-b { top: 130px; width: 52%; height: 140px; background: rgba(232, 247, 181, 0.9); animation-duration: 11s; animation-delay: -4s; }
-.lp-glim-c { top: 70px; width: 34%; height: 110px; background: rgba(255, 255, 255, 0.95); animation-duration: 9s; animation-delay: -2s; }
-.lp-glim-grain {
+/* soften the scene behind the letters and CTA, then fade into paper */
+.lp-glimmer-veil {
   position: absolute;
   inset: 0;
-  opacity: 0.08;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.85'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background:
+    radial-gradient(40% 30% at 50% 44%, rgba(18, 16, 48, 0.62), transparent 80%),
+    linear-gradient(to bottom, transparent 62%, #faf8f3 98%);
 }
-@keyframes lp-glim {
-  0% { transform: translateX(-56%) scaleX(0.95); opacity: 0.8; }
-  100% { transform: translateX(-44%) scaleX(1.08); opacity: 1; }
-}
+.lp-hero .lp-hero-kicker { color: #d9f99d; }
+.lp-hero .lp-hero-title { color: #fff; text-shadow: 0 2px 30px rgba(20, 16, 60, 0.45); }
+.lp-hero .lp-hero-sub { color: rgba(255, 255, 255, 0.88); }
+.lp-hero .lp-hero-link { color: #fff; text-decoration-color: rgba(255, 255, 255, 0.5); }
+.lp-hero .lp-hero-link:hover { text-decoration-color: #fff; }
+.lp-hero .lp-hero-link:focus-visible { outline-color: #fff; }
+.lp-hero .lp-hero-free { color: rgba(255, 255, 255, 0.75); }
 .lp-hero-kicker {
   font-size: 12.5px;
   font-weight: 600;
@@ -7139,7 +7130,7 @@ select.ss-input option {
 .lp-dp-note p { margin-top: 10px; padding: 12px 14px; border-radius: 12px; background: #fff9c9; border: 1px solid #efe29a; font-size: 14.5px; line-height: 1.5; color: #2b2610; }
 
 @media (prefers-reduced-motion: reduce) {
-  .lp-glim, .lp-hw, .lp-hw-note, .lp-caret { animation: none; }
+  .lp-hw, .lp-hw-note, .lp-caret { animation: none; }
 }
 .lp-paper main > section.bg-white { background: transparent; }
 .lp-paper main > section + section { border-top: 1px solid #ece9e0; }
