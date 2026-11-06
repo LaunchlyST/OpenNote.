@@ -1,4 +1,4 @@
-import { apiUrl } from '../../lib/api-base'
+import { API_BASE, apiUrl } from '../../lib/api-base'
 import type { DraftProduct, Page, SellerSetup, ShopProduct, StoreView } from './model'
 
 export class SellerError extends Error {
@@ -21,7 +21,7 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
       body: body === undefined ? undefined : body instanceof Blob ? body : JSON.stringify(body),
     })
   } catch {
-    throw new SellerError('Can’t reach the Desknoty server.', 0)
+    throw new SellerError('The Desknoty server didn’t answer. Check your connection and try again.', 0)
   }
   const text = await res.text()
   let json: any = null
@@ -30,7 +30,14 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
   } catch {
     /* not JSON: probably no server behind /api */
   }
-  if (!res.ok || json === null) throw new SellerError(json?.error ?? (json === null ? 'The Desknoty server isn’t available.' : `Request failed (${res.status}).`), json === null ? 0 : res.status, Boolean(json?.setup))
+  if (json === null) {
+    // No JSON at all: there is no Desknoty API behind this site (e.g. a static host with no backend configured).
+    const local = /^(localhost|127\.)/.test(window.location.hostname)
+    if (!API_BASE && !local) throw new SellerError('This site isn’t connected to a Desknoty server yet, so stores can’t be loaded here. Nothing you saved is lost.', -1)
+    throw new SellerError(`The Desknoty server isn’t responding (${res.status}). Try again in a moment.`, 0)
+  }
+  if (res.status === 401) throw new SellerError('Your session has ended. Sign in again to open Seller Studio.', 401)
+  if (!res.ok) throw new SellerError(json?.error ?? `Request failed (${res.status}).`, res.status, Boolean(json?.setup))
   return json as T
 }
 

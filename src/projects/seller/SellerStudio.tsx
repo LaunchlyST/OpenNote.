@@ -50,6 +50,15 @@ import type { Block, BlockType, DraftProduct, Page, SellerSetup, StoreView } fro
  */
 
 type Tab = 'page' | 'products' | 'payouts' | 'link' | 'orders'
+
+/** Single-panel states (loading, errors, start, TikTok): one white panel on the page background. */
+function Solo({ compact = false, children }: { compact?: boolean; children: ReactNode }) {
+  return (
+    <div className={cn('ss ss-solo', compact && 'ss-compact')}>
+      <section className="ss-editor">{children}</section>
+    </div>
+  )
+}
 const TT_KEY = (id: string) => `desknoty.seller.tiktok-step.${id}`
 
 /** Where Stripe and TikTok send the seller back to: this page, Seller open. */
@@ -60,7 +69,8 @@ function returnPath() {
 export function SellerStudio() {
   const [setup, setSetup] = useState<SellerSetup | null>(null)
   const [store, setStore] = useState<StoreView | null | undefined>(undefined)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<SellerError | null>(null)
+  const [retrying, setRetrying] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
   const load = useCallback(async (refresh = false) => {
@@ -70,7 +80,7 @@ export function SellerStudio() {
       setStore(st.store)
       setError(null)
     } catch (e) {
-      setError((e as Error).message)
+      setError(e instanceof SellerError ? e : new SellerError((e as Error).message, 0))
       setStore(null)
     }
   }, [])
@@ -101,20 +111,35 @@ export function SellerStudio() {
     }
   }, [load])
 
-  if (store === undefined) return <div className="ss ss-solo"><p className="ss-muted p-8">Loading your store…</p></div>
-  if (error && !setup)
+  if (store === undefined)
     return (
-      <div className="ss ss-solo">
-        <div className="ss-start">
-          <div className="ss-start-card">
-            <span className="ss-start-icon"><Store className="h-7 w-7" strokeWidth={1.8} /></span>
-            <h2>Seller Studio needs the Desknoty server</h2>
-            <p>{error} Stores, products, payouts and checkout are saved on your account, so this page works once the Desknoty API is online.</p>
-            <button type="button" className="ss-tt" onClick={() => void load()}>Try again</button>
-          </div>
+      <Solo compact>
+        <div className="ss-state" role="status" aria-live="polite">
+          <span className="ss-spinner" aria-hidden="true" />
+          <p>Loading your store…</p>
         </div>
-      </div>
+      </Solo>
     )
+  if (error && !setup) {
+    const signedOut = error.status === 401
+    return (
+      <Solo compact>
+        <div className="ss-state" role="alert">
+          <span className="ss-start-icon"><Store className="h-6 w-6" strokeWidth={1.8} /></span>
+          <h2>{signedOut ? 'Sign in to open Seller Studio' : error.status === -1 ? 'Seller Studio isn’t connected yet' : 'Can’t reach the Desknoty server'}</h2>
+          <p>{error.message}</p>
+          {signedOut ? (
+            <a className="ss-primary" href="/app/signin">Sign in</a>
+          ) : (
+            <button type="button" className="ss-primary" disabled={retrying} onClick={() => (setRetrying(true), void load().finally(() => setRetrying(false)))}>
+              {retrying ? 'Trying…' : 'Try again'}
+            </button>
+          )}
+          <p className="ss-state-note">Your stores, products, files and orders are saved on the server and aren’t affected.</p>
+        </div>
+      </Solo>
+    )
+  }
   if (!store) return <StartCard onCreated={(s) => setStore(s)} />
   if (!localStorage.getItem(TT_KEY(store.id)) && !store.tiktok) {
     return <TikTokStep store={store} setup={setup!} notice={notice} onDone={() => (localStorage.setItem(TT_KEY(store.id), '1'), setStore({ ...store }))} />
@@ -170,7 +195,7 @@ function StartCard({ onCreated }: { onCreated: (s: StoreView) => void }) {
   }
 
   return (
-    <div className="ss ss-solo">
+    <Solo>
       <div className="ss-start">
         <div className="ss-start-top">
           <span className="ss-start-brand"><Store className="h-4 w-4" /> Seller</span>
@@ -206,7 +231,7 @@ function StartCard({ onCreated }: { onCreated: (s: StoreView) => void }) {
           </ol>
         </div>
       </div>
-    </div>
+    </Solo>
   )
 }
 
@@ -248,7 +273,7 @@ async function importLegacy(store: StoreView): Promise<StoreView> {
 function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup: SellerSetup; notice: string | null; onDone: () => void }) {
   const [err, setErr] = useState<string | null>(notice)
   return (
-    <div className="ss ss-solo">
+    <Solo>
       <div className="ss-start">
         <div className="ss-start-card">
           <span className="ss-start-icon"><TikTokMark /></span>
@@ -275,7 +300,7 @@ function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup:
           <p className="ss-start-note">Your store: <b>{store.url}</b></p>
         </div>
       </div>
-    </div>
+    </Solo>
   )
 }
 

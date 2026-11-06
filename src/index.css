@@ -7447,3 +7447,18 @@ select.ss-input option {
 .ps-download { margin-top: 8px; text-decoration: none !important; }
 .ps-fine { font-size: 12.5px !important; opacity: 0.6 !important; }
 .ps-msg a.sp-btn { color: var(--on, #fff); text-decoration: none; }
+
+/* Seller Studio single-panel states: a white panel on the page, not the dark studio frame */
+.ss-solo { background: transparent; padding: 0; }
+.ss-solo .ss-editor { border: 1px solid #e6e3dc; border-radius: 22px; }
+.ss-compact .ss-editor { min-height: 0; }
+.ss-state { display: grid; justify-items: center; gap: 10px; max-width: 420px; margin: 0 auto; padding: 40px 8px; text-align: center; color: #111114; }
+.ss-state h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
+.ss-state > p { font-size: 14px; line-height: 1.5; color: #52525b; }
+.ss-state .ss-primary { margin-top: 6px; min-width: 160px; justify-content: center; }
+.ss-state-note { font-size: 12.5px !important; color: #8a8985 !important; }
+.ss-spinner { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid #e6e3dc; border-top-color: #111114; animation: ss-spin 0.8s linear infinite; }
+@keyframes ss-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .ss-spinner { animation-duration: 2.4s; } }
+.ss-state .ss-primary { justify-self: center; align-self: center; margin-left: auto; margin-right: auto; }
+.ss-compact .ss-state { padding: 32px 8px; }
