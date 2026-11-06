@@ -6659,3 +6659,170 @@ select.ss-input option {
   transition: transform 0.2s;
 }
 .pj-cta button:hover { transform: translateY(-2px); }
+
+/* ---- Video coming soon v3: dark tile wall, lime countdown, floating stickers */
+.vs3 {
+  background: #141614;
+  color: #fff;
+  place-items: center;
+  font-family: 'Bricolage Grotesque', 'Geist', system-ui, sans-serif;
+}
+.vs3-tiles {
+  position: absolute;
+  inset: 0;
+  background-color: #141614;
+  background-image: linear-gradient(#1d201d, #1b1e1b);
+  -webkit-mask: none;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 0, transparent 100%),
+    repeating-linear-gradient(90deg, transparent 0 66px, #141614 66px 76px),
+    repeating-linear-gradient(0deg, transparent 0 66px, #141614 66px 76px),
+    #202420;
+  box-shadow: inset 0 0 200px 60px #0e100e;
+}
+.vs3-inner {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 0 16px;
+  animation: vcs-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.vs3-brand {
+  margin-bottom: 30px;
+  font-size: 22px;
+  font-weight: 800;
+  font-style: italic;
+  letter-spacing: -0.03em;
+  color: #e9f77a;
+}
+.vs3-count {
+  display: flex;
+  gap: 4px;
+}
+.vs3-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 78px;
+  height: 92px;
+  border-radius: 4px;
+  background: #2a2f2b;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 10px 24px -12px rgba(0, 0, 0, 0.7);
+}
+.vs3-unit b {
+  font-size: 30px;
+  font-weight: 800;
+  color: #e9f77a;
+  font-variant-numeric: tabular-nums;
+}
+.vs3-unit small {
+  margin-top: 4px;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+.vs3-title {
+  margin-top: 30px;
+  font-size: clamp(40px, 7.5vw, 84px);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  transform: scaleX(1.12);
+}
+.vs3-sub {
+  max-width: 470px;
+  margin-top: 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+.vs3-form {
+  display: flex;
+  gap: 6px;
+  margin-top: 28px;
+  width: min(420px, 100%);
+}
+.vs3-form input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  color: #fff;
+  background: #3a403b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+.vs3-form input::placeholder { color: rgba(255, 255, 255, 0.45); }
+.vs3-form input:focus { border-color: #a6e690; }
+.vs3-form button {
+  height: 44px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #10140f;
+  background: #a6e690;
+  transition: transform 0.2s, background 0.2s;
+}
+.vs3-form button:hover { background: #bdf2a8; transform: translateY(-1px); }
+.vs3-done { margin-top: 28px; font-weight: 700; color: #a6e690; }
+/* floating stickers */
+.vs3-chip {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: clamp(64px, 8vw, 104px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) rotate(var(--r));
+  box-shadow: 0 18px 30px -12px rgba(0, 0, 0, 0.7), inset 0 -6px 0 rgba(0, 0, 0, 0.18);
+  animation: vs3-bob 5s ease-in-out infinite;
+}
+.vs3-chip::before {
+  content: '';
+  position: absolute;
+  inset: 12%;
+  border-radius: 50%;
+  border: 3px dashed currentColor;
+  opacity: 0.55;
+}
+.vs3-chip b {
+  font-size: clamp(16px, 2vw, 24px);
+  font-weight: 800;
+  font-style: italic;
+}
+.vs3-lime { background: #a6e690; color: #1b2a17; border: 6px solid #22281f; }
+.vs3-yellow { background: #e9f77a; color: #2a2d10; border: 6px solid #22281f; }
+.vs3-pink { background: #b23bd6; color: #fff; border: 6px solid #fff; }
+.vs3-dark { background: #22281f; color: #a6e690; border: 6px solid #a6e690; }
+@keyframes vs3-bob {
+  50% { transform: translate(-50%, calc(-50% - 12px)) rotate(calc(var(--r) * -1)); }
+}
+.vs3-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 22px;
+  z-index: 2;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+@media (max-width: 640px) {
+  .vs3-chip { display: none; }
+  .vs3-unit { width: 64px; height: 78px; }
+  .vs3-unit b { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs3-chip, .vs3-inner { animation: none; }
+}
