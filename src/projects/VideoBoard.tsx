@@ -86,6 +86,10 @@ export function VideoBoard() {
   return (
     <div className="vb">
       <div className="vcs" role="dialog" aria-modal="true" aria-labelledby="vcs-t">
+        <span className="vcs-orb vcs-o1" aria-hidden="true" />
+        <span className="vcs-orb vcs-o2" aria-hidden="true" />
+        <span className="vcs-orb vcs-o3" aria-hidden="true" />
+        <span className="vcs-glass" aria-hidden="true" />
         <div className="vcs-card">
           <span className="vcs-chip">
             <i /> In the works

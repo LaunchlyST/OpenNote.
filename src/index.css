@@ -6164,7 +6164,8 @@ select.ss-input option {
   display: grid;
   place-items: center;
   padding: 16px;
-  background: rgba(243, 239, 230, 0.78);
+  background: #f7f7fb;
+  overflow: hidden;
   backdrop-filter: blur(14px) saturate(1.1);
   -webkit-backdrop-filter: blur(14px) saturate(1.1);
   animation: vcs-in 0.5s ease both;
@@ -6352,4 +6353,53 @@ select.ss-input option {
 }
 @media (prefers-reduced-motion: reduce) {
   .pg-card { animation: none; transition: none; }
+}
+
+/* glassy wow layer */
+.vcs-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(70px);
+  opacity: 0.75;
+  animation: vcs-float 14s ease-in-out infinite alternate;
+}
+.vcs-o1 { width: 46vmax; height: 46vmax; left: -10vmax; top: -12vmax; background: #b9b4ff; }
+.vcs-o2 { width: 40vmax; height: 40vmax; right: -12vmax; top: 10vh; background: #ffc6a8; animation-delay: -5s; }
+.vcs-o3 { width: 38vmax; height: 38vmax; left: 25vw; bottom: -18vmax; background: #a8e6ff; animation-delay: -9s; }
+@keyframes vcs-float {
+  to { transform: translate3d(6vw, 4vh, 0) scale(1.12); }
+}
+.vcs-glass {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.45)),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.0) 0 22vw, rgba(255, 255, 255, 0.35) 22vw calc(22vw + 1px));
+  backdrop-filter: blur(40px) saturate(1.4);
+  -webkit-backdrop-filter: blur(40px) saturate(1.4);
+}
+.vcs-card { position: relative; z-index: 1; }
+.vcs-title {
+  background: linear-gradient(100deg, #14120e 0%, #14120e 40%, #6b64d8 50%, #14120e 60%, #14120e 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: vcs-shine 5s ease-in-out infinite;
+}
+.vcs-title em {
+  -webkit-text-fill-color: #2a2660;
+}
+@keyframes vcs-shine {
+  0% { background-position: 100% 0; }
+  60%, 100% { background-position: 0 0; }
+}
+.vcs-chip {
+  background: rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(10px);
+  border-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 8px 24px -12px rgba(42, 38, 96, 0.35);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vcs-orb, .vcs-title { animation: none; }
 }
