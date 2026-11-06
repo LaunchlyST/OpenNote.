@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight, Check, Search, CheckSquare, ImagePlus, Link2, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { Dialog, btn } from './Chrome'
+import { VideoSoon } from './VideoSoon'
 import { cn } from '../lib/id'
 
 /**
@@ -85,24 +86,7 @@ export function VideoBoard() {
 
   return (
     <div className="vb">
-      <div className="vcs" role="dialog" aria-modal="true" aria-labelledby="vcs-t">
-        <span className="vcs-orb vcs-o1" aria-hidden="true" />
-        <span className="vcs-orb vcs-o2" aria-hidden="true" />
-        <span className="vcs-orb vcs-o3" aria-hidden="true" />
-        <span className="vcs-glass" aria-hidden="true" />
-        <div className="vcs-card">
-          <span className="vcs-chip">
-            <i /> In the works
-          </span>
-          <h2 id="vcs-t" className="vcs-title">
-            Video Projects
-            <br />
-            <em>coming soon</em>
-          </h2>
-          <p className="vcs-sub">Plan every edit on a thumbnail-shaped card, with notes, checklists and links inside.</p>
-          <span className="vcs-hint">Lift the page from the bottom edge to go back to My Projects</span>
-        </div>
-      </div>
+      <VideoSoon />
       {/* same layout as My Projects */}
       <section className="fx-head">
         <div className="flex flex-wrap items-start justify-between gap-3">

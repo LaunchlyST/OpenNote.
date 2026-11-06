@@ -6403,3 +6403,194 @@ select.ss-input option {
 @media (prefers-reduced-motion: reduce) {
   .vcs-orb, .vcs-title { animation: none; }
 }
+
+/* ---- Video projects coming soon v2: dark stage with a spotlight ------- */
+.vs2 {
+  background: #0d0d10;
+  color: #fff;
+  place-items: center;
+}
+.vs2-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(70% 60% at 50% 45%, #000 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 45%, #000 30%, transparent 80%);
+}
+.vs2-light {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: min(560px, 80vw);
+  height: 62vh;
+  pointer-events: none;
+}
+.vs2-lamp {
+  position: absolute;
+  left: 50%;
+  top: 7vh;
+  transform: translateX(-50%);
+  width: 46%;
+  height: 10px;
+  border-radius: 999px;
+  background: #c9b8ff;
+  box-shadow: 0 0 30px 6px rgba(170, 145, 255, 0.7);
+}
+.vs2-beam {
+  position: absolute;
+  left: 50%;
+  top: calc(7vh + 5px);
+  transform: translateX(-50%);
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, rgba(160, 135, 255, 0.55), rgba(160, 135, 255, 0) 85%);
+  clip-path: polygon(27% 0, 73% 0, 100% 100%, 0 100%);
+  filter: blur(18px);
+  animation: vs2-flicker 6s ease-in-out infinite;
+}
+@keyframes vs2-flicker {
+  0%, 100% { opacity: 0.9; }
+  50% { opacity: 1; }
+  52% { opacity: 0.75; }
+  54% { opacity: 1; }
+}
+.vs2-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 18vh 16px 0;
+  animation: vcs-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.vs2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #e9e4ff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.vs2-chip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #b9a6ff;
+  animation: vcs-pulse 1.8s ease-out infinite;
+}
+.vs2-title {
+  margin: 18px 0 10px;
+  font-size: clamp(52px, 11vw, 132px);
+  font-weight: 800;
+  letter-spacing: -0.055em;
+  line-height: 0.95;
+  color: #fff;
+  text-shadow: 0 20px 60px rgba(150, 120, 255, 0.35);
+}
+.vs2-sub {
+  max-width: 460px;
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.62);
+}
+.vs2-launch {
+  margin-top: 34px;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+}
+.vs2-count {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+.vs2-unit {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 84px;
+  padding: 12px 0 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vs2-unit b {
+  font-size: 34px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.vs2-unit small {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.vs2-colon {
+  position: absolute;
+  right: -9px;
+  top: 14px;
+  font-size: 24px;
+  color: rgba(255, 255, 255, 0.35);
+}
+.vs2-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 30px;
+  width: min(420px, 100%);
+}
+.vs2-form input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 12px;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  outline: none;
+}
+.vs2-form input::placeholder { color: rgba(255, 255, 255, 0.4); }
+.vs2-form input:focus { border-color: #b9a6ff; }
+.vs2-form button {
+  height: 46px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #16112e;
+  background: #b9a6ff;
+  box-shadow: 0 10px 30px -10px rgba(185, 166, 255, 0.8);
+  transition: transform 0.2s, background 0.2s;
+}
+.vs2-form button:hover { background: #cbbdff; transform: translateY(-1px); }
+.vs2-done {
+  margin-top: 30px;
+  font-size: 14px;
+  color: #cbbdff;
+}
+.vs2-hint {
+  margin-top: 28px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.35);
+}
+@media (max-width: 480px) {
+  .vs2-unit { width: 68px; }
+  .vs2-unit b { font-size: 26px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs2-beam, .vs2-inner, .vs2-chip i { animation: none; }
+}
