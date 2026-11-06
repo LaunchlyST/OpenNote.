@@ -185,28 +185,10 @@ export function ProHome(props: Props) {
         </div>
       ) : (
         <main className="or">
+          {upcoming.length > 0 && (
           <section className="or-strip" aria-label="Coming up">
-            <h2 className="dk-label">{upcoming.length ? 'Coming up' : 'Jump back in'}</h2>
-            {upcoming.length === 0 ? (
-              <ol className="or-chips">
-                {list.slice(0, 4).map((p, i) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => setSel(i)}
-                      className="or-chip"
-                      style={{ '--c': (COLORS[p.color] ?? COLORS.lime).dot } as CSSProperties}
-                    >
-                      <span className="or-chip-when">{edited(p.updatedAt)}</span>
-                      <span className="or-chip-title">{p.name}</span>
-                      <span className="or-chip-proj">
-                        {p.eventCount} events · {p.noteCount} notes
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            ) : (
+            <h2 className="dk-label">Coming up</h2>
+            {upcoming.length > 0 && (
               <ol className="or-chips">
                 {upcoming.slice(0, 8).map((e) => (
                   <li key={e.project.id + e.id}>
@@ -225,6 +207,7 @@ export function ProHome(props: Props) {
               </ol>
             )}
           </section>
+          )}
           <Orbit
             list={list}
             at={at}
