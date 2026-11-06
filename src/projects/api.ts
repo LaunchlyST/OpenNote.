@@ -79,15 +79,18 @@ export const paths = {
   picker: '/app',
   dashboard: (ws: WorkspaceId) => `/app/${ws}`,
   project: (id: string) => `/app/project/${encodeURIComponent(id)}`,
+  video: '/app/pro/video',
 }
 
 export type WorkspaceRoute =
   | { kind: 'picker' }
   | { kind: 'dashboard'; workspace: WorkspaceId }
   | { kind: 'project'; id: string }
+  | { kind: 'video' }
 
 export function parseWorkspaceRoute(path: string): WorkspaceRoute | null {
   if (path === '/app' || path === '/dashboard') return { kind: 'picker' }
+  if (path === '/app/pro/video') return { kind: 'video' }
   if (path === '/app/free' || path === '/app/pro')
     return { kind: 'dashboard', workspace: path.slice(5) as WorkspaceId }
   const m = path.match(/^\/app\/project\/([^/]+)$/)

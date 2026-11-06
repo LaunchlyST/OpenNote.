@@ -33,7 +33,7 @@ import { cn } from '../lib/id'
 import { paths } from './api'
 import { SellerStudio } from './seller/SellerStudio'
 import { PagePeel } from './PagePeel'
-import { VideoBoard } from './VideoBoard'
+import { VideoSoon } from './VideoSoon'
 import type { ProjectSummary } from './api'
 import { PRO_THEMES, useProTheme } from './proTheme'
 import { themeNeeds, themeUnlocked, useStreak } from './streak'
@@ -335,14 +335,17 @@ export function ProShell({ project }: { project: ProjectSummary }) {
       <PagePeel
         label="Video projects"
         tone="#f3efe6"
+        keepOnDone
         onDone={() => {
-          stayOnList('videos')
-          navigate(paths.dashboard('pro'))
+          try {
+            sessionStorage.setItem('desknoty.pro.from', project.id)
+          } catch {
+            /* storage blocked */
+          }
+          navigate(paths.video)
         }}
       >
-        <div className="pp-under-pro pro-dash h-full">
-          <VideoBoard />
-        </div>
+        <VideoSoon preview />
       </PagePeel>
     </div>
   )

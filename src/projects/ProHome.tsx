@@ -8,7 +8,9 @@ import { projectsApi } from './api'
 import type { ProjectSummary } from './api'
 import type { ProjectData } from '../store'
 import { StreakChip } from './StreakChip'
-import { VideoBoard } from './VideoBoard'
+import { VideoSoon } from './VideoSoon'
+import { useRouter } from '../router'
+import { paths } from './api'
 import { PagePeel } from './PagePeel'
 import { HeaderLinks } from './MyProjects'
 
@@ -65,6 +67,7 @@ function edited(iso: string) {
 
 export function ProHome(props: Props) {
   const { name, projects, error, onRetry, account, onCreate, onOpen } = props
+  const { navigate } = useRouter()
   const [now, setNow] = useState(() => new Date())
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 30_000)
@@ -102,16 +105,6 @@ export function ProHome(props: Props) {
   const todayProjects = new Set(today.map((e) => e.project.id)).size
 
   const [palette, setPalette] = useState(false)
-  // the page flips over to Video projects and back
-  const [side, setSide] = useState<'projects' | 'videos'>(() => (sessionStorage.getItem('desknoty.pro.side') === 'videos' ? 'videos' : 'projects'))
-  const turn = (to: 'projects' | 'videos') => {
-    setSide(to)
-    try {
-      sessionStorage.setItem('desknoty.pro.side', to)
-    } catch {
-      /* storage blocked */
-    }
-  }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -235,15 +228,10 @@ export function ProHome(props: Props) {
         </div>
       </header>
 
-      <div className="pp-page">{side === 'videos' ? <VideoBoard /> : projectsView}</div>
+      <div className="pp-page">{projectsView}</div>
 
-      <PagePeel
-        key={side}
-        label={side === 'videos' ? 'My Projects' : 'Video projects'}
-        tone={side === 'videos' ? '#f3efe6' : '#1c1b1f'}
-        onDone={() => (side === 'videos' && list[0] ? onOpen(list[0]) : turn(side === 'videos' ? 'projects' : 'videos'))}
-      >
-        {side === 'videos' ? <div className="pp-under-pro">{projectsView}</div> : <div className="pp-under-pro"><VideoBoard /></div>}
+      <PagePeel label="Video projects" tone="#f3efe6" keepOnDone onDone={() => navigate(paths.video)}>
+        <VideoSoon preview />
       </PagePeel>
 
       {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => onOpen(list[i])} onOpen={onOpen} onCreate={onCreate} />}

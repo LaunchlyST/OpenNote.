@@ -10,6 +10,8 @@ import { PageChrome, Spinner, btn } from './projects/Chrome'
 import { ProjectContext } from './projects/context'
 import { ProShell } from './projects/ProShell'
 import { ApiError, parseWorkspaceRoute, paths, projectsApi } from './projects/api'
+import { VideoSoon } from './projects/VideoSoon'
+import { PagePeel } from './projects/PagePeel'
 import type { ProjectSummary } from './projects/api'
 import { useAuth } from './auth'
 import { ScreenProvider, useScreen } from './screens'
@@ -266,6 +268,29 @@ function ProjectView({ id }: { id: string }) {
   )
 }
 
+/** Pro → Video: Coming Soon. Peeling the bottom edge returns to the workspace the user came from. */
+function VideoPage() {
+  const { navigate } = useRouter()
+  let from: string | null = null
+  try {
+    from = sessionStorage.getItem('desknoty.pro.from')
+  } catch {
+    /* storage blocked */
+  }
+  return (
+    <div className="h-full w-full">
+      <VideoSoon />
+      <PagePeel
+        label="your workspace"
+        tone="#f3efe6"
+        onDone={() => navigate(from ? paths.project(from) : paths.dashboard('pro'))}
+      >
+        <div className="pp-back-sheet" />
+      </PagePeel>
+    </div>
+  )
+}
+
 function Shell() {
   const { screen } = useScreen()
   const { path } = useRouter()
@@ -279,6 +304,7 @@ function Shell() {
   const route = parseWorkspaceRoute(path) ?? { kind: 'picker' as const }
   if (route.kind === 'dashboard') return <MyProjects key={route.workspace} workspace={route.workspace} />
   if (route.kind === 'project') return <ProjectView key={route.id} id={route.id} />
+  if (route.kind === 'video') return <VideoPage />
   return <WorkspacePicker />
 }
 

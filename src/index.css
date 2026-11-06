@@ -5535,117 +5535,80 @@ select.ss-input option {
   border-radius: 0;
 }
 
-/* ---- paper peel between Projects and Video projects ------------------ */
+/* ---- paper peel (Pro workspace <-> Video) ---------------------------- */
 .pp {
   position: fixed;
   inset: auto 0 0 0;
   height: 0;
-  z-index: 40;
-  pointer-events: none;
+  z-index: 60;
 }
 .pp-back {
   position: fixed;
   inset: 0;
   background: var(--tone);
-  transition: clip-path 0.38s cubic-bezier(0.22, 1, 0.36, 1);
-  filter: drop-shadow(0 -10px 24px rgba(0, 0, 0, 0.3));
+  transition: clip-path 0.42s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
-.pp-under {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% - var(--lift) - 40px);
-  height: 100vh;
-  overflow: hidden;
+.pp-m-finish .pp-back {
+  transition: clip-path 0.56s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.pp-shade,
+.pp-fold {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.pp-fold {
+  filter: drop-shadow(0 -6px 10px rgba(20, 18, 14, 0.18));
 }
 .pp-under-pro {
   padding: 28px clamp(16px, 4vw, 40px);
 }
-/* the lifted sheet edge: a soft fold and shadow riding on top of the reveal */
-.pp-curl {
+.pp-edge {
   position: fixed;
   left: 0;
   right: 0;
-  bottom: var(--lift);
-  transform: translateY(50%);
-  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.25) 30%, rgba(0, 0, 0, 0.1) 60%, rgba(0, 0, 0, 0));
-  mix-blend-mode: soft-light;
-  opacity: 0;
-  transition: bottom 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s;
-  pointer-events: none;
-}
-.pp-m-hint .pp-curl,
-.pp-m-drag .pp-curl {
-  opacity: 1;
-}
-.pp-m-drag .pp-back,
-.pp-m-drag .pp-curl {
-  transition: none;
-}
-.pp-m-finish .pp-back {
-  transition: clip-path 0.52s cubic-bezier(0.65, 0, 0.35, 1);
-}
-.pp-m-finish .pp-curl {
-  transition: bottom 0.52s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.5s;
-  opacity: 0;
-}
-.pp-m-reset .pp-back {
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-.pp-edge {
-  position: absolute;
-  left: 0;
-  right: 0;
   bottom: 0;
-  height: max(56px, var(--lift));
-  pointer-events: auto;
+  height: 22px;
   cursor: grab;
   touch-action: none;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 8px;
-  gap: 6px;
+  justify-content: center;
+  padding-top: 10px;
   outline: none;
 }
-.pp-m-idle .pp-edge {
-  height: 22px;
+.pp-m-hint .pp-edge,
+.pp-m-drag .pp-edge {
+  height: 64px;
 }
 .pp-m-drag .pp-edge {
   cursor: grabbing;
 }
-.pp-m-finish .pp-edge,
-.pp-m-reset .pp-edge {
+.pp-m-finish .pp-edge {
   pointer-events: none;
 }
 .pp-grip {
-  width: 44px;
+  width: 36px;
   height: 4px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--tone) 40%, #999);
-}
-.pp-hint {
-  font-size: 13px;
-  font-weight: 600;
-  color: color-mix(in srgb, var(--tone) 25%, #999);
-  opacity: 0;
+  background: #191919;
+  opacity: 0.12;
   transition: opacity 0.2s;
 }
-.pp-m-hint .pp-hint,
-.pp-edge:focus-visible .pp-hint {
-  opacity: 1;
+.pp-m-hint .pp-grip,
+.pp-edge:focus-visible .pp-grip {
+  opacity: 0.35;
 }
 .pp-edge:focus-visible .pp-grip {
-  outline: 2px solid currentColor;
+  outline: 2px solid #2a2660;
   outline-offset: 4px;
 }
+.pp-m-drag .pp-grip,
+.pp-m-finish .pp-grip {
+  opacity: 0;
+}
 @media (prefers-reduced-motion: reduce) {
-  .pp-back {
-    transition: none;
-  }
+  .pp-back { transition: none; }
 }
 
 /* ---- Video projects -------------------------------------------------- */
@@ -6828,3 +6791,108 @@ select.ss-input option {
 @media (prefers-reduced-motion: reduce) {
   .vs3-chip, .vs3-inner { animation: none; }
 }
+
+/* ---- Video: Coming Soon (route + peel preview share this) ------------- */
+.vso {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  overflow: hidden;
+  background: #f3efe6;
+  color: #191919;
+}
+.vso[inert] { pointer-events: none; user-select: none; }
+.vso-glow {
+  position: absolute;
+  inset: auto -10% -30% -10%;
+  height: 80%;
+  background:
+    radial-gradient(40% 50% at 30% 60%, rgba(42, 38, 96, 0.10), transparent 70%),
+    radial-gradient(35% 45% at 72% 55%, rgba(224, 118, 58, 0.10), transparent 70%);
+  pointer-events: none;
+}
+.vso-inner {
+  position: relative;
+  padding: 0 clamp(16px, 6vw, 72px);
+  max-width: 980px;
+}
+.vso-title {
+  font-size: clamp(44px, 8vw, 104px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 0.95;
+}
+.vso-title em {
+  display: block;
+  font-family: 'Instrument Serif', Georgia, serif;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: #2a2660;
+}
+.vso-sub {
+  margin-top: 18px;
+  max-width: 460px;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: #6b6a66;
+}
+.vso-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+  width: min(420px, 100%);
+}
+.vso-form input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid #e3e0d7;
+  background: #fffdf8;
+  outline: none;
+  font-size: 14px;
+}
+.vso-form input:focus { border-color: #191919; }
+.vso-form button {
+  height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #1f1d3a;
+}
+.vso-form button:hover { background: #2a2660; }
+.vso-done { margin-top: 22px; font-size: 14px; color: #2a2660; font-weight: 600; }
+/* the badge rides just above the bottom edge: the first thing the peel shows */
+.vso-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: clamp(28px, 7vh, 64px);
+  padding: 0 clamp(16px, 6vw, 72px) 30px;
+}
+.vso-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: #fffdf8;
+  border: 1px solid #e3e0d7;
+}
+.vso-badge i { width: 7px; height: 7px; border-radius: 50%; background: #e0763a; }
+.vso-hint { font-size: 12px; color: #a3a29e; }
+@media (max-width: 560px) { .vso-hint { display: none; } }
+.pp-back-sheet { position: absolute; inset: 0; background: #faf9f6; }

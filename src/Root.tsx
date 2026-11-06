@@ -43,6 +43,7 @@ function isWorkspaceRoute(path: string): boolean {
     path === '/dashboard' ||
     path === '/app/free' ||
     path === '/app/pro' ||
+    path === '/app/pro/video' ||
     /^\/app\/project\/[^/]+$/.test(path)
   )
 }
