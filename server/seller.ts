@@ -43,7 +43,10 @@ const seller = {
   filesDir: resolve(process.env.SELLER_FILES_DIR ?? 'data/seller-files'),
   mediaDir: resolve(process.env.SELLER_MEDIA_DIR ?? 'data/seller-media'),
   maxFileBytes: Number(process.env.SELLER_MAX_FILE_MB ?? 200) * 1024 * 1024,
+  /** Country for new connected accounts (the seller can't change it later). */
+  accountCountry: (process.env.STRIPE_ACCOUNT_COUNTRY || 'GB').toUpperCase(),
 }
+const STRIPE_V2_VERSION = '2026-10-28.endive'
 const tiktokRedirect = () => (process.env.TIKTOK_REDIRECT_URI ?? `${seller.apiUrl}/api/seller/tiktok/callback`).trim()
 
 export const sellerSetup = () => ({
@@ -814,17 +817,25 @@ export function sellerRouter() {
     const returnTo = safeReturn((req.body as { returnTo?: unknown })?.returnTo)
     let accountId = s.stripeAccountId
     if (!accountId) {
-      const a = await st.accounts.create({
-        type: 'express',
-        email: req.userEmail,
-        capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
-        // Stripe rejects non-public URLs (localhost, http), so the store URL is only sent when it is one.
-        business_profile: {
-          product_description: 'Digital products sold through Desknoty',
-          ...(/^https:\/\/(?!localhost|127\.)/.test(seller.siteUrl) ? { url: `${seller.siteUrl}/store/${s.handle}` } : {}),
+      // Accounts v2: Stripe no longer lets new platforms create v1 accounts. A full-dashboard
+      // account where Stripe collects its fees from the seller and manages losses keeps
+      // Desknoty's platform fee at a true 0%. Onboarding links and status reads stay on v1.
+      const a = (await st.rawRequest(
+        'POST',
+        '/v2/core/accounts',
+        {
+          contact_email: req.userEmail,
+          identity: { country: seller.accountCountry },
+          dashboard: 'full',
+          defaults: { responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' } },
+          configuration: {
+            merchant: { capabilities: { card_payments: { requested: true } } },
+            recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } },
+          },
+          metadata: { desknotyStoreId: s.id },
         },
-        metadata: { desknotyStoreId: s.id },
-      })
+        { apiVersion: STRIPE_V2_VERSION },
+      )) as unknown as { id: string }
       accountId = a.id
       db.prepare("UPDATE seller_store SET stripeAccountId = ?, stripeStatus = 'incomplete', updatedAt = ? WHERE id = ?").run(accountId, now(), s.id)
     }
@@ -843,8 +854,8 @@ export function sellerRouter() {
     if (!s) return
     const st = stripe()
     if (!st || !s.stripeAccountId) return void res.status(400).json({ error: 'Connect a bank account first.' })
-    const link = await st.accounts.createLoginLink(s.stripeAccountId)
-    res.json({ url: link.url })
+    // Full-dashboard sellers sign in to their own Stripe Dashboard to manage payouts.
+    res.json({ url: seller.stripeApiBase ? `${seller.stripeApiBase}/dashboard/${s.stripeAccountId}` : 'https://dashboard.stripe.com/settings/payouts' })
   })
 
   /* TikTok Login Kit (web): optional */

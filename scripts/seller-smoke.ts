@@ -178,6 +178,8 @@ try {
   check('incomplete onboarding shows Setup incomplete', (await req('GET', '/api/seller/store?refresh=1', undefined, A)).json.store.payouts.status === 'incomplete')
   const resume = await req('POST', '/api/seller/stripe/onboard', { returnTo: '/app/pro' }, A)
   check('resuming reuses the same connected account', resume.status === 200 && fake.accounts.size === 1)
+  const created = fake.calls.find((c) => c.path === '/v2/core/accounts')!.body as any
+  check('account is created with Accounts v2, Stripe collecting fees and losses', created.dashboard === 'full' && created.defaults.responsibilities.fees_collector === 'stripe' && created.defaults.responsibilities.losses_collector === 'stripe')
   fake.setAccount(accountId, 'pending')
   check('submitted but verifying shows Verification pending', (await req('GET', '/api/seller/store?refresh=1', undefined, A)).json.store.payouts.status === 'pending')
   check('still no checkout while verification is pending', (await req('POST', '/api/store/ava-makes/checkout', { productId: pid })).status === 409)

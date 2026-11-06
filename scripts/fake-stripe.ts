@@ -97,11 +97,13 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     const p = url.pathname
     const form = parseForm(body)
     const account = req.headers['stripe-account'] as string | undefined
-    if (p.startsWith('/v1/')) calls.push({ method: req.method ?? 'GET', path: p, account, body: form })
+    if (p.startsWith('/v1/') || p.startsWith('/v2/')) calls.push({ method: req.method ?? 'GET', path: p, account, body: form })
 
-    if (req.method === 'POST' && p === '/v1/accounts') {
+    if (req.method === 'POST' && p === '/v2/core/accounts') {
+      const j = JSON.parse(body || '{}') as Obj
+      calls[calls.length - 1].body = j
       const id = `acct_test${++n}`
-      const a: Obj = { id, object: 'account', type: 'express', email: form.email, metadata: form.metadata }
+      const a: Obj = { id, object: 'account', type: 'standard', email: j.contact_email, metadata: j.metadata }
       accounts.set(id, a)
       setAccount(id, 'incomplete')
       Object.assign(a, { details_submitted: false })
