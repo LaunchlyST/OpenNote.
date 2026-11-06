@@ -35,6 +35,8 @@ export type SettingsSectionId =
   | 'billing'
   /** Admin-only. Gated by the server, not by this list. */
   | 'deploy'
+  /** Admin-only. Controls the launch/beta lifecycle. */
+  | 'launch'
 
 interface AppContextValue {
   /** Whether the Settings page is open in the main content area. */

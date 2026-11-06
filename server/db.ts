@@ -54,5 +54,16 @@ export function ensureAppTables() {
     );
     CREATE INDEX IF NOT EXISTS email_outbox_due ON email_outbox (status, nextAttemptAt);
     CREATE INDEX IF NOT EXISTS email_outbox_recipient ON email_outbox (recipient, createdAt);
+
+    CREATE TABLE IF NOT EXISTS waitlist (
+      email TEXT PRIMARY KEY,
+      createdAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS site_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
   `)
 }

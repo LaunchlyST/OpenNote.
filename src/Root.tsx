@@ -5,7 +5,7 @@ import type { Screen } from './screens'
 import { SITE, useDocumentMeta } from './landing/seo'
 import { Button, Logo } from './landing/components/primitives'
 import { LandingGate } from './landing/LandingGate'
-import { ComingSoon } from './landing/ComingSoon'
+import { HomeGate } from './landing/HomeGate'
 
 /**
  * Application shell.
@@ -127,7 +127,7 @@ function Routes() {
       </Suspense>
     )
   }
-  if (path === '/') return <ComingSoon />
+  if (path === '/') return <HomeGate />
   if (path === '/landing') return <LandingGate />
   if (isAppRoute(path)) {
     // The key remounts the calendar when the path changes, so a different

@@ -16,11 +16,12 @@ import { enqueueEmail } from './mail/index.ts'
 
 /** Override with EARLY_ACCESS_CODE in .env; the default matches the launch invite. */
 const CODE = (process.env.EARLY_ACCESS_CODE ?? 'Invite27').trim()
-const COOKIE = 'desknoty_access'
+export const EARLY_ACCESS_COOKIE = 'desknoty_access'
+const COOKIE = EARLY_ACCESS_COOKIE
 const MAX_AGE_DAYS = 30
 
 /** The cookie carries an HMAC of a fixed label, so a hand-edited value fails. */
-function token(): string {
+export function earlyAccessToken(): string {
   return createHmac('sha256', env.secret).update('early-access-v1').digest('hex')
 }
 
@@ -38,7 +39,7 @@ function readCookie(header: string | undefined, name: string): string | undefine
 function hasAccess(req: Request): boolean {
   const got = readCookie(req.headers.cookie, COOKIE)
   if (!got) return false
-  const expected = Buffer.from(token())
+  const expected = Buffer.from(earlyAccessToken())
   try {
     return Buffer.from(got).length === expected.length && timingSafeEqual(Buffer.from(got), expected)
   } catch {
@@ -51,7 +52,7 @@ function hasAccess(req: Request): boolean {
  * api.desknoty.com is same-site, but github.io calling api.desknoty.com is
  * not) needs SameSite=None; secure — same rule Better Auth uses in auth.ts.
  */
-function cookieOptions(req: Request) {
+export function earlyAccessCookieOptions(req: Request) {
   const origin = typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : ''
   const registrable = (host: string) => host.split('.').slice(-2).join('.')
   let crossSite = false
@@ -79,7 +80,7 @@ earlyAccessRouter.post('/api/early-access', (req: Request, res: Response) => {
     res.status(403).json({ ok: false, error: 'That invite code is not valid.' })
     return
   }
-  res.cookie(COOKIE, token(), cookieOptions(req))
+  res.cookie(COOKIE, earlyAccessToken(), earlyAccessCookieOptions(req))
   res.json({ ok: true })
 })
 

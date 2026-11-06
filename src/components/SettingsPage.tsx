@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Logo } from '../landing/components/primitives'
 import { AccountMenu } from '../projects/MyProjects'
 import type { ChangeEvent, FormEvent, ReactNode } from 'react'
@@ -21,7 +21,7 @@ import {
   Lock,
   LogOut,
   Mail,
-  Monitor,
+  Megaphone,  Monitor,
   Moon,
   Palette,
   Rocket,
@@ -39,6 +39,7 @@ import {
 import { useApp } from '../store'
 import type { SettingsSectionId } from '../store'
 import { useAuth } from '../auth'
+import { apiUrl } from '../lib/api-base'
 import { authClient } from '../lib/auth-client'
 import { fileToAvatar } from '../lib/avatar'
 import { COLORS, COLOR_IDS } from '../lib/colors'
@@ -79,6 +80,7 @@ const SECTIONS: SectionDef[] = [
   { id: 'security', label: 'Security', icon: <Shield className={ICON} /> },
   { id: 'billing', label: 'Billing', icon: <CreditCard className={ICON} /> },
   { id: 'deploy', label: 'Deploy', icon: <Rocket className={ICON} /> },
+  { id: 'launch', label: 'Launch', icon: <Megaphone className={ICON} /> },
 ]
 
 export const SECTION_KEY = 'opennote.settings-section'
@@ -1264,6 +1266,106 @@ function DeploySection() {
   )
 }
 
+function LaunchSection() {
+  const [mode, setMode] = useState<'waitlist' | 'beta' | 'launched' | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(apiUrl('/api/launch/status'))
+      const data = res.ok ? await res.json() : { mode: 'waitlist' }
+      setMode(data?.mode ?? 'waitlist')
+    } catch {
+      setMode('waitlist')
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const launch = async () => {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const res = await fetch(apiUrl('/api/admin/launch'), { method: 'POST', credentials: 'include' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Launch failed.')
+      setMode(data.mode ?? 'beta')
+      setMessage(
+        typeof data.total === 'number'
+          ? `Sent ${data.queued ?? 0} of ${data.total} launch emails. Site is now in beta.`
+          : data.message ?? 'Site is now in beta.',
+      )
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Launch failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const endBeta = async () => {
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const res = await fetch(apiUrl('/api/admin/launch/end'), { method: 'POST', credentials: 'include' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Could not end beta.')
+      setMode('launched')
+      setMessage('Beta ended. The waitlist page is now gone for everyone.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not end beta.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <SectionShell
+      title="Launch"
+      description="Move Desknoty from the waitlist page to beta, then to a full launch."
+    >
+      <SettingsCard title="Status" icon={<Megaphone className="h-3.5 w-3.5" />}>
+        <SettingsRow label="Current mode" hint="waitlist → beta → launched">
+          <span className="text-[12px] font-medium text-[#191919]">{mode ?? '…'}</span>
+        </SettingsRow>
+      </SettingsCard>
+      {error && (
+        <p className="rounded-xl bg-[#fdf1f1] px-3 py-2 text-[11.5px] leading-snug text-[#c0392b]">
+          {error}
+        </p>
+      )}
+      {message && (
+        <p className="rounded-xl bg-[#f7f7f5] px-3 py-2 text-[11.5px] leading-snug text-[#5f5e5b]">
+          {message}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="primary"
+          onClick={() => void launch()}
+          disabled={busy || mode !== 'waitlist'}
+        >
+          {busy && mode === 'waitlist' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
+          Send launch emails & start beta
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => void endBeta()}
+          disabled={busy || mode !== 'beta'}
+        >
+          {busy && mode === 'beta' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          End beta (remove waitlist page)
+        </Button>
+      </div>
+    </SectionShell>
+  )
+}
+
 /* ------------------------------------------------------------------ */
 /* Page                                                                */
 /* ------------------------------------------------------------------ */
@@ -1285,7 +1387,7 @@ export function SettingsPage({
   const { status } = usePreferences()
   const scrollRef = useRef<HTMLDivElement | null>(null)
 
-  const sections = useMemo(() => SECTIONS.filter((s) => s.id !== 'deploy' || user?.role === 'admin'), [user?.role])
+  const sections = useMemo(() => SECTIONS.filter((s) => (s.id !== 'deploy' && s.id !== 'launch') || user?.role === 'admin'), [user?.role])
   const active = sections.find((s) => s.id === settingsSection) ?? sections[0]
 
   // Remember the section for next time, and start each section at the top.
@@ -1394,6 +1496,7 @@ export function SettingsPage({
             {active.id === 'security' && <SecuritySection />}
             {active.id === 'billing' && <BillingSection />}
             {active.id === 'deploy' && <DeploySection />}
+            {active.id === 'launch' && <LaunchSection />}
           </div>
         </div>
       </div>

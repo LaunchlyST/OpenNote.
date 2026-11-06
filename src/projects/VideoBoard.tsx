@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight, Check, Search, CheckSquare, ImagePlus, Link2, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { Dialog, btn } from './Chrome'
-import { VideoSoon } from './VideoSoon'
 import { cn } from '../lib/id'
 
 /**
@@ -86,7 +85,6 @@ export function VideoBoard() {
 
   return (
     <div className="vb">
-      <VideoSoon />
       {/* same layout as My Projects */}
       <section className="fx-head">
         <div className="flex flex-wrap items-start justify-between gap-3">
