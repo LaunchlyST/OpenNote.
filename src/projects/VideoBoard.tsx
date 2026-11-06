@@ -77,8 +77,8 @@ export function VideoBoard() {
   const [q, setQ] = useState('')
   const shown = videos.filter((v) => v.title.toLowerCase().includes(q.trim().toLowerCase()))
   const [at, setAt] = useState(0)
-  // three columns, four rows per page
-  const PER = 12
+  // two columns, four rows per page
+  const PER = 8
   const pages = Math.max(1, Math.ceil(shown.length / PER))
   const page = Math.min(at, pages - 1)
 
