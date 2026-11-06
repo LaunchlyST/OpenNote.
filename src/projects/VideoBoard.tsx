@@ -85,6 +85,20 @@ export function VideoBoard() {
 
   return (
     <div className="vb">
+      <div className="vcs" role="dialog" aria-modal="true" aria-labelledby="vcs-t">
+        <div className="vcs-card">
+          <span className="vcs-chip">
+            <i /> In the works
+          </span>
+          <h2 id="vcs-t" className="vcs-title">
+            Video Projects
+            <br />
+            <em>coming soon</em>
+          </h2>
+          <p className="vcs-sub">Plan every edit on a thumbnail-shaped card, with notes, checklists and links inside.</p>
+          <span className="vcs-hint">Lift the page from the bottom edge to go back to My Projects</span>
+        </div>
+      </div>
       {/* same layout as My Projects */}
       <section className="fx-head">
         <div className="flex flex-wrap items-start justify-between gap-3">
