@@ -1,0 +1,48 @@
+# Desknoty API on Fly.io (docs/deploy-fly.md). Secrets are set with `fly secrets set`,
+# never here: BETTER_AUTH_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, SMTP_*.
+app = "desknoty-api"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  NODE_ENV = "production"
+  API_PORT = "3001"
+  BETTER_AUTH_URL = "https://api.desknoty.com"
+  PUBLIC_API_URL = "https://api.desknoty.com"
+  PUBLIC_SITE_URL = "https://desknoty.com"
+  TRUSTED_ORIGINS = "https://desknoty.com,https://www.desknoty.com"
+  # Everything that must survive restarts lives on the /data volume, outside dist/.
+  DATABASE_PATH = "/data/opennote.db"
+  SELLER_FILES_DIR = "/data/seller-files"
+  SELLER_MEDIA_DIR = "/data/seller-media"
+  MAILBOX_DIR = "/data/mailbox"
+  STRIPE_ACCOUNT_COUNTRY = "GB"
+  IP_ADDRESS_HEADERS = "fly-client-ip"
+
+[[mounts]]
+  source = "desknoty_data"
+  destination = "/data"
+  # Fly takes a daily snapshot of the volume; keep two weeks.
+  snapshot_retention = 14
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  # Always on, so Stripe webhooks are answered immediately.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    timeout = "5s"
+    method = "GET"
+    path = "/api/auth-config"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  # The tsx launcher plus the server use about 275 MB, so 256 MB is too small.
+  memory = "512mb"

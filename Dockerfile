@@ -6,11 +6,12 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM node:22-alpine
+FROM node:22-alpine AS run
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package*.json ./
-RUN npm ci
+# The server runs TypeScript through tsx (a dev dependency), so install it too.
+RUN npm ci --include=dev && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/server ./server
 COPY --from=build /app/scripts ./scripts

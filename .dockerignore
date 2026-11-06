@@ -1,0 +1,9 @@
+# Never ship local data or secrets in the image: the server's data lives on its volume.
+data
+.env
+.env.*
+!.env.example
+node_modules
+dist
+.git
+*.log
