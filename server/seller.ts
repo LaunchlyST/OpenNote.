@@ -955,6 +955,9 @@ export function sellerRouter() {
     const session = await st.checkout.sessions.create(
       {
         mode: 'payment',
+        // Charge exactly the seller's published price and currency (Adaptive Pricing would show the
+        // buyer a converted amount, which then wouldn't match the order).
+        adaptive_pricing: { enabled: false },
         line_items: [{ quantity: 1, price_data: { currency: p.pubCurrency, unit_amount: p.pubPriceMinor, product_data: { name: p.pubTitle ?? 'Digital product' } } }],
         success_url: `${seller.siteUrl}/store/${s.handle}/thanks?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${seller.siteUrl}/store/${s.handle}/p/${p.id}?checkout=cancelled`,
