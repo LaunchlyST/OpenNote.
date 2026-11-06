@@ -88,3 +88,13 @@ export function demoClock(minutes: number): string {
   const m = minutes % 60
   return `${`${h}`.padStart(2, '0')}:${`${m}`.padStart(2, '0')}`
 }
+/** One short note and a few tasks per weekday, for the day-select interactions. */
+export const DEMO_DAYS: Array<{ note: string; tasks: Array<{ text: string; done: boolean }> }> = [
+  { note: 'Start slow. Inbox to zero before the review.', tasks: [{ text: 'Send agenda', done: true }, { text: 'Review mockups', done: false }] },
+  { note: 'Workshop: bring the printed flows and sticky notes.', tasks: [{ text: 'Print flows', done: true }, { text: 'Book room', done: true }] },
+  { note: 'Ask Alex about the Q4 roadmap draft.', tasks: [{ text: 'Yoga mat in bag', done: false }, { text: 'Prep 1:1 notes', done: false }] },
+  { note: 'Chapter 4 summary for the study group. Marketing wants numbers by 5.', tasks: [{ text: 'Summarise chapter 4', done: false }, { text: 'Pull signup numbers', done: false }, { text: 'Reply to Sam', done: true }] },
+  { note: 'Product review: demo the new week view first.', tasks: [{ text: 'Rehearse demo', done: false }] },
+  { note: 'Dinner at 7, bring dessert.', tasks: [{ text: 'Buy dessert', done: false }] },
+  { note: 'Weekly review: three wins, one thing to drop.', tasks: [{ text: 'Plan next week', done: false }] },
+]

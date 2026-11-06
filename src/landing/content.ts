@@ -21,9 +21,8 @@ export interface NavLink {
 }
 
 export const NAV_LINKS: NavLink[] = [
-  { label: 'Features', section: 'features' },
   { label: 'How It Works', section: 'how-it-works' },
-  { label: 'Preview', section: 'preview' },
+  { label: 'Demo', section: 'preview' },
   { label: 'Pricing', section: 'pricing' },
   { label: 'FAQ', section: 'faq' },
 ]

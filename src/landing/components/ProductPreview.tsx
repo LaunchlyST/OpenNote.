@@ -8,6 +8,64 @@ import { ResponsiveAppWindow } from './mock/AppWindow'
 import type { MockScreen } from './mock/AppWindow'
 import type { MockView } from './mock/AppChrome'
 import { Reveal, Section, SectionHeading } from './primitives'
+import { COLORS } from '../../lib/colors'
+import { DEMO_DAYS, DEMO_EVENTS, DEMO_WEEKDAYS } from '../demo'
+
+const hhmm = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
+
+/** Select a day of the sample week: its events, tasks (tickable, in memory only) and note. */
+function DayPicker() {
+  const [day, setDay] = useState(PREVIEW_TODAY.todayIndex)
+  const [tasks, setTasks] = useState(() => DEMO_DAYS.map((d) => d.tasks.map((t) => ({ ...t }))))
+  const events = DEMO_EVENTS.filter((e) => e.day === day).sort((a, b) => a.start - b.start)
+  return (
+    <div className="lp-dp">
+      <div className="lp-dp-days" role="tablist" aria-label="Sample week">
+        {DEMO_WEEKDAYS.map((w, i) => (
+          <button key={w} type="button" role="tab" aria-selected={day === i} className={day === i ? 'on' : ''} onClick={() => setDay(i)}>
+            <small>{w}</small>
+            <b>{PREVIEW_TODAY.weekNumbers[i]}</b>
+          </button>
+        ))}
+      </div>
+      <div className="lp-dp-body" role="tabpanel" aria-label={`${DEMO_WEEKDAYS[day]} ${PREVIEW_TODAY.weekNumbers[day]}`}>
+        <div>
+          <h3>Plan</h3>
+          <ul className="lp-dp-events">
+            {events.map((e) => (
+              <li key={e.title}>
+                <span style={{ background: COLORS[e.color].dot }} />
+                <time>{hhmm(e.start)}</time>
+                {e.title}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3>Tasks</h3>
+          <ul className="lp-dp-tasks">
+            {tasks[day].map((t, i) => (
+              <li key={t.text}>
+                <label>
+                  <input
+                    type="checkbox"
+                    checked={t.done}
+                    onChange={() => setTasks((all) => all.map((d, di) => (di !== day ? d : d.map((x, xi) => (xi === i ? { ...x, done: !x.done } : x)))))}
+                  />
+                  <span className={t.done ? 'done' : ''}>{t.text}</span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="lp-dp-note">
+          <h3>Note</h3>
+          <p>{DEMO_DAYS[day].note}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /** The demo switches between the calendar views and the projects screen. */
 type DemoTab = MockView | 'projects'
@@ -67,8 +125,8 @@ export function ProductPreview() {
         <SectionHeading
           icon={<MousePointerClick className="h-6 w-6" />}
           tint="#ffdce9"
-          heading="Try it right here."
-          description="This is the real Desknoty layout with a sample week. Switch views below or with the tabs inside the window. No account needed."
+          heading="Try it with a sample week."
+          description="Pick a day to see its plan, tasks and note. Switch views to see the whole week or month. No account needed."
         />
       </Reveal>
 
@@ -112,6 +170,7 @@ export function ProductPreview() {
           </div>
           </div>
         </div>
+        <DayPicker />
         <p className="mt-4 text-center text-[13px] text-lp-muted">
           Sample data only. This demo isn’t connected to an account and can’t change your calendar.
         </p>

@@ -1,10 +1,8 @@
 import { useEffect } from 'react'
 import { Nav } from './components/Nav'
 import { Hero } from './components/Hero'
-import { HowItWorks } from './components/HowItWorks'
-import { Features } from './components/Features'
+import { Workflow } from './components/Workflow'
 import { ProductPreview } from './components/ProductPreview'
-import { PlanSwipe } from './components/PlanSwipe'
 import { Pricing } from './components/Pricing'
 import { Faq } from './components/Faq'
 import { FinalCta } from './components/FinalCta'
@@ -31,7 +29,7 @@ export function LandingPage() {
   }, [])
 
   return (
-    <div className="relative min-h-full overflow-x-clip bg-lp-bg">
+    <div className="relative min-h-full overflow-x-clip bg-lp-bg lp-paper">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-full focus:bg-lp-ink focus:px-4 focus:py-2.5 focus:text-[14px] focus:font-medium focus:text-white"
@@ -44,10 +42,8 @@ export function LandingPage() {
 
       <main id="main">
         <Hero />
-        <HowItWorks />
-        <Features />
+        <Workflow />
         <ProductPreview />
-        <PlanSwipe />
         <Pricing />
         <Faq />
         <FinalCta />
