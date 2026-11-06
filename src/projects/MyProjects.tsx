@@ -560,6 +560,21 @@ export function MyProjects({ workspace }: { workspace: WorkspaceId }) {
     if (!locked) load()
   }, [load, locked])
 
+  // Pro: opening the plan goes straight into the latest project's workspace
+  useEffect(() => {
+    if (!pro || !projects?.length) return
+    let stay = false
+    try {
+      stay = sessionStorage.getItem('desknoty.pro.stay') === '1'
+      sessionStorage.removeItem('desknoty.pro.stay')
+    } catch {
+      /* storage blocked */
+    }
+    if (stay) return
+    const latest = [...projects].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+    navigate(paths.project(latest.id))
+  }, [pro, projects, navigate])
+
   // Remember page / search / sort (tab session + shareable URL).
   useEffect(() => {
     try {

@@ -10,7 +10,6 @@ import type { ProjectData } from '../store'
 import { StreakChip } from './StreakChip'
 import { VideoBoard } from './VideoBoard'
 import { PagePeel } from './PagePeel'
-import { VideoSoon } from './VideoSoon'
 import { HeaderLinks } from './MyProjects'
 
 /**
@@ -242,9 +241,9 @@ export function ProHome(props: Props) {
         key={side}
         label={side === 'videos' ? 'My Projects' : 'Video projects'}
         tone={side === 'videos' ? '#f3efe6' : '#1c1b1f'}
-        onDone={() => turn(side === 'videos' ? 'projects' : 'videos')}
+        onDone={() => (side === 'videos' && list[0] ? onOpen(list[0]) : turn(side === 'videos' ? 'projects' : 'videos'))}
       >
-        {side === 'videos' ? <div className="pp-under-pro">{projectsView}</div> : <VideoSoon />}
+        {side === 'videos' ? <div className="pp-under-pro">{projectsView}</div> : <div className="pp-under-pro"><VideoBoard /></div>}
       </PagePeel>
 
       {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => onOpen(list[i])} onOpen={onOpen} onCreate={onCreate} />}

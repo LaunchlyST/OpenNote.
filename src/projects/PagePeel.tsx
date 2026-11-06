@@ -64,6 +64,17 @@ export function PagePeel({ label, tone, onDone, children }: { label: string; ton
 
   const lifted = mode === 'drag' || mode === 'finish' ? h : mode === 'hint' ? 56 : mode === 'reset' ? h : 0
 
+  // the sheet bends: the middle of the edge rises ahead of the corners
+  const bend = mode === 'idle' ? 0 : Math.min(70, 18 + lifted * 0.12) * (mode === 'finish' ? 0 : 1)
+  const W = 24
+  const pts: string[] = []
+  for (let i = 0; i <= W; i++) {
+    const x = (i / W) * 100
+    const y = Math.sin((i / W) * Math.PI) * bend
+    pts.push(`${x}% calc(100% - ${lifted + y}px)`)
+  }
+  const clip = mode === 'finish' && lifted >= (typeof window !== 'undefined' ? window.innerHeight : 0) ? 'none' : `polygon(0% 100%, ${pts.join(', ')}, 100% 100%)`
+
   return (
     <div
       className={cn2('pp', `pp-m-${mode}`)}
@@ -71,8 +82,8 @@ export function PagePeel({ label, tone, onDone, children }: { label: string; ton
       aria-hidden={mode === 'finish' || mode === 'reset' ? true : undefined}
     >
       {/* the back of the page that rises from the bottom */}
-      <div className="pp-back">{mode !== 'idle' && <div className="pp-under">{children}</div>}</div>
-      <span className="pp-curl" aria-hidden="true" />
+      <div className="pp-back" style={{ clipPath: clip, WebkitClipPath: clip }}>{mode !== 'idle' && <div className="pp-under">{children}</div>}</div>
+      <span className="pp-curl" aria-hidden="true" style={{ bottom: lifted + bend * 0.5, height: bend + 30 }} />
       <div
         className="pp-edge"
         role="button"

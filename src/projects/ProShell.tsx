@@ -32,6 +32,8 @@ import { AppIcon } from '../landing/components/primitives'
 import { cn } from '../lib/id'
 import { paths } from './api'
 import { SellerStudio } from './seller/SellerStudio'
+import { PagePeel } from './PagePeel'
+import { VideoBoard } from './VideoBoard'
 import type { ProjectSummary } from './api'
 import { PRO_THEMES, useProTheme } from './proTheme'
 import { themeNeeds, themeUnlocked, useStreak } from './streak'
@@ -304,7 +306,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
             <header className="flex h-16 shrink-0 items-center gap-3 px-6">
               <button
                 type="button"
-                onClick={() => navigate(paths.dashboard('pro'))}
+                onClick={() => (stayOnList(), navigate(paths.dashboard('pro')))}
                 className={cn('inline-flex items-center gap-1.5 text-[13.5px] transition', theme.dark ? 'text-white/70 hover:text-white' : 'text-[#5f5e5b] hover:text-[#191919]')}
               >
                 <ArrowLeft className="h-4 w-4" /> Back to Projects
@@ -330,8 +332,30 @@ export function ProShell({ project }: { project: ProjectSummary }) {
           </>
         )}
       </main>
+      <PagePeel
+        label="Video projects"
+        tone="#f3efe6"
+        onDone={() => {
+          stayOnList('videos')
+          navigate(paths.dashboard('pro'))
+        }}
+      >
+        <div className="pp-under-pro pro-dash h-full">
+          <VideoBoard />
+        </div>
+      </PagePeel>
     </div>
   )
+}
+
+/** Remember that the next visit to the Pro list should stay there (not jump into a project). */
+export function stayOnList(side: 'projects' | 'videos' = 'projects') {
+  try {
+    sessionStorage.setItem('desknoty.pro.stay', '1')
+    sessionStorage.setItem('desknoty.pro.side', side)
+  } catch {
+    /* storage blocked */
+  }
 }
 
 /** Settings → Appearance, Pro only: the dashboard background. */

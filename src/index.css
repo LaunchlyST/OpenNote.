@@ -5547,13 +5547,16 @@ select.ss-input option {
   position: fixed;
   inset: 0;
   background: var(--tone);
-  clip-path: inset(calc(100% - var(--lift)) 0 0 0 round 22px 22px 0 0);
   transition: clip-path 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  filter: drop-shadow(0 -10px 24px rgba(0, 0, 0, 0.3));
   pointer-events: none;
 }
 .pp-under {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: calc(100% - var(--lift) - 40px);
+  height: 100vh;
   overflow: hidden;
 }
 .pp-under-pro {
@@ -5565,11 +5568,10 @@ select.ss-input option {
   left: 0;
   right: 0;
   bottom: var(--lift);
-  height: 26px;
   transform: translateY(50%);
-  border-radius: 50%;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.0), rgba(255, 255, 255, 0.7) 45%, rgba(0, 0, 0, 0.12) 55%, rgba(0, 0, 0, 0));
-  box-shadow: 0 -14px 30px -12px rgba(0, 0, 0, 0.35);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.25) 30%, rgba(0, 0, 0, 0.1) 60%, rgba(0, 0, 0, 0));
+  mix-blend-mode: soft-light;
   opacity: 0;
   transition: bottom 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s;
   pointer-events: none;
