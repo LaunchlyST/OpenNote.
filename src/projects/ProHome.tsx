@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { ArrowLeft, ArrowRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
+import { Clapperboard, ArrowLeft, ArrowRight, Command, Copy, MoreHorizontal, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import { COLORS } from '../lib/colors'
 import { cn } from '../lib/id'
 import { AppIcon } from '../landing/components/primitives'
@@ -8,6 +8,7 @@ import { projectsApi } from './api'
 import type { ProjectSummary } from './api'
 import type { ProjectData } from '../store'
 import { StreakChip } from './StreakChip'
+import { VideoBoard } from './VideoBoard'
 import { HeaderLinks } from './MyProjects'
 
 /**
@@ -103,6 +104,24 @@ export function ProHome(props: Props) {
   const todayProjects = new Set(today.map((e) => e.project.id)).size
 
   const [palette, setPalette] = useState(false)
+  // the page flips over to Video projects and back
+  const [side, setSide] = useState<'projects' | 'videos'>(() => (sessionStorage.getItem('desknoty.pro.side') === 'videos' ? 'videos' : 'projects'))
+  const [flip, setFlip] = useState<'' | 'out' | 'in'>('')
+  const turn = (to: 'projects' | 'videos') => {
+    if (reduced()) return setSide(to)
+    setFlip('out')
+    window.setTimeout(() => {
+      setSide(to)
+      try {
+        sessionStorage.setItem('desknoty.pro.side', to)
+      } catch {
+        /* storage blocked */
+      }
+      window.scrollTo({ top: 0 })
+      setFlip('in')
+      window.setTimeout(() => setFlip(''), 320)
+    }, 300)
+  }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -143,6 +162,11 @@ export function ProHome(props: Props) {
         </div>
       </header>
 
+      <div className={cn('flip', flip === 'out' && 'flip-out', flip === 'in' && 'flip-in')}>
+      {side === 'videos' ? (
+        <VideoBoard onBack={() => turn('projects')} />
+      ) : (
+      <>
       <section className="fx-head">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -219,6 +243,17 @@ export function ProHome(props: Props) {
           />
         </main>
       )}
+      {projects && (
+        <div className="flip-bar">
+          <button type="button" className="flip-btn" onClick={() => turn('videos')}>
+            <Clapperboard className="h-4 w-4" /> Video projects
+            <span aria-hidden="true">↻</span>
+          </button>
+        </div>
+      )}
+      </>
+      )}
+      </div>
 
       {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => setSel(i)} onOpen={onOpen} onCreate={onCreate} />}
     </div>

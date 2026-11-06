@@ -5534,3 +5534,416 @@ select.ss-input option {
 .ss-editor {
   border-radius: 0;
 }
+
+/* ---- page flip between Projects and Video projects -------------------- */
+.flip {
+  transform-origin: 50% 40%;
+  transition:
+    transform 0.3s cubic-bezier(0.5, 0, 0.75, 0),
+    opacity 0.3s ease;
+}
+.dk {
+  perspective: 1600px;
+}
+.flip-out {
+  transform: rotateY(90deg) scale(0.96);
+  opacity: 0.4;
+}
+.flip-in {
+  animation: flip-in 0.34s cubic-bezier(0.25, 1, 0.5, 1);
+}
+@keyframes flip-in {
+  from {
+    transform: rotateY(-90deg) scale(0.96);
+    opacity: 0.4;
+  }
+}
+.flip-bar {
+  display: flex;
+  justify-content: center;
+  padding: 26px 0 10px;
+}
+.flip-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: 999px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--ink);
+  box-shadow: 0 14px 30px -16px rgba(0, 0, 0, 0.55);
+  transition: transform 0.2s ease;
+}
+.flip-btn span {
+  display: inline-block;
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.flip-btn:hover {
+  transform: translateY(-1px);
+}
+.flip-btn:hover span {
+  transform: rotate(180deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .flip,
+  .flip-in {
+    transition: none;
+    animation: none;
+  }
+}
+
+/* ---- Video projects -------------------------------------------------- */
+.vb {
+  padding: 28px 0 10px;
+  color: var(--ink);
+}
+.vb-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.vb-head h1 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+.vb-head p {
+  margin-top: 4px;
+  font-size: 13.5px;
+  color: var(--faint);
+}
+.vb-new {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--paper);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.vb-new input {
+  width: 240px;
+  padding: 0 10px;
+  font-size: 14px;
+  color: var(--ink);
+  background: transparent;
+  outline: none;
+}
+.vb-new button {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--paper);
+  background: var(--ink);
+}
+.vb-new button:last-child {
+  padding: 0 10px;
+  color: var(--soft);
+  background: transparent;
+}
+.vb-new button:disabled {
+  opacity: 0.4;
+}
+.vb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 22px;
+  margin-top: 26px;
+}
+.vb-card {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+  border-radius: 14px;
+  transition: transform 0.2s ease;
+}
+.vb-card:hover {
+  transform: translateY(-3px);
+}
+.vb-card:hover .vb-thumb {
+  box-shadow: 0 0 0 2px var(--ink), 0 22px 40px -24px rgba(0, 0, 0, 0.6);
+}
+.vb-thumb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    radial-gradient(120% 90% at 100% 0%, hsl(var(--h, 90) 85% 70% / 0.9), transparent 60%),
+    linear-gradient(135deg, hsl(var(--h, 90) 45% 22%), hsl(calc(var(--h, 90) + 40) 50% 12%));
+  background-size: cover;
+  background-position: center;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08), 0 14px 30px -22px rgba(0, 0, 0, 0.55);
+  transition: box-shadow 0.2s ease;
+}
+.vb-thumb-title {
+  max-width: 82%;
+  font-family: 'Bricolage Grotesque', 'Geist', var(--font-sans);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+  overflow-wrap: anywhere;
+}
+.vb-badge {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  font-variant-numeric: tabular-nums;
+}
+.vb-thumb-empty {
+  color: var(--soft);
+  background: transparent;
+  border: 1.5px dashed var(--line);
+  box-shadow: none;
+}
+.vb-meta b {
+  display: block;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.vb-meta small {
+  font-size: 12px;
+  color: var(--faint);
+}
+.vb-blank {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  width: min(320px, 100%);
+  margin-top: 26px;
+  text-align: left;
+}
+.vb-blank .vb-thumb {
+  width: 100%;
+}
+.vb-blank b {
+  font-size: 15px;
+}
+.vb-blank small {
+  font-size: 12.5px;
+  color: var(--faint);
+}
+.vb-flip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  margin: 34px auto 0;
+  padding: 0 20px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.vb > .vb-flip {
+  display: flex;
+  width: fit-content;
+}
+.vb-flip:hover {
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+/* note card */
+.vb-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(12, 12, 14, 0.45);
+  animation: dk-fade 0.15s ease;
+}
+.vb-note {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  max-height: calc(100svh - 32px);
+  padding: 20px;
+  border-radius: 20px;
+  color: #161513;
+  background: #fffdf8;
+  box-shadow: 0 40px 80px -30px rgba(0, 0, 0, 0.6);
+  animation: dk-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vb-note-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.vb-thumb-sm {
+  flex: none;
+  width: 72px;
+  border-radius: 8px;
+}
+.vb-note-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #161513;
+  background: transparent;
+  outline: none;
+}
+.vb-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  color: #9a968c;
+}
+.vb-icon:hover {
+  color: #b42318;
+  background: #fdf3f2;
+}
+.vb-note-top .vb-icon:hover {
+  color: #161513;
+  background: #f1ede3;
+}
+.vb-thumb-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #6b6860;
+  cursor: pointer;
+}
+.vb-thumb-pick:hover {
+  color: #161513;
+}
+.vb-items {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+  overflow-y: auto;
+}
+.vb-empty {
+  padding: 18px;
+  border-radius: 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #9a968c;
+  border: 1.5px dashed #e3dfd5;
+}
+.vb-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 12px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #ece8de;
+}
+.vb-kind {
+  flex: none;
+  margin-top: 3px;
+  color: #9a968c;
+}
+.vb-tick {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border-radius: 6px;
+  color: #fff;
+  box-shadow: inset 0 0 0 1.5px #c9c4b8;
+}
+.vb-tick[aria-pressed='true'] {
+  background: #161513;
+  box-shadow: none;
+}
+.vb-fields {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+.vb-fields input,
+.vb-fields textarea {
+  width: 100%;
+  font-size: 14px;
+  color: #161513;
+  background: transparent;
+  outline: none;
+  resize: vertical;
+}
+.vb-fields input + input {
+  font-size: 12.5px;
+  color: #2563eb;
+}
+.vb-item-done .vb-fields input {
+  text-decoration: line-through;
+  color: #9a968c;
+}
+.vb-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.vb-add button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #161513;
+  box-shadow: inset 0 0 0 1px #e3dfd5;
+}
+.vb-add button:hover {
+  box-shadow: inset 0 0 0 1px #161513;
+}
+.vb-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #ece8de;
+}
+.vb-del {
+  font-size: 12.5px;
+  color: #b42318;
+}
+.vb-save {
+  height: 40px;
+  padding: 0 22px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #161513;
+}
+.vb-save:disabled {
+  opacity: 0.35;
+}
