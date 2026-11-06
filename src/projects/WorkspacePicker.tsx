@@ -11,12 +11,13 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react'
+import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '../auth'
 import { useRouter } from '../router'
 import { Logo } from '../landing/components/primitives'
 import { AccountMenu } from './MyProjects'
-import { paths } from './api'
+import { paths, projectsApi } from './api'
 
 /**
  * The welcome page after sign-in. Desknoty Free is the clear next step;
@@ -41,6 +42,7 @@ const PRO_BENEFITS: Array<[ReactNode, string]> = [
 export function WorkspacePicker() {
   const { user } = useAuth()
   const { navigate } = useRouter()
+  const [opening, setOpening] = useState(false)
   const hasPro = user?.plan === 'pro'
 
   return (
@@ -103,10 +105,23 @@ export function WorkspacePicker() {
             </ul>
             <button
               type="button"
-              onClick={() => navigate(paths.dashboard('free'))}
+              disabled={opening}
+              onClick={async () => {
+                // straight into the calendar: the most recently edited Free project,
+                // or a first one made on the spot; the project list stays one click away
+                setOpening(true)
+                try {
+                  const list = await projectsApi.list('free')
+                  const last = [...list].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+                  const project = last ?? (await projectsApi.create('free', { name: 'My calendar', color: 'lime' }))
+                  navigate(paths.project(project.id))
+                } catch {
+                  navigate(paths.dashboard('free'))
+                }
+              }}
               className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#191919] text-[15px] font-semibold text-white transition hover:bg-[#2e2d2a] focus-visible:outline-offset-4"
             >
-              Get Started Free
+              {opening ? 'Opening…' : 'Get Started Free'}
               <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transform-none" />
             </button>
             <p className="mt-2.5 text-center text-[12px] text-[#8f8e8a]">No payment required.</p>
