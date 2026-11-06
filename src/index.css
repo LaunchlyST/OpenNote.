@@ -5535,63 +5535,111 @@ select.ss-input option {
   border-radius: 0;
 }
 
-/* ---- page flip between Projects and Video projects -------------------- */
-.flip {
-  transform-origin: 50% 40%;
-  transition:
-    transform 0.3s cubic-bezier(0.5, 0, 0.75, 0),
-    opacity 0.3s ease;
+/* ---- paper peel between Projects and Video projects ------------------ */
+.pp {
+  position: fixed;
+  inset: auto 0 0 0;
+  height: 0;
+  z-index: 40;
+  pointer-events: none;
 }
-.dk {
-  perspective: 1600px;
+.pp-back {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--lift);
+  background: var(--tone);
+  border-radius: 18px 18px 0 0;
+  box-shadow: 0 -18px 40px -14px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  transition: height 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.flip-out {
-  transform: rotateY(90deg) scale(0.96);
-  opacity: 0.4;
+/* the curl: a shaded fold along the lifting edge */
+.pp-back::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 28px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 40%, rgba(0, 0, 0, 0.18));
+  border-radius: 18px 18px 50% 50% / 18px 18px 14px 14px;
 }
-.flip-in {
-  animation: flip-in 0.34s cubic-bezier(0.25, 1, 0.5, 1);
+.pp-m-drag .pp-back {
+  transition: none;
 }
-@keyframes flip-in {
-  from {
-    transform: rotateY(-90deg) scale(0.96);
-    opacity: 0.4;
-  }
+.pp-m-finish .pp-back {
+  transition: height 0.52s cubic-bezier(0.65, 0, 0.35, 1);
+  border-radius: 0;
 }
-.flip-bar {
+.pp-m-reset .pp-back {
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+.pp-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(22px, 4vw, 40px);
+  font-weight: 700;
+  color: color-mix(in srgb, var(--tone) 30%, #888);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.pp-m-finish .pp-label,
+.pp-m-drag .pp-label {
+  opacity: 1;
+}
+.pp-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: max(56px, var(--lift));
+  pointer-events: auto;
+  cursor: grab;
+  touch-action: none;
   display: flex;
-  justify-content: center;
-  padding: 26px 0 10px;
-}
-.flip-btn {
-  display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px;
-  height: 48px;
-  padding: 0 22px;
-  border-radius: 999px;
-  font-size: 14.5px;
+  padding-top: 8px;
+  gap: 6px;
+  outline: none;
+}
+.pp-m-idle .pp-edge {
+  height: 22px;
+}
+.pp-m-drag .pp-edge {
+  cursor: grabbing;
+}
+.pp-m-finish .pp-edge,
+.pp-m-reset .pp-edge {
+  pointer-events: none;
+}
+.pp-grip {
+  width: 44px;
+  height: 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--tone) 40%, #999);
+}
+.pp-hint {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--paper);
-  background: var(--ink);
-  box-shadow: 0 14px 30px -16px rgba(0, 0, 0, 0.55);
-  transition: transform 0.2s ease;
+  color: color-mix(in srgb, var(--tone) 25%, #999);
+  opacity: 0;
+  transition: opacity 0.2s;
 }
-.flip-btn span {
-  display: inline-block;
-  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+.pp-m-hint .pp-hint,
+.pp-edge:focus-visible .pp-hint {
+  opacity: 1;
 }
-.flip-btn:hover {
-  transform: translateY(-1px);
-}
-.flip-btn:hover span {
-  transform: rotate(180deg);
+.pp-edge:focus-visible .pp-grip {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
 }
 @media (prefers-reduced-motion: reduce) {
-  .flip,
-  .flip-in {
+  .pp-back {
     transition: none;
-    animation: none;
   }
 }
 

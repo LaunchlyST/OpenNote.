@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { ArrowLeft, ArrowRight, Check, FolderKanban, Search, CheckSquare, ImagePlus, Link2, Plus, StickyNote, Trash2, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Search, CheckSquare, ImagePlus, Link2, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { cn } from '../lib/id'
 
 /**
@@ -56,7 +56,7 @@ function readImage(file: File, cb: (url: string) => void) {
   r.readAsDataURL(file)
 }
 
-export function VideoBoard({ onBack }: { onBack: () => void }) {
+export function VideoBoard() {
   const [videos, setVideos] = useState<Video[]>(load)
   const [open, setOpen] = useState<string | null>(null)
   const [naming, setNaming] = useState(false)
@@ -222,13 +222,6 @@ export function VideoBoard({ onBack }: { onBack: () => void }) {
           </div>
         </>
       )}
-
-      <div className="flip-bar">
-        <button type="button" className="flip-btn" onClick={onBack}>
-          <FolderKanban className="h-4 w-4" /> My Projects
-          <span aria-hidden="true">↻</span>
-        </button>
-      </div>
 
       {current && (
         <NoteCard
