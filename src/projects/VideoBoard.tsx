@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight, Check, Search, CheckSquare, ImagePlus, Link2, Plus, StickyNote, Trash2, X } from 'lucide-react'
+import { Dialog, btn } from './Chrome'
 import { cn } from '../lib/id'
 
 /**
@@ -97,28 +98,9 @@ export function VideoBoard() {
           </label>
         </div>
         <div className="fx-create-row">
-          {naming ? (
-            <form
-              className="vb-new"
-              onSubmit={(e) => {
-                e.preventDefault()
-                create()
-                setAt(0)
-              }}
-            >
-              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Video title" maxLength={80} />
-              <button type="submit" disabled={!title.trim()}>
-                Create
-              </button>
-              <button type="button" aria-label="Cancel" onClick={() => setNaming(false)}>
-                <X className="h-4 w-4" />
-              </button>
-            </form>
-          ) : (
-            <button type="button" className="fx-create" onClick={() => setNaming(true)}>
-              <Plus className="h-[18px] w-[18px]" /> Create Project
-            </button>
-          )}
+          <button type="button" className="fx-create" onClick={() => setNaming(true)}>
+            <Plus className="h-[18px] w-[18px]" /> Create Project
+          </button>
         </div>
       </section>
 
@@ -189,6 +171,39 @@ export function VideoBoard() {
             </div>
           )}
         </>
+      )}
+
+      {naming && (
+        <Dialog title="Create Video Project" onClose={() => (setNaming(false), setTitle(''))}>
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              create()
+              setAt(0)
+            }}
+          >
+            <label className="block">
+              <span className="text-[13px] font-medium text-[#37352f]">Video title</span>
+              <input
+                autoFocus
+                value={title}
+                maxLength={80}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. My Morning Routine Vlog"
+                className="mt-1.5 w-full rounded-xl border border-[#e3e3e0] bg-white px-3 py-2.5 text-[14px] text-[#191919] outline-none transition placeholder:text-[#a3a29e] focus:border-[#191919]"
+              />
+            </label>
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" className={btn.secondary} onClick={() => (setNaming(false), setTitle(''))}>
+                Cancel
+              </button>
+              <button type="submit" className={btn.primary} disabled={!title.trim()}>
+                Create Project
+              </button>
+            </div>
+          </form>
+        </Dialog>
       )}
 
       {current && (
