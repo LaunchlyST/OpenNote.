@@ -9,7 +9,6 @@ import { FinalCta } from './components/FinalCta'
 import { Footer } from './components/Footer'
 import { useHashOnMount } from './hooks'
 import { useScrollMotion } from './motion'
-import { Cursor } from './components/Cursor'
 import { SITE, useDocumentMeta } from './seo'
 
 export function LandingPage() {
@@ -37,7 +36,6 @@ export function LandingPage() {
         Skip to content
       </a>
 
-      <Cursor />
       <Nav />
 
       <main id="main">

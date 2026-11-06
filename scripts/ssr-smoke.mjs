@@ -218,18 +218,18 @@ try {
   /* Content contract — the copy the brief asked for. */
   const expected = [
     // Hero
-    'Plan the day.',
-    'Keep the thought.',
-    'Your calendar, tasks and notes in one place.',
+    'Make time. Leave a note.',
+    'A calendar for your plans, tasks and the thoughts you want to keep.',
+    'Open my free calendar',
     'Start Planning Free',
     'Try the demo',
     'Sign In',
     'Free plan, no card required',
     // Workflow
-    'Three moves. One place.',
-    'Plan the day.',
-    'Add a task.',
-    'Capture a note.',
+    'One day, three steps.',
+    'Block the time.',
+    'Tick the task.',
+    'Pin the thought.',
     // Demo
     'Try it with a sample week.',
     'Full Week',
@@ -239,18 +239,15 @@ try {
     'Simple plans. Better planning.',
     'Free Forever',
     'Coming Soon',
-    'Built for Teams',
     'isn’t available yet. Nothing can be purchased',
-    'Nothing is on sale yet',
     // FAQ
     'Questions &amp; answers',
     'What is Desknoty?',
-    'Is Desknoty free?',
+    'Is the calendar really free?',
+    'How do I get started?',
     'When is Desknoty Business launching?',
     // Final CTA
-    'Get Desknoty',
-    'for free.',
-    'Start Planning for Free',
+    'Open a day of your',
     // Footer
     'Desknoty',
     'Privacy Policy',
@@ -271,14 +268,14 @@ try {
   check('skip link present', html.includes('Skip to content'))
   check('FAQ uses aria-expanded', html.includes('aria-expanded'))
   check('preview switcher uses aria-pressed', html.includes('aria-pressed'))
-  check('Business CTA is a real disabled button', /disabled[^>]*>[^<]*Coming Soon/.test(html.replace(/\s+/g, ' ')))
+  check('Pro and Business each say Coming Soon once, with no fake buttons', (html.match(/lp-pr-label">Coming Soon/g) || []).length === 2 && !/<button[^>]*>[^<]*Coming Soon/.test(html))
   check('Pro CTA is not a link', !/href="\/app\/signup"[^>]*>[^<]*Get Desknoty Pro/.test(html))
   check('Pro is not offered for purchase', !html.includes('Get Desknoty Pro') && !html.includes('Most Popular'))
   check('no checkout or payment links', !/href="[^"]*(checkout|stripe|billing)/i.test(html))
 
   /* Product mockups */
   check('hero shows the week close-up', html.includes('Study session') && html.includes('lp-hw-note'))
-  check('demo has a day picker', html.includes('lp-dp-days'))
+  check('demo has a day picker', html.includes('lp-dm-strip') && html.includes('lp-dm-side'))
   /* Product mockups — the showcase renders real screenshots of the app
      (public/landing/app-*.png, taken by scripts/capture-landing.cjs). The
      demo calendar list ("Study") lives inside those images now, so the check

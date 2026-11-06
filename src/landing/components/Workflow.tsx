@@ -1,49 +1,62 @@
 import { COLORS } from '../../lib/colors'
-import { Reveal } from './primitives'
 import { PREVIEW_TODAY } from '../today'
+import { Reveal } from './primitives'
 
-/** Three small purpose-built scenes: plan a day, add a task, capture a note. */
+/**
+ * How it works: one Thursday, three steps. The same study block runs through
+ * all three: it goes on the calendar, its task gets ticked, then a note is
+ * pinned to that day.
+ */
 export function Workflow() {
-  const lime = COLORS.lime
+  const thu = PREVIEW_TODAY.weekNumbers[3]
   const purple = COLORS.purple
   return (
-    <section id="how-it-works" className="lp-wf px-4 py-20 sm:px-8 sm:py-28">
+    <section id="how-it-works" className="lp-wf px-4 py-16 sm:px-8 sm:py-20">
       <div className="mx-auto max-w-[1120px]">
         <Reveal>
-          <p className="lp-eyebrow">How a day goes</p>
-          <h2 className="lp-h2">Three moves. One place.</h2>
+          <p className="lp-eyebrow">How it works</p>
+          <h2 className="lp-h2">One day, three steps.</h2>
         </Reveal>
-        <div className="lp-wf-grid">
-          <Reveal as="figure" className="lp-wf-item">
-            <div className="lp-scene lp-scene-plan" aria-hidden="true">
-              <div className="lp-sp-row"><span>9:00</span><i style={{ background: lime.bg, borderColor: lime.border, color: lime.text }}>Morning planning</i></div>
-              <div className="lp-sp-row"><span>10:00</span><i className="lp-sp-drop">Drop a block here</i></div>
-              <div className="lp-sp-row"><span>11:30</span><i style={{ background: purple.bg, borderColor: purple.border, color: purple.text, height: 52 }}>Design review</i></div>
+        <ol className="lp-wf-steps">
+          <Reveal as="li" className="lp-wf-step">
+            <span className="lp-wf-n">1</span>
+            <div className="lp-scene lp-s1" aria-hidden="true">
+              <div className="lp-s1-head">Thu {thu}</div>
+              <div className="lp-s1-rows">
+                <span>9:00</span>
+                <span>10:00</span>
+                <span>11:00</span>
+              </div>
+              <i className="lp-s1-block" style={{ background: purple.bg, borderColor: purple.border, color: purple.text }}>
+                <b>Study session</b>
+                <small>9:30 – 11:00</small>
+              </i>
             </div>
-            <figcaption><b>Plan the day.</b> Drag time blocks onto the hours they need.</figcaption>
+            <p><b>Block the time.</b> Drop a study session onto Thursday morning.</p>
           </Reveal>
-          <Reveal as="figure" className="lp-wf-item" delay={80}>
-            <div className="lp-scene lp-scene-task" aria-hidden="true">
-              <div className="lp-st-input">Reply to Sam about the invoice<span className="lp-caret" /></div>
+          <Reveal as="li" className="lp-wf-step" delay={80}>
+            <span className="lp-wf-n">2</span>
+            <div className="lp-scene lp-s2" aria-hidden="true">
+              <div className="lp-s2-tag" style={{ background: purple.bg, color: purple.text }}>Study session · 9:30</div>
               <ul>
-                <li className="done"><span />Send agenda</li>
-                <li><span />Review mockups</li>
+                <li className="done"><span />Summarise chapter 4</li>
+                <li><span />Pull signup numbers</li>
               </ul>
-              <small>Due Thursday</small>
             </div>
-            <figcaption><b>Add a task.</b> Type it, give it a day, tick it off.</figcaption>
+            <p><b>Tick the task.</b> Chapter 4 summarised, straight from the block.</p>
           </Reveal>
-          <Reveal as="figure" className="lp-wf-item" delay={160}>
-            <div className="lp-scene lp-scene-note" aria-hidden="true">
-              <div className="lp-sn-date"><b>{PREVIEW_TODAY.weekNumbers[3]}</b><span>Thu</span></div>
+          <Reveal as="li" className="lp-wf-step" delay={160}>
+            <span className="lp-wf-n">3</span>
+            <div className="lp-scene lp-s3" aria-hidden="true">
+              <div className="lp-sn-date"><b>{thu}</b><span>Thu</span></div>
               <div className="lp-sn-paper">
-                <p>Chapter 4 summary for the study group.</p>
-                <p>Marketing wants numbers by 5.</p>
+                <span className="lp-s3-pin" />
+                <p>Study group wants the summary by Friday.</p>
               </div>
             </div>
-            <figcaption><b>Capture a note.</b> It stays pinned to the day it belongs to.</figcaption>
+            <p><b>Pin the thought.</b> The note stays with Thursday, where you’ll look for it.</p>
           </Reveal>
-        </div>
+        </ol>
       </div>
     </section>
   )

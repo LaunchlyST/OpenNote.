@@ -11,8 +11,8 @@ function FooterItem({ link }: { link: FooterLink }) {
   if (link.unavailableNote) {
     // No real page exists yet, so this is text rather than a dead link.
     return (
-      <span className="text-[14px] text-lp-muted">
-        {link.label} <span className="text-[12px]">({link.unavailableNote.toLowerCase()})</span>
+      <span className="text-[14px] text-lp-muted" title={link.unavailableNote}>
+        {link.label} <span className="text-[12px]">· soon</span>
       </span>
     )
   }
@@ -33,8 +33,8 @@ function FooterItem({ link }: { link: FooterLink }) {
 export function Footer() {
   const [year] = useState(() => new Date().getFullYear())
   return (
-    <footer className="border-t border-lp-line bg-white px-5 pt-14 pb-10 sm:px-8">
-      <div className="mx-auto grid max-w-[1080px] gap-10 lg:grid-cols-12">
+    <footer className="lp-footer border-t border-lp-line px-4 pt-12 pb-10 sm:px-8">
+      <div className="mx-auto grid max-w-[1120px] gap-10 lg:grid-cols-12">
         <div className="lg:col-span-5">
           <Logo />
           <p className="mt-4 max-w-[34ch] text-[14px] leading-relaxed text-lp-body">{FOOTER.description}</p>

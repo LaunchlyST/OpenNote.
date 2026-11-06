@@ -8,20 +8,20 @@ export function Faq() {
   const [openIndex, setOpenIndex] = useState<number | null>(0)
 
   return (
-    <Section id="faq" innerClassName="max-w-[820px]">
+    <Section id="faq" className="lp-faq" innerClassName="max-w-[820px]">
       <Reveal>
-        <h2 data-anim="mask" className="text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink">
+        <h2 className="text-[clamp(2rem,4.2vw,3rem)] leading-[1.08] font-semibold tracking-[-0.035em] text-lp-ink">
           {FAQ.heading}
         </h2>
       </Reveal>
       <Reveal delay={80}>
-        <ul data-anim="lines" className="mt-10 border-t border-lp-line">
+        <ul className="mt-10 border-t border-lp-line">
           {FAQ.items.map((item, i) => {
             const open = openIndex === i
             const buttonId = `faq-button-${i}`
             const panelId = `faq-panel-${i}`
             return (
-              <li key={item.question} data-anim-item="" className="border-b border-lp-line">
+              <li key={item.question} className="border-b border-lp-line">
                 <h3>
                   <button
                     id={buttonId}
@@ -29,7 +29,7 @@ export function Faq() {
                     aria-expanded={open}
                     aria-controls={panelId}
                     onClick={() => setOpenIndex(open ? null : i)}
-                    className="group flex w-full items-center gap-4 py-5 text-left"
+                    className="lp-faq-q group flex w-full items-center gap-4 py-5 text-left"
                   >
                     <span className="min-w-0 flex-1 text-[16px] font-semibold tracking-[-0.01em] text-lp-ink">
                       {item.question}

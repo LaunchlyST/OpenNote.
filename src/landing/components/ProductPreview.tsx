@@ -1,180 +1,179 @@
-import { useEffect, useRef, useState } from 'react'
-import { gsap } from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
-import { useTilt } from '../motion'
-import { MousePointerClick } from 'lucide-react'
-import { PREVIEW_TODAY } from '../today'
-import { ResponsiveAppWindow } from './mock/AppWindow'
-import type { MockScreen } from './mock/AppWindow'
-import type { MockView } from './mock/AppChrome'
-import { Reveal, Section, SectionHeading } from './primitives'
+import { useEffect, useState } from 'react'
 import { COLORS } from '../../lib/colors'
 import { DEMO_DAYS, DEMO_EVENTS, DEMO_WEEKDAYS } from '../demo'
+import { PREVIEW_TODAY } from '../today'
+import { Reveal } from './primitives'
 
+/**
+ * The product demo: a sample week that behaves like the app. View tabs live
+ * in the toolbar; the selected day's plan, tasks and note sit in the same
+ * frame. Demo data comes from ../demo only and is never saved. Narrow
+ * screens get a day agenda instead of a shrunken desktop window.
+ */
+type View = 'day' | 'week' | 'month'
+const TABS: Array<{ v: View; label: string }> = [
+  { v: 'day', label: 'Day' },
+  { v: 'week', label: 'Full Week' },
+  { v: 'month', label: 'Month' },
+]
+const LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+const START = 8 * 60
+const END = 21 * 60
+const SPAN = END - START
 const hhmm = (m: number) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`
 
-/** Select a day of the sample week: its events, tasks (tickable, in memory only) and note. */
-function DayPicker() {
-  const [day, setDay] = useState(PREVIEW_TODAY.todayIndex)
-  const [tasks, setTasks] = useState(() => DEMO_DAYS.map((d) => d.tasks.map((t) => ({ ...t }))))
-  const events = DEMO_EVENTS.filter((e) => e.day === day).sort((a, b) => a.start - b.start)
+function useNarrow() {
+  const [n, setN] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 720px)')
+    const set = () => setN(mq.matches)
+    set()
+    mq.addEventListener('change', set)
+    return () => mq.removeEventListener('change', set)
+  }, [])
+  return n
+}
+
+function Ev({ e }: { e: (typeof DEMO_EVENTS)[number] }) {
+  const c = COLORS[e.color]
   return (
-    <div className="lp-dp">
-      <div className="lp-dp-days" role="tablist" aria-label="Sample week">
-        {DEMO_WEEKDAYS.map((w, i) => (
-          <button key={w} type="button" role="tab" aria-selected={day === i} className={day === i ? 'on' : ''} onClick={() => setDay(i)}>
-            <small>{w}</small>
-            <b>{PREVIEW_TODAY.weekNumbers[i]}</b>
-          </button>
-        ))}
-      </div>
-      <div className="lp-dp-body" role="tabpanel" aria-label={`${DEMO_WEEKDAYS[day]} ${PREVIEW_TODAY.weekNumbers[day]}`}>
-        <div>
-          <h3>Plan</h3>
-          <ul className="lp-dp-events">
-            {events.map((e) => (
-              <li key={e.title}>
-                <span style={{ background: COLORS[e.color].dot }} />
-                <time>{hhmm(e.start)}</time>
-                {e.title}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div>
-          <h3>Tasks</h3>
-          <ul className="lp-dp-tasks">
-            {tasks[day].map((t, i) => (
-              <li key={t.text}>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={t.done}
-                    onChange={() => setTasks((all) => all.map((d, di) => (di !== day ? d : d.map((x, xi) => (xi === i ? { ...x, done: !x.done } : x)))))}
-                  />
-                  <span className={t.done ? 'done' : ''}>{t.text}</span>
-                </label>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="lp-dp-note">
-          <h3>Note</h3>
-          <p>{DEMO_DAYS[day].note}</p>
-        </div>
-      </div>
-    </div>
+    <span
+      className="lp-dm-ev"
+      style={{ top: `${((e.start - START) / SPAN) * 100}%`, height: `max(${(e.duration / SPAN) * 100}%, 30px)`, background: c.bg, borderColor: c.border, color: c.text }}
+    >
+      <b>{e.title}</b>
+      <small>{hhmm(e.start)}</small>
+    </span>
   )
 }
 
-/** The demo switches between the calendar views and the projects screen. */
-type DemoTab = MockView | 'projects'
-
-const VIEW_OPTIONS: Array<{ value: DemoTab; label: string; hint: string }> = [
-  { value: 'day', label: 'Day', hint: 'One day, hour by hour.' },
-  { value: 'week', label: 'Full Week', hint: 'All seven days side by side.' },
-  { value: 'month', label: 'Month', hint: 'The whole month at a glance.' },
-  { value: 'projects', label: 'Projects', hint: 'Every project, card and page in one place.' },
-]
-
-const DATE_LABELS: Record<MockView, string> = {
-  day: `${PREVIEW_TODAY.dayTitle}, ${PREVIEW_TODAY.year}`,
-  week: `${PREVIEW_TODAY.weekTitle}, ${PREVIEW_TODAY.year}`,
-  month: `${PREVIEW_TODAY.monthName} ${PREVIEW_TODAY.year}`,
-}
-
 export function ProductPreview() {
-  const [tab, setTab] = useState<DemoTab>('week')
-  // The projects screen has no date range, so it keeps the calendar's view.
-  const view: MockView = tab === 'projects' ? 'week' : tab
-  const screen: MockScreen = tab === 'projects' ? 'projects' : 'calendar'
-  const stageRef = useRef<HTMLDivElement | null>(null)
-  const frameRef = useRef<HTMLDivElement | null>(null)
-  const touched = useRef(false)
-  useTilt(frameRef, 4)
-
-  // As the demo scrolls through the viewport it walks Day → Full Week → Month,
-  // until the visitor takes the controls themselves.
-  useEffect(() => {
-    const el = stageRef.current
-    if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    gsap.registerPlugin(ScrollTrigger)
-    const st = ScrollTrigger.create({
-      trigger: el,
-      start: 'top 75%',
-      end: 'bottom 40%',
-      onUpdate: (self) => {
-        if (touched.current) return
-        const p = self.progress
-        setTab(p < 0.3 ? 'day' : p < 0.65 ? 'week' : 'month')
-      },
-    })
-    return () => st.kill()
-  }, [])
-
-  const choose = (next: DemoTab) => {
-    touched.current = true
-    setTab(next)
-  }
-  const index = Math.max(0, VIEW_OPTIONS.findIndex((o) => o.value === tab))
-  const active = VIEW_OPTIONS[index]
+  const narrow = useNarrow()
+  const [view, setView] = useState<View>('week')
+  const [day, setDay] = useState(3) // Thursday: the fullest day
+  const [tasks, setTasks] = useState(() => DEMO_DAYS.map((d) => d.tasks.map((t) => ({ ...t }))))
+  const shown: View = narrow && view === 'week' ? 'day' : view
+  const events = DEMO_EVENTS.filter((e) => e.day === day).sort((a, b) => a.start - b.start)
+  const title =
+    shown === 'month' ? `${PREVIEW_TODAY.monthName} ${PREVIEW_TODAY.year}` : shown === 'day' ? `${LONG[day]} ${PREVIEW_TODAY.weekNumbers[day]}` : PREVIEW_TODAY.weekTitle
+  const toggle = (i: number) => setTasks((all) => all.map((d, di) => (di !== day ? d : d.map((x, xi) => (xi === i ? { ...x, done: !x.done } : x)))))
 
   return (
-    <Section id="preview">
-      <Reveal>
-        <SectionHeading
-          icon={<MousePointerClick className="h-6 w-6" />}
-          tint="#ffdce9"
-          heading="Try it with a sample week."
-          description="Pick a day to see its plan, tasks and note. Switch views to see the whole week or month. No account needed."
-        />
-      </Reveal>
+    <section id="preview" className="lp-demo px-4 py-16 sm:px-8 sm:py-20">
+      <div className="mx-auto max-w-[1120px]">
+        <Reveal>
+          <p className="lp-eyebrow">Demo</p>
+          <h2 className="lp-h2">Try it with a sample week.</h2>
+          <p className="lp-lede">Pick a day to see its plan, tasks and note. Switch views from the toolbar. No account needed.</p>
+        </Reveal>
 
-      <Reveal delay={100}>
-        <div className="mt-10 flex flex-col items-center gap-3">
-          <div role="group" aria-label="Calendar view" className="relative grid w-full max-w-[440px] grid-cols-4 rounded-[12px] bg-[#ececea] p-1">
-            <span
-              aria-hidden="true"
-              className="absolute inset-y-1 left-1 w-[calc((100%-8px)/4)] rounded-[9px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.12)] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-              style={{ transform: `translateX(${index * 100}%)` }}
-            />
-            {VIEW_OPTIONS.map((option) => {
-              const selected = tab === option.value
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => choose(option.value)}
-                  aria-pressed={selected}
-                  className={
-                    'relative z-10 rounded-[9px] px-2 py-2 text-[14px] font-medium transition-colors duration-300 ' +
-                    (selected ? 'text-lp-ink' : 'text-lp-body hover:text-lp-ink')
-                  }
-                >
-                  {option.label}
+        <Reveal delay={80}>
+          <div className="lp-dm" role="region" aria-label="Desknoty demo with sample data">
+            <div className="lp-dm-bar">
+              <b className="lp-dm-title" aria-live="polite">{title}</b>
+              <div className="lp-dm-tabs" role="group" aria-label="Calendar view">
+                {TABS.map((t) => (
+                  <button key={t.v} type="button" aria-pressed={view === t.v} className={view === t.v ? 'on' : ''} onClick={() => setView(t.v)}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="lp-dm-strip" role="group" aria-label="Choose a day">
+              {DEMO_WEEKDAYS.map((w, i) => (
+                <button key={w} type="button" aria-pressed={day === i} className={day === i ? 'on' : ''} onClick={() => setDay(i)}>
+                  <small>{w}</small>
+                  <b>{PREVIEW_TODAY.weekNumbers[i]}</b>
                 </button>
-              )
-            })}
-          </div>
-          <p aria-live="polite" className="text-[13.5px] text-lp-muted">
-            {screen === 'projects' ? 'My Projects' : DATE_LABELS[view]} · {active.hint}
-          </p>
-        </div>
-      </Reveal>
+              ))}
+            </div>
 
-      <Reveal delay={150}>
-        <div ref={stageRef} className="mt-8 rounded-[22px] bg-lp-sunken p-2 sm:p-6">
-          <div ref={frameRef}>
-          <div key={view} className="lp-viewswap">
-          <ResponsiveAppWindow view={view} onViewChange={choose} dateLabel={DATE_LABELS[view]} screen={screen} label="Desknoty — sample data" />
+            <div className="lp-dm-main">
+              <div className="lp-dm-cal">
+                {shown === 'week' && (
+                  <div className="lp-dm-week">
+                    {DEMO_WEEKDAYS.map((w, i) => (
+                      <button key={w} type="button" className={'lp-dm-col' + (day === i ? ' on' : '')} aria-label={`${LONG[i]} ${PREVIEW_TODAY.weekNumbers[i]}`} aria-pressed={day === i} onClick={() => setDay(i)}>
+                        {DEMO_EVENTS.filter((e) => e.day === i).map((e) => (
+                          <Ev key={e.title} e={e} />
+                        ))}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {shown === 'day' && (
+                  <ol className="lp-dm-agenda">
+                    {events.map((e) => (
+                      <li key={e.title} style={{ borderColor: COLORS[e.color].border, background: COLORS[e.color].bg, color: COLORS[e.color].text }}>
+                        <time>
+                          {hhmm(e.start)} – {hhmm(e.start + e.duration)}
+                        </time>
+                        <b>{e.title}</b>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {shown === 'month' && (
+                  <div className="lp-dm-month">
+                    {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
+                      <span key={i} className="lp-dm-mh">{d}</span>
+                    ))}
+                    {PREVIEW_TODAY.miniCells.map((c) => {
+                      const wi = PREVIEW_TODAY.weekKeys.indexOf(c.key)
+                      const dots = wi >= 0 ? DEMO_EVENTS.filter((e) => e.day === wi) : []
+                      return wi >= 0 ? (
+                        <button key={c.key} type="button" className={'lp-dm-cell in' + (day === wi ? ' on' : '')} aria-pressed={day === wi} aria-label={`${LONG[wi]} ${c.n}`} onClick={() => setDay(wi)}>
+                          <b>{c.n}</b>
+                          <span>
+                            {dots.map((e) => (
+                              <i key={e.title} style={{ background: COLORS[e.color].dot }} />
+                            ))}
+                          </span>
+                        </button>
+                      ) : (
+                        <span key={c.key} className={'lp-dm-cell' + (c.inMonth ? '' : ' out')}>
+                          <b>{c.n}</b>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <aside className="lp-dm-side" aria-label={`${LONG[day]} details`}>
+                <h3>
+                  {LONG[day]} <span>{PREVIEW_TODAY.weekNumbers[day]}</span>
+                </h3>
+                <h4>Plan</h4>
+                <ul className="lp-dm-plan">
+                  {events.map((e) => (
+                    <li key={e.title}>
+                      <i style={{ background: COLORS[e.color].dot }} />
+                      <time>{hhmm(e.start)}</time>
+                      {e.title}
+                    </li>
+                  ))}
+                </ul>
+                <h4>Tasks</h4>
+                <ul className="lp-dm-tasks">
+                  {tasks[day].map((t, i) => (
+                    <li key={t.text}>
+                      <label>
+                        <input type="checkbox" checked={t.done} onChange={() => toggle(i)} />
+                        <span className={t.done ? 'done' : ''}>{t.text}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <h4>Note</h4>
+                <p className="lp-dm-note">{DEMO_DAYS[day].note}</p>
+              </aside>
+            </div>
           </div>
-          </div>
-        </div>
-        <DayPicker />
-        <p className="mt-4 text-center text-[13px] text-lp-muted">
-          Sample data only. This demo isn’t connected to an account and can’t change your calendar.
-        </p>
-      </Reveal>
-    </Section>
+          <p className="lp-small">Sample data only. This demo isn’t connected to an account and can’t change your calendar.</p>
+        </Reveal>
+      </div>
+    </section>
   )
 }

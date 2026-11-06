@@ -285,38 +285,33 @@ export const FAQ = {
   heading: 'Questions & answers',
   items: [
     {
+      question: 'Is the calendar really free?',
+      answer: 'Yes. The Free plan costs £0 and stays free. No card is needed to start.',
+    },
+    {
+      question: 'What does the Free plan include?',
+      answer:
+        'A personal calendar with day, week and month views, events, tasks, basic notes pinned to the day they belong to, and colour-coded calendars, in your desktop browser.',
+    },
+    {
+      question: 'How do I get started?',
+      answer: 'Choose “Open my free calendar”, create an account, and your first calendar opens straight away.',
+    },
+    {
       question: 'What is Desknoty?',
-      answer:
-        'Desknoty is an all-in-one platform to manage your business, organise schedules, track tasks, and keep everything in one place.',
-    },
-    {
-      question: 'Is Desknoty free?',
-      answer: 'Yes. Desknoty offers a Free plan for everyday planning.',
-    },
-    {
-      question: 'What does Desknoty Pro include?',
-      answer:
-        'Desknoty Pro will include advanced business tools, better team communication, and smarter workplace management features.',
-    },
-    {
-      question: 'How much does Desknoty Pro cost?',
-      answer:
-        'Pricing details are coming soon. Stay tuned!',
-    },
-    {
-      question: 'Is Desknoty Pro a monthly subscription?',
-      answer:
-        'Desknoty Pro will offer a monthly subscription with access to premium business tools, advanced features, and regular updates.',
+      answer: 'Desknoty is a calendar, task and notes workspace: plan the day, tick off what needs doing, and keep the thought next to the day it belongs to.',
     },
     {
       question: 'Can I use Desknoty on my phone?',
-      answer:
-        'No. Desknoty is designed for desktop only.',
+      answer: 'Desknoty is designed for the desktop browser for now.',
+    },
+    {
+      question: 'What will Desknoty Pro include?',
+      answer: 'Pro is coming soon. Its features and price haven’t been announced, and nothing can be bought yet.',
     },
     {
       question: 'When is Desknoty Business launching?',
-      answer:
-        'Desknoty Business is coming soon. Its release date has not been announced.',
+      answer: 'Desknoty Business is coming soon. Its release date has not been announced.',
     },
   ] satisfies FaqItem[],
 } as const
@@ -352,14 +347,13 @@ export interface FooterColumn {
 
 export const FOOTER = {
   description:
-    'A calendar and notes workspace for people who want their day to make sense.',
+    'A calendar, task and notes workspace for people who want their day to make sense.',
   columns: [
     {
       heading: 'Product',
       links: [
-        { label: 'Features', section: 'features' },
         { label: 'How It Works', section: 'how-it-works' },
-        { label: 'Preview', section: 'preview' },
+        { label: 'Demo', section: 'preview' },
         { label: 'Pricing', section: 'pricing' },
         { label: 'FAQ', section: 'faq' },
       ],
@@ -369,7 +363,7 @@ export const FOOTER = {
       links: [
         { label: 'Sign In', href: '/app/signin' },
         { label: 'Create an account', href: '/app/signup' },
-        { label: 'Open calendar', href: '/app' },
+        { label: 'Open my free calendar', href: '/app/free' },
       ],
     },
     {
