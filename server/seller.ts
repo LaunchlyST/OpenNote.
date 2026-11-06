@@ -57,7 +57,8 @@ let stripeClient: Stripe | null = null
 function stripe(): Stripe | null {
   if (!seller.stripeSecret) return null
   if (!stripeClient) {
-    const opts: Stripe.StripeConfig = { maxNetworkRetries: 2, appInfo: { name: 'Desknoty Seller' } }
+    // The fetch client honours the host's HTTPS proxy settings (NODE_USE_ENV_PROXY), unlike node:http.
+    const opts: Stripe.StripeConfig = { maxNetworkRetries: 2, appInfo: { name: 'Desknoty Seller' }, httpClient: Stripe.createFetchHttpClient() }
     if (seller.stripeApiBase) {
       const u = new URL(seller.stripeApiBase)
       Object.assign(opts, { host: u.hostname, port: Number(u.port), protocol: u.protocol.replace(':', '') as 'http' | 'https' })
@@ -817,7 +818,11 @@ export function sellerRouter() {
         type: 'express',
         email: req.userEmail,
         capabilities: { card_payments: { requested: true }, transfers: { requested: true } },
-        business_profile: { url: `${seller.siteUrl}/store/${s.handle}`, product_description: 'Digital products sold through Desknoty' },
+        // Stripe rejects non-public URLs (localhost, http), so the store URL is only sent when it is one.
+        business_profile: {
+          product_description: 'Digital products sold through Desknoty',
+          ...(/^https:\/\/(?!localhost|127\.)/.test(seller.siteUrl) ? { url: `${seller.siteUrl}/store/${s.handle}` } : {}),
+        },
         metadata: { desknotyStoreId: s.id },
       })
       accountId = a.id
