@@ -120,27 +120,9 @@ export function SellerStudio() {
         </div>
       </Solo>
     )
-  if (error && !setup) {
-    const signedOut = error.status === 401
-    return (
-      <Solo compact>
-        <div className="ss-state" role="alert">
-          <span className="ss-start-icon"><Store className="h-6 w-6" strokeWidth={1.8} /></span>
-          <h2>{signedOut ? 'Sign in to open Seller Studio' : error.status === -1 ? 'Seller Studio isn’t connected yet' : 'Can’t reach the Desknoty server'}</h2>
-          <p>{error.message}</p>
-          {signedOut ? (
-            <a className="ss-primary" href="/app/signin">Sign in</a>
-          ) : (
-            <button type="button" className="ss-primary" disabled={retrying} onClick={() => (setRetrying(true), void load().finally(() => setRetrying(false)))}>
-              {retrying ? 'Trying…' : 'Try again'}
-            </button>
-          )}
-          <p className="ss-state-note">Your stores, products, files and orders are saved on the server and aren’t affected.</p>
-        </div>
-      </Solo>
-    )
-  }
-  if (!store) return <StartCard onCreated={(s) => setStore(s)} />
+  if (error && !setup)
+    return <StartCard setup={null} problem={error} retrying={retrying} onRetry={() => (setRetrying(true), void load().finally(() => setRetrying(false)))} onCreated={() => {}} />
+  if (!store) return <StartCard setup={setup} onCreated={(s, skipTikTok) => (skipTikTok && localStorage.setItem(TT_KEY(s.id), '1'), setStore(s))} />
   if (!localStorage.getItem(TT_KEY(store.id)) && !store.tiktok) {
     return <TikTokStep store={store} setup={setup!} notice={notice} onDone={() => (localStorage.setItem(TT_KEY(store.id), '1'), setStore({ ...store }))} />
   }
@@ -174,24 +156,57 @@ function useHandleCheck(handle: string) {
   return state
 }
 
-function StartCard({ onCreated }: { onCreated: (s: StoreView) => void }) {
+/**
+ * The first screen: Connect TikTok (optional), then pick your link. The same
+ * card shows server problems (not connected, down, signed out) with the
+ * right action, so the layout never changes.
+ */
+function StartCard({
+  setup,
+  onCreated,
+  problem = null,
+  retrying = false,
+  onRetry,
+}: {
+  setup: SellerSetup | null
+  onCreated: (s: StoreView, skipTikTok: boolean) => void
+  problem?: SellerError | null
+  retrying?: boolean
+  onRetry?: () => void
+}) {
   const [legacy] = useState(readLegacyDraft)
+  const [mode, setMode] = useState<null | 'tiktok' | 'manual'>(null)
+  const [ttOff, setTtOff] = useState(false)
   const [name, setName] = useState(legacy?.name ?? '')
   const [handle, setHandle] = useState(legacy?.handle ? toHandle(legacy.handle) : '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const check = useHandleCheck(handle)
+  const check = useHandleCheck(mode ? handle : '')
 
   const start = async () => {
     setBusy(true)
     setErr(null)
     try {
       const { store } = await sellerApi.create(name.trim(), handle)
-      onCreated(legacy ? await importLegacy(store) : store)
+      const ready = legacy ? await importLegacy(store) : store
+      if (mode === 'tiktok') {
+        try {
+          window.location.href = (await sellerApi.tiktok(returnPath())).url
+          return
+        } catch {
+          /* fall through to the studio; TikTok can be connected later */
+        }
+      }
+      onCreated(ready, mode === 'manual')
     } catch (e) {
       setErr((e as Error).message)
       setBusy(false)
     }
+  }
+  const connect = () => {
+    if (problem) return
+    if (setup?.tiktok) setMode('tiktok')
+    else setTtOff(true)
   }
 
   return (
@@ -204,31 +219,66 @@ function StartCard({ onCreated }: { onCreated: (s: StoreView) => void }) {
         <div className="ss-start-card">
           <span className="ss-start-icon"><Store className="h-7 w-7" strokeWidth={1.8} /></span>
           <h2>Start your store</h2>
-          <p>Sell digital downloads from one link in your bio. It’s saved on your Desknoty account.</p>
-          <form
-            className="ss-start-manual"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (check?.ok && name.trim()) void start()
-            }}
-          >
-            <input className="ss-input ss-input-light" placeholder="Store name" aria-label="Store name" maxLength={60} value={name} onChange={(e) => (setName(e.target.value), !handle && setHandle(toHandle(e.target.value)))} />
-            <div className="ss-affix ss-affix-light">
-              <span>/store/</span>
-              <input className="ss-input ss-input-light" placeholder="yourname" aria-label="Store handle" maxLength={30} value={handle} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
-            </div>
-            <span className={cn('ss-start-check', check?.ok ? 'ok' : 'no')} aria-live="polite">{check ? `● ${check.msg}` : 'Checking…'}</span>
-            <button type="submit" className="ss-tt" disabled={!check?.ok || !name.trim() || busy}>
-              {busy ? 'Creating…' : 'Start your store'}
-            </button>
-          </form>
-          {legacy && <p className="ss-start-note">We found a store draft saved in this browser. It will be imported into your new store.</p>}
-          {err && <div className="ss-start-err" role="alert">{err}</div>}
-          <ol className="ss-start-steps" aria-label="What happens next">
-            <li><b>1</b> Claim your link</li>
-            <li><b>2</b> Build your page</li>
-            <li><b>3</b> Add a product</li>
-          </ol>
+          {!mode ? (
+            <>
+              <p>Connect TikTok to create your store in 2 minutes.</p>
+              <button type="button" className="ss-tt" onClick={connect} disabled={Boolean(problem)}>
+                <TikTokMark /> Connect TikTok
+              </button>
+              <ol className="ss-start-steps" aria-label="What happens next">
+                <li><b>1</b> Connect TikTok</li>
+                <li><b>2</b> Pick your link</li>
+                <li><b>3</b> Add a product</li>
+              </ol>
+              {problem ? (
+                <div className="ss-start-err" role="alert">
+                  {problem.status === 401 ? 'You’re signed out.' : problem.status === -1 ? 'Seller Studio isn’t connected yet.' : 'Can’t reach the Desknoty server.'}
+                  <small>{problem.message}</small>
+                  {problem.status === 401 ? (
+                    <a href="/app/signin">Sign in</a>
+                  ) : (
+                    <button type="button" onClick={onRetry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
+                  )}
+                </div>
+              ) : ttOff ? (
+                <div className="ss-start-err" role="alert">
+                  TikTok connection isn’t available.
+                  <small>TikTok login isn’t switched on for Desknoty yet.</small>
+                  <button type="button" onClick={() => setMode('manual')}>Continue without TikTok</button>
+                </div>
+              ) : (
+                <button type="button" className="ss-start-skip" onClick={() => setMode('manual')}>Continue without TikTok</button>
+              )}
+            </>
+          ) : (
+            <>
+              <p>{mode === 'tiktok' ? 'Pick your link, then connect TikTok.' : 'Pick your link. You can connect TikTok later.'}</p>
+              <form
+                className="ss-start-manual"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (check?.ok && name.trim()) void start()
+                }}
+              >
+                <input className="ss-input ss-input-light" placeholder="Store name" aria-label="Store name" maxLength={60} value={name} onChange={(e) => (setName(e.target.value), !handle && setHandle(toHandle(e.target.value)))} />
+                <div className="ss-affix ss-affix-light">
+                  <span>/store/</span>
+                  <input className="ss-input ss-input-light" placeholder="yourname" aria-label="Store handle" maxLength={30} value={handle} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
+                </div>
+                <span className={cn('ss-start-check', check?.ok ? 'ok' : 'no')} aria-live="polite">{check ? `● ${check.msg}` : 'Checking…'}</span>
+                <button type="submit" className="ss-tt" disabled={!check?.ok || !name.trim() || busy}>
+                  {busy ? 'Creating…' : mode === 'tiktok' ? <><TikTokMark /> Continue to TikTok</> : 'Start your store'}
+                </button>
+              </form>
+              {legacy && <p className="ss-start-note">We found a store draft saved in this browser. It will be imported into your new store.</p>}
+              {err && <div className="ss-start-err" role="alert">{err}</div>}
+              <ol className="ss-start-steps" aria-label="What happens next">
+                <li><b>1</b> Connect TikTok</li>
+                <li><b>2</b> Pick your link</li>
+                <li><b>3</b> Add a product</li>
+              </ol>
+            </>
+          )}
         </div>
       </div>
     </Solo>

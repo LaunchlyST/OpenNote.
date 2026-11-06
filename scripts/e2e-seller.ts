@@ -101,14 +101,15 @@ try {
   await page.waitForURL(/\/app\/project\//)
   await page.getByRole('button', { name: 'Seller', exact: true }).click()
 
-  // 1. Start your store
+  // 1. Start your store: Connect TikTok is optional; without credentials it says so
+  await page.getByRole('heading', { name: 'Start your store' }).waitFor()
+  await page.getByRole('button', { name: 'Connect TikTok' }).click()
+  check('TikTok is optional and says it isn’t switched on', await page.getByText('TikTok login isn’t switched on').isVisible())
+  await page.getByRole('button', { name: 'Continue without TikTok' }).click()
   await page.getByLabel('Store name').fill('Ava Makes')
   await page.getByLabel('Store handle').fill('ava-makes')
   await page.getByText('● Available').waitFor()
   await page.getByRole('button', { name: 'Start your store' }).click()
-  await page.getByRole('heading', { name: 'Connect TikTok' }).waitFor()
-  check('TikTok step is optional and says it isn’t set up', await page.getByText('TikTok login isn’t switched on').isVisible())
-  await page.getByRole('button', { name: 'Continue without TikTok' }).click()
   await page.getByRole('tab', { name: 'Page' }).waitFor()
   check('studio opens on the Page tab', true)
 

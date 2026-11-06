@@ -7449,8 +7449,6 @@ select.ss-input option {
 .ps-msg a.sp-btn { color: var(--on, #fff); text-decoration: none; }
 
 /* Seller Studio single-panel states: a white panel on the page, not the dark studio frame */
-.ss-solo { background: transparent; padding: 0; }
-.ss-solo .ss-editor { border: 1px solid #e6e3dc; border-radius: 22px; }
 .ss-compact .ss-editor { min-height: 0; }
 .ss-state { display: grid; justify-items: center; gap: 10px; max-width: 420px; margin: 0 auto; padding: 40px 8px; text-align: center; color: #111114; }
 .ss-state h2 { font-size: 20px; font-weight: 650; letter-spacing: -0.02em; }
@@ -7462,3 +7460,6 @@ select.ss-input option {
 @media (prefers-reduced-motion: reduce) { .ss-spinner { animation-duration: 2.4s; } }
 .ss-state .ss-primary { justify-self: center; align-self: center; margin-left: auto; margin-right: auto; }
 .ss-compact .ss-state { padding: 32px 8px; }
+
+.ss-start-err a { justify-self: center; margin-top: 2px; font-size: 12.5px; font-weight: 600; color: #111114; text-decoration: underline; text-underline-offset: 3px; }
+.ss-start-err button:disabled { opacity: 0.5; }
