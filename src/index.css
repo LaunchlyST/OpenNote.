@@ -5663,7 +5663,7 @@ select.ss-input option {
   border-radius: 14px;
   transition: transform 0.2s ease;
 }
-.vb-card:hover {
+.vb-card:not(.vb-orbit):hover {
   transform: translateY(-3px);
 }
 .vb-card:hover .vb-thumb {
@@ -5946,4 +5946,43 @@ select.ss-input option {
 }
 .vb-save:disabled {
   opacity: 0.35;
+}
+/* video projects use the My Projects layout */
+.vb {
+  padding: 0;
+}
+.vb-search-in {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  color: var(--ink);
+  background: transparent;
+  outline: none;
+}
+.vb-stage {
+  height: clamp(320px, 44vh, 400px);
+}
+.vb-orbit {
+  position: absolute;
+  left: 50%;
+  top: 48%;
+  width: min(420px, 78vw);
+  padding: 10px;
+  border-radius: 18px;
+  background: var(--paper);
+  box-shadow: 0 0 0 1px var(--line), 0 40px 60px -36px rgba(20, 18, 10, 0.55);
+  transition:
+    transform 0.55s cubic-bezier(0.2, 1.2, 0.35, 1),
+    opacity 0.35s ease,
+    filter 0.35s ease;
+  will-change: transform;
+}
+.vb-orbit .vb-meta {
+  padding: 0 4px 2px;
+}
+.vb-front {
+  box-shadow: 0 0 0 2px var(--ink), 0 50px 70px -34px rgba(20, 18, 10, 0.6);
+}
+.vb-orbit:hover .vb-thumb {
+  box-shadow: none;
 }
