@@ -43,6 +43,8 @@ if [ ! -f .env ]; then
   read -rp "Your Gmail address (sends the emails): " GMAIL </dev/tty
   read -rsp "Gmail app password (16 letters, from myaccount.google.com/apppasswords): " GPASS </dev/tty; echo
   read -rp "Who may create an account (comma-separated emails): " ALLOW </dev/tty
+  read -rsp "Stripe secret key (sk_test_… for the test run; leave empty to add later): " STRIPE_KEY </dev/tty; echo
+  read -rsp "Stripe webhook signing secret (whsec_…; leave empty to add later): " STRIPE_WHSEC </dev/tty; echo
   cat > .env <<ENV
 NODE_ENV=production
 BETTER_AUTH_URL=https://$DOMAIN
@@ -56,6 +58,16 @@ SMTP_USER=$GMAIL
 SMTP_PASS=$GPASS
 WAITLIST_NOTIFY_EMAIL=$GMAIL
 SIGNUP_ALLOWLIST=$ALLOW
+# Seller Studio (docs/seller-studio.md)
+PUBLIC_API_URL=https://$DOMAIN
+PUBLIC_SITE_URL=$SITE
+STRIPE_SECRET_KEY=$STRIPE_KEY
+STRIPE_WEBHOOK_SECRET=$STRIPE_WHSEC
+# Kept outside dist/ (never served as static files); back these up with data/opennote.db
+SELLER_FILES_DIR=$DIR/data/seller-files
+SELLER_MEDIA_DIR=$DIR/data/seller-media
+TIKTOK_CLIENT_KEY=
+TIKTOK_CLIENT_SECRET=
 ENV
   chmod 600 .env
 fi
@@ -67,6 +79,9 @@ sudo env PATH="$PATH" pm2 startup systemd -u "$USER" --hp "$HOME" >/dev/null
 
 echo "==> HTTPS for $DOMAIN"
 echo "$DOMAIN {
+    request_body {
+        max_size 210MB
+    }
     reverse_proxy 127.0.0.1:3001
 }" | sudo tee /etc/caddy/Caddyfile >/dev/null
 sudo systemctl reload caddy || sudo systemctl restart caddy

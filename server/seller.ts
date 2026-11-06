@@ -37,9 +37,9 @@ const seller = {
   tiktokKey: (process.env.TIKTOK_CLIENT_KEY ?? '').trim(),
   tiktokSecret: (process.env.TIKTOK_CLIENT_SECRET ?? '').trim(),
   /** Public origin of this API (download links, OAuth callbacks). Defaults to the site origin. */
-  apiUrl: (process.env.PUBLIC_API_URL ?? env.baseURL).replace(/\/+$/, ''),
-  /** Public origin of the site (store pages, return URLs). */
-  siteUrl: env.baseURL.replace(/\/+$/, ''),
+  apiUrl: (process.env.PUBLIC_API_URL || env.baseURL).replace(/\/+$/, ''),
+  /** Public origin of the site (store pages, return URLs), e.g. https://desknoty.com when the API is on its own host. */
+  siteUrl: (process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, ''),
   filesDir: resolve(process.env.SELLER_FILES_DIR ?? 'data/seller-files'),
   mediaDir: resolve(process.env.SELLER_MEDIA_DIR ?? 'data/seller-media'),
   maxFileBytes: Number(process.env.SELLER_MAX_FILE_MB ?? 200) * 1024 * 1024,

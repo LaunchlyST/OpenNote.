@@ -99,7 +99,7 @@ async function req(method: string, path: string, body?: unknown, cookie = '', he
   return { status: res.status, json, text, cookies, headers: res.headers }
 }
 
-const server = await boot()
+let server = await boot()
 try {
   const PASSWORD = 'a-long-enough-password'
   const a = await req('POST', '/api/auth/sign-up/email', { name: 'Ava', email: 'ava@seller.test', password: PASSWORD })
@@ -261,6 +261,19 @@ try {
   const ords = (await req('GET', '/api/seller/orders', undefined, A)).json.orders
   check('Ava sees her orders', ords.length === 3 && ords.some((o: { status: string }) => o.status === 'paid'))
   check('Ben sees none', (await req('GET', '/api/seller/orders', undefined, B)).json.orders.length === 0)
+
+  console.log('\n  Restart keeps everything')
+  await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
+  server = await boot()
+  const after = await req('GET', '/api/store/ava-makes')
+  check('store is still published after a restart', after.status === 200 && after.json.products[0]?.id === pid)
+  check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 3)
+  const re = await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)
+  const reDl = await fetch(String(re.json?.order?.downloadUrl).replace(ORIGIN, BASE))
+  check('the private file still downloads after a restart', reDl.status === 200 && (await reDl.text()) === 'SECRET-PLANNER-CONTENT')
+  check('private files are not under the public static folder', !join(tmp, 'files').includes('dist'))
+  const leak = await req('GET', `/${'data/seller-files'}`)
+  check('the files folder is not served by URL', leak.status !== 200 || !leak.text.includes('SECRET'))
 } finally {
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   await fake.close()

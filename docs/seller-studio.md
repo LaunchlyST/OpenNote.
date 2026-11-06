@@ -24,7 +24,10 @@ processing fee is charged by Stripe to the seller's account on each payment.
 1. **A running Desknoty API.** desknoty.com is a static site on GitHub Pages
    and has no backend today. Host `server/` (see docs/free-backend-hosting.md),
    then build the frontend with `VITE_API_BASE_URL=https://<api host>` and set
-   `TRUSTED_ORIGINS=https://desknoty.com` and `PUBLIC_API_URL` on the server.
+   `TRUSTED_ORIGINS=https://desknoty.com`, `PUBLIC_API_URL=https://<api host>`
+   and `PUBLIC_SITE_URL=https://desknoty.com` on the server.
+   `deploy/oracle/setup.sh` writes all of these (and asks for the Stripe key and
+   webhook secret without echoing them) into the server's `.env`.
    Until then Seller Studio shows "Seller Studio needs the Desknoty server" and
    store links show "Store not found".
 2. **Stripe keys.** Turn on Connect in the Stripe dashboard (Express accounts),
