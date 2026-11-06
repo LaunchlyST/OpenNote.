@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { ArrowLeft, ArrowRight, Check, Search, CheckSquare, ImagePlus, Link2, Plus, StickyNote, Trash2, X } from 'lucide-react'
 import { cn } from '../lib/id'
@@ -77,9 +77,10 @@ export function VideoBoard() {
   const [q, setQ] = useState('')
   const shown = videos.filter((v) => v.title.toLowerCase().includes(q.trim().toLowerCase()))
   const [at, setAt] = useState(0)
-  const i0 = Math.min(at, Math.max(0, shown.length - 1))
-  const go = (i: number) => setAt(Math.max(0, Math.min(shown.length - 1, i)))
-  const drag = useRef<{ x: number; moved: boolean } | null>(null)
+  // three columns, four rows per page
+  const PER = 12
+  const pages = Math.max(1, Math.ceil(shown.length / PER))
+  const page = Math.min(at, pages - 1)
 
   return (
     <div className="vb">
@@ -125,7 +126,7 @@ export function VideoBoard() {
         <h2 className="dk-label">Videos</h2>
         {shown.length > 0 && (
           <span className="dk-count">
-            <b>{pad(i0 + 1)}</b> / {pad(shown.length)}
+            <b>{pad(shown.length)}</b> {shown.length === 1 ? 'video' : 'videos'}
           </span>
         )}
       </div>
@@ -140,86 +141,53 @@ export function VideoBoard() {
         </button>
       ) : (
         <>
-          <div
-            className="or-stage vb-stage"
-            tabIndex={0}
-            role="listbox"
-            aria-label="Video projects. Arrow keys to move, Enter to open"
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowRight') (e.preventDefault(), go(i0 + 1))
-              if (e.key === 'ArrowLeft') (e.preventDefault(), go(i0 - 1))
-              if (e.key === 'Enter') setOpen(shown[i0].id)
-            }}
-            onPointerDown={(e) => (drag.current = { x: e.clientX, moved: false })}
-            onPointerUp={(e) => {
-              const d = drag.current
-              drag.current = null
-              if (!d) return
-              const dx = e.clientX - d.x
-              if (Math.abs(dx) > 40) {
-                d.moved = true
-                go(i0 + (dx < 0 ? 1 : -1))
-              }
-            }}
-          >
-            <div className="or-floor" aria-hidden="true" />
-            {shown.map((v, i) => {
-              const d = i - i0
-              const ad = Math.abs(d)
-              if (ad > 3) return null
+          <div className="vg-grid" role="list" aria-label="Video projects">
+            {shown.slice(page * PER, page * PER + PER).map((v, i) => {
               const checks = v.items.filter((x) => x.kind === 'check')
               const done = checks.filter((x) => x.kind === 'check' && x.done).length
               return (
-                <button
-                  key={v.id}
-                  type="button"
-                  role="option"
-                  aria-selected={d === 0}
-                  className={cn('vb-card vb-orbit', d === 0 && 'vb-front')}
-                  style={{
-                    transform: `translate3d(calc(-50% + ${d * 300 * (1 - Math.min(ad, 3) * 0.12)}px), -50%, ${-ad * 140}px) rotateY(${-Math.sign(d) * Math.min(ad, 1) * 30}deg) scale(${1 - Math.min(ad, 3) * 0.06})`,
-                    zIndex: 100 - ad * 10,
-                    opacity: 1 - ad * 0.18,
-                    filter: ad ? `blur(${ad * 0.8}px)` : undefined,
-                  }}
-                  onClick={() => (d === 0 ? setOpen(v.id) : go(i))}
-                >
-                  <span className="vb-thumb" style={v.thumb ? { backgroundImage: `url(${v.thumb})` } : ({ '--h': v.hue } as CSSProperties)}>
+                <button key={v.id} type="button" role="listitem" className="vg-card" style={{ '--i': i } as CSSProperties} onClick={() => setOpen(v.id)}>
+                  <span className="vb-thumb vg-thumb" style={v.thumb ? { backgroundImage: `url(${v.thumb})` } : ({ '--h': v.hue } as CSSProperties)}>
                     {!v.thumb && <span className="vb-thumb-title">{v.title}</span>}
                     {checks.length > 0 && (
                       <span className="vb-badge">
                         {done}/{checks.length}
                       </span>
                     )}
+                    <span className="vg-open" aria-hidden="true">
+                      Open <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
                   </span>
-                  <span className="vb-meta">
+                  <span className="vg-meta">
                     <b>{v.title}</b>
                     <small>
                       {v.items.length} {v.items.length === 1 ? 'item' : 'items'} · {ago(v.updatedAt)}
                     </small>
+                    {checks.length > 0 && (
+                      <span className="vg-bar">
+                        <i style={{ width: `${(done / checks.length) * 100}%` }} />
+                      </span>
+                    )}
                   </span>
                 </button>
               )
             })}
           </div>
-          <div className="or-controls">
-            <div className="or-dots" role="tablist" aria-label="All videos">
-              {shown.map((v, i) => (
-                <button key={v.id} type="button" role="tab" aria-selected={i === i0} aria-label={v.title} onClick={() => go(i)} style={{ '--c': `hsl(${v.hue} 70% 55%)` } as CSSProperties} />
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button type="button" className="dk-round" aria-label="Previous video" disabled={i0 === 0} onClick={() => go(i0 - 1)}>
+          {pages > 1 && (
+            <div className="vg-pager">
+              <button type="button" className="dk-round" aria-label="Previous page" disabled={page === 0} onClick={() => setAt(page - 1)}>
                 <ArrowLeft className="h-4 w-4" />
               </button>
-              <span className="or-counter">
-                <b>{pad(i0 + 1)}</b> / {pad(shown.length)}
-              </span>
-              <button type="button" className="dk-round" aria-label="Next video" disabled={i0 === shown.length - 1} onClick={() => go(i0 + 1)}>
+              {Array.from({ length: pages }, (_, n) => (
+                <button key={n} type="button" className={cn('vg-num', n === page && 'vg-num-on')} aria-label={`Page ${n + 1}`} aria-current={n === page ? 'page' : undefined} onClick={() => setAt(n)}>
+                  {n + 1}
+                </button>
+              ))}
+              <button type="button" className="dk-round" aria-label="Next page" disabled={page === pages - 1} onClick={() => setAt(page + 1)}>
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
-          </div>
+          )}
         </>
       )}
 
