@@ -220,25 +220,18 @@ try {
     // Hero
     'Plan the day.',
     'Keep the thought.',
-    'Desknoty is a calendar with your notes built in.',
+    'Your calendar, tasks and notes in one place.',
     'Start Planning Free',
-    'See it in action',
+    'Try the demo',
     'Sign In',
     'Free plan, no card required',
-    // How it works
-    'From a blank week to a plan.',
-    'Pick the day',
-    'Block the time',
-    'Pin the thought',
-    // Features
-    'Your calendar and notes, finally together.',
-    'The thought stays next to the plan.',
-    'See the shape of your week in colour.',
-    'Month at a glance',
-    'Move through time',
-    'Create in seconds',
-    // Preview
-    'Try it right here.',
+    // Workflow
+    'Three moves. One place.',
+    'Plan the day.',
+    'Add a task.',
+    'Capture a note.',
+    // Demo
+    'Try it with a sample week.',
     'Full Week',
     'No account needed.',
     // Pricing. Pro and Business are sealed: no price, no feature list, so the
@@ -284,17 +277,13 @@ try {
   check('no checkout or payment links', !/href="[^"]*(checkout|stripe|billing)/i.test(html))
 
   /* Product mockups */
-  check('hero shows the week grid', html.includes('Morning planning'))
-  check('page shows the current notes screenshot', html.includes('/landing/app-notes.png'))
+  check('hero shows the week close-up', html.includes('Study session') && html.includes('lp-hw-note'))
+  check('demo has a day picker', html.includes('lp-dp-days'))
   /* Product mockups — the showcase renders real screenshots of the app
      (public/landing/app-*.png, taken by scripts/capture-landing.cjs). The
      demo calendar list ("Study") lives inside those images now, so the check
      asserts the screenshots are wired up instead of the old live-mock markup. */
   check('Free plan lists colour-coded calendars', html.includes('Colour-coded'))
-  check(
-    'product showcase shows the real app screenshots',
-    html.includes('/landing/app-week.png') && html.includes('/landing/app-day.png'),
-  )
   check('no localStorage writes during render', globalThis.localStorage._v.size === 0)
 
   /* No placeholders or debug leftovers */
