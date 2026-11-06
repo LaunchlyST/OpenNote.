@@ -41,19 +41,21 @@ export function VideoSoon() {
 
   return (
     <div className="vcs vs2" role="dialog" aria-modal="true" aria-labelledby="vs2-t">
-      <div className="vs2-grid" aria-hidden="true" />
-      <div className="vs2-light" aria-hidden="true">
-        <span className="vs2-lamp" />
-        <span className="vs2-beam" />
-      </div>
+      <div className="vs2-noise" aria-hidden="true" />
       <div className="vs2-inner">
-        <span className="vs2-chip">
-          <i /> Video Projects
-        </span>
+        <div className="vs2-stage" aria-hidden="true">
+          <div className="vs2-screen">
+            <span className="vs2-play" />
+            <span className="vs2-bar">
+              <i />
+            </span>
+          </div>
+          <span className="vs2-beam" />
+        </div>
         <h2 id="vs2-t" className="vs2-title">
           Coming Soon
         </h2>
-        <p className="vs2-sub">Plan every edit on a thumbnail-shaped card, with notes, checklists and links inside.</p>
+        <p className="vs2-tag">Video Projects is on the way.</p>
 
         <p className="vs2-launch">Launching in</p>
         <div className="vs2-count" role="timer" aria-live="off">
@@ -67,15 +69,15 @@ export function VideoSoon() {
         </div>
 
         {done ? (
-          <p className="vs2-done">You're on the list. We'll email you the day it opens.</p>
+          <p className="vs2-done">You're on the list ✓</p>
         ) : (
           <form className="vs2-form" onSubmit={submit}>
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" aria-label="Email address" />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Your email" aria-label="Email address" />
             <button type="submit">Notify me</button>
           </form>
         )}
-        <span className="vs2-hint">Lift the page from the bottom edge to go back to My Projects</span>
       </div>
+      <span className="vs2-hint">↑ Lift the bottom edge for My Projects</span>
     </div>
   )
 }
