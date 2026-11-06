@@ -5544,51 +5544,54 @@ select.ss-input option {
   pointer-events: none;
 }
 .pp-back {
+  position: fixed;
+  inset: 0;
+  background: var(--tone);
+  clip-path: inset(calc(100% - var(--lift)) 0 0 0 round 22px 22px 0 0);
+  transition: clip-path 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+.pp-under {
   position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.pp-under-pro {
+  padding: 28px clamp(16px, 4vw, 40px);
+}
+/* the lifted sheet edge: a soft fold and shadow riding on top of the reveal */
+.pp-curl {
+  position: fixed;
   left: 0;
   right: 0;
-  bottom: 0;
-  height: var(--lift);
-  background: var(--tone);
-  border-radius: 18px 18px 0 0;
-  box-shadow: 0 -18px 40px -14px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-  transition: height 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  bottom: var(--lift);
+  height: 26px;
+  transform: translateY(50%);
+  border-radius: 50%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.0), rgba(255, 255, 255, 0.7) 45%, rgba(0, 0, 0, 0.12) 55%, rgba(0, 0, 0, 0));
+  box-shadow: 0 -14px 30px -12px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transition: bottom 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s;
+  pointer-events: none;
 }
-/* the curl: a shaded fold along the lifting edge */
-.pp-back::before {
-  content: '';
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 28px;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 40%, rgba(0, 0, 0, 0.18));
-  border-radius: 18px 18px 50% 50% / 18px 18px 14px 14px;
+.pp-m-hint .pp-curl,
+.pp-m-drag .pp-curl {
+  opacity: 1;
 }
-.pp-m-drag .pp-back {
+.pp-m-drag .pp-back,
+.pp-m-drag .pp-curl {
   transition: none;
 }
 .pp-m-finish .pp-back {
-  transition: height 0.52s cubic-bezier(0.65, 0, 0.35, 1);
-  border-radius: 0;
+  transition: clip-path 0.52s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.pp-m-finish .pp-curl {
+  transition: bottom 0.52s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.5s;
+  opacity: 0;
 }
 .pp-m-reset .pp-back {
   opacity: 0;
-  transition: opacity 0.4s ease;
-}
-.pp-label {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: clamp(22px, 4vw, 40px);
-  font-weight: 700;
-  color: color-mix(in srgb, var(--tone) 30%, #888);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-.pp-m-finish .pp-label,
-.pp-m-drag .pp-label {
-  opacity: 1;
+  transition: opacity 0.3s ease;
 }
 .pp-edge {
   position: absolute;
@@ -6239,7 +6242,7 @@ select.ss-input option {
 .vb:has(> .vcs) > :not(.vcs) {
   visibility: hidden;
 }
-.pro-dash:has(.vcs) header {
+.pro-dash:has(.vb > .vcs) header {
   filter: blur(24px);
   opacity: 0.55;
   pointer-events: none;
@@ -6594,3 +6597,65 @@ select.ss-input option {
 @media (prefers-reduced-motion: reduce) {
   .vs2-beam, .vs2-inner, .vs2-chip i { animation: none; }
 }
+
+.sk-locked {
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #8a857b;
+  cursor: default;
+}
+
+/* ---- bottom call to action on My Projects ------------------------------ */
+.pj-cta {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 40px 0 70px;
+  padding: 34px 36px;
+  border-radius: 26px;
+  color: #fff;
+  background: #121118;
+  box-shadow: 0 30px 60px -30px rgba(20, 18, 40, 0.6);
+}
+.pj-cta-glow {
+  position: absolute;
+  right: -10%;
+  top: -60%;
+  width: 60%;
+  height: 220%;
+  background: radial-gradient(closest-side, rgba(170, 150, 255, 0.55), transparent);
+  filter: blur(20px);
+  pointer-events: none;
+}
+.pj-cta h2 {
+  position: relative;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.pj-cta p {
+  position: relative;
+  margin-top: 6px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+}
+.pj-cta button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 22px;
+  border-radius: 14px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #16112e;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.pj-cta button:hover { transform: translateY(-2px); }

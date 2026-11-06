@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 
 /**
  * The page as a sheet of paper. Bring the mouse to the bottom edge and the
@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react'
  */
 const ZONE = 72 // px from the bottom of the window that wakes the edge
 
-export function PagePeel({ label, tone, onDone }: { label: string; tone: string; onDone: () => void }) {
+export function PagePeel({ label, tone, onDone, children }: { label: string; tone: string; onDone: () => void; children?: ReactNode }) {
   const [h, setH] = useState(0) // how far the sheet is lifted, in px
   const [mode, setMode] = useState<'idle' | 'hint' | 'drag' | 'finish' | 'reset'>('idle')
   const drag = useRef<{ y0: number } | null>(null)
@@ -62,7 +62,7 @@ export function PagePeel({ label, tone, onDone }: { label: string; tone: string;
     }, 520)
   }
 
-  const lifted = mode === 'drag' || mode === 'finish' ? h : mode === 'hint' ? 46 : mode === 'reset' ? h : 14
+  const lifted = mode === 'drag' || mode === 'finish' ? h : mode === 'hint' ? 56 : mode === 'reset' ? h : 0
 
   return (
     <div
@@ -71,9 +71,8 @@ export function PagePeel({ label, tone, onDone }: { label: string; tone: string;
       aria-hidden={mode === 'finish' || mode === 'reset' ? true : undefined}
     >
       {/* the back of the page that rises from the bottom */}
-      <div className="pp-back">
-        <span className="pp-label">{label}</span>
-      </div>
+      <div className="pp-back">{mode !== 'idle' && <div className="pp-under">{children}</div>}</div>
+      <span className="pp-curl" aria-hidden="true" />
       <div
         className="pp-edge"
         role="button"

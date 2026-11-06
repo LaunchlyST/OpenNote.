@@ -5,8 +5,18 @@ import { cn } from '../lib/id'
 import { MILESTONES, recordVisit, topMilestone, useStreak } from './streak'
 import type { Milestone } from './streak'
 
-/** Flame + day count; opens the rewards ladder. Counts today on mount. */
+/** Streaks are not live yet: a locked chip that says so. */
 export function StreakChip({ className }: { className?: string }) {
+  return (
+    <span className={cn('sk-chip sk-locked', className)} title="Streaks are coming soon" aria-label="Streaks: coming soon">
+      <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>Coming soon</span>
+    </span>
+  )
+}
+
+/** Flame + day count; opens the rewards ladder. Counts today on mount. (Off until streaks launch.) */
+export function StreakChipLive({ className }: { className?: string }) {
   const s = useStreak()
   const [open, setOpen] = useState(false)
   const [party, setParty] = useState<Milestone | null>(null)

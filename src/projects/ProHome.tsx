@@ -10,6 +10,7 @@ import type { ProjectData } from '../store'
 import { StreakChip } from './StreakChip'
 import { VideoBoard } from './VideoBoard'
 import { PagePeel } from './PagePeel'
+import { VideoSoon } from './VideoSoon'
 import { HeaderLinks } from './MyProjects'
 
 /**
@@ -135,27 +136,7 @@ export function ProHome(props: Props) {
           ? `Nothing booked today. Next: ${upcoming[0].title}, ${when(upcoming[0].start, now)}.`
           : 'Nothing scheduled yet. A clear day to get ahead.'
 
-  return (
-    <div className="dk relative z-10 flex min-h-full flex-col">
-      <header className="dk-top">
-        <a href="/" aria-label="Desknoty home" className="inline-flex items-center gap-2">
-          <AppIcon className="h-7 w-7 text-[28px]" />
-          <span className="dk-brand">Desknoty</span>
-          <span className="dk-pro">Pro</span>
-        </a>
-        <nav aria-label="Explore Desknoty" className="dk-links hidden md:block">
-          <HeaderLinks />
-        </nav>
-        <div className="flex items-center gap-2 justify-self-end">
-          <StreakChip />
-          {account}
-        </div>
-      </header>
-
-      <div>
-      {side === 'videos' ? (
-        <VideoBoard />
-      ) : (
+  const projectsView = (
       <>
       <section className="fx-head">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -175,7 +156,7 @@ export function ProHome(props: Props) {
         </div>
         <div className="fx-create-row">
           <button type="button" className="fx-create" onClick={onCreate}>
-            <Plus className="h-[18px] w-[18px]" /> Create Project
+            <Plus className="h-[18px] w-[18px]" /> Join now
           </button>
         </div>
       </section>
@@ -223,18 +204,48 @@ export function ProHome(props: Props) {
           </section>
           )}
           <ProjectGrid list={list} peeks={peeks} now={now} props={props} />
+          <section className="pj-cta">
+            <span className="pj-cta-glow" aria-hidden="true" />
+            <div>
+              <h2>Start something new today.</h2>
+              <p>Every project gets its own calendar, notes and plans.</p>
+            </div>
+            <button type="button" onClick={onCreate}>
+              Join now <ArrowRight className="h-4 w-4" />
+            </button>
+          </section>
         </main>
       )}
       </>
-      )}
-      </div>
+  )
+
+  return (
+    <div className="dk relative z-10 flex min-h-full flex-col">
+      <header className="dk-top">
+        <a href="/" aria-label="Desknoty home" className="inline-flex items-center gap-2">
+          <AppIcon className="h-7 w-7 text-[28px]" />
+          <span className="dk-brand">Desknoty</span>
+          <span className="dk-pro">Pro</span>
+        </a>
+        <nav aria-label="Explore Desknoty" className="dk-links hidden md:block">
+          <HeaderLinks />
+        </nav>
+        <div className="flex items-center gap-2 justify-self-end">
+          <StreakChip />
+          {account}
+        </div>
+      </header>
+
+      <div className="pp-page">{side === 'videos' ? <VideoBoard /> : projectsView}</div>
 
       <PagePeel
         key={side}
         label={side === 'videos' ? 'My Projects' : 'Video projects'}
         tone={side === 'videos' ? '#f3efe6' : '#1c1b1f'}
         onDone={() => turn(side === 'videos' ? 'projects' : 'videos')}
-      />
+      >
+        {side === 'videos' ? <div className="pp-under-pro">{projectsView}</div> : <VideoSoon />}
+      </PagePeel>
 
       {palette && <Palette projects={list} onClose={() => setPalette(false)} onPick={(i) => onOpen(list[i])} onOpen={onOpen} onCreate={onCreate} />}
     </div>
