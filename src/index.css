@@ -6235,8 +6235,10 @@ select.ss-input option {
 @media (prefers-reduced-motion: reduce) {
   .vcs, .vcs-card, .vcs-chip i { animation: none; }
 }
-.pro-dash:has(.vcs) header,
 .vb:has(> .vcs) > :not(.vcs) {
+  visibility: hidden;
+}
+.pro-dash:has(.vcs) header {
   filter: blur(24px);
   opacity: 0.55;
   pointer-events: none;
