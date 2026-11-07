@@ -306,9 +306,22 @@ try {
   check('Ava sees her orders', ords.length === 3 && ords.some((o: { status: string }) => o.status === 'paid'))
   check('Ben sees none', (await req('GET', '/api/seller/orders', undefined, B)).json.orders.length === 0)
 
-  console.log('\n  Restart keeps everything')
+  console.log('\n  Restart keeps everything (and runs the grandfathering migration)')
+  // A pre-existing store owned by a Free, unverified account, from before enforcement.
+  const cal = await req('POST', '/api/auth/sign-up/email', { name: 'Cal', email: 'cal@seller.test', password: PASSWORD })
+  const dan = await req('POST', '/api/auth/sign-up/email', { name: 'Dan', email: 'dan@seller.test', password: PASSWORD })
+  const calId = (await dbGet<{ id: string }>(`SELECT id FROM "user" WHERE email = 'cal@seller.test'`)).id
+  await dbRun(`INSERT INTO seller_store (id, "userId", handle, draft, "createdAt", "updatedAt") VALUES ('sto_legacy_cal', ?, 'cal-legacy', '{"name":"Cal","theme":"clean","blocks":[]}', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`, calId)
+  check('before the migration a Free legacy seller is refused', (await req('GET', '/api/seller/store', undefined, cal.cookies)).status === 403)
+  await dbRun(`DELETE FROM site_settings WHERE key = 'seller-enforcement-v1'`)
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   server = await boot()
+  check('after the migration the legacy seller is grandfathered in', (await req('GET', '/api/seller/store', undefined, cal.cookies)).status === 200)
+  check('a new Free account without a store is still refused', (await req('GET', '/api/seller/store', undefined, dan.cookies)).status === 403)
+  await dbRun(`INSERT INTO seller_store (id, "userId", handle, draft, "createdAt", "updatedAt") SELECT 'sto_late_dan', id, 'dan-late', '{"name":"Dan","theme":"clean","blocks":[]}', '2026-11-08T00:00:00Z', '2026-11-08T00:00:00Z' FROM "user" WHERE email = 'dan@seller.test'`)
+  await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
+  server = await boot()
+  check('a store created after the migration is not grandfathered', (await req('GET', '/api/seller/store', undefined, dan.cookies)).status === 403)
   const after = await req('GET', '/api/store/ava-makes')
   check('store is still published after a restart', after.status === 200 && after.json.products[0]?.id === pid)
   check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 3)

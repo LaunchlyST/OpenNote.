@@ -177,7 +177,29 @@ export async function ensureSellerTables() {
       verifier TEXT,
       "expiresAt" ${t.big} NOT NULL
     );
+
+    -- Stores that existed before Seller Studio required Pro + a verified email.
+    -- Their owners keep access (grandfathered); see MERGE_PLAN.md for rollback.
+    CREATE TABLE IF NOT EXISTS seller_grandfathered (
+      "storeId" TEXT PRIMARY KEY REFERENCES seller_store(id) ON DELETE CASCADE,
+      "grantedAt" TEXT NOT NULL
+    );
   `)
+  await grandfatherExistingStores()
+}
+
+/**
+ * One-time, additive migration: every store present the first time this runs
+ * is grandfathered. Marked done in site_settings so later stores never are.
+ */
+export async function grandfatherExistingStores() {
+  await sql.tx(async (tx) => {
+    const done = await tx.get(`SELECT 1 AS one FROM site_settings WHERE key = 'seller-enforcement-v1'`)
+    if (done) return
+    const at = now()
+    await tx.run(`INSERT INTO seller_grandfathered ("storeId", "grantedAt") SELECT id, ? FROM seller_store WHERE true ON CONFLICT ("storeId") DO NOTHING`, at)
+    await tx.run(`INSERT INTO site_settings (key, value, "updatedAt") VALUES ('seller-enforcement-v1', ?, ?) ON CONFLICT (key) DO NOTHING`, at, at)
+  })
 }
 
 /* -------------------------------------------------------------- types --- */
@@ -451,8 +473,12 @@ async function requireUser(req: Authed, res: Response, next: NextFunction) {
     if (!session) return void res.status(401).json({ error: 'Not signed in.' })
     // Seller Studio is a Pro tool, and payouts need an address we know is real.
     const u = session.user as { plan?: string | null; emailVerified?: boolean | number }
-    if (u.plan !== 'pro') return void res.status(403).json({ error: 'Seller Studio is part of Desknoty Pro.', needs: 'pro' })
-    if (!u.emailVerified) return void res.status(403).json({ error: 'Verify your email address to use Seller Studio.', needs: 'verify-email' })
+    // Stores from before this rule keep working (grandfathered); SELLER_ENFORCE=off is the emergency rollback.
+    const exempt =
+      process.env.SELLER_ENFORCE === 'off' ||
+      Boolean(await sql.get(`SELECT 1 AS one FROM seller_grandfathered g JOIN seller_store s ON s.id = g."storeId" WHERE s."userId" = ?`, session.user.id))
+    if (!exempt && u.plan !== 'pro') return void res.status(403).json({ error: 'Seller Studio is part of Desknoty Pro.', needs: 'pro' })
+    if (!exempt && !u.emailVerified) return void res.status(403).json({ error: 'Verify your email address to use Seller Studio.', needs: 'verify-email' })
     req.userId = session.user.id
     req.userEmail = session.user.email
     next()
