@@ -67,6 +67,8 @@ export interface PublicStore {
   page: Page
   products: ShopProduct[]
   checkoutReady: boolean
+  /** Payments go through Stripe Sandbox: no real money moves. */
+  testMode?: boolean
 }
 export interface PublicOrder {
   id: string

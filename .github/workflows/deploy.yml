@@ -32,9 +32,15 @@ jobs:
         run: npm run build
         env:
           BASE_PATH: /
-          # Set this repository variable to your backend origin, e.g.
-          # https://api.desknoty.com, when the API is hosted separately.
-          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          # The hosted API (Supabase Edge Function "api"). Paths are added by
+          # the app (/api/...), so this ends at /functions/v1. A repository
+          # variable VITE_API_BASE_URL overrides it. Public URL, not a secret.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://mrcnonqrgrumxyvgpfqr.supabase.co/functions/v1' }}
+
+      - name: Pre-render store and app routes
+        run: node scripts/spa-routes.mjs dist
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'https://mrcnonqrgrumxyvgpfqr.supabase.co/functions/v1' }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

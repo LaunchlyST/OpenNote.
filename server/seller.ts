@@ -944,10 +944,18 @@ export function sellerRouter() {
   }
   const liveProducts = async (s: StoreRow) => (await q.products(s.id)).filter((p) => p.pubAt)
 
+  /** Published stores and products, for pre-rendering their pages at deploy time. Public data only. */
+  r.get('/api/store-directory', async (_req, res) => {
+    const stores = await sql.all<{ id: string; handle: string }>(`SELECT id, handle FROM seller_store WHERE published IS NOT NULL ORDER BY handle LIMIT 5000`)
+    const out = []
+    for (const s of stores) out.push({ handle: s.handle, products: (await sql.all<{ id: string }>(`SELECT id FROM seller_product WHERE "storeId" = ? AND "pubAt" IS NOT NULL`, s.id)).map((p) => p.id) })
+    res.set('Cache-Control', 'public, max-age=60').json({ stores: out })
+  })
+
   pub.get('/:handle', async (req, res) => {
     const s = await liveStore(req, res)
     if (!s) return
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: Boolean(s.chargesReady) && Boolean(stripe()) })
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: Boolean(s.chargesReady) && Boolean(stripe()), testMode: sellerSetup().stripeMode !== 'live' })
   })
 
   pub.post('/:handle/checkout', async (req, res) => {
