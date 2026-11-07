@@ -37,7 +37,10 @@ function readCookie(header: string | undefined, name: string): string | undefine
 }
 
 function hasAccess(req: Request): boolean {
-  const got = readCookie(req.headers.cookie, COOKIE)
+  // Cookie on same-site hosting; the X-Early-Access header where the API is
+  // cross-site and browsers (Safari) drop third-party cookies.
+  const header = typeof req.headers['x-early-access'] === 'string' ? req.headers['x-early-access'] : undefined
+  const got = header || readCookie(req.headers.cookie, COOKIE)
   if (!got) return false
   const expected = Buffer.from(earlyAccessToken())
   try {
@@ -81,7 +84,7 @@ earlyAccessRouter.post('/api/early-access', (req: Request, res: Response) => {
     return
   }
   res.cookie(COOKIE, earlyAccessToken(), earlyAccessCookieOptions(req))
-  res.json({ ok: true })
+  res.json({ ok: true, token: earlyAccessToken() })
 })
 
 /** Whether this browser already holds a valid access cookie. */
@@ -89,6 +92,9 @@ earlyAccessRouter.get('/api/early-access/status', (req: Request, res: Response) 
   res.set('Cache-Control', 'no-store')
   res.json({ unlocked: hasAccess(req) })
 })
+
+/** The public site (differs from the API origin when they are hosted apart). */
+const siteUrl = (process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, '')
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
@@ -112,9 +118,9 @@ earlyAccessRouter.post('/api/waitlist', async (req: Request, res: Response) => {
   // Only a new signup gets mail: the visitor a welcome, the owner a heads-up.
   // The outbox queues and retries; a mail problem never fails the signup.
   if (added) {
-    await enqueueEmail('waitlist-welcome', email, { url: env.baseURL })
+    await enqueueEmail('waitlist-welcome', email, { url: siteUrl })
     const owner = (process.env.WAITLIST_NOTIFY_EMAIL ?? env.adminEmails[0] ?? '').trim()
-    if (owner) await enqueueEmail('waitlist-signup', owner, { url: env.baseURL, email, count })
+    if (owner) await enqueueEmail('waitlist-signup', owner, { url: siteUrl, email, count })
   }
   res.json({ ok: true, alreadyJoined: !added })
 })

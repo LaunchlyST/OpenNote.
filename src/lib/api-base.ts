@@ -23,17 +23,18 @@ export function apiUrl(path: string): string {
  * kept in this browser's storage, and sent with every request to the API.
  */
 const TOKEN_KEY = 'desknoty.session'
-function readToken(): string | null {
+const ACCESS_KEY = 'desknoty.early-access'
+function readToken(key = TOKEN_KEY): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    return localStorage.getItem(key)
   } catch {
     return null
   }
 }
-function writeToken(t: string | null) {
+function writeToken(t: string | null, key = TOKEN_KEY) {
   try {
-    if (t) localStorage.setItem(TOKEN_KEY, t)
-    else localStorage.removeItem(TOKEN_KEY)
+    if (t) localStorage.setItem(key, t)
+    else localStorage.removeItem(key)
   } catch {
     /* storage unavailable: session lasts for this page only */
   }
@@ -47,10 +48,17 @@ if (API_BASE && typeof window !== 'undefined' && typeof window.fetch === 'functi
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
     const token = readToken()
     if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
+    const access = readToken(ACCESS_KEY)
+    if (access) headers.set('X-Early-Access', access)
     const res = await original(input, { ...init, headers })
     const fresh = res.headers.get('set-auth-token')
     if (fresh) writeToken(fresh)
     if (url.includes('/api/auth/sign-out')) writeToken(null)
+    // Early-access unlock: keep the signed pass for browsers that drop the cookie.
+    if (res.ok && /\/api\/early-access$/.test(url.split('?')[0])) {
+      const b = (await res.clone().json().catch(() => null)) as { token?: string } | null
+      if (b?.token) writeToken(b.token, ACCESS_KEY)
+    }
     return res
   }
 }

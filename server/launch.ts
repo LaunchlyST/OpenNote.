@@ -106,7 +106,7 @@ launchRouter.get('/api/launch/redeem', async (req: Request, res: Response) => {
     return
   }
   res.cookie(EARLY_ACCESS_COOKIE, earlyAccessToken(), earlyAccessCookieOptions(req))
-  res.redirect(302, `${env.baseURL}/landing`)
+  res.redirect(302, `${(process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, '')}/landing`)
 })
 
 // Admin: send launch emails to every waitlist signup and move the site into beta.
