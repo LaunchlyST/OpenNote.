@@ -44,7 +44,7 @@ const seller = {
   siteUrl: (process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, ''),
   filesDir: resolve(process.env.SELLER_FILES_DIR ?? 'data/seller-files'),
   mediaDir: resolve(process.env.SELLER_MEDIA_DIR ?? 'data/seller-media'),
-  maxFileBytes: Number(process.env.SELLER_MAX_FILE_MB ?? 200) * 1024 * 1024,
+  maxFileBytes: Number(process.env.SELLER_MAX_FILE_MB ?? 50) * 1024 * 1024,
   /** Country for new connected accounts (the seller can't change it later). */
   accountCountry: (process.env.STRIPE_ACCOUNT_COUNTRY || 'GB').toUpperCase(),
 }

@@ -38,6 +38,9 @@ import {
   readLegacyDraft,
   toHandle,
 } from './model'
+
+/** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
+const MAX_PRODUCT_FILE_MB = 50
 import type { Block, BlockType, DraftProduct, Page, SellerSetup, StoreView } from './model'
 
 /**
@@ -915,18 +918,19 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
               onChange={(e) => {
                 const f = e.target.files?.[0]
                 if (!f) return
+                if (f.size > MAX_PRODUCT_FILE_MB * 1024 * 1024) return setState(`Files can be up to ${MAX_PRODUCT_FILE_MB} MB.`)
                 setUploading(true)
                 sellerApi
                   .uploadFile(product.id, f)
                   .then(() => sellerApi.store())
                   .then((r) => r.store && setStore(r.store))
-                  .catch((er: SellerError) => setState(er.status === 413 ? 'That file is too big.' : er.message))
+                  .catch((er: SellerError) => setState(er.status === 413 ? `That file is too big. Files can be up to ${MAX_PRODUCT_FILE_MB} MB.` : er.message))
                   .finally(() => setUploading(false))
               }}
             />
           </label>
         </div>
-        <span className="ss-hint">Kept private. Buyers only get an expiring link after payment.</span>
+        <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after payment.</span>
       </div>
       <label className="ss-check">
         <input type="checkbox" checked={product.listed} onChange={(e) => patch({ listed: e.target.checked })} /> Put this product on sale when I publish

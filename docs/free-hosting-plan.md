@@ -1,65 +1,41 @@
-# £0 hosting for the Desknoty backend: options and migration plan
+# £0 hosting for the Desknoty backend: Supabase Free
 
-Status: **proposal, not applied.** Nothing here has been deployed. Checked
-November 2026; re-check the providers' own pricing pages before signing up.
+Status: **in progress on branch `migration/supabase`.** desknoty.com is not
+switched until the hosted checks below pass. Checked November 2026.
 
-## Why the current backend can't move as-is
+Netlify and Turso were evaluated earlier and are **not used**. No Netlify
+account or key is needed. Turso's terms limit free use to non-commercial use,
+which rules it out for a store.
 
-The server is one long-running Express process that keeps state on a local
-disk: SQLite through `better-sqlite3` (73 synchronous `db.prepare` calls in 13
-files), private product files and images in `data/`, and a mail worker on a
-timer. Every genuinely free host today is either serverless (no persistent
-disk, no long-running process) or a "free" VM that is a trial, sleeps, or needs
-billing enabled. So a £0 setup means changing how the backend stores data.
+## Where each part runs (Supabase Free project `desknoty-test`, Frankfurt)
 
-## Options checked
-
-| | Netlify Free + Turso Free (recommended) | Cloudflare Workers Free + D1 |
+| Part | Runs on | Notes |
 |---|---|---|
-| Cost / card | $0, no card on Netlify's Free plan, hard limits (stops, never bills) | $0 for Workers + D1; R2 file storage needs a payment method on file |
-| Commercial use | Netlify Free explicitly allows commercial projects. Turso: terms not confirmed, **check before launch** | No restriction found |
-| Compute limits | 300 credits/month (≈150k requests, ≈15 GB bandwidth); functions run up to 60 s | 100k requests/day, **10 ms CPU per request**: Better Auth email/password sign-in is reported to exceed it |
-| Database | Turso: SQLite-compatible (libSQL), ~5 GB, current DB imports as-is | D1: SQLite, 5 GB (500 MB per DB), different client API |
-| Private files | Netlify Blobs (private, persistent) | R2 (card) or KV (25 MB per file) |
-| Stripe webhooks | Yes (raw body available in functions) | Yes |
-| Blocker | File size: requests ≤ 6 MB (≈4.5 MB binary), streamed downloads ≤ 20 MB | Auth CPU limit; R2 card |
+| API (Express app) | Supabase Edge Function `api` | `https://<ref>.supabase.co/functions/v1/api/...`; verify_jwt off (the app does its own auth) |
+| Database | Supabase Postgres (500 MB) | Same code as local SQLite via `server/sql.ts`; set `DATABASE_URL` |
+| Sign-in | Better Auth inside the function | Bearer-token sessions: a supabase.co cookie is third-party for desknoty.com |
+| Product files | Private Storage bucket (1 GB total) | **50 MB per file** on Free, so `SELLER_MAX_FILE_MB=50`; short-lived signed links only for paid orders |
+| Stripe webhooks | Same function, `/api/seller/webhook` | Signature-checked; duplicates ignored via `stripe_event`; Sandbox only |
+| Email | SMTP on port 465 (25/587 blocked) | Outbox sent by Supabase Cron |
+| Frontend | GitHub Pages (unchanged) | Built with `VITE_API_BASE_URL` pointing at the function |
 
-**Recommendation: Netlify Free (API as Functions, files in Netlify Blobs) +
-Turso Free (database).** It is the only combination found that is $0 without a
-card, allows commercial use on the hosting side, has no CPU limit that breaks
-sign-in, and keeps the SQLite schema.
+## Free-plan limits
 
-Limits to accept on £0:
-- **Product files up to 20 MB** (uploaded in 4 MB chunks, downloaded as a
-  stream). Bigger files need paid storage.
-- **~15 GB of downloads + pages a month** across the whole site; when the 300
-  credits run out Netlify pauses the site until the next month (no charge).
-- Turso's free terms must allow commercial use; if not, Netlify Database
-  (Postgres) is the fallback, which is a bigger schema change.
+- The project pauses after 7 days without activity (resume in the dashboard; data is kept).
+- No automatic backups on Free: run scripts/backup-data.ts before migrations.
+- 5 GB egress and 500k function calls a month; 2 s CPU per request.
+- Billing stays disabled: limits stop service, they never charge.
 
-## Migration required
+## Secrets (entered by the owner, never in chat or Git)
 
-1. **Database client:** replace `better-sqlite3` (sync) with `@libsql/client`
-   (async) behind `server/db.ts`; every `db.prepare(...).get/all/run` becomes an
-   awaited call; the 4 `db.transaction` blocks become `client.batch`/transactions.
-   Better Auth switches to its Kysely libSQL dialect. Same tables and columns.
-2. **Express on Netlify Functions:** wrap the existing app with `serverless-http`
-   in `netlify/functions/api.ts`; route `/api/*` to it. Remove `app.listen` for
-   that entry point (keep it for local `npm run dev`).
-3. **Mail worker:** a Netlify scheduled function runs `processOutbox()` every
-   few minutes instead of the in-process timer.
-4. **Seller files:** move `data/seller-files` and `data/seller-media` to two
-   Netlify Blobs stores (`seller-files` private, `seller-media` served by the
-   API). Uploads in ≤ 4 MB chunks; downloads streamed; cap product files at 20 MB.
-5. **Config:** `PUBLIC_API_URL`, `PUBLIC_SITE_URL`, `TRUSTED_ORIGINS`,
-   `VITE_API_BASE_URL` as today; secrets in Netlify's environment settings.
-   `api.desknoty.com` as a Netlify custom domain (free HTTPS).
-6. **Tests:** run `npm run test:seller`, `npm run test:api` and
-   `npm run test:e2e:seller` against the new storage layer before switching.
+Supabase dashboard → Edge Functions → Secrets: `STRIPE_SECRET_KEY` (Sandbox
+`sk_test_…`), `SMTP_USER`, `SMTP_PASS`. `BETTER_AUTH_SECRET` and the Stripe
+webhook signing secret are generated during deployment and stored there
+directly. `SUPABASE_DB_URL` and the service role key are provided to the
+function automatically.
 
-## Keeping the data
+## Hosted checks before switching desknoty.com
 
-`npx tsx scripts/backup-data.ts` writes a consistent copy of the database
-(SQLite online backup, integrity-checked) plus all seller files and images.
-That copy is imported with `turso db import` and a one-off upload script to
-Blobs. The original files are never modified.
+Sign-in, seller isolation, product upload (≤ 50 MB), Sandbox checkout, genuine
+Stripe webhook fulfilment, protected downloads (unpaid refused), duplicate
+webhook delivery ignored.
