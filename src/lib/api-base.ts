@@ -24,14 +24,14 @@ export function apiUrl(path: string): string {
  */
 const TOKEN_KEY = 'desknoty.session'
 const ACCESS_KEY = 'desknoty.early-access'
-function readToken(key = TOKEN_KEY): string | null {
+export function readToken(key = TOKEN_KEY): string | null {
   try {
     return localStorage.getItem(key)
   } catch {
     return null
   }
 }
-function writeToken(t: string | null, key = TOKEN_KEY) {
+export function writeToken(t: string | null, key = TOKEN_KEY) {
   try {
     if (t) localStorage.setItem(key, t)
     else localStorage.removeItem(key)

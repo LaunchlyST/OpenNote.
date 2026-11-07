@@ -1,5 +1,5 @@
 import { createAuthClient } from 'better-auth/react'
-import { API_BASE } from './api-base'
+import { API_BASE, readToken, writeToken } from './api-base'
 
 /**
  * Better Auth browser client. Requests go to `/api/auth/*` on the API origin.
@@ -10,8 +10,23 @@ import { API_BASE } from './api-base'
  * time the client talks to that backend origin instead.
  */
 export const authClient = createAuthClient({
+  // A base URL with a path (Supabase: …/functions/v1) is taken as the full
+  // auth URL, so name /api/auth explicitly when an API base is set.
   baseURL:
-    API_BASE ||
+    (API_BASE && `${API_BASE}/api/auth`) ||
     (typeof window !== 'undefined' && window.location?.origin) ||
     'http://localhost',
+  // Cross-site API: the session travels as a bearer token (see api-base.ts),
+  // because Safari drops the API's cookie on desknoty.com.
+  ...(API_BASE
+    ? {
+        fetchOptions: {
+          auth: { type: 'Bearer' as const, token: () => readToken() ?? '' },
+          onSuccess: (ctx: { response: Response }) => {
+            const t = ctx.response.headers.get('set-auth-token')
+            if (t) writeToken(t)
+          },
+        },
+      }
+    : {}),
 })

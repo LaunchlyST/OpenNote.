@@ -304,7 +304,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
           </div>
         ) : (
           <>
-            <header className="flex h-16 shrink-0 items-center gap-3 px-6">
+            <header className="flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6">
               <button
                 type="button"
                 onClick={() => (stayOnList(), navigate(paths.dashboard('pro')))}
@@ -314,9 +314,24 @@ export function ProShell({ project }: { project: ProjectSummary }) {
               </button>
               <span className={cn('text-[13.5px]', muted)}>/</span>
               <span className={cn('text-[13.5px] font-semibold', ink)}>{project.name}</span>
+              {/* Phones and tablets: the sidebar is hidden below lg, so pick the tool here. */}
+              <label className="ml-auto lg:hidden">
+                <span className="sr-only">Tool</span>
+                <select
+                  value={active}
+                  onChange={(e) => setActive(e.target.value)}
+                  className={cn('rounded-lg border px-3 py-2 text-[14px]', theme.dark ? 'border-white/15 bg-white/10 text-white' : 'border-[#e5e4e1] bg-white text-[#191919]')}
+                >
+                  {ALL.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </header>
             {active === 'seller' ? (
-              <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-8">
+              <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-8 sm:px-6">
                 <SellerStudio />
               </div>
             ) : (
