@@ -59,16 +59,25 @@ async function enterProject(p, name) {
   const eventTitle = `Planning session ${Date.now() % 10000}`
   const noteTitle = `Journey note ${Date.now() % 10000}`
 
+  // The home page is the invite-only Coming Soon screen; the invite code opens the landing page.
   await p.goto(B, { waitUntil: 'networkidle' })
-  ;(await p.getByText('Plan the day.').count()) ? ok('landing page loads') : die('landing page')
+  ;(await p.getByText('Invite only').count()) ? ok('home page shows the invite-only Coming Soon screen') : die('Coming Soon screen')
+  await p.fill('input[placeholder="Invite code"]', 'Invite27')
+  await p.keyboard.press('Enter')
+  await p.waitForURL('**/landing', { timeout: 15000 })
+  await p.locator('#pricing').waitFor({ state: 'attached', timeout: 15000 })
+  ok('the invite code opens the landing page')
 
   await p.locator('#pricing').scrollIntoViewIfNeeded()
-  await p.getByRole('link', { name: /Get Started Free/ }).first().click()
+  await p.locator('#pricing a[href="/app/signup"]').first().click()
   await p.getByRole('button', { name: 'Create account' }).waitFor()
   ok('“Get Started Free” opens registration')
-  ;(await p.getByRole('button', { name: 'Continue with Google' }).count()) === 1 && (await p.getByText('or continue with', { exact: true }).count()) === 1
-    ? ok('sign-up shows the email form plus “or continue with” Google')
-    : die('Google / email choice missing')
+  // Google is offered only when the server has Google credentials (GET /api/auth-config).
+  const googleOn = (await (await p.request.get(`${B}/api/auth-config`)).json()).google === true
+  const googleShown = (await p.getByRole('button', { name: 'Continue with Google' }).count()) === 1
+  googleShown === googleOn
+    ? ok(googleOn ? 'sign-up shows the email form plus “or continue with” Google' : 'sign-up shows the email form; Google is hidden because it is not configured')
+    : die(`Google button shown=${googleShown} but configured=${googleOn}`)
 
   await p.getByLabel('Full name', { exact: true }).fill('Journey Tester')
   await p.getByLabel('Email address', { exact: true }).fill(email)
