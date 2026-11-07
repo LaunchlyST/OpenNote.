@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { writeToken } from './lib/api-base'
 import type { ReactNode } from 'react'
 import { authClient } from './lib/auth-client'
 import { apiUrl } from './lib/api-base'
@@ -119,7 +120,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authClient
       .signOut()
       .then(({ error }) => {
-        if (!error) window.sessionStorage.removeItem(SIGNOUT_PENDING)
+        if (!error) {
+          window.sessionStorage.removeItem(SIGNOUT_PENDING)
+          writeToken(null)
+        }
       })
       .catch(() => {})
       .finally(() => {
@@ -238,6 +242,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearAllUserCaches()
     try {
       const { error } = await authClient.signOut()
+      // The server session is gone (or will be retried); the stored bearer token must go too.
+      if (!error) writeToken(null)
       if (!error) window.sessionStorage.removeItem(SIGNOUT_PENDING)
     } catch {
       /* stays pending; finished on the next load */

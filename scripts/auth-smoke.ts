@@ -44,7 +44,7 @@ const { applyMigrations } = await import('../server/schema.ts')
 await applyMigrations({ quiet: true })
 const { toNodeHandler } = await import('better-auth/node')
 const { auth } = await import('../server/auth.ts')
-const { db } = await import('../server/db.ts')
+const { sql } = await import('../server/db.ts')
 const { syncRoles, verifyEmail } = await import('../server/roles.ts')
 const { processOutbox } = await import('../server/mail/index.ts')
 const { readMailbox } = await import('../server/mail/dev-inbox.ts')
@@ -105,15 +105,16 @@ function jar(res: Res) {
 }
 
 const sessionCookie = (res: Res) => res.cookies.find((c) => c.startsWith('better-auth.session_token=')) ?? ''
-const role = (email: string) =>
-  (db.prepare('SELECT role FROM "user" WHERE email = ?').get(email) as { role: string } | undefined)?.role
+const { default: Sqlite } = await import('better-sqlite3')
+const raw = new Sqlite(process.env.DATABASE_PATH!)
+const role = (email: string) => (raw.prepare('SELECT role FROM "user" WHERE email = ?').get(email) as { role: string } | undefined)?.role
 
 const PASSWORD = 'a-long-enough-password'
 
 try {
   console.log('\n  Database migration')
   {
-    const cols = (db.prepare('PRAGMA table_info("user")').all() as Array<{ name: string }>).map((c) => c.name)
+    const cols = (await sql.all('PRAGMA table_info("user")') as Array<{ name: string }>).map((c) => c.name)
     check('user.role column exists', cols.includes('role'))
     check('admin plugin ban columns exist', cols.includes('banned') && cols.includes('banExpires'))
   }
@@ -212,7 +213,7 @@ try {
     const promote = await call('/admin/set-role', { userId: 'anything', role: 'admin' }, userCookie)
     check('a user cannot call admin endpoints', promote.status === 401 || promote.status === 403, `got ${promote.status}`)
 
-    verifyEmail('owner@opennote.test')
+    await verifyEmail('owner@opennote.test')
     check('after verification the owner is admin', role('owner@opennote.test') === 'admin')
 
     const adminCookie = jar(await call('/sign-in/email', { email: 'owner@opennote.test', password: PASSWORD }))
@@ -221,8 +222,8 @@ try {
     const list = await call('/admin/list-users?limit=10', undefined, adminCookie)
     check('the admin can use admin endpoints', list.status === 200, `got ${list.status}`)
 
-    db.prepare('UPDATE "user" SET role = ? WHERE email = ?').run('admin', 'sam@opennote.test')
-    syncRoles()
+    await sql.run('UPDATE "user" SET role = ? WHERE email = ?', 'admin', 'sam@opennote.test')
+    await syncRoles()
     check('a role set outside ADMIN_EMAILS is revoked on sync', role('sam@opennote.test') === 'user')
   }
 
@@ -254,7 +255,7 @@ try {
     const ghost = await call('/request-password-reset', { email: 'nobody@opennote.test', redirectTo: `${ORIGIN}/app` })
     check('unknown emails get the same answer (no account probing)', ghost.status === 200)
 
-    const row = db.prepare("SELECT expiresAt FROM verification WHERE identifier = ?").get(`reset-password:${token}`) as
+    const row = await sql.get("SELECT expiresAt FROM verification WHERE identifier = ?", `reset-password:${token}`) as
       | { expiresAt: string | number }
       | undefined
     const mins = row ? (new Date(row.expiresAt).getTime() - Date.now()) / 60000 : 0
@@ -277,7 +278,6 @@ try {
   }
 } finally {
   server.close()
-  db.close()
   rmSync(tmp, { recursive: true, force: true })
 }
 

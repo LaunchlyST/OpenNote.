@@ -4,12 +4,13 @@ import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 import { deployRouter } from './deploy.ts'
 import { env, googleConfigured, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
-import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
+import { outboxLog, processOutbox, startMailWorker, transportName } from './mail/index.ts'
+import { timingSafeEqual } from 'node:crypto'
 import { productionMailProblem, senderProblem, verifySmtp } from './mail/transport.ts'
 import { applyMigrations } from './schema.ts'
 import { PLANS, planOf, requirePlan } from './plans.ts'
@@ -22,7 +23,7 @@ import { sellerRouter, stripeWebhookHandler } from './seller.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
-const { admins } = syncRoles()
+const { admins } = await syncRoles()
 startMailWorker()
 {
   const problem = productionMailProblem()
@@ -56,8 +57,9 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Vary', 'Origin')
     res.setHeader('Access-Control-Allow-Credentials', 'true')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, X-File-Name, X-Early-Access')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Expose-Headers', 'set-auth-token')
   }
   if (req.method === 'OPTIONS') {
     res.status(204).end()
@@ -68,12 +70,32 @@ app.use((req, res, next) => {
 
 // Better Auth must see the raw request body, so it is mounted before any
 // body parser.
-app.all('/api/auth/*splat', toNodeHandler(auth))
+// When the API's public URL has a path (Supabase serves it under
+// /functions/v1), Better Auth expects that prefix on the request path too.
+const authPrefix = new URL(env.baseURL).pathname.replace(/\/+$/, '')
+const authHandler = toNodeHandler(auth)
+app.all('/api/auth/*splat', (req, res) => {
+  if (authPrefix && !req.url.startsWith(`${authPrefix}/`)) req.url = authPrefix + req.url
+  return authHandler(req, res)
+})
 
 // Stripe signs the raw body, so its webhook is mounted before the JSON parser.
 app.post('/api/stripe/webhook', ...stripeWebhookHandler())
 
 app.use(express.json({ limit: '2mb' }))
+
+/**
+ * Scheduled email run (Supabase Cron calls this every minute): hosted
+ * functions do not keep a background timer alive between requests.
+ * Protected by CRON_SECRET; does nothing when it is not set.
+ */
+app.post('/api/internal/outbox', async (req, res) => {
+  const secret = process.env.CRON_SECRET ?? ''
+  const got = String(req.headers['x-cron-secret'] ?? '')
+  if (!secret || got.length !== secret.length || !timingSafeEqual(Buffer.from(got), Buffer.from(secret))) return void res.status(404).end()
+  await processOutbox()
+  res.json({ ok: true, transport: transportName() })
+})
 
 /** Which sign-in options the UI should offer. Contains no secrets. */
 app.get('/api/auth-config', (_req, res) => {
@@ -98,22 +120,18 @@ async function requireUser(req: AuthedRequest, res: Response, next: NextFunction
   }
 }
 
-const getWorkspace = db.prepare<[string], { data: string; updatedAt: string }>(
-  'SELECT data, updatedAt FROM workspace WHERE userId = ?',
-)
-const putWorkspace = db.prepare(
-  `INSERT INTO workspace (userId, data, updatedAt) VALUES (?, ?, ?)
-   ON CONFLICT(userId) DO UPDATE SET data = excluded.data, updatedAt = excluded.updatedAt`,
-)
+const GET_WORKSPACE = 'SELECT data, "updatedAt" FROM workspace WHERE "userId" = ?'
+const PUT_WORKSPACE = `INSERT INTO workspace ("userId", data, "updatedAt") VALUES (?, ?, ?)
+   ON CONFLICT ("userId") DO UPDATE SET data = excluded.data, "updatedAt" = excluded."updatedAt"`
 
 /** The signed-in user's own workspace. There is no way to address anyone else's. */
-app.get('/api/workspace', requireUser, (req: AuthedRequest, res) => {
-  const row = getWorkspace.get(req.userId!)
+app.get('/api/workspace', requireUser, async (req: AuthedRequest, res) => {
+  const row = await sql.get<{ data: string; updatedAt: string }>(GET_WORKSPACE, req.userId!)
   res.set('Cache-Control', 'no-store')
   res.json(row ? { data: JSON.parse(row.data), updatedAt: row.updatedAt } : { data: null })
 })
 
-app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
+app.put('/api/workspace', requireUser, async (req: AuthedRequest, res) => {
   const data = (req.body as { data?: unknown } | undefined)?.data
   const problem = validateWorkspace(data)
   if (problem) {
@@ -121,7 +139,7 @@ app.put('/api/workspace', requireUser, (req: AuthedRequest, res) => {
     return
   }
   const updatedAt = new Date().toISOString()
-  putWorkspace.run(req.userId!, JSON.stringify(data), updatedAt)
+  await sql.run(PUT_WORKSPACE, req.userId!, JSON.stringify(data), updatedAt)
   res.json({ ok: true, updatedAt })
 })
 
@@ -168,7 +186,7 @@ app.get('/api/admin/mail-log', requireUser, async (req: AuthedRequest, res) => {
     res.status(403).json({ error: 'Administrators only.' })
     return
   }
-  res.set('Cache-Control', 'no-store').json({ transport: transportName(), messages: outboxLog(100) })
+  res.set('Cache-Control', 'no-store').json({ transport: transportName(), messages: await outboxLog(100) })
 })
 
 // Development inbox: read what OpenNote "sent", without any mail server.

@@ -38,7 +38,8 @@ function loadEnvFile(path: string): void {
 
 loadEnvFile('.env')
 
-const isProduction = process.env.NODE_ENV === 'production'
+// Supabase's edge runtime does not pass NODE_ENV through, so hosting sets DESKNOTY_PRODUCTION=true.
+const isProduction = process.env.NODE_ENV === 'production' || process.env.DESKNOTY_PRODUCTION === 'true'
 
 function required(name: string): string {
   const value = process.env[name]

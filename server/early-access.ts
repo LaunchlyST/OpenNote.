@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Router } from 'express'
 import type { Request, Response } from 'express'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 import { env } from './env.ts'
 import { enqueueEmail } from './mail/index.ts'
 
@@ -37,7 +37,10 @@ function readCookie(header: string | undefined, name: string): string | undefine
 }
 
 function hasAccess(req: Request): boolean {
-  const got = readCookie(req.headers.cookie, COOKIE)
+  // Cookie on same-site hosting; the X-Early-Access header where the API is
+  // cross-site and browsers (Safari) drop third-party cookies.
+  const header = typeof req.headers['x-early-access'] === 'string' ? req.headers['x-early-access'] : undefined
+  const got = header || readCookie(req.headers.cookie, COOKIE)
   if (!got) return false
   const expected = Buffer.from(earlyAccessToken())
   try {
@@ -81,7 +84,7 @@ earlyAccessRouter.post('/api/early-access', (req: Request, res: Response) => {
     return
   }
   res.cookie(COOKIE, earlyAccessToken(), earlyAccessCookieOptions(req))
-  res.json({ ok: true })
+  res.json({ ok: true, token: earlyAccessToken() })
 })
 
 /** Whether this browser already holds a valid access cookie. */
@@ -90,10 +93,13 @@ earlyAccessRouter.get('/api/early-access/status', (req: Request, res: Response) 
   res.json({ unlocked: hasAccess(req) })
 })
 
+/** The public site (differs from the API origin when they are hosted apart). */
+const siteUrl = (process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, '')
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 /** Join the launch waitlist. Signing up twice is fine and says the same thing. */
-earlyAccessRouter.post('/api/waitlist', (req: Request, res: Response) => {
+earlyAccessRouter.post('/api/waitlist', async (req: Request, res: Response) => {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   if (!email || email.length > 254 || !EMAIL.test(email)) {
     res.status(400).json({ ok: false, error: 'Please enter a valid email address.' })
@@ -102,11 +108,8 @@ earlyAccessRouter.post('/api/waitlist', (req: Request, res: Response) => {
   let added = false
   let count = 0
   try {
-    db.exec('CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, createdAt TEXT NOT NULL);')
-    added =
-      db.prepare('INSERT OR IGNORE INTO waitlist (email, createdAt) VALUES (?, ?)').run(email, new Date().toISOString())
-        .changes === 1
-    count = (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get() as { n: number }).n
+    added = (await sql.run('INSERT INTO waitlist (email, "createdAt") VALUES (?, ?) ON CONFLICT (email) DO NOTHING', email, new Date().toISOString())).changes === 1
+    count = (await sql.get<{ n: number }>('SELECT CAST(COUNT(*) AS INTEGER) AS n FROM waitlist'))?.n ?? 0
   } catch (err) {
     console.error('[waitlist] could not save signup:', err)
     res.status(500).json({ ok: false, error: 'We couldn’t save your email just now. Please try again in a minute.' })
@@ -115,17 +118,16 @@ earlyAccessRouter.post('/api/waitlist', (req: Request, res: Response) => {
   // Only a new signup gets mail: the visitor a welcome, the owner a heads-up.
   // The outbox queues and retries; a mail problem never fails the signup.
   if (added) {
-    enqueueEmail('waitlist-welcome', email, { url: env.baseURL })
+    await enqueueEmail('waitlist-welcome', email, { url: siteUrl })
     const owner = (process.env.WAITLIST_NOTIFY_EMAIL ?? env.adminEmails[0] ?? '').trim()
-    if (owner) enqueueEmail('waitlist-signup', owner, { url: env.baseURL, email, count })
+    if (owner) await enqueueEmail('waitlist-signup', owner, { url: siteUrl, email, count })
   }
   res.json({ ok: true, alreadyJoined: !added })
 })
 
 /** How many people are on the waitlist — shown as social proof on the page. */
-earlyAccessRouter.get('/api/waitlist/count', (_req: Request, res: Response) => {
-  db.exec('CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, createdAt TEXT NOT NULL);')
-  const row = db.prepare('SELECT COUNT(*) AS n FROM waitlist').get() as { n: number }
+earlyAccessRouter.get('/api/waitlist/count', async (_req: Request, res: Response) => {
+  const row = await sql.get<{ n: number }>('SELECT CAST(COUNT(*) AS INTEGER) AS n FROM waitlist')
   res.set('Cache-Control', 'no-store')
-  res.json({ count: row.n })
+  res.json({ count: row?.n ?? 0 })
 })

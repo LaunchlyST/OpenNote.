@@ -65,7 +65,7 @@ const { applyMigrations } = await import('../server/schema.ts')
 await applyMigrations({ quiet: true })
 const { toNodeHandler } = await import('better-auth/node')
 const { auth } = await import('../server/auth.ts')
-const { db } = await import('../server/db.ts')
+const { sql } = await import('../server/db.ts')
 const { verifyEmail } = await import('../server/roles.ts')
 
 const app = express()
@@ -120,7 +120,9 @@ async function finishGoogle(start: { url: URL; cookies: string[] }, code: string
   const state = start.url.searchParams.get('state') ?? ''
   return call('GET', `/callback/google?state=${encodeURIComponent(state)}&code=${code}`, undefined, jar(start.cookies))
 }
-const userCount = (email: string) => (db.prepare('SELECT count(*) n FROM "user" WHERE email = ?').get(email) as { n: number }).n
+const { default: Sqlite } = await import('better-sqlite3')
+const raw = new Sqlite(process.env.DATABASE_PATH!)
+const userCount = (email: string) => (raw.prepare('SELECT count(*) n FROM "user" WHERE email = ?').get(email) as { n: number }).n
 
 try {
   console.log('\n  Continue with Google → Google’s own page')
@@ -215,14 +217,14 @@ try {
     const s = await startGoogle()
     const r = await finishGoogle(s, 'code-victim', { sub: 'google-victim', email: 'victim@gmail.com', email_verified: true, name: 'Victim' })
     check('the victim’s Google login is NOT merged into the unverified look-alike account', !hasSession(r.cookies), `${r.status} ${r.location}`)
-    const linked = db.prepare(`SELECT count(*) n FROM account a JOIN "user" u ON u.id = a.userId WHERE u.email = 'victim@gmail.com' AND a.providerId = 'google'`).get() as { n: number }
+    const linked = await sql.get(`SELECT count(*) n FROM account a JOIN "user" u ON u.id = a.userId WHERE u.email = 'victim@gmail.com' AND a.providerId = 'google'`) as { n: number }
     check('no Google identity was attached to that account', linked.n === 0)
     check('the user is told why (account_not_linked)', /error=account[_ ]not[_ ]linked|error=account%20not%20linked/.test(r.location), r.location)
 
     // A real owner with a VERIFIED OpenNote account can link Google safely.
     await call('POST', '/sign-up/email', { name: 'Owner', email: 'owner@gmail.com', password: 'strong-pass-1234' })
-    verifyEmail('owner@gmail.com')
-    const ownerId = (db.prepare('SELECT id FROM "user" WHERE email = ?').get('owner@gmail.com') as { id: string }).id
+    await verifyEmail('owner@gmail.com')
+    const ownerId = (await sql.get('SELECT id FROM "user" WHERE email = ?', 'owner@gmail.com') as { id: string }).id
     const s2 = await startGoogle()
     const r2 = await finishGoogle(s2, 'code-owner', { sub: 'google-owner', email: 'owner@gmail.com', email_verified: true, name: 'Owner' })
     const me = await call('GET', '/get-session', undefined, jar(r2.cookies))
@@ -241,12 +243,11 @@ try {
     const after = await call('GET', '/get-session', undefined, jar(r.cookies))
     check('signing out ends a Google session on the server', out.status === 200 && after.json === null)
     const role = await call('POST', '/update-user', { role: 'admin' }, jar(r.cookies))
-    check('a Google user cannot make themselves admin', role.status !== 200 || (db.prepare('SELECT role FROM "user" WHERE email = ?').get('newperson@gmail.com') as { role: string }).role !== 'admin')
+    check('a Google user cannot make themselves admin', role.status !== 200 || (await sql.get('SELECT role FROM "user" WHERE email = ?', 'newperson@gmail.com') as { role: string }).role !== 'admin')
   }
 } finally {
   globalThis.fetch = realFetch
   server.close()
-  db.close()
   rmSync(tmp, { recursive: true, force: true })
 }
 

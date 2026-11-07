@@ -19,6 +19,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
+import pg from 'pg'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-seller-'))
@@ -34,6 +35,24 @@ function check(label: string, ok: boolean, detail = '') {
   else {
     failures += 1
     console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ''}`)
+  }
+}
+
+/** Reads the server's database directly (SQLite file, or Postgres when DATABASE_URL is set). */
+async function dbGet<T>(text: string, ...params: unknown[]): Promise<T> {
+  if (process.env.DATABASE_URL) {
+    const c = new pg.Client({ connectionString: process.env.DATABASE_URL })
+    await c.connect()
+    let n = 0
+    const r = await c.query(text.replace(/\?/g, () => '$' + String(++n)), params)
+    await c.end()
+    return r.rows[0] as T
+  }
+  const d = new Database(join(tmp, 'seller.db'), { readonly: true })
+  try {
+    return d.prepare(text).get(...params) as T
+  } finally {
+    d.close()
   }
 }
 
@@ -220,12 +239,10 @@ try {
   const done = await req('GET', `/api/store/ava-makes/session/${sid}`)
   check('order is paid with a download link', done.json.order.status === 'paid' && String(done.json.order.downloadUrl).includes('/api/store-download/'))
 
-  const dbh = new Database(join(tmp, 'seller.db'), { readonly: true })
-  const orders = dbh.prepare('SELECT COUNT(*) AS n FROM seller_order WHERE sessionId = ?').get(sid) as { n: number }
-  const mails = dbh.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE kind = 'order-receipt' AND recipient = 'buyer@example.test'").get() as { n: number }
+  const orders = await dbGet<{ n: number }>('SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order WHERE "sessionId" = ?', sid)
+  const mails = await dbGet<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM email_outbox WHERE kind = 'order-receipt' AND recipient = 'buyer@example.test'`)
   check('exactly one order for the session', orders.n === 1)
   check('exactly one receipt email despite three deliveries', mails.n === 1, `got ${mails.n}`)
-  dbh.close()
 
   const dl = await fetch(done.json.order.downloadUrl.replace(ORIGIN, BASE))
   const content = await dl.text()
@@ -246,9 +263,7 @@ try {
   const sid2 = String(co2.json.url).split('/pay/')[1]
   const o2 = (await req('GET', `/api/store/ava-makes/session/${sid2}`)).json.order
   check('an unpaid visitor gets no download', o2.status === 'pending' && o2.downloadUrl === null)
-  const dbh2 = new Database(join(tmp, 'seller.db'), { readonly: true })
-  const unpaidId = (dbh2.prepare('SELECT id FROM seller_order WHERE sessionId = ?').get(sid2) as { id: string }).id
-  dbh2.close()
+  const unpaidId = (await dbGet<{ id: string }>('SELECT id FROM seller_order WHERE "sessionId" = ?', sid2)).id
   check('guessing the download URL for an unpaid order fails', (await req('GET', `/api/store-download/${unpaidId}.${Date.now() + 1e6}.x`)).status === 403)
   await sendWebhook(HOOK, fake.event('checkout.session.expired', { ...fake.sessions.get(sid2)!, status: 'expired' }, accountId))
   check('a cancelled / expired checkout is marked cancelled', (await req('GET', `/api/store/ava-makes/session/${sid2}`)).json.order.status === 'cancelled')

@@ -14,14 +14,17 @@
  * TikTok step says so and "Continue without TikTok" works.
  */
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
-import { createReadStream, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { makeBlobs } from './blobs.ts'
+import type { Blobs } from './blobs.ts'
+import { resolve } from 'node:path'
 import express, { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import Stripe from 'stripe'
 import { fromNodeHeaders } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
+import { ddl } from './sql.ts'
+import type { Sql } from './sql.ts'
 import { env } from './env.ts'
 import { enqueueEmail } from './mail/index.ts'
 
@@ -42,7 +45,7 @@ const seller = {
   siteUrl: (process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, ''),
   filesDir: resolve(process.env.SELLER_FILES_DIR ?? 'data/seller-files'),
   mediaDir: resolve(process.env.SELLER_MEDIA_DIR ?? 'data/seller-media'),
-  maxFileBytes: Number(process.env.SELLER_MAX_FILE_MB ?? 200) * 1024 * 1024,
+  maxFileBytes: Number(process.env.SELLER_MAX_FILE_MB ?? 50) * 1024 * 1024,
   /** Country for new connected accounts (the seller can't change it later). */
   accountCountry: (process.env.STRIPE_ACCOUNT_COUNTRY || 'GB').toUpperCase(),
 }
@@ -54,7 +57,14 @@ export const sellerSetup = () => ({
   webhook: Boolean(seller.webhookSecret),
   tiktok: Boolean(seller.tiktokKey && seller.tiktokSecret),
   email: true,
+  /** Never the key itself: only whether it is a Sandbox (test) key. */
+  stripeMode: seller.stripeSecret.startsWith('sk_test_') || seller.stripeSecret.startsWith('rk_test_') ? 'sandbox' : seller.stripeSecret ? 'live' : 'none',
 })
+
+/** The Stripe platform account the configured key belongs to (an id, not a secret). Cached. */
+let platformAccount: Promise<string | null> | null = null
+const platformAccountId = () =>
+  (platformAccount ??= (stripe()?.accounts.retrieve() ?? Promise.resolve(null)).then((a) => (a ? a.id : null)).catch(() => null))
 
 let stripeClient: Stripe | null = null
 function stripe(): Stripe | null {
@@ -73,96 +83,99 @@ function stripe(): Stripe | null {
 
 /* ------------------------------------------------------------- tables --- */
 
-export function ensureSellerTables() {
-  mkdirSync(seller.filesDir, { recursive: true })
-  mkdirSync(seller.mediaDir, { recursive: true })
-  db.exec(`
+let blobStore: Blobs | null = null
+const blobs = () => (blobStore ??= makeBlobs({ files: seller.filesDir, media: seller.mediaDir }))
+
+export async function ensureSellerTables() {
+  blobs()
+  const t = ddl(sql.dialect)
+  await sql.exec(`
     CREATE TABLE IF NOT EXISTS seller_store (
       id TEXT PRIMARY KEY,
-      userId TEXT NOT NULL UNIQUE REFERENCES "user"(id) ON DELETE CASCADE,
+      "userId" TEXT NOT NULL UNIQUE REFERENCES "user"(id) ON DELETE CASCADE,
       handle TEXT NOT NULL UNIQUE,
       draft TEXT NOT NULL,
       published TEXT,
-      publishedAt TEXT,
+      "publishedAt" TEXT,
       tiktok TEXT,
-      stripeAccountId TEXT,
-      stripeStatus TEXT NOT NULL DEFAULT 'not_connected',
-      chargesReady INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      "stripeAccountId" TEXT,
+      "stripeStatus" TEXT NOT NULL DEFAULT 'not_connected',
+      "chargesReady" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TEXT NOT NULL,
+      "updatedAt" TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS seller_store_account ON seller_store (stripeAccountId);
+    CREATE INDEX IF NOT EXISTS seller_store_account ON seller_store ("stripeAccountId");
 
     CREATE TABLE IF NOT EXISTS seller_product (
       id TEXT PRIMARY KEY,
-      storeId TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
+      "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
       cover TEXT,
-      priceMinor INTEGER NOT NULL DEFAULT 0,
+      "priceMinor" INTEGER NOT NULL DEFAULT 0,
       currency TEXT NOT NULL DEFAULT 'gbp',
-      fileId TEXT,
-      fileName TEXT,
-      fileSize INTEGER,
-      fileType TEXT,
+      "fileId" TEXT,
+      "fileName" TEXT,
+      "fileSize" INTEGER,
+      "fileType" TEXT,
       listed INTEGER NOT NULL DEFAULT 1,
-      pubTitle TEXT,
-      pubDescription TEXT,
-      pubCover TEXT,
-      pubPriceMinor INTEGER,
-      pubCurrency TEXT,
-      pubFileId TEXT,
-      pubFileName TEXT,
-      pubAt TEXT,
+      "pubTitle" TEXT,
+      "pubDescription" TEXT,
+      "pubCover" TEXT,
+      "pubPriceMinor" INTEGER,
+      "pubCurrency" TEXT,
+      "pubFileId" TEXT,
+      "pubFileName" TEXT,
+      "pubAt" TEXT,
       sort INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL,
-      updatedAt TEXT NOT NULL
+      "createdAt" TEXT NOT NULL,
+      "updatedAt" TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS seller_product_store ON seller_product (storeId);
+    CREATE INDEX IF NOT EXISTS seller_product_store ON seller_product ("storeId");
 
     CREATE TABLE IF NOT EXISTS seller_media (
       id TEXT PRIMARY KEY,
-      storeId TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
+      "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
       type TEXT NOT NULL,
       size INTEGER NOT NULL,
-      createdAt TEXT NOT NULL
+      "createdAt" TEXT NOT NULL
     );
 
     -- One row per Checkout Session. status: pending | paid | failed | cancelled
     CREATE TABLE IF NOT EXISTS seller_order (
       id TEXT PRIMARY KEY,
-      storeId TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
-      productId TEXT NOT NULL,
-      productTitle TEXT NOT NULL,
-      fileId TEXT NOT NULL,
-      fileName TEXT NOT NULL,
-      sessionId TEXT UNIQUE,
-      accountId TEXT NOT NULL,
-      amountMinor INTEGER NOT NULL,
+      "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
+      "productId" TEXT NOT NULL,
+      "productTitle" TEXT NOT NULL,
+      "fileId" TEXT NOT NULL,
+      "fileName" TEXT NOT NULL,
+      "sessionId" TEXT UNIQUE,
+      "accountId" TEXT NOT NULL,
+      "amountMinor" INTEGER NOT NULL,
       currency TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'pending',
-      buyerEmail TEXT,
-      accessKey TEXT NOT NULL,
-      createdAt TEXT NOT NULL,
-      paidAt TEXT,
-      emailedAt TEXT
+      "buyerEmail" TEXT,
+      "accessKey" TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL,
+      "paidAt" TEXT,
+      "emailedAt" TEXT
     );
-    CREATE INDEX IF NOT EXISTS seller_order_store ON seller_order (storeId, createdAt);
+    CREATE INDEX IF NOT EXISTS seller_order_store ON seller_order ("storeId", "createdAt");
 
     -- Stripe event ids already handled, so a re-delivered webhook is a no-op.
     CREATE TABLE IF NOT EXISTS stripe_event (
       id TEXT PRIMARY KEY,
       type TEXT NOT NULL,
-      receivedAt TEXT NOT NULL
+      "receivedAt" TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS oauth_state (
       state TEXT PRIMARY KEY,
-      userId TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
       provider TEXT NOT NULL,
-      returnTo TEXT NOT NULL,
+      "returnTo" TEXT NOT NULL,
       verifier TEXT,
-      expiresAt INTEGER NOT NULL
+      "expiresAt" ${t.big} NOT NULL
     );
   `)
 }
@@ -414,21 +427,17 @@ function payoutView(s: StoreRow) {
 
 /* --------------------------------------------------------- statements --- */
 
-function statements() {
-  return {
-  storeByUser: db.prepare<[string], StoreRow>('SELECT * FROM seller_store WHERE userId = ?'),
-  storeByHandle: db.prepare<[string], StoreRow>('SELECT * FROM seller_store WHERE handle = ?'),
-  storeById: db.prepare<[string], StoreRow>('SELECT * FROM seller_store WHERE id = ?'),
-  storeByAccount: db.prepare<[string], StoreRow>('SELECT * FROM seller_store WHERE stripeAccountId = ?'),
-  products: db.prepare<[string], ProductRow>('SELECT * FROM seller_product WHERE storeId = ? ORDER BY sort, createdAt'),
-  product: db.prepare<[string, string], ProductRow>('SELECT * FROM seller_product WHERE id = ? AND storeId = ?'),
-  order: db.prepare<[string], OrderRow>('SELECT * FROM seller_order WHERE id = ?'),
-  orderBySession: db.prepare<[string], OrderRow>('SELECT * FROM seller_order WHERE sessionId = ?'),
-  }
+/** Lookups used everywhere. Pass `via` to read inside an open transaction. */
+const q = {
+  storeByUser: (id: string, via: Sql = sql) => via.get<StoreRow>(`SELECT * FROM seller_store WHERE "userId" = ?`, id),
+  storeByHandle: (h: string, via: Sql = sql) => via.get<StoreRow>(`SELECT * FROM seller_store WHERE handle = ?`, h),
+  storeById: (id: string, via: Sql = sql) => via.get<StoreRow>(`SELECT * FROM seller_store WHERE id = ?`, id),
+  storeByAccount: (id: string, via: Sql = sql) => via.get<StoreRow>(`SELECT * FROM seller_store WHERE "stripeAccountId" = ?`, id),
+  products: (storeId: string, via: Sql = sql) => via.all<ProductRow>(`SELECT * FROM seller_product WHERE "storeId" = ? ORDER BY sort, "createdAt"`, storeId),
+  product: (id: string, storeId: string, via: Sql = sql) => via.get<ProductRow>(`SELECT * FROM seller_product WHERE id = ? AND "storeId" = ?`, id, storeId),
+  order: (id: string, via: Sql = sql) => via.get<OrderRow>(`SELECT * FROM seller_order WHERE id = ?`, id),
+  orderBySession: (id: string, via: Sql = sql) => via.get<OrderRow>(`SELECT * FROM seller_order WHERE "sessionId" = ?`, id),
 }
-let cached: ReturnType<typeof statements> | null = null
-/** Prepared on first use, after migrations have created the tables. */
-const q = new Proxy({} as ReturnType<typeof statements>, { get: (_t, k) => (cached ??= statements())[k as keyof ReturnType<typeof statements>] })
 
 /* -------------------------------------------------------- auth guard --- */
 
@@ -469,7 +478,7 @@ async function refreshAccount(s: StoreRow): Promise<StoreRow> {
   if (!st || !s.stripeAccountId) return s
   const a = await st.accounts.retrieve(s.stripeAccountId)
   const { status, chargesReady } = payoutStatusOf(a)
-  db.prepare('UPDATE seller_store SET stripeStatus = ?, chargesReady = ?, updatedAt = ? WHERE id = ?').run(status, chargesReady ? 1 : 0, now(), s.id)
+  await sql.run(`UPDATE seller_store SET "stripeStatus" = ?, "chargesReady" = ?, "updatedAt" = ? WHERE id = ?`, status, chargesReady ? 1 : 0, now(), s.id)
   return { ...s, stripeStatus: status, chargesReady: chargesReady ? 1 : 0 }
 }
 
@@ -503,34 +512,39 @@ const retrievalUrl = (o: OrderRow, handle: string) => `${seller.siteUrl}/store/$
  * Marks an order paid once Stripe confirms it, and sends the receipt exactly
  * once. Safe to call any number of times, from the webhook or the return page.
  */
-export function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Session, 'payment_status' | 'amount_total' | 'currency' | 'customer_details' | 'id'>): OrderRow {
+export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Session, 'payment_status' | 'amount_total' | 'currency' | 'customer_details' | 'id'>): Promise<OrderRow> {
   if (session.id !== order.sessionId) return order
   if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return order
   if (session.amount_total !== order.amountMinor || (session.currency ?? '').toLowerCase() !== order.currency) {
     console.error(`[seller] order ${order.id}: paid amount does not match, not fulfilling`)
     return order
   }
-  const tx = db.transaction(() => {
+  await sql.tx(async (tx) => {
     const email = session.customer_details?.email ?? null
-    const moved = db
-      .prepare("UPDATE seller_order SET status = 'paid', paidAt = ?, buyerEmail = COALESCE(?, buyerEmail) WHERE id = ? AND status != 'paid'")
-      .run(now(), email, order.id).changes
-    const row = q.order.get(order.id)!
-    if (row.status === 'paid' && !row.emailedAt && row.buyerEmail) {
-      const store = q.storeById.get(row.storeId)
-      if (store) {
-        enqueueEmail('order-receipt', row.buyerEmail, { url: retrievalUrl(row, store.handle), name: row.productTitle, email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle })
-        db.prepare('UPDATE seller_order SET emailedAt = ? WHERE id = ? AND emailedAt IS NULL').run(now(), row.id)
-      }
-    }
-    return moved
+    await tx.run(
+      `UPDATE seller_order SET status = 'paid', "paidAt" = ?, "buyerEmail" = COALESCE(?, "buyerEmail") WHERE id = ? AND status != 'paid'`,
+      now(),
+      email,
+      order.id,
+    )
+    // Claim the receipt atomically: only the call that sets emailedAt sends it.
+    const claim = await tx.run(`UPDATE seller_order SET "emailedAt" = ? WHERE id = ? AND status = 'paid' AND "emailedAt" IS NULL AND "buyerEmail" IS NOT NULL`, now(), order.id)
+    if (!claim.changes) return
+    const row = (await q.order(order.id, tx))!
+    const store = await q.storeById(row.storeId, tx)
+    if (store)
+      await enqueueEmail(
+        'order-receipt',
+        row.buyerEmail!,
+        { url: retrievalUrl(row, store.handle), name: row.productTitle, email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle },
+        tx,
+      )
   })
-  tx()
-  return q.order.get(order.id)!
+  return (await q.order(order.id))!
 }
 
-function markOrder(sessionId: string, status: 'failed' | 'cancelled') {
-  db.prepare("UPDATE seller_order SET status = ? WHERE sessionId = ? AND status = 'pending'").run(status, sessionId)
+async function markOrder(sessionId: string, status: 'failed' | 'cancelled') {
+  await sql.run(`UPDATE seller_order SET status = ? WHERE "sessionId" = ? AND status = 'pending'`, status, sessionId)
 }
 
 /* ---------------------------------------------------------- webhook --- */
@@ -544,18 +558,18 @@ export function stripeWebhookHandler() {
       if (!st || !seller.webhookSecret) return void res.status(503).json({ error: 'Stripe webhooks are not configured.' })
       let event: Stripe.Event
       try {
-        event = st.webhooks.constructEvent(req.body as Buffer, String(req.headers['stripe-signature'] ?? ''), seller.webhookSecret)
+        event = await st.webhooks.constructEventAsync(req.body as Buffer, String(req.headers['stripe-signature'] ?? ''), seller.webhookSecret)
       } catch {
         return void res.status(400).json({ error: 'Invalid signature.' })
       }
       // Already handled this exact event: acknowledge and do nothing.
-      const fresh = db.prepare('INSERT OR IGNORE INTO stripe_event (id, type, receivedAt) VALUES (?, ?, ?)').run(event.id, event.type, now()).changes
+      const fresh = (await sql.run(`INSERT INTO stripe_event (id, type, "receivedAt") VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING`, event.id, event.type, now())).changes
       if (!fresh) return void res.json({ received: true, duplicate: true })
       try {
         await handleEvent(event)
       } catch (err) {
         // Let Stripe retry: forget the event so the retry is processed.
-        db.prepare('DELETE FROM stripe_event WHERE id = ?').run(event.id)
+        await sql.run(`DELETE FROM stripe_event WHERE id = ?`, event.id)
         console.error('[seller] webhook failed', event.type, err)
         return void res.status(500).json({ error: 'Webhook handling failed.' })
       }
@@ -569,28 +583,28 @@ async function handleEvent(event: Stripe.Event) {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded': {
       const s = event.data.object as Stripe.Checkout.Session
-      const order = s.id ? q.orderBySession.get(s.id) : undefined
+      const order = s.id ? await q.orderBySession(s.id) : undefined
       if (!order) return
       if (event.account && event.account !== order.accountId) return
-      fulfil(order, s)
+      await fulfil(order, s)
       return
     }
     case 'checkout.session.async_payment_failed': {
       const s = event.data.object as Stripe.Checkout.Session
-      markOrder(s.id, 'failed')
+      await markOrder(s.id, 'failed')
       return
     }
     case 'checkout.session.expired': {
       const s = event.data.object as Stripe.Checkout.Session
-      markOrder(s.id, 'cancelled')
+      await markOrder(s.id, 'cancelled')
       return
     }
     case 'account.updated': {
       const a = event.data.object as Stripe.Account
-      const store = q.storeByAccount.get(a.id)
+      const store = await q.storeByAccount(a.id)
       if (!store) return
       const { status, chargesReady } = payoutStatusOf(a)
-      db.prepare('UPDATE seller_store SET stripeStatus = ?, chargesReady = ?, updatedAt = ? WHERE id = ?').run(status, chargesReady ? 1 : 0, now(), store.id)
+      await sql.run(`UPDATE seller_store SET "stripeStatus" = ?, "chargesReady" = ?, "updatedAt" = ? WHERE id = ?`, status, chargesReady ? 1 : 0, now(), store.id)
       return
     }
   }
@@ -598,8 +612,8 @@ async function handleEvent(event: Stripe.Event) {
 
 /* ------------------------------------------------------ seller API --- */
 
-function storeView(s: StoreRow) {
-  const products = q.products.all(s.id)
+async function storeView(s: StoreRow) {
+  const products = await q.products(s.id)
   return {
     id: s.id,
     handle: s.handle,
@@ -617,14 +631,14 @@ function storeView(s: StoreRow) {
 export function sellerRouter() {
   const r = Router()
 
-  r.get('/api/seller/setup', (_req, res) => res.set('Cache-Control', 'no-store').json({ ...sellerSetup(), platformFeePercent: PLATFORM_FEE_PERCENT }))
+  r.get('/api/seller/setup', async (_req, res) => res.set('Cache-Control', 'no-store').json({ ...sellerSetup(), platformAccount: await platformAccountId(), platformFeePercent: PLATFORM_FEE_PERCENT }))
 
   const me = Router()
   me.use(requireUser)
   me.use((_req, res, next) => (res.set('Cache-Control', 'no-store'), next()))
 
-  function mine(req: Authed, res: Response): StoreRow | null {
-    const s = q.storeByUser.get(req.userId!)
+  async function mine(req: Authed, res: Response): Promise<StoreRow | null> {
+    const s = await q.storeByUser(req.userId!)
     if (!s) {
       res.status(404).json({ error: 'You have no store yet.' })
       return null
@@ -633,80 +647,77 @@ export function sellerRouter() {
   }
 
   me.get('/store', async (req: Authed, res) => {
-    let s = q.storeByUser.get(req.userId!)
+    let s = await q.storeByUser(req.userId!)
     if (!s) return void res.json({ store: null })
     if (req.query.refresh === '1') s = await refreshAccount(s).catch(() => s!)
-    res.json({ store: storeView(s) })
+    res.json({ store: await storeView(s) })
   })
 
-  me.get('/handle/:h', (req: Authed, res) => {
+  me.get('/handle/:h', async (req: Authed, res) => {
     const h = String(req.params.h).toLowerCase()
     const problem = handleProblem(h)
-    const taken = !problem && q.storeByHandle.get(h)
+    const taken = !problem && await q.storeByHandle(h)
     const own = taken && taken.userId === req.userId
     res.json({ available: !problem && (!taken || own), problem: problem ?? (taken && !own ? 'That handle is taken.' : null) })
   })
 
-  me.post('/store', (req: Authed, res) => {
-    if (q.storeByUser.get(req.userId!)) return void res.status(409).json({ error: 'You already have a store.' })
+  me.post('/store', async (req: Authed, res) => {
+    if (await q.storeByUser(req.userId!)) return void res.status(409).json({ error: 'You already have a store.' })
     const b = (req.body ?? {}) as Record<string, unknown>
     const handle = String(b.handle ?? '').toLowerCase()
     const problem = handleProblem(handle)
     if (problem) return void res.status(400).json({ error: problem })
-    if (q.storeByHandle.get(handle)) return void res.status(409).json({ error: 'That handle is taken.' })
+    if (await q.storeByHandle(handle)) return void res.status(409).json({ error: 'That handle is taken.' })
     const name = str(b.name, 60).trim() || handle
     const t = now()
     const row = { id: `sto_${randomUUID()}`, userId: req.userId!, handle, draft: JSON.stringify(defaultPage(name)), createdAt: t, updatedAt: t }
     try {
-      db.prepare('INSERT INTO seller_store (id, userId, handle, draft, createdAt, updatedAt) VALUES (@id, @userId, @handle, @draft, @createdAt, @updatedAt)').run(row)
+      await sql.run(`INSERT INTO seller_store (id, "userId", handle, draft, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)`, row.id, row.userId, row.handle, row.draft, row.createdAt, row.updatedAt)
     } catch {
       return void res.status(409).json({ error: 'That handle is taken.' })
     }
-    res.status(201).json({ store: storeView(q.storeByUser.get(req.userId!)!) })
+    res.status(201).json({ store: await storeView((await q.storeByUser(req.userId!))!) })
   })
 
-  me.put('/handle', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.put('/handle', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
     const handle = String((req.body as { handle?: unknown })?.handle ?? '').toLowerCase()
     const problem = handleProblem(handle)
     if (problem) return void res.status(400).json({ error: problem })
-    const other = q.storeByHandle.get(handle)
+    const other = await q.storeByHandle(handle)
     if (other && other.id !== s.id) return void res.status(409).json({ error: 'That handle is taken.' })
-    db.prepare('UPDATE seller_store SET handle = ?, updatedAt = ? WHERE id = ?').run(handle, now(), s.id)
-    res.json({ store: storeView(q.storeById.get(s.id)!) })
+    await sql.run(`UPDATE seller_store SET handle = ?, "updatedAt" = ? WHERE id = ?`, handle, now(), s.id)
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
   /** Saves the draft page. The published page is untouched until Publish. */
-  me.put('/store/draft', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.put('/store/draft', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
-    const ids = new Set(q.products.all(s.id).map((p) => p.id))
+    const ids = new Set((await q.products(s.id)).map((p) => p.id))
     const page = cleanPage((req.body as { page?: unknown })?.page, ids)
     if (typeof page === 'string') return void res.status(400).json({ error: page })
-    db.prepare('UPDATE seller_store SET draft = ?, updatedAt = ? WHERE id = ?').run(JSON.stringify(page), now(), s.id)
-    res.json({ store: storeView(q.storeById.get(s.id)!) })
+    await sql.run(`UPDATE seller_store SET draft = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(page), now(), s.id)
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
   /** Copies the draft page and every complete, listed product to the live store. */
-  me.post('/store/publish', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.post('/store/publish', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
     const t = now()
-    const tx = db.transaction(() => {
-      for (const p of q.products.all(s.id)) {
+    await sql.tx(async (tx) => {
+      for (const p of await q.products(s.id, tx)) {
         if (p.listed && !productProblem(p)) {
-          db.prepare(
-            'UPDATE seller_product SET pubTitle = title, pubDescription = description, pubCover = cover, pubPriceMinor = priceMinor, pubCurrency = currency, pubFileId = fileId, pubFileName = fileName, pubAt = ? WHERE id = ?',
-          ).run(t, p.id)
+          await tx.run(`UPDATE seller_product SET "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = "priceMinor", "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubAt" = ? WHERE id = ?`, t, p.id)
         } else {
-          db.prepare('UPDATE seller_product SET pubAt = NULL WHERE id = ?').run(p.id)
+          await tx.run(`UPDATE seller_product SET "pubAt" = NULL WHERE id = ?`, p.id)
         }
       }
-      db.prepare('UPDATE seller_store SET published = draft, publishedAt = ?, updatedAt = ? WHERE id = ?').run(t, t, s.id)
+      await tx.run(`UPDATE seller_store SET published = draft, "publishedAt" = ?, "updatedAt" = ? WHERE id = ?`, t, t, s.id)
     })
-    tx()
-    res.json({ store: storeView(q.storeById.get(s.id)!) })
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
   /* products */
@@ -729,88 +740,86 @@ export function sellerRouter() {
     return out
   }
 
-  me.post('/products', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.post('/products', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
-    const count = q.products.all(s.id).length
+    const count = (await q.products(s.id)).length
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    db.prepare(
-      'INSERT INTO seller_product (id, storeId, title, description, cover, priceMinor, currency, listed, sort, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
-    res.status(201).json({ product: productDraftView(q.product.get(id, s.id)!), store: storeView(q.storeById.get(s.id)!) })
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
+    res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
-  me.patch('/products/:id', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.patch('/products/:id', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
-    const p = q.product.get(String(req.params.id), s.id)
+    const p = await q.product(String(req.params.id), s.id)
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const next = { ...p, ...fields, updatedAt: now() }
-    db.prepare('UPDATE seller_product SET title=@title, description=@description, cover=@cover, priceMinor=@priceMinor, currency=@currency, listed=@listed, updatedAt=@updatedAt WHERE id=@id').run(next)
-    res.json({ product: productDraftView(q.product.get(p.id, s.id)!), store: storeView(q.storeById.get(s.id)!) })
+    await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, "updatedAt" = ? WHERE id = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.updatedAt, next.id)
+    res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
-  me.delete('/products/:id', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.delete('/products/:id', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
-    const p = q.product.get(String(req.params.id), s.id)
+    const p = await q.product(String(req.params.id), s.id)
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
     // Keep the file while any paid order still needs it.
-    const paid = db.prepare<[string], { n: number }>("SELECT COUNT(*) AS n FROM seller_order WHERE productId = ? AND status = 'paid'").get(p.id)!.n
-    db.prepare('DELETE FROM seller_product WHERE id = ?').run(p.id)
+    const paid = (await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order WHERE "productId" = ? AND status = 'paid'`, p.id))?.n ?? 0
+    await sql.run(`DELETE FROM seller_product WHERE id = ?`, p.id)
     if (!paid) for (const f of [p.fileId, p.pubFileId]) if (f) removeFile(f)
-    res.json({ store: storeView(q.storeById.get(s.id)!) })
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
   /** Private product file. Raw body; the name comes from X-File-Name. */
-  me.put('/products/:id/file', express.raw({ type: () => true, limit: seller.maxFileBytes }), (req: Authed, res) => {
-    const s = mine(req, res)
+  me.put('/products/:id/file', express.raw({ type: () => true, limit: seller.maxFileBytes }), async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
-    const p = q.product.get(String(req.params.id), s.id)
+    const p = await q.product(String(req.params.id), s.id)
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
     const body = req.body as Buffer
     if (!Buffer.isBuffer(body) || body.length === 0) return void res.status(400).json({ error: 'Empty file.' })
     const name = decodeURIComponent(String(req.headers['x-file-name'] ?? 'download')).replace(/[\\/\0\r\n"]/g, '_').slice(0, 120) || 'download'
     const type = String(req.headers['content-type'] ?? 'application/octet-stream').slice(0, 100)
     const fileId = `fil_${randomBytes(16).toString('hex')}`
-    writeFileSync(join(seller.filesDir, fileId), body)
+    await blobs().put('files', fileId, body, 'application/octet-stream')
     const old = p.fileId
-    db.prepare('UPDATE seller_product SET fileId = ?, fileName = ?, fileSize = ?, fileType = ?, updatedAt = ? WHERE id = ?').run(fileId, name, body.length, type, now(), p.id)
+    await sql.run(`UPDATE seller_product SET "fileId" = ?, "fileName" = ?, "fileSize" = ?, "fileType" = ?, "updatedAt" = ? WHERE id = ?`, fileId, name, body.length, type, now(), p.id)
     // The old file stays if the live product or a paid order still points at it.
-    if (old && old !== p.pubFileId && !db.prepare("SELECT 1 FROM seller_order WHERE fileId = ? LIMIT 1").get(old)) removeFile(old)
-    res.json({ product: productDraftView(q.product.get(p.id, s.id)!) })
+    if (old && old !== p.pubFileId && !(await sql.get(`SELECT 1 AS one FROM seller_order WHERE "fileId" = ? LIMIT 1`, old))) removeFile(old)
+    res.json({ product: productDraftView((await q.product(p.id, s.id))!) })
   })
 
   /** Public images (avatar, covers, image blocks). */
-  me.post('/media', express.raw({ type: () => true, limit: 5 * 1024 * 1024 }), (req: Authed, res) => {
-    const s = mine(req, res)
+  me.post('/media', express.raw({ type: () => true, limit: 5 * 1024 * 1024 }), async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
     const type = String(req.headers['content-type'] ?? '')
     if (!/^image\/(png|jpe?g|gif|webp)$/.test(type)) return void res.status(400).json({ error: 'Use a PNG, JPG, GIF or WebP image.' })
     const body = req.body as Buffer
     if (!Buffer.isBuffer(body) || !body.length) return void res.status(400).json({ error: 'Empty image.' })
     const id = `med_${randomBytes(12).toString('hex')}`
-    writeFileSync(join(seller.mediaDir, id), body)
-    db.prepare('INSERT INTO seller_media (id, storeId, type, size, createdAt) VALUES (?, ?, ?, ?, ?)').run(id, s.id, type, body.length, now())
+    await blobs().put('media', id, body, type)
+    await sql.run(`INSERT INTO seller_media (id, "storeId", type, size, "createdAt") VALUES (?, ?, ?, ?, ?)`, id, s.id, type, body.length, now())
     res.status(201).json({ id, url: `${seller.apiUrl}/api/store-media/${id}` })
   })
 
-  me.get('/orders', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.get('/orders', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
-    const rows = db.prepare<[string], OrderRow>('SELECT * FROM seller_order WHERE storeId = ? ORDER BY createdAt DESC LIMIT 100').all(s.id)
+    const rows = await sql.all(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC LIMIT 100`, s.id)
     res.json({ orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt })) })
   })
 
   /* payouts: Stripe-hosted Connect onboarding */
   me.post('/stripe/onboard', async (req: Authed, res) => {
-    const s = mine(req, res)
+    const s = await mine(req, res)
     if (!s) return
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Payouts are not set up on this Desknoty server yet (STRIPE_SECRET_KEY).', setup: true })
@@ -837,7 +846,7 @@ export function sellerRouter() {
         { apiVersion: STRIPE_V2_VERSION },
       )) as unknown as { id: string }
       accountId = a.id
-      db.prepare("UPDATE seller_store SET stripeAccountId = ?, stripeStatus = 'incomplete', updatedAt = ? WHERE id = ?").run(accountId, now(), s.id)
+      await sql.run(`UPDATE seller_store SET "stripeAccountId" = ?, "stripeStatus" = 'incomplete', "updatedAt" = ? WHERE id = ?`, accountId, now(), s.id)
     }
     const sep = returnTo.includes('?') ? '&' : '?'
     const link = await st.accountLinks.create({
@@ -850,7 +859,7 @@ export function sellerRouter() {
   })
 
   me.post('/stripe/manage', async (req: Authed, res) => {
-    const s = mine(req, res)
+    const s = await mine(req, res)
     if (!s) return
     const st = stripe()
     if (!st || !s.stripeAccountId) return void res.status(400).json({ error: 'Connect a bank account first.' })
@@ -859,11 +868,11 @@ export function sellerRouter() {
   })
 
   /* TikTok Login Kit (web): optional */
-  me.post('/tiktok/start', (req: Authed, res) => {
+  me.post('/tiktok/start', async (req: Authed, res) => {
     if (!sellerSetup().tiktok) return void res.status(503).json({ error: 'TikTok login is not switched on for this Desknoty server yet.', setup: true })
     const state = randomBytes(24).toString('base64url')
-    db.prepare('DELETE FROM oauth_state WHERE expiresAt < ?').run(Date.now())
-    db.prepare('INSERT INTO oauth_state (state, userId, provider, returnTo, expiresAt) VALUES (?, ?, ?, ?, ?)').run(
+    await sql.run(`DELETE FROM oauth_state WHERE "expiresAt" < ?`, Date.now())
+    await sql.run(`INSERT INTO oauth_state (state, "userId", provider, "returnTo", "expiresAt") VALUES (?, ?, ?, ?, ?)`, 
       state,
       req.userId!,
       'tiktok',
@@ -874,11 +883,11 @@ export function sellerRouter() {
     res.json({ url: `https://www.tiktok.com/v2/auth/authorize/?${u}` })
   })
 
-  me.post('/tiktok/disconnect', (req: Authed, res) => {
-    const s = mine(req, res)
+  me.post('/tiktok/disconnect', async (req: Authed, res) => {
+    const s = await mine(req, res)
     if (!s) return
-    db.prepare('UPDATE seller_store SET tiktok = NULL, updatedAt = ? WHERE id = ?').run(now(), s.id)
-    res.json({ store: storeView(q.storeById.get(s.id)!) })
+    await sql.run(`UPDATE seller_store SET tiktok = NULL, "updatedAt" = ? WHERE id = ?`, now(), s.id)
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
   r.use('/api/seller', me)
@@ -886,8 +895,8 @@ export function sellerRouter() {
   /** TikTok sends the browser back here. The state must match one we issued, for this signed-in user. */
   r.get('/api/seller/tiktok/callback', async (req: Authed, res) => {
     const state = String(req.query.state ?? '')
-    const row = db.prepare<[string], { userId: string; returnTo: string; expiresAt: number }>("SELECT userId, returnTo, expiresAt FROM oauth_state WHERE state = ? AND provider = 'tiktok'").get(state)
-    if (row) db.prepare('DELETE FROM oauth_state WHERE state = ?').run(state)
+    const row = await sql.get<{ userId: string; returnTo: string; expiresAt: number }>(`SELECT "userId", "returnTo", "expiresAt" FROM oauth_state WHERE state = ? AND provider = 'tiktok'`, state)
+    if (row) await sql.run(`DELETE FROM oauth_state WHERE state = ?`, state)
     const back = (result: string) => {
       const to = row?.returnTo ?? '/app/pro'
       res.redirect(302, `${seller.siteUrl}${to}${to.includes('?') ? '&' : '?'}tiktok=${result}`)
@@ -908,11 +917,11 @@ export function sellerRouter() {
       }).then((r2) => r2.json() as Promise<{ data?: { user?: { open_id?: string; avatar_url?: string; display_name?: string; username?: string } } }>)
       const u = info.data?.user
       if (!u?.open_id) return back('failed')
-      const store = q.storeByUser.get(row.userId)
+      const store = await q.storeByUser(row.userId)
       if (!store) return back('no-store')
       // Profile only; the access token is not kept.
       const profile = JSON.stringify({ openId: u.open_id, username: u.username ?? '', displayName: u.display_name ?? '', avatarUrl: u.avatar_url ?? '' })
-      db.prepare('UPDATE seller_store SET tiktok = ?, updatedAt = ? WHERE id = ?').run(profile, now(), store.id)
+      await sql.run(`UPDATE seller_store SET tiktok = ?, "updatedAt" = ? WHERE id = ?`, profile, now(), store.id)
       return back('connected')
     } catch (err) {
       console.error('[seller] TikTok login failed', err)
@@ -925,27 +934,27 @@ export function sellerRouter() {
   const pub = Router()
   pub.use((_req, res, next) => (res.set('Cache-Control', 'no-store'), next()))
 
-  function liveStore(req: Request, res: Response): StoreRow | null {
-    const s = q.storeByHandle.get(String(req.params.handle).toLowerCase())
+  async function liveStore(req: Request, res: Response): Promise<StoreRow | null> {
+    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
     if (!s || !s.published) {
       res.status(404).json({ error: 'This store doesn’t exist or isn’t published yet.' })
       return null
     }
     return s
   }
-  const liveProducts = (s: StoreRow) => q.products.all(s.id).filter((p) => p.pubAt)
+  const liveProducts = async (s: StoreRow) => (await q.products(s.id)).filter((p) => p.pubAt)
 
-  pub.get('/:handle', (req, res) => {
-    const s = liveStore(req, res)
+  pub.get('/:handle', async (req, res) => {
+    const s = await liveStore(req, res)
     if (!s) return
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: liveProducts(s).map(productPublicView), checkoutReady: Boolean(s.chargesReady) && Boolean(stripe()) })
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: Boolean(s.chargesReady) && Boolean(stripe()) })
   })
 
   pub.post('/:handle/checkout', async (req, res) => {
-    const s = liveStore(req, res)
+    const s = await liveStore(req, res)
     if (!s) return
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
-    const p = q.product.get(productId, s.id)
+    const p = await q.product(productId, s.id)
     if (!p || !p.pubAt || !p.pubFileId || p.pubPriceMinor == null || !p.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
@@ -966,9 +975,7 @@ export function sellerRouter() {
       },
       { stripeAccount: fresh.stripeAccountId, idempotencyKey: `checkout_${orderId}` },
     )
-    db.prepare(
-      'INSERT INTO seller_order (id, storeId, productId, productTitle, fileId, fileName, sessionId, accountId, amountMinor, currency, accessKey, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(orderId, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', session.id, fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now())
+    await sql.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "sessionId", "accountId", "amountMinor", currency, "accessKey", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, orderId, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', session.id, fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now())
     res.json({ url: session.url })
   })
 
@@ -988,25 +995,26 @@ export function sellerRouter() {
 
   /** The Checkout success page asks here; if the webhook hasn't arrived yet, Stripe is asked directly. */
   pub.get('/:handle/session/:sessionId', async (req, res) => {
-    const s = q.storeByHandle.get(String(req.params.handle).toLowerCase())
-    let o = q.orderBySession.get(String(req.params.sessionId))
+    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
+    let o = await q.orderBySession(String(req.params.sessionId))
     if (!s || !o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
     const st = stripe()
-    if (o.status === 'pending' && st) {
+    // SELLER_CONFIRM_FALLBACK=off: only the signed webhook may fulfil (used to prove webhook delivery).
+    if (o.status === 'pending' && st && process.env.SELLER_CONFIRM_FALLBACK !== 'off') {
       const session = await st.checkout.sessions.retrieve(o.sessionId!, { stripeAccount: o.accountId }).catch(() => null)
       if (session) {
-        o = fulfil(o, session)
-        if (session.status === 'expired') markOrder(session.id, 'cancelled')
-        o = q.order.get(o.id)!
+        o = await fulfil(o, session)
+        if (session.status === 'expired') await markOrder(session.id, 'cancelled')
+        o = (await q.order(o.id))!
       }
     }
     res.json({ order: orderView(o, s) })
   })
 
   /** The link in the receipt email: re-issues a fresh download link for a paid order. */
-  pub.get('/:handle/order/:orderId', (req, res) => {
-    const s = q.storeByHandle.get(String(req.params.handle).toLowerCase())
-    const o = q.order.get(String(req.params.orderId))
+  pub.get('/:handle/order/:orderId', async (req, res) => {
+    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
+    const o = await q.order(String(req.params.orderId))
     const k = Buffer.from(String(req.query.k ?? ''))
     if (!s || !o || o.storeId !== s.id || k.length !== o.accessKey.length || !timingSafeEqual(k, Buffer.from(o.accessKey))) {
       return void res.status(404).json({ error: 'Order not found.' })
@@ -1017,29 +1025,19 @@ export function sellerRouter() {
   r.use('/api/store', pub)
 
   /** Private file, only through a valid, unexpired link for a paid order. */
-  r.get('/api/store-download/:token', (req, res) => {
+  r.get('/api/store-download/:token', async (req, res) => {
     const orderId = verifyDownload(String(req.params.token))
-    const o = orderId ? q.order.get(orderId) : undefined
+    const o = orderId ? await q.order(orderId) : undefined
     if (!o || o.status !== 'paid') return void res.status(403).json({ error: 'This download link is invalid or has expired.' })
-    const path = join(seller.filesDir, o.fileId)
-    if (!/^fil_[a-f0-9]{32}$/.test(o.fileId) || !existsSync(path)) return void res.status(410).json({ error: 'This file is no longer available.' })
-    res.set({
-      'Cache-Control': 'private, no-store',
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': String(statSync(path).size),
-      'Content-Disposition': `attachment; filename="${o.fileName.replace(/[^\w.\- ]/g, '_')}"`,
-      'X-Content-Type-Options': 'nosniff',
-    })
-    createReadStream(path).pipe(res)
+    if (!/^fil_[a-f0-9]{32}$/.test(o.fileId) || !(await blobs().exists('files', o.fileId))) return void res.status(410).json({ error: 'This file is no longer available.' })
+    await blobs().send('files', o.fileId, res, { fileName: o.fileName.replace(/[^\w.\- ]/g, '_'), type: 'application/octet-stream', cache: 'private, no-store' })
   })
 
-  r.get('/api/store-media/:id', (req, res) => {
+  r.get('/api/store-media/:id', async (req, res) => {
     const id = String(req.params.id)
-    const m = /^med_[a-f0-9]{24}$/.test(id) ? db.prepare<[string], { type: string }>('SELECT type FROM seller_media WHERE id = ?').get(id) : undefined
-    const path = join(seller.mediaDir, id)
-    if (!m || !existsSync(path)) return void res.status(404).end()
-    res.set({ 'Content-Type': m.type, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' })
-    createReadStream(path).pipe(res)
+    const m = /^med_[a-f0-9]{24}$/.test(id) ? await sql.get(`SELECT type FROM seller_media WHERE id = ?`, id) : undefined
+    if (!m || !(await blobs().exists('media', id))) return void res.status(404).end()
+    await blobs().send('media', id, res, { type: String(m.type), cache: 'public, max-age=31536000, immutable' })
   })
 
   return r
@@ -1047,10 +1045,6 @@ export function sellerRouter() {
 
 function removeFile(id: string) {
   if (!/^fil_[a-f0-9]{32}$/.test(id)) return
-  try {
-    unlinkSync(join(seller.filesDir, id))
-  } catch {
-    /* already gone */
-  }
+  void blobs().remove('files', id)
 }
 

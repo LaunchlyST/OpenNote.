@@ -3,7 +3,7 @@ import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { fromNodeHeaders } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db } from './db.ts'
+import { sql } from './db.ts'
 import { env } from './env.ts'
 import { enqueueEmail } from './mail/index.ts'
 import { EARLY_ACCESS_COOKIE, earlyAccessToken, earlyAccessCookieOptions } from './early-access.ts'
@@ -12,20 +12,23 @@ const MODE_KEY = 'launchMode'
 const LAUNCH_ID_KEY = 'launchId'
 const LAUNCHED_AT_KEY = 'launchedAt'
 
-function getSetting(key: string): string | null {
-  const row = db.prepare('SELECT value FROM site_settings WHERE key = ?').get(key) as { value: string } | undefined
+async function getSetting(key: string): Promise<string | null> {
+  const row = await sql.get<{ value: string }>('SELECT value FROM site_settings WHERE key = ?', key)
   return row?.value ?? null
 }
 
-function setSetting(key: string, value: string) {
-  db.prepare(
-    `INSERT INTO site_settings (key, value, updatedAt) VALUES (?, ?, ?)
-     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt`,
-  ).run(key, value, new Date().toISOString())
+async function setSetting(key: string, value: string) {
+  await sql.run(
+    `INSERT INTO site_settings (key, value, "updatedAt") VALUES (?, ?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value, "updatedAt" = excluded."updatedAt"`,
+    key,
+    value,
+    new Date().toISOString(),
+  )
 }
 
-export function getLaunchMode(): 'waitlist' | 'beta' | 'launched' {
-  const v = getSetting(MODE_KEY)
+export async function getLaunchMode(): Promise<'waitlist' | 'beta' | 'launched'> {
+  const v = await getSetting(MODE_KEY)
   if (v === 'beta' || v === 'launched') return v
   return 'waitlist'
 }
@@ -79,15 +82,15 @@ launchRouter.use((_req, res, next) => {
 })
 
 // Public: current launch mode.
-launchRouter.get('/api/launch/status', (_req: Request, res: Response) => {
-  res.json({ mode: getLaunchMode(), launchedAt: getSetting(LAUNCHED_AT_KEY) })
+launchRouter.get('/api/launch/status', async (_req: Request, res: Response) => {
+  res.json({ mode: await getLaunchMode(), launchedAt: await getSetting(LAUNCHED_AT_KEY) })
 })
 
 // Public: redeem a launch email link. Sets the early-access cookie and sends the
 // browser to the landing page.
-launchRouter.get('/api/launch/redeem', (req: Request, res: Response) => {
+launchRouter.get('/api/launch/redeem', async (req: Request, res: Response) => {
   const token = typeof req.query.token === 'string' ? req.query.token : ''
-  const launchId = getSetting(LAUNCH_ID_KEY)
+  const launchId = await getSetting(LAUNCH_ID_KEY)
   if (!token || !launchId) {
     res.status(400).type('text/plain').send('This link is no longer valid.')
     return
@@ -97,13 +100,13 @@ launchRouter.get('/api/launch/redeem', (req: Request, res: Response) => {
     res.status(400).type('text/plain').send('This link is no longer valid.')
     return
   }
-  const row = db.prepare('SELECT 1 FROM waitlist WHERE email = ?').get(email)
+  const row = await sql.get('SELECT 1 AS one FROM waitlist WHERE email = ?', email)
   if (!row) {
     res.status(403).type('text/plain').send('This link is no longer valid.')
     return
   }
   res.cookie(EARLY_ACCESS_COOKIE, earlyAccessToken(), earlyAccessCookieOptions(req))
-  res.redirect(302, `${env.baseURL}/landing`)
+  res.redirect(302, `${(process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, '')}/landing`)
 })
 
 // Admin: send launch emails to every waitlist signup and move the site into beta.
@@ -114,7 +117,7 @@ launchRouter.post('/api/admin/launch', async (req: Request, res: Response) => {
   // requireAdmin already responded on failure; detect by status.
   if (res.headersSent) return
 
-  const mode = getLaunchMode()
+  const mode = await getLaunchMode()
   if (mode === 'launched') {
     res.status(409).json({ error: 'Beta has already ended; the site is fully launched.' })
     return
@@ -125,16 +128,16 @@ launchRouter.post('/api/admin/launch', async (req: Request, res: Response) => {
   }
 
   const launchId = randomUUID()
-  setSetting(LAUNCH_ID_KEY, launchId)
-  setSetting(LAUNCHED_AT_KEY, new Date().toISOString())
-  setSetting(MODE_KEY, 'beta')
+  await setSetting(LAUNCH_ID_KEY, launchId)
+  await setSetting(LAUNCHED_AT_KEY, new Date().toISOString())
+  await setSetting(MODE_KEY, 'beta')
 
-  const rows = db.prepare('SELECT email FROM waitlist').all() as Array<{ email: string }>
+  const rows = await sql.all<{ email: string }>('SELECT email FROM waitlist')
   let queued = 0
   for (const row of rows) {
     const email = row.email
     const url = `${env.baseURL}/api/launch/redeem?token=${encodeURIComponent(makeToken(email, launchId))}`
-    const r = enqueueEmail('waitlist-launch', email, { url })
+    const r = await enqueueEmail('waitlist-launch', email, { url })
     if (r.queued) queued++
   }
   res.status(202).json({ mode: 'beta', queued, total: rows.length })
@@ -146,6 +149,6 @@ launchRouter.post('/api/admin/launch/end', async (req: Request, res: Response) =
     requireAdmin(req, res, (err) => (err ? reject(err) : resolve()))
   }).catch(() => {})
   if (res.headersSent) return
-  setSetting(MODE_KEY, 'launched')
+  await setSetting(MODE_KEY, 'launched')
   res.json({ mode: 'launched' })
 })

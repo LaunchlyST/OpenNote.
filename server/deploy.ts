@@ -21,14 +21,9 @@ import type {
 } from 'express'
 import { fromNodeHeaders } from 'better-auth/node'
 import { auth } from './auth.ts'
-import { db, ensureAppTables } from './db.ts'
+import { sql } from './db.ts'
 import { env, PROVIDER_LABELS } from './env.ts'
 
-// The prepared statements below run at module load, and ES module imports are
-// evaluated before the importing file's body — so `server/index.ts` calling
-// ensureAppTables() would happen too late. Create the schema here instead;
-// it is idempotent.
-ensureAppTables()
 
 /** Refuses to fire twice in a row, so a double click cannot queue two builds. */
 const MIN_SECONDS_BETWEEN = 60
@@ -47,22 +42,16 @@ export interface DeploymentRecord {
   accepted: boolean
 }
 
-const readLast = db.prepare<[], DeploymentRecord>(
-  `SELECT requestedAt, provider, providerLabel, productionUrl, accepted
-     FROM deployment WHERE id = 1`,
-)
-
-const writeLast = db.prepare(
-  `INSERT INTO deployment (id, requestedAt, provider, providerLabel, productionUrl, requestedBy, accepted)
+const READ_LAST = `SELECT "requestedAt", provider, "providerLabel", "productionUrl", accepted FROM deployment WHERE id = 1`
+const WRITE_LAST = `INSERT INTO deployment (id, "requestedAt", provider, "providerLabel", "productionUrl", "requestedBy", accepted)
    VALUES (1, ?, ?, ?, ?, ?, ?)
-   ON CONFLICT(id) DO UPDATE SET
-     requestedAt = excluded.requestedAt,
+   ON CONFLICT (id) DO UPDATE SET
+     "requestedAt" = excluded."requestedAt",
      provider = excluded.provider,
-     providerLabel = excluded.providerLabel,
-     productionUrl = excluded.productionUrl,
-     requestedBy = excluded.requestedBy,
-     accepted = excluded.accepted`,
-)
+     "providerLabel" = excluded."providerLabel",
+     "productionUrl" = excluded."productionUrl",
+     "requestedBy" = excluded."requestedBy",
+     accepted = excluded.accepted`
 
 function providerLabel(): string {
   return PROVIDER_LABELS[env.deploy.provider] ?? env.deploy.provider
@@ -87,8 +76,8 @@ export function publicStatus() {
   }
 }
 
-function readLastDeployment(): DeploymentRecord | null {
-  const row = readLast.get()
+async function readLastDeployment(): Promise<DeploymentRecord | null> {
+  const row = await sql.get<DeploymentRecord>(READ_LAST)
   if (!row) return null
   return { ...row, accepted: Boolean(row.accepted) }
 }
@@ -129,8 +118,8 @@ export function deployRouter() {
     next()
   })
 
-  router.get('/', requireAdmin, (_req: AuthedRequest, res: Res) => {
-    res.json({ ...publicStatus(), lastDeployment: readLastDeployment() })
+  router.get('/', requireAdmin, async (_req: AuthedRequest, res: Res) => {
+    res.json({ ...publicStatus(), lastDeployment: await readLastDeployment() })
   })
 
   router.post('/', requireAdmin, async (req: AuthedRequest, res: Res) => {
@@ -148,7 +137,7 @@ export function deployRouter() {
       return
     }
 
-    const last = readLastDeployment()
+    const last = await readLastDeployment()
     if (last) {
       const since = (Date.now() - Date.parse(last.requestedAt)) / 1000
       if (Number.isFinite(since) && since < MIN_SECONDS_BETWEEN) {
@@ -196,7 +185,8 @@ export function deployRouter() {
       productionUrl: env.deploy.productionUrl || null,
       accepted: true,
     }
-    writeLast.run(
+    await sql.run(
+      WRITE_LAST,
       record.requestedAt,
       record.provider,
       record.providerLabel,

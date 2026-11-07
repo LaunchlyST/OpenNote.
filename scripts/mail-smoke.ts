@@ -35,8 +35,8 @@ function check(label: string, ok: boolean, detail = '') {
   }
 }
 
-const { db, ensureAppTables } = await import('../server/db.ts')
-ensureAppTables()
+const { sql, ensureAppTables } = await import('../server/db.ts')
+await ensureAppTables()
 const { env } = await import('../server/env.ts')
 const { renderEmail, enqueueEmail, processOutbox, setTransport, outboxLog, maskEmail } = await import('../server/mail/index.ts')
 const { localTransport, smtpTransport, productionMailProblem, createTransport, senderProblem, verifySmtp } = await import('../server/mail/transport.ts')
@@ -44,8 +44,10 @@ const { smtpSettings } = await import('../server/env.ts')
 const { startSmtpCatcher } = await import('../server/mail/smtp-catcher.ts')
 const { readMailbox } = await import('../server/mail/dev-inbox.ts')
 
+const { default: Sqlite } = await import('better-sqlite3')
+const raw = new Sqlite(process.env.DATABASE_PATH!)
 const row = (id: number) =>
-  db.prepare('SELECT status, attempts, html, text, lastError, nextAttemptAt FROM email_outbox WHERE id = ?').get(id) as {
+  raw.prepare('SELECT status, attempts, html, text, lastError, nextAttemptAt FROM email_outbox WHERE id = ?').get(id) as {
     status: string
     attempts: number
     html: string | null
@@ -72,7 +74,7 @@ try {
   console.log('\n  Outbox → local dev inbox')
   {
     setTransport(localTransport())
-    const r = enqueueEmail('reset-password', 'Sam@Example.com', { url: LINK, name: 'Sam' })
+    const r = await enqueueEmail('reset-password', 'Sam@Example.com', { url: LINK, name: 'Sam' })
     check('a message is queued', r.queued)
     const id = r.queued ? r.id : 0
     check('it is queued, not sent inline', row(id).status === 'queued')
@@ -95,7 +97,7 @@ try {
         throw new Error('451 temporary failure')
       },
     })
-    const r = enqueueEmail('verify-email', 'retry@example.com', { url: LINK })
+    const r = await enqueueEmail('verify-email', 'retry@example.com', { url: LINK })
     const id = r.queued ? r.id : 0
     await processOutbox()
     const after1 = row(id)
@@ -106,12 +108,12 @@ try {
     await processOutbox()
     check('it is not retried before it is due', calls === 1)
 
-    db.prepare('UPDATE email_outbox SET nextAttemptAt = 0 WHERE id = ?').run(id)
+    await sql.run('UPDATE email_outbox SET nextAttemptAt = 0 WHERE id = ?', id)
     await processOutbox()
     const after2 = row(id)
     check('backoff grows (~2 minutes after the 2nd failure)', after2.attempts === 2 && after2.nextAttemptAt - Date.now() > 100_000)
 
-    db.prepare('UPDATE email_outbox SET nextAttemptAt = 0 WHERE id = ?').run(id)
+    await sql.run('UPDATE email_outbox SET nextAttemptAt = 0 WHERE id = ?', id)
     await processOutbox()
     const after3 = row(id)
     check(`after ${env.mail.maxAttempts} attempts it is marked failed`, after3.status === 'failed' && after3.attempts === 3)
@@ -123,12 +125,12 @@ try {
         throw Object.assign(new Error('550 5.1.1 mailbox does not exist'), { responseCode: 550 })
       },
     })
-    const perm = enqueueEmail('verify-email', 'gone@example.com', { url: LINK })
+    const perm = await enqueueEmail('verify-email', 'gone@example.com', { url: LINK })
     await processOutbox()
     check('a permanent 5xx refusal is not retried', perm.queued && row(perm.id).status === 'failed' && row(perm.id).attempts === 1)
 
     setTransport({ name: 'smtp', async send() {} })
-    const ok = enqueueEmail('verify-email', 'recover@example.com', { url: LINK })
+    const ok = await enqueueEmail('verify-email', 'recover@example.com', { url: LINK })
     await processOutbox()
     check('a message that later succeeds is marked sent', ok.queued && row(ok.id).status === 'sent')
   }
@@ -136,13 +138,14 @@ try {
   console.log('\n  Rate limiting and input safety')
   {
     setTransport({ name: 'smtp', async send() {} })
-    const results = Array.from({ length: 7 }, () => enqueueEmail('reset-password', 'flood@example.com', { url: LINK }))
+    const results = []
+    for (let i = 0; i < 7; i++) results.push(await enqueueEmail('reset-password', 'flood@example.com', { url: LINK }))
     check('the first 5 per hour are queued', results.slice(0, 5).every((r) => r.queued))
     check('the rest are refused as rate-limited', results.slice(5).every((r) => !r.queued && r.reason === 'rate-limited'))
-    check('another address is unaffected', enqueueEmail('reset-password', 'other@example.com', { url: LINK }).queued)
-    const inj = enqueueEmail('reset-password', 'a@example.com\r\nBcc: victim@example.com', { url: LINK })
+    check('another address is unaffected', (await enqueueEmail('reset-password', 'other@example.com', { url: LINK })).queued)
+    const inj = await enqueueEmail('reset-password', 'a@example.com\r\nBcc: victim@example.com', { url: LINK })
     check('header injection in the address is refused', !inj.queued && inj.reason === 'invalid-recipient')
-    const two = enqueueEmail('reset-password', 'a@example.com, b@example.com', { url: LINK })
+    const two = await enqueueEmail('reset-password', 'a@example.com, b@example.com', { url: LINK })
     check('a list of addresses is refused', !two.queued)
   }
 
@@ -157,7 +160,7 @@ try {
     env.smtp.secure = false
     env.smtp.requireTLS = false
     setTransport(smtpTransport())
-    const r = enqueueEmail('reset-password', 'smtp@example.com', { url: LINK, name: 'Sam' })
+    const r = await enqueueEmail('reset-password', 'smtp@example.com', { url: LINK, name: 'Sam' })
     await processOutbox()
     const mine = caught.filter((m) => m.to.join() === 'smtp@example.com')
     check('the SMTP server accepted the message', r.queued && row(r.id).status === 'sent', r.queued ? String(row(r.id).lastError) : '')
@@ -170,7 +173,7 @@ try {
     // Desknoty never falls back to sending a reset link in clear text.
     env.smtp.requireTLS = true
     setTransport(smtpTransport())
-    const t = enqueueEmail('reset-password', 'tls@example.com', { url: LINK })
+    const t = await enqueueEmail('reset-password', 'tls@example.com', { url: LINK })
     await processOutbox()
     check('without STARTTLS the send is refused (TLS is enforced)', t.queued && ['retrying', 'failed'].includes(row(t.id).status) && !caught.some((m) => m.to.join() === 'tls@example.com'), t.queued ? row(t.id).status : '')
     server.close()
@@ -192,7 +195,7 @@ try {
     env.smtp.port = (fake.address() as AddressInfo).port
     env.smtp.secure = true
     setTransport(smtpTransport())
-    const r = enqueueEmail('reset-password', 'cert@example.com', { url: LINK })
+    const r = await enqueueEmail('reset-password', 'cert@example.com', { url: LINK })
     await processOutbox()
     const st = r.queued ? row(r.id) : null
     check('an untrusted certificate is refused (nothing sent)', st?.status !== 'sent', `${st?.status}: ${st?.lastError}`)
@@ -237,7 +240,7 @@ try {
     const v = await verifySmtp()
     check('the startup login check succeeds with the right app password', v.ok, v.ok ? '' : v.error)
     setTransport(smtpTransport())
-    const r = enqueueEmail('verify-email', 'new.user@outlook.test', { url: LINK, name: 'New User' })
+    const r = await enqueueEmail('verify-email', 'new.user@outlook.test', { url: LINK, name: 'New User' })
     await processOutbox()
     check('the email is accepted by the server', r.queued && row(r.id).status === 'sent', r.queued ? String(row(r.id).lastError) : '')
     check('the login happened only after encryption (STARTTLS)', logins.length > 0 && logins.every((l) => l.encrypted))
@@ -249,14 +252,14 @@ try {
     const bad = await verifySmtp()
     check('a wrong app password is detected by the startup check', !bad.ok && /not accepted|535/i.test(bad.error), bad.ok ? '' : bad.error)
     setTransport(smtpTransport())
-    const w = enqueueEmail('reset-password', 'someone@gmail.test', { url: LINK })
+    const w = await enqueueEmail('reset-password', 'someone@gmail.test', { url: LINK })
     await processOutbox()
     check('a rejected login fails visibly (status failed, 535 logged), not silently', w.queued && row(w.id).status === 'failed' && /535|not accepted/i.test(row(w.id).lastError ?? ''), w.queued ? `${row(w.id).status} ${row(w.id).lastError}` : '')
 
     env.smtp.pass = 'abcdefghijklmnop'
     env.smtp.caFile = ''
     setTransport(smtpTransport())
-    const u = enqueueEmail('reset-password', 'untrusted@gmail.test', { url: LINK })
+    const u = await enqueueEmail('reset-password', 'untrusted@gmail.test', { url: LINK })
     await processOutbox()
     check('without trusting the CA the same server is refused (certificate checked)', u.queued && row(u.id).status !== 'sent')
     server.close()
@@ -303,9 +306,9 @@ try {
     env.mail.transport = 'local'
     env.smtp.host = ''
     setTransport(createTransport())
-    const r = enqueueEmail('reset-password', 'prod@example.com', { url: LINK })
+    const r = await enqueueEmail('reset-password', 'prod@example.com', { url: LINK })
     await processOutbox()
-    check('a misconfigured production email is marked failed, not silently dropped', r.queued && row(r.id).status === 'failed', r.queued ? row(r.id).status : '')
+    check('a misconfigured production email stays queued for when SMTP is set, never faked or dropped', r.queued && row(r.id).status === 'queued' && row(r.id).html !== null, r.queued ? row(r.id).status : '')
     Object.assign(env.smtp, saved)
     env.isProduction = saved.isProd
     env.baseURL = saved.base
@@ -323,7 +326,6 @@ try {
     }
   }
 } finally {
-  db.close()
   rmSync(tmp, { recursive: true, force: true })
 }
 
