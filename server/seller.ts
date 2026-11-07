@@ -999,7 +999,8 @@ export function sellerRouter() {
     let o = await q.orderBySession(String(req.params.sessionId))
     if (!s || !o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
     const st = stripe()
-    if (o.status === 'pending' && st) {
+    // SELLER_CONFIRM_FALLBACK=off: only the signed webhook may fulfil (used to prove webhook delivery).
+    if (o.status === 'pending' && st && process.env.SELLER_CONFIRM_FALLBACK !== 'off') {
       const session = await st.checkout.sessions.retrieve(o.sessionId!, { stripeAccount: o.accountId }).catch(() => null)
       if (session) {
         o = await fulfil(o, session)
