@@ -6,7 +6,7 @@
  * for the inbox preview line. Every value that reaches the HTML is escaped.
  */
 
-export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt'
+export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt' | 'welcome'
 
 /** What a template may fill in. `email` and `count` are used by the waitlist emails. */
 export interface EmailData {
@@ -113,6 +113,13 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
       heading: 'Confirm your email address',
       paragraphs: [hello, 'Thanks for signing up for Desknoty. Confirm your email address to finish creating your account.'],
       action: 'Confirm email',
+    },
+    welcome: {
+      subject: 'Welcome to Desknoty',
+      preheader: 'Your email is confirmed. Your account is ready.',
+      heading: 'You’re all set',
+      paragraphs: [hello, 'Your email address is confirmed and your Desknoty account is ready to use.'],
+      action: 'Open Desknoty',
     },
     'order-receipt': {
       subject: `Your download: ${data.name ?? 'your purchase'}`,

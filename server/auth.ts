@@ -41,6 +41,10 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => {
       await enqueueEmail('verify-email', user.email, { url, name: user.name })
     },
+    // Once per account: verification only happens once.
+    afterEmailVerification: async (user) => {
+      await enqueueEmail('welcome', user.email, { url: `${(process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, '')}/app`, name: user.name })
+    },
   },
 
   user: {

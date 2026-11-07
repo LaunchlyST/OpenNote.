@@ -332,6 +332,43 @@ try {
   const leak = await req('GET', `/${'data/seller-files'}`)
   check('the files folder is not served by URL', leak.status !== 200 || !leak.text.includes('SECRET'))
 
+  console.log('\n  Account emails: verification, welcome, resend, password reset')
+  {
+    const { readdirSync, readFileSync } = await import('node:fs')
+    const inbox = (to: string) =>
+      readdirSync(join(tmp, 'mailbox'))
+        .map((f) => JSON.parse(readFileSync(join(tmp, 'mailbox', f), 'utf8')) as { to: string; subject: string; text: string })
+        .filter((m) => m.to === to)
+    const linkIn = (m: { text: string } | undefined) => m?.text.match(/https?:\/\/\S+/)?.[0].replace(ORIGIN, BASE) ?? ''
+    const wait = async (fn: () => boolean) => {
+      for (let i = 0; i < 50 && !fn(); i++) await new Promise((r) => setTimeout(r, 100))
+    }
+    await req('POST', '/api/auth/sign-up/email', { name: 'Eve', email: 'eve@seller.test', password: PASSWORD })
+    await wait(() => inbox('eve@seller.test').some((m) => /Confirm/.test(m.subject)))
+    const verify = inbox('eve@seller.test').find((m) => /Confirm/.test(m.subject))
+    check('sign-up sends a verification email', Boolean(verify))
+    const vlink = linkIn(verify)
+    const tampered = await fetch(vlink.replace(/token=([^&]+)/, (_m, t: string) => `token=${t.slice(0, -4)}AAAA`), { redirect: 'manual' })
+    check('a tampered verification token does not verify', (await dbGet<{ v: unknown }>(`SELECT "emailVerified" AS v FROM "user" WHERE email = 'eve@seller.test'`)).v == false, String(tampered.status))
+    await req('POST', '/api/auth/send-verification-email', { email: 'eve@seller.test', callbackURL: '/app' })
+    await wait(() => inbox('eve@seller.test').filter((m) => /Confirm/.test(m.subject)).length >= 2)
+    check('verification can be resent', inbox('eve@seller.test').filter((m) => /Confirm/.test(m.subject)).length >= 2)
+    await fetch(vlink, { redirect: 'manual' })
+    check('the emailed link verifies the address', Boolean((await dbGet<{ v: unknown }>(`SELECT "emailVerified" AS v FROM "user" WHERE email = 'eve@seller.test'`)).v))
+    await wait(() => inbox('eve@seller.test').some((m) => /Welcome/.test(m.subject)))
+    check('a welcome email follows verification, once', inbox('eve@seller.test').filter((m) => /Welcome/.test(m.subject)).length === 1)
+    await req('POST', '/api/auth/request-password-reset', { email: 'eve@seller.test', redirectTo: '/app/reset' })
+    await wait(() => inbox('eve@seller.test').some((m) => /password/i.test(m.subject)))
+    const rlink = linkIn(inbox('eve@seller.test').find((m) => /password/i.test(m.subject)))
+    const token = rlink.match(/reset-password\/([^?/]+)/)?.[1] ?? new URL(rlink).searchParams.get('token') ?? ''
+    check('a password reset email is sent with a token', token.length > 10, rlink.slice(0, 80))
+    const NEWPW = 'a-brand-new-password-99'
+    check('the reset token sets a new password', (await req('POST', '/api/auth/reset-password', { token, newPassword: NEWPW })).status === 200)
+    check('the new password signs in', (await req('POST', '/api/auth/sign-in/email', { email: 'eve@seller.test', password: NEWPW })).status === 200)
+    check('the old password no longer does', (await req('POST', '/api/auth/sign-in/email', { email: 'eve@seller.test', password: PASSWORD })).status !== 200)
+    check('a reset token can’t be used twice', (await req('POST', '/api/auth/reset-password', { token, newPassword: 'yet-another-password-1' })).status !== 200)
+  }
+
   console.log('\n  Fixes: uploads, retries, receipts, renames, deletions')
   {
     const { readdirSync, readFileSync } = await import('node:fs')

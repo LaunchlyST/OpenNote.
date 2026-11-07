@@ -222,8 +222,10 @@ try {
   const nOrders = db.prepare("SELECT COUNT(*) AS n FROM seller_order WHERE status = 'paid'").get() as { n: number }
   const nMail = db.prepare("SELECT COUNT(*) AS n FROM email_outbox WHERE kind = 'order-receipt'").get() as { n: number }
   check('one paid order and one receipt email', nOrders.n === 1 && nMail.n === 1, `${nOrders.n}/${nMail.n}`)
-  const cancelled = db.prepare("SELECT COUNT(*) AS n FROM seller_order WHERE status = 'pending'").get() as { n: number }
-  check('the cancelled checkout stays unpaid', cancelled.n === 1)
+  // Buying again after cancelling reuses the same attempt (same requestId, still-open
+  // Stripe session), so there is one order in total and no stray unpaid one.
+  const all = db.prepare("SELECT COUNT(*) AS n, SUM(status = 'pending') AS p FROM seller_order").get() as { n: number; p: number }
+  check('cancel then buy again makes one order, not a duplicate', all.n === 1 && !all.p, `${all.n} orders, ${all.p} pending`)
 
   // The receipt email link
   // The mail worker sends every few seconds; wait for the receipt to land in the dev inbox.
@@ -257,6 +259,12 @@ try {
   const bp = await ben.newPage()
   await bp.goto(`${SITE}/app/signin`)
   await bp.request.post(`${SITE}/api/auth/sign-up/email`, { data: { name: 'Ben', email: 'ben@e2e.test', password: 'a-long-enough-password' }, headers: { origin: SITE } })
+  // Seller Studio needs Pro + a verified email (test setup, like Ava above).
+  {
+    const dbBen = new Database(DB)
+    dbBen.prepare("UPDATE \"user\" SET plan = 'pro', emailVerified = 1 WHERE email = 'ben@e2e.test'").run()
+    dbBen.close()
+  }
   await bp.request.post(`${SITE}/api/seller/store`, { data: { name: 'Ben Builds', handle: 'ben-builds' }, headers: { origin: SITE } })
   await bp.request.post(`${SITE}/api/seller/store/publish`, { headers: { origin: SITE } })
   await bp.goto(`${SITE}/store/ben-builds`)
