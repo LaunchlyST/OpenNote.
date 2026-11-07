@@ -30,12 +30,24 @@ const cors = await call('OPTIONS', '/api/seller/store', { headers: { 'Access-Con
 ok(cors.status === 204 && cors.headers.get('access-control-allow-origin') === ORIGIN, 'CORS allows desknoty.com')
 ok((await call('GET', '/api/seller/store')).status === 401, 'seller API refuses anonymous requests')
 
-const a = await seller('a')
-const b = await seller('b')
-const sa = await call('POST', '/api/seller/store', { token: a.token, body: { handle: `ha${stamp}`, name: 'Store A' } })
-ok(sa.status === 201, `A creates a store (HTTP ${sa.status} ${sa.data?.error ?? ''})`)
-const sb = await call('POST', '/api/seller/store', { token: b.token, body: { handle: `hb${stamp}`, name: 'Store B' } })
-ok(sb.status === 201, 'B creates a store')
+// A brand-new Free, unverified account must not get into Seller Studio.
+const fresh = await seller('new')
+const blocked = await call('POST', '/api/seller/store', { token: fresh.token, body: { handle: `hn${stamp}`, name: 'New' } })
+ok(blocked.status === 403 && blocked.data?.needs === 'pro', `a new Free account can't open a store (HTTP ${blocked.status} ${blocked.data?.needs ?? ''})`)
+
+// Isolation uses two existing (grandfathered) test sellers: HOSTED_SELLERS=<stamp> from an earlier run.
+const legacy = process.env.HOSTED_SELLERS
+if (!legacy) throw new Error('set HOSTED_SELLERS to the stamp of two grandfathered test sellers')
+async function signIn(tag) {
+  const email = `hosted-${tag}-${legacy}@example.com`
+  const r = await call('POST', '/api/auth/sign-in/email', { body: { email, password: `Pw-${legacy}-${tag}-Long!9` } })
+  ok(r.status === 200, `${tag}: grandfathered test seller signs in`)
+  return { email, token: r.headers.get('set-auth-token') }
+}
+const a = await signIn('a')
+const b = await signIn('b')
+ok((await call('GET', '/api/seller/store', { token: a.token })).data?.store?.handle === `ha${legacy}`, 'A (grandfathered, Free) still opens its store')
+ok((await call('GET', '/api/seller/store', { token: b.token })).data?.store?.handle === `hb${legacy}`, 'B (grandfathered, Free) still opens its store')
 const p = await call('POST', '/api/seller/products', { token: a.token, body: { title: 'Hosted test pack', priceMinor: 300, currency: 'gbp' } })
 const pid = p.data?.product?.id
 ok(p.status === 201 && pid, 'A creates a product')
@@ -53,9 +65,9 @@ ok(big.status >= 400, `a 51 MB file is refused (HTTP ${big.status})`)
 const out = await call('POST', '/api/auth/sign-out', { token: b.token, body: {} })
 ok(out.status === 200, 'B signs out')
 ok((await call('GET', '/api/seller/store', { token: b.token })).status === 401, "B's token stops working after sign-out")
-const again = await call('POST', '/api/auth/sign-in/email', { body: { email: b.email, password: `Pw-${stamp}-b-Long!9` } })
+const again = await call('POST', '/api/auth/sign-in/email', { body: { email: b.email, password: `Pw-${legacy}-b-Long!9` } })
 ok(again.status === 200 && Boolean(again.headers.get('set-auth-token')), 'B signs back in with the password')
-ok((await call('GET', '/api/seller/store', { token: again.headers.get('set-auth-token') })).data?.store?.handle === `hb${stamp}`, 'B gets the same store back after signing in')
+ok((await call('GET', '/api/seller/store', { token: again.headers.get('set-auth-token') })).data?.store?.handle === `hb${legacy}`, 'B gets the same store back after signing in')
 ok((await call('GET', '/api/seller/store', { token: 'not-a-real-session-token' })).status === 401, 'an unknown session token is refused')
 console.log(failed ? `\n${failed} hosted check(s) FAILED` : '\nAll hosted checks passed.')
 process.exit(failed ? 1 : 0)
