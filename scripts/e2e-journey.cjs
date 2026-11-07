@@ -35,6 +35,10 @@ const pickerReady = (p) => p.getByText('Your space to make').first().waitFor({ t
 async function enterProject(p, name) {
   await pickerReady(p)
   await p.getByRole('button', { name: /Get Started Free/ }).click()
+  // Free opens straight into the latest project (or a new one) since 9911c62;
+  // the project list only appears when that isn't possible.
+  await p.waitForURL(/\/app\/(project\/|free)/, { timeout: 15000 })
+  if (/\/app\/project\//.test(p.url())) return appReady(p)
   await p.getByText(/Your workspace starts here|Showing \d/).first().waitFor({ timeout: 15000 })
   const card = p.getByRole('button', { name: `Open ${name}`, exact: true }).first()
   if (await card.count()) await card.click()
@@ -42,7 +46,7 @@ async function enterProject(p, name) {
     await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
     await p.getByLabel('Project name').fill(name)
     await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
-    await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
+    await p.getByRole('button', { name: `Open ${name}`, exact: true }).first().click()
   }
   await appReady(p)
 }
@@ -188,9 +192,11 @@ async function enterProject(p, name) {
   const body = await theirs.text()
   !body.includes(eventTitle) && !body.includes(noteTitle) ? ok('another account cannot see this account’s data') : die('data leaked to another account')
 
-  await p.goto(B, { waitUntil: 'networkidle' })
+  // Pricing lives on /landing (behind the invite code this browser already redeemed).
+  await p.goto(`${B}/landing`, { waitUntil: 'networkidle' })
   await p.locator('#pricing').scrollIntoViewIfNeeded()
-  const pricing = await p.locator('#pricing').innerText()
+  // textContent: the label is uppercased by CSS, innerText would read "COMING SOON"
+  const pricing = (await p.locator('#pricing').textContent()) ?? ''
   const proBuyLinks = await p.locator('#pricing a[href*="checkout"], #pricing a[href*="stripe"]').count()
   pricing.includes('Coming Soon') && !/Get Desknoty Pro/.test(pricing) && proBuyLinks === 0
     ? ok('Pro shows “Coming Soon” and cannot be purchased')

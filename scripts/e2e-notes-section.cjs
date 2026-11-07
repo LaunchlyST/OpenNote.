@@ -28,10 +28,13 @@ const check = (ok, msg) => {
   await p.getByLabel('Confirm password', { exact: true }).fill('notes-tester-pass1')
   await p.getByRole('button', { name: 'Create account' }).click()
   await p.getByRole('button', { name: /Get Started Free/ }).click()
+  // Free opens straight into a calendar since ffc5602; the project list is at /app/free.
+  await p.waitForURL(/\/app\/(project\/|free)/, { timeout: 15000 })
+  await p.goto(`${B}/app/free`)
   await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
   await p.getByLabel('Project name').fill('Notes')
   await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
-  await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
+  await p.getByRole('button', { name: 'Open ' + 'Notes', exact: true }).first().click()
   await p.getByText('Full Week').first().waitFor()
   const projectId = p.url().split('/').pop()
   const data = async () => (await (await p.request.get(`${B}/api/projects/${projectId}`)).json()).data

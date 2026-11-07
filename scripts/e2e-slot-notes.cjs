@@ -25,7 +25,7 @@ async function createProject(p, name) {
   await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
   await p.getByLabel('Project name').fill(name)
   await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
-  await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
+  await p.getByRole('button', { name: `Open ${name}`, exact: true }).first().click()
   await appReady(p)
 }
 
@@ -100,6 +100,9 @@ async function addNote(p, text) {
   await p.getByLabel('Confirm password', { exact: true }).fill('slot-notes-pass-1')
   await p.getByRole('button', { name: 'Create account' }).click()
   await p.getByRole('button', { name: /Get Started Free/ }).click()
+  // Free opens straight into a calendar since ffc5602; the project list is at /app/free.
+  await p.waitForURL(/\/app\/(project\/|free)/, { timeout: 15000 })
+  await p.goto(`${B}/app/free`)
   await createProject(p, 'Alpha')
   check((await zoomLabel(p)) === '1 h', 'calendar opens zoomed out at 1-hour rows')
   check((await p.locator('[data-note-card]').count()) === 0, 'a new project has no notes')

@@ -34,10 +34,13 @@ const pad = (v) => String(v).padStart(2, '0')
   await p.getByLabel('Confirm password', { exact: true }).fill('now-line-tester-1')
   await p.getByRole('button', { name: 'Create account' }).click()
   await p.getByRole('button', { name: /Get Started Free/ }).click()
+  // Free opens straight into a calendar since ffc5602; the project list is at /app/free.
+  await p.waitForURL(/\/app\/(project\/|free)/, { timeout: 15000 })
+  await p.goto(`${B}/app/free`)
   await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
   await p.getByLabel('Project name').fill('Now')
   await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
-  await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
+  await p.getByRole('button', { name: 'Open ' + 'Now', exact: true }).first().click()
   await p.getByText('Full Week').first().waitFor()
 
   const todayKey = `${start.getFullYear()}-${pad(start.getMonth() + 1)}-${pad(start.getDate())}`
