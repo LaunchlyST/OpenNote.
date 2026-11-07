@@ -57,7 +57,14 @@ export const sellerSetup = () => ({
   webhook: Boolean(seller.webhookSecret),
   tiktok: Boolean(seller.tiktokKey && seller.tiktokSecret),
   email: true,
+  /** Never the key itself: only whether it is a Sandbox (test) key. */
+  stripeMode: seller.stripeSecret.startsWith('sk_test_') || seller.stripeSecret.startsWith('rk_test_') ? 'sandbox' : seller.stripeSecret ? 'live' : 'none',
 })
+
+/** The Stripe platform account the configured key belongs to (an id, not a secret). Cached. */
+let platformAccount: Promise<string | null> | null = null
+const platformAccountId = () =>
+  (platformAccount ??= (stripe()?.accounts.retrieve() ?? Promise.resolve(null)).then((a) => (a ? a.id : null)).catch(() => null))
 
 let stripeClient: Stripe | null = null
 function stripe(): Stripe | null {
@@ -624,7 +631,7 @@ async function storeView(s: StoreRow) {
 export function sellerRouter() {
   const r = Router()
 
-  r.get('/api/seller/setup', async (_req, res) => res.set('Cache-Control', 'no-store').json({ ...sellerSetup(), platformFeePercent: PLATFORM_FEE_PERCENT }))
+  r.get('/api/seller/setup', async (_req, res) => res.set('Cache-Control', 'no-store').json({ ...sellerSetup(), platformAccount: await platformAccountId(), platformFeePercent: PLATFORM_FEE_PERCENT }))
 
   const me = Router()
   me.use(requireUser)

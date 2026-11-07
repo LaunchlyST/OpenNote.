@@ -99,8 +99,17 @@ export async function enqueueEmail(kind: EmailKind, to: string, data: EmailData,
   return { queued: true, id }
 }
 
+/** How long a claimed message may stay in "sending" before it counts as abandoned. */
+const CLAIM_MS = 10 * 60 * 1000
+
 async function sendDue() {
+  // No mail server configured: keep everything queued (sent once SMTP is set)
+  // instead of marking receipts failed.
+  if (transport.name === 'none') return
   const now = Date.now()
+  // A worker that died mid-send leaves its claim behind; take it back only
+  // after the claim has expired, so a live worker is never doubled.
+  await sql.run(`UPDATE email_outbox SET status = 'retrying' WHERE status = 'sending' AND "nextAttemptAt" <= ?`, now)
   const due = await sql.all<Row>(
     `SELECT id, kind, recipient, subject, html, text, attempts FROM email_outbox WHERE status IN ('queued','retrying') AND "nextAttemptAt" <= ? ORDER BY id LIMIT 20`,
     now,
@@ -108,7 +117,7 @@ async function sendDue() {
 
   for (const row of due) {
     // Claim the row so a second worker (or a restart) cannot send it twice.
-    const claimed = await sql.run(`UPDATE email_outbox SET status = 'sending' WHERE id = ? AND status IN ('queued','retrying')`, row.id)
+    const claimed = await sql.run(`UPDATE email_outbox SET status = 'sending', "nextAttemptAt" = ? WHERE id = ? AND status IN ('queued','retrying')`, now + CLAIM_MS, row.id)
     if (!claimed.changes) continue
 
     try {
@@ -166,7 +175,6 @@ function kick() {
 
 /** Starts the background worker. A message stuck in "sending" by a crash is retried. */
 export function startMailWorker(intervalMs = 5_000) {
-  void sql.run(`UPDATE email_outbox SET status = 'retrying' WHERE status = 'sending'`).catch((err) => console.error('[mail] worker error', err))
   timer ??= setInterval(() => void processOutbox().catch((err) => console.error('[mail] worker error', err)), intervalMs)
   ;(timer as { unref?: () => void }).unref?.()
   log(`worker started (transport: ${transport.name})`)

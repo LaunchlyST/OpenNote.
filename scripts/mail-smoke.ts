@@ -308,7 +308,7 @@ try {
     setTransport(createTransport())
     const r = await enqueueEmail('reset-password', 'prod@example.com', { url: LINK })
     await processOutbox()
-    check('a misconfigured production email is marked failed, not silently dropped', r.queued && row(r.id).status === 'failed', r.queued ? row(r.id).status : '')
+    check('a misconfigured production email stays queued for when SMTP is set, never faked or dropped', r.queued && row(r.id).status === 'queued' && row(r.id).html !== null, r.queued ? row(r.id).status : '')
     Object.assign(env.smtp, saved)
     env.isProduction = saved.isProd
     env.baseURL = saved.base

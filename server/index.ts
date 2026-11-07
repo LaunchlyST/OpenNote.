@@ -9,7 +9,8 @@ import { deployRouter } from './deploy.ts'
 import { env, googleConfigured, requireEmailVerification, smtpConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
-import { outboxLog, startMailWorker, transportName } from './mail/index.ts'
+import { outboxLog, processOutbox, startMailWorker, transportName } from './mail/index.ts'
+import { timingSafeEqual } from 'node:crypto'
 import { productionMailProblem, senderProblem, verifySmtp } from './mail/transport.ts'
 import { applyMigrations } from './schema.ts'
 import { PLANS, planOf, requirePlan } from './plans.ts'
@@ -82,6 +83,19 @@ app.all('/api/auth/*splat', (req, res) => {
 app.post('/api/stripe/webhook', ...stripeWebhookHandler())
 
 app.use(express.json({ limit: '2mb' }))
+
+/**
+ * Scheduled email run (Supabase Cron calls this every minute): hosted
+ * functions do not keep a background timer alive between requests.
+ * Protected by CRON_SECRET; does nothing when it is not set.
+ */
+app.post('/api/internal/outbox', async (req, res) => {
+  const secret = process.env.CRON_SECRET ?? ''
+  const got = String(req.headers['x-cron-secret'] ?? '')
+  if (!secret || got.length !== secret.length || !timingSafeEqual(Buffer.from(got), Buffer.from(secret))) return void res.status(404).end()
+  await processOutbox()
+  res.json({ ok: true, transport: transportName() })
+})
 
 /** Which sign-in options the UI should offer. Contains no secrets. */
 app.get('/api/auth-config', (_req, res) => {
