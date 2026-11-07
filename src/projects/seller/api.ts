@@ -72,7 +72,7 @@ export interface PublicStore {
 }
 export interface PublicOrder {
   id: string
-  status: 'pending' | 'paid' | 'failed' | 'cancelled'
+  status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded'
   product: string
   amountMinor: number
   currency: string

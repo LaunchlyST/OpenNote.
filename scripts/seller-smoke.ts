@@ -356,6 +356,23 @@ try {
   const links = fake.calls.filter((c) => c.path === '/v1/account_links').slice(-2).map((c) => c.body.account)
   const benAcct = (await dbGet<{ a: string }>('SELECT "stripeAccountId" AS a FROM seller_store WHERE handle = ?', 'ben-builds')).a
   check('two simultaneous onboarding clicks end on one connected account', ob1.status === 200 && ob2.status === 200 && Boolean(benAcct) && links.every((x) => x === benAcct), JSON.stringify({ links, benAcct }))
+  // Refunds: a partial refund keeps access, a full refund revokes it.
+  const rp = (await req('POST', '/api/seller/products', { title: 'Refund pack', priceMinor: 900, currency: 'gbp' }, A)).json.product.id
+  await req('PUT', `/api/seller/products/${rp}/file`, Buffer.from('REFUND-FILE'), A, { 'content-type': 'application/zip', 'x-file-name': 'r.zip' })
+  await req('POST', '/api/seller/store/publish', {}, A)
+  const rco = await req('POST', '/api/store/ava-renamed/checkout', { productId: rp })
+  const rsid = new URL(rco.json.url).pathname.split('/').pop()!
+  await sendWebhook(HOOK, fake.pay(rsid, 'refund@example.test'))
+  const rOrder = (await req('GET', `/api/store/ava-renamed/session/${rsid}`)).json.order
+  const rDl = String(rOrder.downloadUrl).replace(ORIGIN, BASE)
+  check('refund test order is paid and downloadable', rOrder.status === 'paid' && (await fetch(rDl)).status === 200)
+  check('a partial refund is acknowledged', (await sendWebhook(HOOK, fake.refund(rsid, 300))).status === 200)
+  check('…and keeps the download', (await fetch(rDl)).status === 200 && (await req('GET', `/api/store/ava-renamed/session/${rsid}`)).json.order.status === 'paid')
+  check('a full refund is acknowledged', (await sendWebhook(HOOK, fake.refund(rsid))).status === 200)
+  check('…marks the order refunded', (await req('GET', `/api/store/ava-renamed/session/${rsid}`)).json.order.status === 'refunded')
+  check('…and the existing download link stops working', (await fetch(rDl)).status === 403)
+  const forged = fake.refund(rsid)
+  check('a refund event with a bad signature is refused', (await sendWebhook(HOOK, { payload: forged.payload, header: 't=1,v1=00' })).status === 400)
   const del = await req('POST', '/api/auth/delete-user', { password: PASSWORD }, A)
   check('an account with paid customer orders can’t be deleted', del.status >= 400, String(del.status))
   check('…and its buyers keep their order', (await req('GET', `/api/store/ava-renamed/order/${oid}?k=${k}`)).json?.order?.status === 'paid')

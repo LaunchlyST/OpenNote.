@@ -171,5 +171,6 @@ function OrderStatus({ store, load }: { store: Store; load: () => Promise<{ orde
       />
     )
   if (order.status === 'cancelled') return <Message title="Checkout cancelled" text="You weren’t charged." back={back} />
+  if (order.status === 'refunded') return <Message title="Order refunded" text="This purchase was refunded, so its download is no longer available." back={back} />
   return <Message title="Payment didn’t go through" text="You weren’t charged. Try again with another payment method." back={back} />
 }

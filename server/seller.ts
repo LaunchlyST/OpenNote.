@@ -633,6 +633,19 @@ async function handleEvent(event: Stripe.Event) {
       await markOrder(s.id, 'cancelled')
       return
     }
+    case 'charge.refunded': {
+      // A full refund revokes the purchase: no more download links, receipt link shows it refunded.
+      // Partial refunds keep access (the buyer still paid for the product).
+      const ch = event.data.object as Stripe.Charge
+      if (!ch.refunded || !event.account) return
+      const piId = typeof ch.payment_intent === 'string' ? ch.payment_intent : ch.payment_intent?.id
+      const st = stripe()
+      if (!piId || !st) return
+      const pi = await st.paymentIntents.retrieve(piId, { stripeAccount: event.account })
+      const orderId = pi.metadata?.desknotyOrderId
+      if (orderId) await sql.run(`UPDATE seller_order SET status = 'refunded' WHERE id = ? AND "accountId" = ? AND status = 'paid'`, orderId, event.account)
+      return
+    }
     case 'account.updated': {
       const a = event.data.object as Stripe.Account
       const store = await q.storeByAccount(a.id)

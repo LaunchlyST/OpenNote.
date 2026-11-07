@@ -43,12 +43,15 @@ export interface FakeStripe {
   /** Buyer pays: marks the session paid and returns the signed webhook it would send. */
   pay(sessionId: string, email?: string): { payload: string; header: string }
   event(type: string, object: Obj, account?: string): { payload: string; header: string }
+  /** Seller refunds a paid session: returns the signed charge.refunded webhook (full or partial). */
+  refund(sessionId: string, amount?: number): { payload: string; header: string }
   close(): Promise<void>
 }
 
 export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: string }): Promise<FakeStripe> {
   const accounts = new Map<string, Obj>()
   const sessions = new Map<string, Obj>()
+  const intents = new Map<string, Obj>()
   const calls: FakeStripe['calls'] = []
   const sent: FakeStripe['sent'] = []
   const signer = new Stripe('sk_test_fake')
@@ -81,8 +84,17 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
   }
   const pay: FakeStripe['pay'] = (id, email = 'buyer@example.test') => {
     const s = sessions.get(id)!
-    Object.assign(s, { payment_status: 'paid', status: 'complete', customer_details: { email } })
+    const pi = `pi_${id.slice(8)}`
+    intents.set(pi, { id: pi, object: 'payment_intent', metadata: s._piMetadata ?? {}, _account: s._account })
+    Object.assign(s, { payment_status: 'paid', status: 'complete', customer_details: { email }, payment_intent: pi })
     return event('checkout.session.completed', s, s._account as string)
+  }
+  const refund: FakeStripe['refund'] = (id, amount) => {
+    const s = sessions.get(id)!
+    const total = Number(s.amount_total)
+    const refunded = amount ?? total
+    const charge = { id: `ch_${id.slice(8)}`, object: 'charge', payment_intent: s.payment_intent, amount: total, amount_refunded: refunded, refunded: refunded >= total }
+    return event('charge.refunded', charge, s._account as string)
   }
 
   const json = (res: ServerResponse, code: number, body: unknown) => {
@@ -135,9 +147,16 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
         customer_details: null,
         _account: account,
         _name: (item.product_data as Obj).name,
+        _piMetadata: ((form.payment_intent_data as Obj | undefined)?.metadata as Obj | undefined) ?? {},
       }
       sessions.set(id, s)
       return json(res, 200, s)
+    }
+    m = p.match(/^\/v1\/payment_intents\/(pi_\w+)$/)
+    if (req.method === 'GET' && m) {
+      const pi = intents.get(m[1])
+      if (!pi || pi._account !== account) return json(res, 404, { error: { message: 'No such payment_intent' } })
+      return json(res, 200, pi)
     }
     m = p.match(/^\/v1\/checkout\/sessions\/(cs_\w+)$/)
     if (req.method === 'GET' && m) {
@@ -187,7 +206,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     srv.listen(0, '127.0.0.1', () => {
       const addr = srv.address() as { port: number }
       base = `http://127.0.0.1:${addr.port}`
-      resolve({ url: base, accounts, sessions, calls, sent, setAccount, pay, event, close: () => new Promise((r) => srv.close(() => r())) })
+      resolve({ url: base, accounts, sessions, calls, sent, setAccount, pay, refund, event, close: () => new Promise((r) => srv.close(() => r())) })
     })
   })
 }
