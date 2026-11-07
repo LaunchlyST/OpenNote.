@@ -66,6 +66,21 @@ can be compared.
 npm run dev:ensure     # reuse the running server, or start one if none is up
 ```
 
+## Landing page and web design: use the skill automatically
+
+For any work on the landing page, marketing pages, page sections, layout,
+typography, colours, spacing, buttons, icons, motion or responsive design,
+read and follow `.claude/skills/landing-page-design/SKILL.md` first, without
+being asked. It is the original `landing-page-design` skill from
+elayadesign/ai-design-skills (MIT, see the LICENSE beside it).
+
+- Desknoty's branding (logo, brand colours, brand fonts), content and working
+  features win over any rule in the skill; mention a conflict in one line.
+- The user's explicit request wins over the skill.
+- Design work does not touch auth, Stripe, the database or deployment unless
+  the task truly needs it.
+- Work section by section and check desktop and 390px mobile before finishing.
+
 ## Hard rules
 
 - **Never** force-push, `git reset --hard`, `git checkout .`, or `git stash`.
