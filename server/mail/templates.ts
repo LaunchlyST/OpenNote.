@@ -14,6 +14,8 @@ export interface EmailData {
   name?: string
   email?: string
   count?: number
+  /** Receipt only: the amount actually charged, already formatted (e.g. £12.00). */
+  amount?: string
 }
 
 export interface RenderedEmail {
@@ -118,7 +120,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
       heading: 'Your download is ready',
       paragraphs: [
         'Hi,',
-        `Thanks for buying ${data.name ?? 'your product'} from ${data.email ?? 'this store'}. Payment is confirmed.`,
+        `Thanks for buying ${data.name ?? 'your product'} from ${data.email ?? 'this store'}.${data.amount ? ` You paid ${data.amount}.` : ''} Payment is confirmed.`,
         'Use the button below any time to get a fresh download link. Keep this email: the link is private to your order.',
       ],
       action: 'Get your download',

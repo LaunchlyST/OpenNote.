@@ -333,6 +333,15 @@ try {
   check('the files folder is not served by URL', leak.status !== 200 || !leak.text.includes('SECRET'))
 
   console.log('\n  Fixes: uploads, retries, receipts, renames, deletions')
+  {
+    const { readdirSync, readFileSync } = await import('node:fs')
+    const files = readdirSync(join(tmp, 'mailbox')).map((f) => JSON.parse(readFileSync(join(tmp, 'mailbox', f), 'utf8')))
+    const receipts = files.filter((m: { to: string; subject: string }) => m.to === 'buyer@example.test' && /Your download/.test(m.subject))
+    const r0 = receipts[0] as { text: string } | undefined
+    check('exactly one receipt reached the buyer’s inbox (dev mailbox)', receipts.length === 1, String(receipts.length))
+    check('the receipt names the product, store and amount paid', Boolean(r0 && r0.text.includes('Content planner') && r0.text.includes('Ava Makes') && r0.text.includes('£12.00')), r0?.text.slice(0, 200))
+    check('the receipt link opens the order', Boolean(r0 && /\/store\/ava-makes\/order\/ord_\w+\?k=/.test(r0.text)))
+  }
   check('the paid order reports its receipt state', ['sent', 'queued'].includes(re.json?.order?.receipt), String(re.json?.order?.receipt))
   const p2 = (await req('POST', '/api/seller/products', { title: 'Data pack', priceMinor: 300, currency: 'gbp' }, A)).json.product.id
   const jsonUp = await req('PUT', `/api/seller/products/${p2}/file`, Buffer.from('{"rows":[1,2,3]}'), A, { 'content-type': 'application/json', 'x-file-name': 'data.json' })

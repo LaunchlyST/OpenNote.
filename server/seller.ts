@@ -566,7 +566,12 @@ export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Sess
       await enqueueEmail(
         'order-receipt',
         row.buyerEmail!,
-        { url: retrievalUrl(row, store.handle), name: row.productTitle, email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle },
+        {
+          url: retrievalUrl(row, store.handle),
+          name: row.productTitle,
+          email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle,
+          amount: new Intl.NumberFormat('en-GB', { style: 'currency', currency: row.currency.toUpperCase() }).format(row.amountMinor / 100),
+        },
         tx,
       )
   })
