@@ -562,14 +562,18 @@ export function stripeWebhookHandler() {
       } catch {
         return void res.status(400).json({ error: 'Invalid signature.' })
       }
-      // Already handled this exact event: acknowledge and do nothing.
       const fresh = (await sql.run(`INSERT INTO stripe_event (id, type, "receivedAt") VALUES (?, ?, ?) ON CONFLICT (id) DO NOTHING`, event.id, event.type, now())).changes
-      if (!fresh) return void res.json({ received: true, duplicate: true })
       try {
+        // A repeat of a recorded event is handled again rather than skipped:
+        // if the first attempt died mid-way (worker killed after recording the
+        // event), the retry finishes it. Fulfilment is idempotent (the order
+        // is marked paid once; the receipt is claimed atomically), so a true
+        // duplicate changes nothing.
         await handleEvent(event)
+        if (!fresh) return void res.json({ received: true, duplicate: true })
       } catch (err) {
         // Let Stripe retry: forget the event so the retry is processed.
-        await sql.run(`DELETE FROM stripe_event WHERE id = ?`, event.id)
+        if (fresh) await sql.run(`DELETE FROM stripe_event WHERE id = ?`, event.id)
         console.error('[seller] webhook failed', event.type, err)
         return void res.status(500).json({ error: 'Webhook handling failed.' })
       }
