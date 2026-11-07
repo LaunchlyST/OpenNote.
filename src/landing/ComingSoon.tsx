@@ -135,9 +135,11 @@ export function ComingSoon() {
         .then((r) => (r.ok ? r.json() : null))
         .catch(() => null)
         .then(async (d) => {
-          if (typeof d?.count === 'number') return setCount(d.count)
+          // Sign-ups made before the site had a server were only counted by the public
+          // counter, so show whichever is higher: nobody who joined disappears.
           const n = await readCounter()
-          if (n !== null) setCount(n)
+          const api = typeof d?.count === 'number' ? d.count : null
+          if (api !== null || n !== null) setCount(Math.max(api ?? 0, n ?? 0))
         })
     void load()
     const id = window.setInterval(load, 15000)
