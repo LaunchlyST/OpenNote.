@@ -162,7 +162,7 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   // Remember page + search when returning from a project
   await pager.getByRole('button', { name: 'Page 2' }).click()
   const onPage2 = await p.locator('[data-project-card] h3').first().innerText()
-  await p.getByRole('button', { name: 'Open ' + 'My Business Calendar', exact: true }).first().click()
+  await p.getByRole('button', { name: 'Open ' + onPage2, exact: true }).first().click()
   await p.getByText('Full Week').first().waitFor()
   check(true, `opening “${onPage2}” shows its calendar`)
   await p.getByRole('button', { name: /Back to Projects/ }).click()
