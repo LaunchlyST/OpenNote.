@@ -32,7 +32,8 @@
     "mail:test": "tsx scripts/mail-test.ts",
     "serve": "NODE_ENV=production tsx server/index.ts",
     "test:seller": "tsx scripts/seller-smoke.ts",
-    "test:e2e:seller": "tsx scripts/e2e-seller.ts"
+    "test:e2e:seller": "tsx scripts/e2e-seller.ts",
+    "test:e2e:studio": "tsx scripts/seller-e2e.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
