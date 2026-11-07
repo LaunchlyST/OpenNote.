@@ -449,6 +449,10 @@ async function requireUser(req: Authed, res: Response, next: NextFunction) {
   try {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
     if (!session) return void res.status(401).json({ error: 'Not signed in.' })
+    // Seller Studio is a Pro tool, and payouts need an address we know is real.
+    const u = session.user as { plan?: string | null; emailVerified?: boolean | number }
+    if (u.plan !== 'pro') return void res.status(403).json({ error: 'Seller Studio is part of Desknoty Pro.', needs: 'pro' })
+    if (!u.emailVerified) return void res.status(403).json({ error: 'Verify your email address to use Seller Studio.', needs: 'verify-email' })
     req.userId = session.user.id
     req.userEmail = session.user.email
     next()
@@ -774,10 +778,13 @@ export function sellerRouter() {
     if (!s) return
     const p = await q.product(String(req.params.id), s.id)
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
-    // Keep the file while any paid order still needs it.
-    const paid = (await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order WHERE "productId" = ? AND status = 'paid'`, p.id))?.n ?? 0
     await sql.run(`DELETE FROM seller_product WHERE id = ?`, p.id)
-    if (!paid) for (const f of [p.fileId, p.pubFileId]) if (f) removeFile(f)
+    // A file stays while any order (paid, or pending and still payable) points at it.
+    for (const f of new Set([p.fileId, p.pubFileId])) {
+      if (!f) continue
+      const used = await sql.get(`SELECT 1 AS one FROM seller_order WHERE "fileId" = ? AND status IN ('paid', 'pending') LIMIT 1`, f)
+      if (!used) removeFile(f)
+    }
     res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -847,10 +854,12 @@ export function sellerRouter() {
           },
           metadata: { desknotyStoreId: s.id },
         },
-        { apiVersion: STRIPE_V2_VERSION },
+        // Same key for concurrent clicks: Stripe returns the same account instead of a second one.
+        { apiVersion: STRIPE_V2_VERSION, idempotencyKey: `desknoty_account_${s.id}` } as never,
       )) as unknown as { id: string }
-      accountId = a.id
-      await sql.run(`UPDATE seller_store SET "stripeAccountId" = ?, "stripeStatus" = 'incomplete', "updatedAt" = ? WHERE id = ?`, accountId, now(), s.id)
+      // Only the first writer stores its account; everyone then uses whatever is stored.
+      await sql.run(`UPDATE seller_store SET "stripeAccountId" = ?, "stripeStatus" = 'incomplete', "updatedAt" = ? WHERE id = ? AND "stripeAccountId" IS NULL`, a.id, now(), s.id)
+      accountId = (await q.storeById(s.id))!.stripeAccountId ?? a.id
     }
     const sep = returnTo.includes('?') ? '&' : '?'
     const link = await st.accountLinks.create({
@@ -972,7 +981,18 @@ export function sellerRouter() {
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
     const fresh = await refreshAccount(s).catch(() => s)
     if (!fresh.stripeAccountId || !fresh.chargesReady) return void res.status(409).json({ error: 'This seller can’t take payments yet.' })
-    const orderId = `ord_${randomBytes(12).toString('hex')}`
+    // A retried request (same requestId from the buyer's page) maps to the same order and the same
+    // Stripe session, so double clicks or network retries never create duplicate orders.
+    const requestId = String((req.body as { requestId?: unknown })?.requestId ?? '')
+    const orderId = /^[A-Za-z0-9-]{8,64}$/.test(requestId)
+      ? `ord_${createHmac('sha256', env.secret).update(`checkout:${s.id}:${p.id}:${requestId}`).digest('hex').slice(0, 24)}`
+      : `ord_${randomBytes(12).toString('hex')}`
+    const existing = await q.order(orderId)
+    if (existing?.sessionId) {
+      const prev = await st.checkout.sessions.retrieve(existing.sessionId, { stripeAccount: existing.accountId }).catch(() => null)
+      if (prev?.status === 'open' && prev.url) return void res.json({ url: prev.url })
+      if (existing.status === 'paid') return void res.status(409).json({ error: 'This purchase is already complete.' })
+    }
     const session = await st.checkout.sessions.create(
       {
         mode: 'payment',
@@ -987,12 +1007,36 @@ export function sellerRouter() {
       },
       { stripeAccount: fresh.stripeAccountId, idempotencyKey: `checkout_${orderId}` },
     )
-    await sql.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "sessionId", "accountId", "amountMinor", currency, "accessKey", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, orderId, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', session.id, fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now())
+    await sql.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "sessionId", "accountId", "amountMinor", currency, "accessKey", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING`, orderId, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', session.id, fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now())
     res.json({ url: session.url })
   })
 
-  function orderView(o: OrderRow, s: StoreRow) {
+  /**
+   * The order's store for a link carrying `handle`. The store's current handle
+   * matches; so does a handle no store uses any more (the seller renamed it
+   * after the receipt was sent). Another store's handle never does.
+   */
+  async function orderStore(o: OrderRow, handle: string): Promise<StoreRow | undefined> {
+    const s = await q.storeById(o.storeId)
+    if (!s) return undefined
+    const named = await q.storeByHandle(handle.toLowerCase())
+    return !named || named.id === s.id ? s : undefined
+  }
+
+  /** The receipt's real state, from the outbox: only 'sent' means the mail server accepted it. */
+  async function receiptState(o: OrderRow): Promise<'sent' | 'queued' | 'failed' | null> {
+    if (o.status !== 'paid' || !o.buyerEmail || !o.emailedAt) return null
+    const m = await sql.get<{ status: string }>(
+      `SELECT status FROM email_outbox WHERE kind = 'order-receipt' AND recipient = ? AND "createdAt" >= ? ORDER BY id LIMIT 1`,
+      o.buyerEmail.toLowerCase(),
+      Date.parse(String(o.emailedAt)) - 60_000,
+    )
+    return m?.status === 'sent' ? 'sent' : m?.status === 'failed' ? 'failed' : 'queued'
+  }
+
+  async function orderView(o: OrderRow, s: StoreRow) {
     return {
+      receipt: await receiptState(o),
       id: o.id,
       status: o.status,
       product: o.productTitle,
@@ -1007,9 +1051,10 @@ export function sellerRouter() {
 
   /** The Checkout success page asks here; if the webhook hasn't arrived yet, Stripe is asked directly. */
   pub.get('/:handle/session/:sessionId', async (req, res) => {
-    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
+    // The order's own store, not the handle in the URL: links keep working after a handle change.
     let o = await q.orderBySession(String(req.params.sessionId))
-    if (!s || !o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
+    const s = o ? await orderStore(o, String(req.params.handle)) : undefined
+    if (!s || !o) return void res.status(404).json({ error: 'Order not found.' })
     const st = stripe()
     // SELLER_CONFIRM_FALLBACK=off: only the signed webhook may fulfil (used to prove webhook delivery).
     if (o.status === 'pending' && st && process.env.SELLER_CONFIRM_FALLBACK !== 'off') {
@@ -1020,18 +1065,18 @@ export function sellerRouter() {
         o = (await q.order(o.id))!
       }
     }
-    res.json({ order: orderView(o, s) })
+    res.json({ order: await orderView(o, s) })
   })
 
   /** The link in the receipt email: re-issues a fresh download link for a paid order. */
   pub.get('/:handle/order/:orderId', async (req, res) => {
-    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
     const o = await q.order(String(req.params.orderId))
+    const s = o ? await orderStore(o, String(req.params.handle)) : undefined
     const k = Buffer.from(String(req.query.k ?? ''))
-    if (!s || !o || o.storeId !== s.id || k.length !== o.accessKey.length || !timingSafeEqual(k, Buffer.from(o.accessKey))) {
+    if (!s || !o || k.length !== o.accessKey.length || !timingSafeEqual(k, Buffer.from(o.accessKey))) {
       return void res.status(404).json({ error: 'Order not found.' })
     }
-    res.json({ order: orderView(o, s) })
+    res.json({ order: await orderView(o, s) })
   })
 
   r.use('/api/store', pub)

@@ -82,7 +82,10 @@ app.all('/api/auth/*splat', (req, res) => {
 // Stripe signs the raw body, so its webhook is mounted before the JSON parser.
 app.post('/api/stripe/webhook', ...stripeWebhookHandler())
 
-app.use(express.json({ limit: '2mb' }))
+// Product file uploads take the raw body (any type, JSON included), so the JSON
+// parser must leave them alone.
+const jsonBody = express.json({ limit: '2mb' })
+app.use((req, res, next) => (/^\/api\/seller\/products\/[^/]+\/file$/.test(req.path) ? next() : jsonBody(req, res, next)))
 
 /**
  * Scheduled email run (Supabase Cron calls this every minute): hosted

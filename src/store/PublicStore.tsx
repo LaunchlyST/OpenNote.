@@ -36,7 +36,29 @@ export default function PublicStore({ path }: { path: string }) {
     setBuying(p.id)
     setBuyErr(null)
     try {
-      window.location.assign((await storeApi.checkout(handle, p.id)).url)
+      // One id per purchase attempt: a retry or double click reuses the same order.
+      const key = `desknoty.checkout.${handle}.${p.id}`
+      const fresh = () => {
+        const id = crypto.randomUUID()
+        try {
+          sessionStorage.setItem(key, id)
+        } catch {
+          /* storage blocked: retries just won't be merged */
+        }
+        return id
+      }
+      let requestId: string
+      try {
+        requestId = sessionStorage.getItem(key) ?? fresh()
+      } catch {
+        requestId = fresh()
+      }
+      const r = await storeApi.checkout(handle, p.id, requestId).catch(async (e: Error & { status?: number }) => {
+        // That attempt was already paid for: this is a new purchase.
+        if (e.status === 409 && /already complete/.test(e.message)) return storeApi.checkout(handle, p.id, fresh())
+        throw e
+      })
+      window.location.assign(r.url)
     } catch (e) {
       setBuyErr((e as Error).message)
       setBuying(null)
@@ -128,12 +150,16 @@ function OrderStatus({ store, load }: { store: Store; load: () => Promise<{ orde
         <h1>Thanks for your order</h1>
         <p>
           {order.product} · {formatPrice(order.amountMinor, order.currency)}
-          {order.email ? ` · receipt sent to ${order.email}` : ''}
+          {order.email && order.receipt === 'sent' ? ` · receipt sent to ${order.email}` : ''}
+          {order.email && order.receipt !== 'sent' ? ` · a receipt will be emailed to ${order.email}` : ''}
         </p>
         <a className="sp-btn ps-download" href={order.downloadUrl!} download>
           Download {order.fileName}
         </a>
-        <p className="ps-fine">This download link works for 24 hours. The email we sent you can make a new one any time.</p>
+        <p className="ps-fine">
+          This download link works for 24 hours.{' '}
+          {order.receipt === 'sent' ? 'The email we sent you can make a new one any time.' : 'Keep this page’s address: it can make a new link any time.'}
+        </p>
         <a href={back}>Back to the store</a>
       </div>
     )

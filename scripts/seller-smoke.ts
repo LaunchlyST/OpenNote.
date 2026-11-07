@@ -15,7 +15,7 @@
  */
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
@@ -51,6 +51,24 @@ async function dbGet<T>(text: string, ...params: unknown[]): Promise<T> {
   const d = new Database(join(tmp, 'seller.db'), { readonly: true })
   try {
     return d.prepare(text).get(...params) as T
+  } finally {
+    d.close()
+  }
+}
+
+/** Writes to the throwaway test database (used only to set up test accounts). */
+async function dbRun(text: string, ...params: unknown[]): Promise<void> {
+  if (process.env.DATABASE_URL) {
+    const c = new pg.Client({ connectionString: process.env.DATABASE_URL })
+    await c.connect()
+    let n = 0
+    await c.query(text.replace(/\?/g, () => '$' + String(++n)), params)
+    await c.end()
+    return
+  }
+  const d = new Database(join(tmp, 'seller.db'))
+  try {
+    d.prepare(text).run(...params)
   } finally {
     d.close()
   }
@@ -125,6 +143,15 @@ try {
   const b = await req('POST', '/api/auth/sign-up/email', { name: 'Ben', email: 'ben@seller.test', password: PASSWORD })
   const A = a.cookies
   const B = b.cookies
+
+  console.log('\n  Seller Studio needs Pro and a verified email')
+  const free = await req('GET', '/api/seller/store', undefined, A)
+  check('a Free account is refused by the seller API', free.status === 403 && free.json?.needs === 'pro', String(free.status))
+  await dbRun(`UPDATE "user" SET plan = 'pro' WHERE email IN ('ava@seller.test', 'ben@seller.test')`)
+  const unverified = await req('GET', '/api/seller/store', undefined, A)
+  check('a Pro account with an unverified email is refused', unverified.status === 403 && unverified.json?.needs === 'verify-email', String(unverified.status))
+  await dbRun(`UPDATE "user" SET "emailVerified" = ? WHERE email IN ('ava@seller.test', 'ben@seller.test')`, process.env.DATABASE_URL ? true : 1)
+  check('a verified Pro account is let in', (await req('GET', '/api/seller/store', undefined, A)).status === 200)
 
   console.log('\n  Setup state')
   const setup = await req('GET', '/api/seller/setup')
@@ -291,6 +318,34 @@ try {
   check('private files are not under the public static folder', !join(tmp, 'files').includes('dist'))
   const leak = await req('GET', `/${'data/seller-files'}`)
   check('the files folder is not served by URL', leak.status !== 200 || !leak.text.includes('SECRET'))
+
+  console.log('\n  Fixes: uploads, retries, receipts, renames, deletions')
+  check('the paid order reports its receipt state', ['sent', 'queued'].includes(re.json?.order?.receipt), String(re.json?.order?.receipt))
+  const p2 = (await req('POST', '/api/seller/products', { title: 'Data pack', priceMinor: 300, currency: 'gbp' }, A)).json.product.id
+  const jsonUp = await req('PUT', `/api/seller/products/${p2}/file`, Buffer.from('{"rows":[1,2,3]}'), A, { 'content-type': 'application/json', 'x-file-name': 'data.json' })
+  check('a JSON product file uploads intact', jsonUp.status === 200 && jsonUp.json?.product?.file?.size === 16 && jsonUp.json.product.file.name === 'data.json', String(jsonUp.status))
+  await req('POST', '/api/seller/store/publish', {}, A)
+  const ordersFor = async (pid: string) => (await dbGet<{ n: number }>('SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order WHERE "productId" = ?', pid)).n
+  const rid = 'retry-0123456789'
+  const c1 = await req('POST', '/api/store/ava-makes/checkout', { productId: p2, requestId: rid })
+  const c2 = await req('POST', '/api/store/ava-makes/checkout', { productId: p2, requestId: rid })
+  check('a retried checkout reuses the same Stripe session', c1.status === 200 && c1.json?.url === c2.json?.url, `${c1.status} ${c2.status}`)
+  check('…and creates exactly one order', (await ordersFor(p2)) === 1)
+  const p2file = (await dbGet<{ f: string }>('SELECT "pubFileId" AS f FROM seller_product WHERE id = ?', p2)).f
+  await req('DELETE', `/api/seller/products/${p2}`, undefined, A)
+  check('deleting a product keeps the file a pending order still needs', existsSync(join(tmp, 'files', p2file)))
+  const renamed = await req('PUT', '/api/seller/handle', { handle: 'ava-renamed' }, A)
+  check('Ava renames her store handle', renamed.status === 200, String(renamed.status))
+  check('the receipt link with the old handle still works', (await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)).json?.order?.status === 'paid')
+  check('…and with the new handle', (await req('GET', `/api/store/ava-renamed/order/${oid}?k=${k}`)).json?.order?.status === 'paid')
+  check('another store’s handle still can’t open it', (await req('GET', `/api/store/ben-builds/order/${oid}?k=${k}`)).status === 404)
+  const [ob1, ob2] = await Promise.all([req('POST', '/api/seller/stripe/onboard', { returnTo: '/app/pro' }, B), req('POST', '/api/seller/stripe/onboard', { returnTo: '/app/pro' }, B)])
+  const links = fake.calls.filter((c) => c.path === '/v1/account_links').slice(-2).map((c) => c.body.account)
+  const benAcct = (await dbGet<{ a: string }>('SELECT "stripeAccountId" AS a FROM seller_store WHERE handle = ?', 'ben-builds')).a
+  check('two simultaneous onboarding clicks end on one connected account', ob1.status === 200 && ob2.status === 200 && Boolean(benAcct) && links.every((x) => x === benAcct), JSON.stringify({ links, benAcct }))
+  const del = await req('POST', '/api/auth/delete-user', { password: PASSWORD }, A)
+  check('an account with paid customer orders can’t be deleted', del.status >= 400, String(del.status))
+  check('…and its buyers keep their order', (await req('GET', `/api/store/ava-renamed/order/${oid}?k=${k}`)).json?.order?.status === 'paid')
 } finally {
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   await fake.close()

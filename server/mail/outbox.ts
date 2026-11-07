@@ -69,7 +69,8 @@ export async function enqueueEmail(kind: EmailKind, to: string, data: EmailData,
     recipient,
     now - HOUR,
   )
-  if ((recent?.n ?? 0) >= env.mail.perRecipientPerHour) {
+  // A receipt is the proof of a purchase: never drop it (only paid orders create one, once each).
+  if (kind !== 'order-receipt' && (recent?.n ?? 0) >= env.mail.perRecipientPerHour) {
     await via.run(
       `INSERT INTO email_outbox (kind, recipient, subject, status, "nextAttemptAt", "lastError", "createdAt") VALUES (?, ?, ?, 'skipped', ?, 'rate limited', ?)`,
       kind,

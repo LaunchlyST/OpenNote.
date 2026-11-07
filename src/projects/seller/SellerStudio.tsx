@@ -22,6 +22,7 @@ import {
 import { cn } from '../../lib/id'
 import { StorePage } from './StorePage'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
+import { createSaver, flushAllSaves } from './autosave'
 import {
   BLOCKS,
   BUTTON_STYLES,
@@ -380,37 +381,28 @@ function Studio({
   const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const dirty = useRef(false)
-
-  // Autosave the draft page, debounced.
-  useEffect(() => {
-    if (!dirty.current) return
-    setSaving('saving')
-    const t = window.setTimeout(() => {
-      sellerApi
-        .saveDraft(page)
-        .then((r) => {
-          dirty.current = false
-          setStore(r.store)
-          setSaving('saved')
-        })
-        .catch((e: Error) => (setSaving('error'), setErr(e.message)))
-    }, 700)
-    return () => window.clearTimeout(t)
-  }, [page, setStore])
+  // Autosave the draft page: debounced, one request at a time, newest wins.
+  const saver = useRef<ReturnType<typeof createSaver<Page>> | null>(null)
+  saver.current ??= createSaver<Page>(
+    async (p) => {
+      const r = await sellerApi.saveDraft(p)
+      setStore(r.store)
+    },
+    { delay: 700, onState: (st, e) => (setSaving(st), e && setErr(e.message)) },
+  )
+  useEffect(() => () => void saver.current?.flush(), [])
+  const dirty = { get current() { return saver.current?.dirty() ?? false } }
   const edit = (next: Page) => {
-    dirty.current = true
     setPage(next)
+    saver.current!.schedule(next)
   }
 
   const publish = async () => {
     setPublishing(true)
     setErr(null)
     try {
-      if (dirty.current) {
-        await sellerApi.saveDraft(page)
-        dirty.current = false
-      }
+      // Every pending page and product edit is saved before publishing.
+      await flushAllSaves()
       const r = await sellerApi.publish()
       setStore(r.store)
     } catch (e) {
@@ -867,20 +859,21 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   const [state, setState] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
+  // Save edits a moment after typing stops; flushed if the form closes or the store is published.
+  const saver = useRef<ReturnType<typeof createSaver<typeof form>> | null>(null)
+  saver.current ??= createSaver<typeof form>(
+    async (f) => {
+      const r = await sellerApi.updateProduct(product.id, { title: f.title, description: f.description, priceMinor: Math.round(Number(f.price || 0) * 100), currency: f.currency })
+      setStore(r.store)
+    },
+    { onState: (st, e) => setState(st === 'saved' ? 'Saved' : st === 'error' ? (e?.message ?? 'Couldn’t save.') : null) },
+  )
+  useEffect(() => () => void saver.current?.flush(), [])
   const first = useRef(true)
-
-  // Save edits a moment after typing stops.
   useEffect(() => {
     if (first.current) return void (first.current = false)
-    const t = window.setTimeout(() => {
-      const priceMinor = Math.round(Number(form.price || 0) * 100)
-      sellerApi
-        .updateProduct(product.id, { title: form.title, description: form.description, priceMinor, currency: form.currency })
-        .then((r) => (setStore(r.store), setState('Saved')))
-        .catch((e: Error) => setState(e.message))
-    }, 600)
-    return () => window.clearTimeout(t)
-  }, [form, product.id, setStore])
+    saver.current!.schedule(form)
+  }, [form])
 
   const patch = (p: Partial<Pick<DraftProduct, 'cover' | 'listed'>>) =>
     void sellerApi.updateProduct(product.id, p).then((r) => setStore(r.store)).catch((e: Error) => setState(e.message))

@@ -80,11 +80,14 @@ export interface PublicOrder {
   fileName: string
   downloadUrl: string | null
   retrievalUrl: string | null
+  /** Only 'sent' means the receipt left Desknoty's mail server. */
+  receipt?: 'sent' | 'queued' | 'failed' | null
 }
 
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string) => call<{ url: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId }),
+  /** `requestId` makes a retry of the same click reuse the same order and Stripe session. */
+  checkout: (handle: string, productId: string, requestId?: string) => call<{ url: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, requestId }),
   session: (handle: string, sessionId: string) => call<{ order: PublicOrder }>('GET', `/api/store/${encodeURIComponent(handle)}/session/${encodeURIComponent(sessionId)}`),
   order: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('GET', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}?k=${encodeURIComponent(k)}`),
 }
