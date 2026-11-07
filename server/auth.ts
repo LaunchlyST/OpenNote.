@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth'
-import { admin } from 'better-auth/plugins'
+import { admin, bearer } from 'better-auth/plugins'
 import { authDatabase } from './db.ts'
 import { env, googleConfigured, requireEmailVerification } from './env.ts'
 import { passwordProblem } from './password-policy.ts'
@@ -9,10 +9,12 @@ import { syncRoles } from './roles.ts'
 
 export const auth = betterAuth({
   appName: 'Desknoty',
-  baseURL: env.baseURL,
+  // Better Auth treats a base URL that has a path as the full auth URL, so
+  // append /api/auth when the API is served under one (Supabase: /functions/v1).
+  baseURL: new URL(env.baseURL).pathname.replace(/\/+$/, '') ? `${env.baseURL.replace(/\/+$/, '')}/api/auth` : env.baseURL,
   secret: env.secret,
   database: authDatabase,
-  trustedOrigins: [env.baseURL, ...env.trustedOrigins],
+  trustedOrigins: [new URL(env.baseURL).origin, ...env.trustedOrigins],
 
   emailAndPassword: {
     enabled: true,
@@ -91,6 +93,8 @@ export const auth = betterAuth({
   },
 
   plugins: [
+    // Session as a bearer token for cross-site hosting (see src/lib/api-base.ts).
+    bearer(),
     // Adds user.role (and ban fields). Roles are assigned by syncRoles() from
     // ADMIN_EMAILS — never by the sign-up request itself.
     admin({ defaultRole: 'user', adminRoles: ['admin'] }),

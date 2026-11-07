@@ -14,8 +14,9 @@
  * TikTok step says so and "Continue without TikTok" works.
  */
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
-import { createReadStream, existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { makeBlobs } from './blobs.ts'
+import type { Blobs } from './blobs.ts'
+import { resolve } from 'node:path'
 import express, { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import Stripe from 'stripe'
@@ -75,9 +76,11 @@ function stripe(): Stripe | null {
 
 /* ------------------------------------------------------------- tables --- */
 
+let blobStore: Blobs | null = null
+const blobs = () => (blobStore ??= makeBlobs({ files: seller.filesDir, media: seller.mediaDir }))
+
 export async function ensureSellerTables() {
-  mkdirSync(seller.filesDir, { recursive: true })
-  mkdirSync(seller.mediaDir, { recursive: true })
+  blobs()
   const t = ddl(sql.dialect)
   await sql.exec(`
     CREATE TABLE IF NOT EXISTS seller_store (
@@ -548,7 +551,7 @@ export function stripeWebhookHandler() {
       if (!st || !seller.webhookSecret) return void res.status(503).json({ error: 'Stripe webhooks are not configured.' })
       let event: Stripe.Event
       try {
-        event = st.webhooks.constructEvent(req.body as Buffer, String(req.headers['stripe-signature'] ?? ''), seller.webhookSecret)
+        event = await st.webhooks.constructEventAsync(req.body as Buffer, String(req.headers['stripe-signature'] ?? ''), seller.webhookSecret)
       } catch {
         return void res.status(400).json({ error: 'Invalid signature.' })
       }
@@ -778,7 +781,7 @@ export function sellerRouter() {
     const name = decodeURIComponent(String(req.headers['x-file-name'] ?? 'download')).replace(/[\\/\0\r\n"]/g, '_').slice(0, 120) || 'download'
     const type = String(req.headers['content-type'] ?? 'application/octet-stream').slice(0, 100)
     const fileId = `fil_${randomBytes(16).toString('hex')}`
-    writeFileSync(join(seller.filesDir, fileId), body)
+    await blobs().put('files', fileId, body, 'application/octet-stream')
     const old = p.fileId
     await sql.run(`UPDATE seller_product SET "fileId" = ?, "fileName" = ?, "fileSize" = ?, "fileType" = ?, "updatedAt" = ? WHERE id = ?`, fileId, name, body.length, type, now(), p.id)
     // The old file stays if the live product or a paid order still points at it.
@@ -795,7 +798,7 @@ export function sellerRouter() {
     const body = req.body as Buffer
     if (!Buffer.isBuffer(body) || !body.length) return void res.status(400).json({ error: 'Empty image.' })
     const id = `med_${randomBytes(12).toString('hex')}`
-    writeFileSync(join(seller.mediaDir, id), body)
+    await blobs().put('media', id, body, type)
     await sql.run(`INSERT INTO seller_media (id, "storeId", type, size, "createdAt") VALUES (?, ?, ?, ?, ?)`, id, s.id, type, body.length, now())
     res.status(201).json({ id, url: `${seller.apiUrl}/api/store-media/${id}` })
   })
@@ -1018,25 +1021,15 @@ export function sellerRouter() {
     const orderId = verifyDownload(String(req.params.token))
     const o = orderId ? await q.order(orderId) : undefined
     if (!o || o.status !== 'paid') return void res.status(403).json({ error: 'This download link is invalid or has expired.' })
-    const path = join(seller.filesDir, o.fileId)
-    if (!/^fil_[a-f0-9]{32}$/.test(o.fileId) || !existsSync(path)) return void res.status(410).json({ error: 'This file is no longer available.' })
-    res.set({
-      'Cache-Control': 'private, no-store',
-      'Content-Type': 'application/octet-stream',
-      'Content-Length': String(statSync(path).size),
-      'Content-Disposition': `attachment; filename="${o.fileName.replace(/[^\w.\- ]/g, '_')}"`,
-      'X-Content-Type-Options': 'nosniff',
-    })
-    createReadStream(path).pipe(res)
+    if (!/^fil_[a-f0-9]{32}$/.test(o.fileId) || !(await blobs().exists('files', o.fileId))) return void res.status(410).json({ error: 'This file is no longer available.' })
+    await blobs().send('files', o.fileId, res, { fileName: o.fileName.replace(/[^\w.\- ]/g, '_'), type: 'application/octet-stream', cache: 'private, no-store' })
   })
 
   r.get('/api/store-media/:id', async (req, res) => {
     const id = String(req.params.id)
     const m = /^med_[a-f0-9]{24}$/.test(id) ? await sql.get(`SELECT type FROM seller_media WHERE id = ?`, id) : undefined
-    const path = join(seller.mediaDir, id)
-    if (!m || !existsSync(path)) return void res.status(404).end()
-    res.set({ 'Content-Type': m.type, 'Cache-Control': 'public, max-age=31536000, immutable', 'X-Content-Type-Options': 'nosniff' })
-    createReadStream(path).pipe(res)
+    if (!m || !(await blobs().exists('media', id))) return void res.status(404).end()
+    await blobs().send('media', id, res, { type: String(m.type), cache: 'public, max-age=31536000, immutable' })
   })
 
   return r
@@ -1044,10 +1037,6 @@ export function sellerRouter() {
 
 function removeFile(id: string) {
   if (!/^fil_[a-f0-9]{32}$/.test(id)) return
-  try {
-    unlinkSync(join(seller.filesDir, id))
-  } catch {
-    /* already gone */
-  }
+  void blobs().remove('files', id)
 }
 

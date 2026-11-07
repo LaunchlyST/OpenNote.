@@ -168,7 +168,7 @@ function kick() {
 export function startMailWorker(intervalMs = 5_000) {
   void sql.run(`UPDATE email_outbox SET status = 'retrying' WHERE status = 'sending'`).catch((err) => console.error('[mail] worker error', err))
   timer ??= setInterval(() => void processOutbox().catch((err) => console.error('[mail] worker error', err)), intervalMs)
-  timer.unref()
+  ;(timer as { unref?: () => void }).unref?.()
   log(`worker started (transport: ${transport.name})`)
 }
 

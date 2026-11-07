@@ -56,8 +56,9 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Vary', 'Origin')
     res.setHeader('Access-Control-Allow-Credentials', 'true')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, X-File-Name')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+    res.setHeader('Access-Control-Expose-Headers', 'set-auth-token')
   }
   if (req.method === 'OPTIONS') {
     res.status(204).end()
@@ -68,7 +69,14 @@ app.use((req, res, next) => {
 
 // Better Auth must see the raw request body, so it is mounted before any
 // body parser.
-app.all('/api/auth/*splat', toNodeHandler(auth))
+// When the API's public URL has a path (Supabase serves it under
+// /functions/v1), Better Auth expects that prefix on the request path too.
+const authPrefix = new URL(env.baseURL).pathname.replace(/\/+$/, '')
+const authHandler = toNodeHandler(auth)
+app.all('/api/auth/*splat', (req, res) => {
+  if (authPrefix && !req.url.startsWith(`${authPrefix}/`)) req.url = authPrefix + req.url
+  return authHandler(req, res)
+})
 
 // Stripe signs the raw body, so its webhook is mounted before the JSON parser.
 app.post('/api/stripe/webhook', ...stripeWebhookHandler())

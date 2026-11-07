@@ -36,3 +36,4 @@ dist-ssr
 !.env.example
 data/
 deploy/mail/mail.env
+supabase/functions/api/index.js

@@ -1,6 +1,5 @@
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import Database from 'better-sqlite3'
 import pg from 'pg'
 import { env } from './env.ts'
 import { ddl, postgresSql, sqliteSql } from './sql.ts'
@@ -13,13 +12,13 @@ import type { Sql } from './sql.ts'
  * - Otherwise: one SQLite file at DATABASE_PATH, as before. Existing local
  *   data keeps working unchanged.
  */
-const databaseUrl = (process.env.DATABASE_URL ?? '').trim()
+const databaseUrl = (process.env.DATABASE_URL || process.env.SUPABASE_DB_URL || '').trim()
 
 // Postgres returns BIGINT as a string by default; Desknoty stores millisecond
 // timestamps in BIGINT columns and wants numbers back.
 pg.types.setTypeParser(20, (v) => Number(v))
 
-function open(): { sql: Sql; authDatabase: unknown } {
+async function open(): Promise<{ sql: Sql; authDatabase: unknown }> {
   if (databaseUrl) {
     const pool = new pg.Pool({
       connectionString: databaseUrl,
@@ -28,6 +27,9 @@ function open(): { sql: Sql; authDatabase: unknown } {
     })
     return { sql: postgresSql(pool), authDatabase: pool }
   }
+  // Loaded only for local SQLite, so hosted runtimes never need the native module.
+  const sqliteModule = 'better-sqlite3'
+  const { default: Database } = (await import(/* @vite-ignore */ sqliteModule)) as { default: typeof import('better-sqlite3') }
   mkdirSync(dirname(env.databasePath), { recursive: true })
   const file = new Database(env.databasePath)
   file.pragma('journal_mode = WAL')
@@ -35,7 +37,7 @@ function open(): { sql: Sql; authDatabase: unknown } {
   return { sql: sqliteSql(file), authDatabase: file }
 }
 
-const opened = open()
+const opened = await open()
 /** The app's data. Every query goes through this. */
 export const sql = opened.sql
 /** The same store, in the form Better Auth accepts (pg Pool or SQLite handle). */
