@@ -287,7 +287,7 @@ const LOCAL_PATHS = /^\/api\/(auth-config|auth\/|projects|preferences)/
 let decided: Promise<boolean> | null = null
 
 /** Whether this page runs without an API (asked once, then remembered for the page). */
-function useLocal(realFetch: typeof fetch): Promise<boolean> {
+function shouldUseLocal(realFetch: typeof fetch): Promise<boolean> {
   decided ??= realFetch(`${API_BASE}/api/auth-config`)
     .then(async (res) => {
       const body = await res.json().catch(() => null)
@@ -305,7 +305,7 @@ export function installLocalMode() {
     const req = new Request(input, init)
     const url = new URL(req.url, window.location.origin)
     const base = API_BASE ? new URL(API_BASE).origin : window.location.origin
-    if (url.origin !== base || !LOCAL_PATHS.test(url.pathname) || !(await useLocal(realFetch))) return realFetch(input, init)
+    if (url.origin !== base || !LOCAL_PATHS.test(url.pathname) || !(await shouldUseLocal(realFetch))) return realFetch(input, init)
     const text = req.method === 'GET' || req.method === 'HEAD' ? '' : await req.text()
     let body: Record<string, unknown> = {}
     try {
