@@ -26,7 +26,7 @@ import { sql } from './db.ts'
 import { ddl } from './sql.ts'
 import type { Sql } from './sql.ts'
 import { env } from './env.ts'
-import { enqueueEmail } from './mail/index.ts'
+import { enqueueEmail, transportName } from './mail/index.ts'
 
 /* ------------------------------------------------------------- config --- */
 
@@ -56,7 +56,7 @@ export const sellerSetup = () => ({
   stripe: Boolean(seller.stripeSecret),
   webhook: Boolean(seller.webhookSecret),
   tiktok: Boolean(seller.tiktokKey && seller.tiktokSecret),
-  email: true,
+  email: transportName() === 'smtp' || transportName() === 'resend',
   /** Never the key itself: only whether it is a Sandbox (test) key. */
   stripeMode: seller.stripeSecret.startsWith('sk_test_') || seller.stripeSecret.startsWith('rk_test_') ? 'sandbox' : seller.stripeSecret ? 'live' : 'none',
 })

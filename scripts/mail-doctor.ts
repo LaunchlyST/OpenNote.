@@ -15,7 +15,7 @@ import { Socket } from 'node:net'
 import nodemailer from 'nodemailer'
 import { env } from '../server/env.ts'
 import { renderEmail } from '../server/mail/templates.ts'
-import { productionMailProblem, senderProblem, smtpTransport } from '../server/mail/transport.ts'
+import { productionMailProblem, resendTransport, senderProblem, smtpTransport } from '../server/mail/transport.ts'
 
 let fails = 0
 const pass = (m: string) => console.log(`  PASS  ${m}`)
@@ -39,25 +39,40 @@ function reachable(host: string, port: number, ms = 6000): Promise<boolean> {
   })
 }
 
-const fromDomain = /@([^>\s]+)>?\s*$/.exec(env.smtp.from)?.[1]?.toLowerCase() ?? ''
+const fromDomain = /@([^>\s]+)>?\s*$/.exec(env.resend.from || env.smtp.from)?.[1]?.toLowerCase() ?? ''
+const isResend = env.mail.transport === 'resend'
+const mailboxProvider = ['smtp.gmail.com', 'smtp-mail.outlook.com', 'smtp.office365.com'].includes(env.smtp.host)
 
 console.log('\n  Configuration')
-env.smtp.host ? pass(`SMTP_HOST is set (${env.smtp.host}:${env.smtp.port})`) : fail('SMTP_HOST is empty — mail only goes to the local dev inbox')
-fromDomain ? pass(`EMAIL_FROM domain: ${fromDomain}`) : fail('EMAIL_FROM is missing or has no domain')
-if (/(^|\.)(example\.(com|org|net)|yourdomain\.com|localhost|local|test)$/.test(fromDomain)) fail(`${fromDomain} is a placeholder — real inboxes will reject it`)
-const mailboxProvider = ['smtp.gmail.com', 'smtp-mail.outlook.com', 'smtp.office365.com'].includes(env.smtp.host)
-if (/(^|\.)(gmail|googlemail|outlook|hotmail|live|yahoo|icloud)\.com$/.test(fromDomain) && !mailboxProvider)
-  fail(`You cannot send as ${fromDomain} from your own server — DMARC will reject it. Use SMTP_PRESET=gmail/outlook, or your own domain.`)
-if (mailboxProvider) pass(`sending through ${env.smtp.host}: the provider signs mail (SPF/DKIM/DMARC handled by them)`)
-const sender = senderProblem()
-sender ? fail(sender) : env.smtp.host && pass('sender address matches the SMTP account')
-if (env.smtp.host === 'smtp.gmail.com' && env.smtp.pass && env.smtp.pass.length !== 16) warn('a Google app password is 16 letters — this looks like a normal password, which Google rejects')
-const prodProblem = env.isProduction ? productionMailProblem() : null
-if (prodProblem) fail(prodProblem)
-env.baseURL.startsWith('https://') ? pass(`BETTER_AUTH_URL is https (${env.baseURL}) — reset links use it`) : warn(`BETTER_AUTH_URL is ${env.baseURL} — fine locally, must be your https domain in production`)
-env.smtp.requireTLS || env.smtp.secure ? pass('TLS is required for SMTP') : warn('SMTP_REQUIRE_TLS=false — only acceptable for the local catcher')
+if (isResend) {
+  env.resend.apiKey ? pass('RESEND_API_KEY is set') : fail('RESEND_API_KEY is empty — Resend is not configured')
+  env.resend.from ? pass(`RESEND_FROM is set (${env.resend.from})`) : fail('RESEND_FROM / EMAIL_FROM is missing')
+  fromDomain ? pass(`EMAIL_FROM domain: ${fromDomain}`) : fail('EMAIL_FROM is missing or has no domain')
+  if (/(^|\.)(example\.(com|org|net)|yourdomain\.com|localhost|local|test)$/.test(fromDomain)) fail(`${fromDomain} is a placeholder — real inboxes will reject it`)
+  const resendDomainOk = !/(^|\.)(resend\.dev|example\.com|yourdomain\.com|localhost|local|test)$/.test(fromDomain)
+  resendDomainOk ? pass(`sender domain ${fromDomain} is a real sending domain`) : fail(`sender domain ${fromDomain} is a placeholder or Resend test domain — set a sender on the verified desknoty.com domain`)
+  const sender = senderProblem()
+  sender ? fail(sender) : pass('sender address is acceptable for Resend')
+  const prodProblem = env.isProduction ? productionMailProblem() : null
+  if (prodProblem) fail(prodProblem)
+  env.baseURL.startsWith('https://') ? pass(`BETTER_AUTH_URL is https (${env.baseURL}) — reset links use it`) : warn(`BETTER_AUTH_URL is ${env.baseURL} — fine locally, must be your https domain in production`)
+} else {
+  env.smtp.host ? pass(`SMTP_HOST is set (${env.smtp.host}:${env.smtp.port})`) : fail('SMTP_HOST is empty — mail only goes to the local dev inbox')
+  fromDomain ? pass(`EMAIL_FROM domain: ${fromDomain}`) : fail('EMAIL_FROM is missing or has no domain')
+  if (/(^|\.)(example\.(com|org|net)|yourdomain\.com|localhost|local|test)$/.test(fromDomain)) fail(`${fromDomain} is a placeholder — real inboxes will reject it`)
+  if (/(^|\.)(gmail|googlemail|outlook|hotmail|live|yahoo|icloud)\.com$/.test(fromDomain) && !mailboxProvider)
+    fail(`You cannot send as ${fromDomain} from your own server — DMARC will reject it. Use SMTP_PRESET=gmail/outlook, or your own domain.`)
+  if (mailboxProvider) pass(`sending through ${env.smtp.host}: the provider signs mail (SPF/DKIM/DMARC handled by them)`)
+  const sender = senderProblem()
+  sender ? fail(sender) : env.smtp.host && pass('sender address matches the SMTP account')
+  if (env.smtp.host === 'smtp.gmail.com' && env.smtp.pass && env.smtp.pass.length !== 16) warn('a Google app password is 16 letters — this looks like a normal password, which Google rejects')
+  const prodProblem = env.isProduction ? productionMailProblem() : null
+  if (prodProblem) fail(prodProblem)
+  env.baseURL.startsWith('https://') ? pass(`BETTER_AUTH_URL is https (${env.baseURL}) — reset links use it`) : warn(`BETTER_AUTH_URL is ${env.baseURL} — fine locally, must be your https domain in production`)
+  env.smtp.requireTLS || env.smtp.secure ? pass('TLS is required for SMTP') : warn('SMTP_REQUIRE_TLS=false — only acceptable for the local catcher')
+}
 
-if (fromDomain && !/\.(local|test)$/.test(fromDomain) && !mailboxProvider) {
+if (!isResend && fromDomain && !/\.(local|test)$/.test(fromDomain) && !mailboxProvider) {
   console.log(`\n  DNS for ${fromDomain}`)
   const mx = await dns.resolveMx(fromDomain).catch(() => [])
   mx.length ? pass(`MX: ${mx.map((m) => m.exchange).join(', ')}`) : warn('no MX record (needed to receive bounces/replies)')
@@ -89,6 +104,19 @@ if (fromDomain && !/\.(local|test)$/.test(fromDomain) && !mailboxProvider) {
 }
 
 console.log('\n  Connectivity')
+if (isResend) {
+  try {
+    const res = await fetch('https://api.resend.com/emails', { headers: { Authorization: `Bearer ${env.resend.apiKey}` } })
+    const detail = await res.text().catch(() => '')
+    if (res.ok) {
+      pass(`Resend API key accepted (sender ${env.resend.from})`)
+    } else {
+      fail(`Resend API check failed: ${res.status} ${detail.slice(0, 200)}`)
+    }
+  } catch (err) {
+    fail(`Resend API check failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
 if (env.smtp.host) {
   try {
     await nodemailer
@@ -108,8 +136,10 @@ if (to) {
   console.log(`\n  Real send to ${to}`)
   try {
     const email = renderEmail('test', { url: `${env.baseURL}/app` })
-    await smtpTransport().send({ id: 0, to, ...email })
-    pass(`accepted by ${env.smtp.host}. Delivery is only confirmed once it appears in ${to} — open it and use "Show original" to check SPF/DKIM/DMARC = PASS.`)
+    const transport = env.mail.transport === 'resend' ? resendTransport() : smtpTransport()
+    await transport.send({ id: 0, to, ...email })
+    if (env.mail.transport === 'resend') pass('accepted by the Resend API. Delivery is only confirmed once it appears in the real inbox — and the desknoty.com domain is verified in Resend.')
+    else pass(`accepted by ${env.smtp.host}. Delivery is only confirmed once it appears in ${to} — open it and use "Show original" to check SPF/DKIM/DMARC = PASS.`)
   } catch (err) {
     fail(`send failed: ${err instanceof Error ? err.message : String(err)}`)
   }
