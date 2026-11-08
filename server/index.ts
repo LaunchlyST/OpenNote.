@@ -6,12 +6,12 @@ import { fromNodeHeaders, toNodeHandler } from 'better-auth/node'
 import { auth } from './auth.ts'
 import { sql } from './db.ts'
 import { deployRouter } from './deploy.ts'
-import { env, googleConfigured, requireEmailVerification, smtpConfigured } from './env.ts'
+import { env, googleConfigured, requireEmailVerification, smtpConfigured, resendConfigured } from './env.ts'
 import { syncRoles } from './roles.ts'
 import { devMailRouter } from './mail/dev-inbox.ts'
 import { outboxLog, processOutbox, startMailWorker, transportName } from './mail/index.ts'
 import { timingSafeEqual } from 'node:crypto'
-import { productionMailProblem, senderProblem, verifySmtp } from './mail/transport.ts'
+import { productionMailProblem, senderProblem, verifyResend, verifySmtp } from './mail/transport.ts'
 import { applyMigrations } from './schema.ts'
 import { PLANS, planOf, requirePlan } from './plans.ts'
 import { validateWorkspace } from './workspace.ts'
@@ -30,8 +30,16 @@ startMailWorker()
   if (problem) console.error(`[mail] EMAIL IS OFF: ${problem} Verification and reset emails will be marked failed, not sent.`)
   const sender = senderProblem()
   if (sender) console.error(`[mail] ${sender}`)
-  // Prove the SMTP login works now, not when the first user signs up.
-  if (transportName() === 'smtp') {
+  // Prove the provider login works now, not when the first user signs up.
+  const provider = transportName()
+  if (provider === 'resend') {
+    void verifyResend().then((r) =>
+      r.ok
+        ? console.log(`[mail] Resend API OK (from ${env.resend.from}) — transactional email goes through Resend.`)
+        : console.error(`[mail] RESEND CHECK FAILED: ${r.error} — queued emails will retry and then be marked failed.`),
+    )
+  }
+  if (provider === 'smtp') {
     void verifySmtp().then((r) =>
       r.ok
         ? console.log(`[mail] SMTP login OK (${env.smtp.host}:${env.smtp.port}, ${env.smtp.secure || env.smtp.requireTLS ? "encrypted" : "UNENCRYPTED — local catcher only"})`)
@@ -99,7 +107,7 @@ app.post('/api/internal/outbox', async (req, res) => {
 
 /** Which sign-in options the UI should offer. Contains no secrets. */
 app.get('/api/auth-config', (_req, res) => {
-  res.json({ google: googleConfigured, emailVerificationRequired: requireEmailVerification, emailEnabled: smtpConfigured })
+  res.json({ google: googleConfigured, emailVerificationRequired: requireEmailVerification, emailEnabled: smtpConfigured || resendConfigured })
 })
 
 interface AuthedRequest extends Request {
@@ -214,7 +222,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
 app.listen(env.apiPort, () => {
   console.log(`OpenNote API listening on http://localhost:${env.apiPort}`)
   console.log(`  Administrators: ${admins.length ? admins.join(', ') : 'none (set ADMIN_EMAILS and verify the address)'}`)
-  console.log(`  Email delivery: ${transportName() === 'smtp' ? `SMTP via ${env.smtp.host}:${env.smtp.port}` : transportName() === 'local' ? 'local dev inbox → http://localhost:5173/api/dev/mail' : 'OFF — set SMTP_HOST'}`)
+  console.log(`  Email delivery: ${transportName() === 'resend' ? `Resend API (from ${env.resend.from})` : transportName() === 'smtp' ? `SMTP via ${env.smtp.host}:${env.smtp.port}` : transportName() === 'local' ? 'local dev inbox → http://localhost:5173/api/dev/mail' : 'OFF — set SMTP_HOST / RESEND_API_KEY'}`)
   console.log(`  Google sign-in: ${googleConfigured ? 'on' : 'off (set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET)'}`)
   console.log(`  Email verification required: ${requireEmailVerification ? 'yes' : 'no'}`)
 })

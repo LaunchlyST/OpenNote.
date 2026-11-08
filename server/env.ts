@@ -102,13 +102,20 @@ export const env = {
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean),
   smtp: smtpSettings(),
+  resend: {
+    apiKey: (process.env.RESEND_API_KEY ?? '').trim(),
+    from: (process.env.RESEND_FROM ?? '').trim() || 'Desknoty <noreply@desknoty.com>',
+  },
   mail: {
     /**
      * smtp  – deliver through SMTP_HOST (your own server, or the local catcher)
+     * resend – deliver through the Resend API (RESEND_API_KEY + a Resend-verified
+     *          sending domain, e.g. desknoty.com). This is the production path
+     *          now that Gmail SMTP is retired in favour of Resend.
      * local – write each message to MAILBOX_DIR and show it at /api/dev/mail
      *         (development only; never used in production)
      */
-    transport: (process.env.MAIL_TRANSPORT ?? (process.env.SMTP_HOST || process.env.SMTP_PRESET ? 'smtp' : 'local')) as 'smtp' | 'local',
+    transport: (process.env.MAIL_TRANSPORT ?? (process.env.RESEND_API_KEY ? 'resend' : process.env.SMTP_HOST || process.env.SMTP_PRESET ? 'smtp' : 'local')) as 'smtp' | 'resend' | 'local',
     mailboxDir: process.env.MAILBOX_DIR ?? 'data/mailbox',
     /** Max emails one address can be sent per hour (all kinds together). */
     perRecipientPerHour: Number(process.env.MAIL_RATE_PER_HOUR ?? 5),
@@ -186,6 +193,11 @@ export const PROVIDER_LABELS: Record<string, string> = {
 
 export const googleConfigured = Boolean(env.google.clientId && env.google.clientSecret)
 export const smtpConfigured = Boolean(env.smtp.host && env.smtp.from)
+/**
+ * Resend delivery: an API key plus a sender on a Resend-verified domain.
+ * Used when `MAIL_TRANSPORT=resend` (or when only RESEND_API_KEY is set).
+ */
+export const resendConfigured = Boolean(env.resend.apiKey && env.resend.from)
 
 /**
  * Verification is only enforced when mail can actually be delivered — otherwise
@@ -194,4 +206,4 @@ export const smtpConfigured = Boolean(env.smtp.host && env.smtp.from)
 export const requireEmailVerification =
   process.env.REQUIRE_EMAIL_VERIFICATION !== undefined
     ? process.env.REQUIRE_EMAIL_VERIFICATION === 'true'
-    : smtpConfigured
+    : Boolean(env.smtp.host && env.smtp.from) || resendConfigured

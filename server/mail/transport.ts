@@ -14,7 +14,7 @@ export interface OutgoingMessage {
 }
 
 export interface Transport {
-  name: 'smtp' | 'local' | 'none'
+  name: 'smtp' | 'resend' | 'local' | 'none'
   send(message: OutgoingMessage): Promise<void>
 }
 
@@ -59,6 +59,7 @@ export function smtpTransport(): Transport {
     name: 'smtp',
     async send(m) {
       await transporter.sendMail({
+        messageId: `<desknoty-outbox-${m.id}@${new URL(env.baseURL).hostname}>`,
         from: smtp.from,
         to: m.to,
         subject: m.subject,
@@ -66,6 +67,29 @@ export function smtpTransport(): Transport {
         text: m.text,
         headers: { 'X-OpenNote-Message': String(m.id) },
       })
+    },
+  }
+}
+
+/**
+ * Resend: the transactional email API. The API key lives in the environment
+ * (set as a Supabase Edge Function secret in production); the sender must be
+ * on a domain verified in Resend (desknoty.com here). STARTTLS/DKIM/SMTP
+ * specifics do not apply — Resend signs and delivers for us.
+ */
+export function resendTransport(): Transport {
+  const from = env.resend.from
+  const apiKey = env.resend.apiKey
+  return {
+    name: 'resend',
+    async send(m) {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ from, to: m.to, subject: m.subject, html: m.html, text: m.text }),
+      })
+      const detail = await res.text().catch(() => '')
+      if (!res.ok) throw Object.assign(new Error(`Resend ${res.status}: ${detail.slice(0, 300)}`), { responseCode: res.status })
     },
   }
 }
@@ -102,6 +126,12 @@ function noTransport(reason = 'No mail server configured (set SMTP_HOST).'): Tra
  */
 export function productionMailProblem(): string | null {
   if (!env.isProduction) return null
+  if (env.mail.transport === 'resend') {
+    if (!env.resend.apiKey) return 'Production has no Resend API key: set RESEND_API_KEY (plus a Resend-verified sending domain such as desknoty.com).'
+    if (!env.resend.from) return 'EMAIL_FROM / RESEND_FROM is not set.'
+    if (!env.baseURL.startsWith('https://')) return `BETTER_AUTH_URL must be https:// in production (links would be sent as ${env.baseURL}).`
+    return null
+  }
   if (env.mail.transport !== 'smtp' || !env.smtp.host) return 'Production has no mail server: set SMTP_HOST (the dev inbox is never used in production).'
   if (!env.smtp.secure && !env.smtp.requireTLS) return 'SMTP_REQUIRE_TLS=false is not allowed in production (that setting is only for the local catcher).'
   if (!env.smtp.from) return 'EMAIL_FROM is not set.'
@@ -115,12 +145,31 @@ export function productionMailProblem(): string | null {
  */
 export function senderProblem(): string | null {
   const { host, user, from } = env.smtp
-  if (!['smtp.gmail.com', 'smtp-mail.outlook.com', 'smtp.office365.com'].includes(host)) return null
   const addr = /<([^>]+)>/.exec(from)?.[1] ?? from.trim()
+  if (env.mail.transport === 'resend') {
+    // Resend sends as the verified sending domain itself; the mailbox-provider
+    // same-address rule does not apply. A placeholder or test domain is refused.
+    if (/@(resend\.dev|example\.com|yourdomain\.com|localhost|local|test)$/.test(addr)) return `EMAIL_FROM (${addr}) looks like a placeholder or a Resend test address — set a sender on the verified desknoty.com domain.`
+    return null
+  }
+  if (!['smtp.gmail.com', 'smtp-mail.outlook.com', 'smtp.office365.com'].includes(host)) return null
   if (user && addr.toLowerCase() !== user.toLowerCase()) {
     return `EMAIL_FROM (${addr}) must be the same address as SMTP_USER (${user}) when sending through ${host}.`
   }
   return null
+}
+
+/** Checks the Resend API key once, so a wrong key shows up at startup, not at the first sign-up. Read-only: no email is sent here. */
+export async function verifyResend(): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (env.mail.transport !== 'resend' || !env.resend.apiKey) return { ok: false, error: 'Resend is not configured' }
+  try {
+    const res = await fetch('https://api.resend.com/emails', { headers: { Authorization: `Bearer ${env.resend.apiKey}` } })
+    const detail = await res.text().catch(() => '')
+    if (!res.ok) return { ok: false, error: `Resend ${res.status}: ${detail.slice(0, 300)}` }
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+  }
 }
 
 /** Checks the SMTP login once, so a wrong password shows up at startup, not at the first sign-up. */
@@ -148,6 +197,7 @@ export async function verifySmtp(): Promise<{ ok: true } | { ok: false; error: s
 export function createTransport(): Transport {
   const problem = productionMailProblem()
   if (problem) return noTransport(problem)
+  if (env.mail.transport === 'resend') return resendTransport()
   if (env.mail.transport === 'smtp' && env.smtp.host) return smtpTransport()
   if (!env.isProduction) return localTransport()
   return noTransport()

@@ -24,13 +24,17 @@ const email = renderEmail('test', { url: `${env.baseURL}/app` })
 const where =
   transport.name === 'local'
     ? `the local dev inbox (${env.mail.mailboxDir}) — open http://localhost:5173/api/dev/mail`
-    : `${env.smtp.host}:${env.smtp.port}`
+    : transport.name === 'resend'
+      ? `Resend API (from ${env.resend.from})`
+      : `${env.smtp.host}:${env.smtp.port}`
 
 console.log(`Sending a test email to ${to} via ${where}…`)
 try {
   await transport.send({ id: 0, to, ...email })
   if (transport.name === 'local') {
     console.log('  Saved to the local dev inbox. This is a LOCAL test: nothing was sent to a real inbox.')
+  } else if (transport.name === 'resend') {
+    console.log('  Accepted by Resend. Now check the real inbox of the recipient (and its spam folder) to confirm delivery.')
   } else if (['127.0.0.1', 'localhost', '::1'].includes(env.smtp.host)) {
     console.log('  Accepted by the local SMTP server. This is a LOCAL test: nothing was sent to a real inbox.')
   } else {
