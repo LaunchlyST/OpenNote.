@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { writeToken } from './lib/api-base'
+import { readToken, writeToken } from './lib/api-base'
 import type { ReactNode } from 'react'
 import { authClient } from './lib/auth-client'
 import { apiUrl } from './lib/api-base'
@@ -222,29 +222,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   /**
-   * Sign-out, in an order that leaves nothing behind:
-   * 1. push any edit still waiting to be saved (it belongs to this user),
-   * 2. stop syncing and block cache writes, so no late save restores data,
+   * Sign-out, in an order that keeps the UI signed out no matter what:
+   * 1. drop the stored bearer token first, so nothing can restore the session,
+   * 2. stop syncing and block cache writes, so a late save cannot bring data back,
    * 3. wipe this browser's cached workspaces,
-   * 4. end the session on the server (remembered and retried if it fails),
-   * 5. reload onto the sign-in page, dropping everything held in memory and
-   *    replacing the history entry so Back cannot return to the workspace.
+   * 4. tell the server to end the session in the background (keepalive lets it
+   *    finish after the page has gone; if it fails, the pending flag makes the
+   *    next page load retry it),
+   * 5. leave for the sign-in page straight away — no network call can stall it.
    */
   const signOut = useCallback(async () => {
-    await flushPendingSave().catch(() => {})
     stopSync()
     blockCacheWrites()
+    const token = readToken()
+    writeToken(null)
     try {
       window.sessionStorage.setItem(SIGNOUT_PENDING, '1')
     } catch {
       /* ignore */
     }
     clearAllUserCaches()
+    // Finish any save already in flight; the request itself uses keepalive.
+    void flushPendingSave().catch(() => {})
     try {
-      const { error } = await authClient.signOut()
-      // The server session is gone (or will be retried); the stored bearer token must go too.
-      if (!error) writeToken(null)
-      if (!error) window.sessionStorage.removeItem(SIGNOUT_PENDING)
+      const headers: Record<string, string> = {}
+      if (token) headers.Authorization = `Bearer ${token}`
+      void fetch(apiUrl('/api/auth/sign-out'), {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+        headers,
+      }).catch(() => {})
     } catch {
       /* stays pending; finished on the next load */
     }
