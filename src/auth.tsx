@@ -1,13 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { readToken, writeToken } from './lib/api-base'
+import { acceptSession, authGeneration, beginSignOut, confirmRevocation, isSignedOut, tokenToRevoke } from './lib/session-state'
 import type { ReactNode } from 'react'
 import { authClient } from './lib/auth-client'
 import { apiUrl } from './lib/api-base'
 import { blockCacheWrites, clearAllUserCaches, clearOtherUserCaches } from './lib/local-cache'
 import { flushPendingSave, stopSync } from './sync'
 
-/** Set while a sign-out has not been confirmed by the server. */
-const SIGNOUT_PENDING = 'opennote.signout-pending'
+/** Retry revocation without allowing a network failure to restore the UI session. */
+async function revokeSession(token = tokenToRevoke()) {
+  const expected = authGeneration()
+  const response = await fetch(apiUrl('/api/auth/sign-out'), {
+    method: 'POST', credentials: token ? 'omit' : 'include', keepalive: true,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    signal: AbortSignal.timeout(5000),
+  })
+  if (!response.ok) throw new Error('Could not finish signing out. Please try again.')
+  confirmRevocation(expected)
+}
 
 /**
  * Authentication for OpenNote, backed by Better Auth.
@@ -107,53 +116,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // A previous sign-out that the server never confirmed (offline, server
   // down): finish it before showing anything, so the old session cannot
   // quietly bring the workspace back.
-  const [finishingSignOut, setFinishingSignOut] = useState(() => {
-    try {
-      return typeof window !== 'undefined' && window.sessionStorage.getItem(SIGNOUT_PENDING) === '1'
-    } catch {
-      return false
-    }
-  })
+  const [signedOutHere, setSignedOutHere] = useState(isSignedOut)
   useEffect(() => {
-    if (!finishingSignOut) return
-    let alive = true
-    const finish = async () => {
+    const update = () => setSignedOutHere(isSignedOut())
+    window.addEventListener('storage', update)
+    if (isSignedOut()) {
       clearAllUserCaches()
-      try {
-        await authClient.signOut()
-      } catch {
-        /* retried on the next load */
-      }
-      // Only release the signed-out guard once the server positively says the
-      // session is gone. If a cookie session survived, keeping the flag stops
-      // the app from signing the user straight back in.
-      const session = await authClient.getSession().catch(() => null)
-      writeToken(null)
-      if (alive && session && !session.error && !session.data) {
-        try {
-          window.sessionStorage.removeItem(SIGNOUT_PENDING)
-        } catch {
-          /* ignore */
-        }
-      }
-      if (!alive) return
-      void refetch()
-      setFinishingSignOut(false)
+      void revokeSession().catch(() => {})
     }
-    void finish()
-    return () => {
-      alive = false
-    }
-  }, [finishingSignOut, refetch])
-  // While a sign-out is unconfirmed, nobody is treated as signed in.
-  let pendingFlag = false
-  try {
-    pendingFlag = typeof window !== 'undefined' && window.sessionStorage.getItem(SIGNOUT_PENDING) === '1'
-  } catch {
-    /* ignore */
-  }
-  const data = finishingSignOut || pendingFlag ? null : liveData
-  const isPending = finishingSignOut || livePending
+    return () => window.removeEventListener('storage', update)
+  }, [])
+  const data = signedOutHere || isSignedOut() ? null : liveData
+  const isPending = !isSignedOut() && livePending
 
   // Whoever is signed in now, no other account's cached copy stays in this browser.
   const currentId = data?.user?.id
@@ -191,6 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = useCallback(async ({ fullName, email, password, avatar }: SignUpInput) => {
     const name = fullName.trim()
     if (name.length < 2) throw new Error('Please enter your full name.')
+    const expected = authGeneration()
     const { data: res, error } = await authClient.signUp.email({
       name,
       email: email.trim().toLowerCase(),
@@ -199,32 +174,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       callbackURL: `${origin()}/app`,
     })
     if (error) fail(error)
-    try {
-      window.sessionStorage.removeItem(SIGNOUT_PENDING)
-    } catch {
-      /* ignore */
-    }
+    if (acceptSession(res?.token ?? null, expected, true)) setSignedOutHere(false)
     await refetch()
     return { needsVerification: !res?.token }
   }, [refetch])
 
   const signIn = useCallback(async (email: string, password: string, rememberMe = true) => {
-    const { error } = await authClient.signIn.email({
+    const expected = authGeneration()
+    const { data: res, error } = await authClient.signIn.email({
       email: email.trim().toLowerCase(),
       password,
       rememberMe,
       callbackURL: `${origin()}/app`,
     })
     if (error) fail(error)
-    try {
-      window.sessionStorage.removeItem(SIGNOUT_PENDING)
-    } catch {
-      /* ignore */
-    }
+    if (!acceptSession(res?.token ?? null, expected, true)) return
+    setSignedOutHere(false)
     await refetch()
   }, [refetch])
 
   const signInWithGoogle = useCallback(async () => {
+    const expected = authGeneration()
+    if (isSignedOut()) {
+      await revokeSession()
+      if (!acceptSession(null, expected, true)) return
+      setSignedOutHere(false)
+    }
     const { error } = await authClient.signIn.social({
       provider: 'google',
       callbackURL: `${origin()}/app`,
@@ -246,38 +221,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * 5. leave for the sign-in page straight away — no network call can stall it.
    */
   const signOut = useCallback(async () => {
+    // Set the guard before removing the token: late responses cannot restore it.
+    const token = beginSignOut()
+    setSignedOutHere(true)
     try {
-      // Stop the sync loop and block cache writes so no late save can write the
-      // old account's data back anywhere.
       stopSync()
       blockCacheWrites()
-      // Flag the pending sign-out before touching anything else: while it is
-      // set, no screen treats the user as signed in.
-      try {
-        window.sessionStorage.setItem(SIGNOUT_PENDING, '1')
-      } catch {
-        /* ignore */
-      }
       clearAllUserCaches()
-      // Drop the stored bearer token first, so nothing can restore the session.
-      const token = readToken()
-      writeToken(null)
-      const headers: Record<string, string> = {}
-      if (token) headers.Authorization = `Bearer ${token}`
-      // Finish any save already in flight; the request itself uses keepalive.
       void flushPendingSave().catch(() => {})
-      // Tell the server to end the session in the background; the page leaves
-      // straight away so no network call can stall the sign-out.
-      void fetch(apiUrl('/api/auth/sign-out'), {
-        method: 'POST',
-        credentials: 'include',
-        keepalive: true,
-        headers,
-      }).catch(() => {})
-    } catch {
-      /* stay signed out locally even when a helper fails */
+      void revokeSession(token).catch(() => {})
     } finally {
-      // Leave the page no matter what happened above.
       window.location.replace('/app/signin')
     }
   }, [])

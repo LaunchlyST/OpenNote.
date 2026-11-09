@@ -1,8 +1,7 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  # Publishing is an explicit manual action; pushing code must not deploy.
   workflow_dispatch:
 
 permissions:

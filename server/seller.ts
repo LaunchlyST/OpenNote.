@@ -562,7 +562,7 @@ export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Sess
       const queued = await enqueueEmail(
         'order-receipt',
         row.buyerEmail!,
-        { url: retrievalUrl(row, store.handle), name: row.productTitle, email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle },
+        { url: retrievalUrl(row, store.handle), name: row.productTitle, amount: new Intl.NumberFormat('en-GB', { style: 'currency', currency: row.currency.toUpperCase() }).format(row.amountMinor / 100), email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle },
         tx,
       )
       if (queued.queued) await tx.run('UPDATE seller_order SET "receiptId" = ? WHERE id = ?', queued.id, row.id)
@@ -1038,7 +1038,7 @@ export function sellerRouter() {
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
     const fresh = await refreshAccount(s).catch(() => s)
     if (!fresh.stripeAccountId || !fresh.chargesReady) return void res.status(409).json({ error: 'This seller can’t take payments yet.' })
-    const key = String(req.body?.checkoutKey ?? randomUUID())
+    const key = String(req.body?.checkoutKey ?? req.body?.requestId ?? randomUUID())
     if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
     const order = await sql.tx(async tx => {
       await tx.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`, `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode)

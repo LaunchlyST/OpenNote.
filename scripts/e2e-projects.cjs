@@ -52,13 +52,22 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   await shot(p, 'welcome-mobile')
   await p.setViewportSize({ width: 1440, height: 900 })
   await p.getByRole('button', { name: /Get Started Free/ }).click()
+  // Since ffc5602, Free opens the calendar directly: a first account gets a "My calendar" project.
+  await p.waitForURL(/\/app\/project\//, { timeout: 15000 })
+  const autoList = await (await p.request.get(`${B}/api/projects?workspace=free`)).json()
+  const auto = (autoList.projects ?? autoList).filter((x) => x.name === 'My calendar')
+  check(auto.length === 1, '“Get Started Free” opens the calendar in a new “My calendar” project')
+  // Remove it (this test account's own project) to check the empty dashboard below.
+  for (const x of auto) await p.request.delete(`${B}/api/projects/${x.id}`)
+  await p.goto(`${B}/app/free`)
 
   // Empty dashboard
   await p.getByText('Your workspace starts here').waitFor()
   check(true, 'empty state: “Your workspace starts here”')
   check((await p.getByRole('button', { name: /settings/i }).count()) === 0, 'no Settings gear on My Projects')
-  for (const label of ['Features', 'Explore', 'Community']) {
-    await p.getByRole('navigation', { name: 'Explore Desknoty' }).getByRole('button', { name: label }).click()
+  // The three header links all read "Coming Soon"; their popovers name the section.
+  for (const [i, label] of ['Features', 'Explore', 'Community'].entries()) {
+    await p.getByRole('navigation', { name: 'Explore Desknoty' }).getByRole('button', { name: 'Coming Soon' }).nth(i).click()
     const pop = p.getByRole('dialog', { name: `${label} — Coming Soon` })
     check((await pop.innerText()).includes('This feature is being developed.'), `“${label}” shows Coming Soon`)
     await p.keyboard.press('Escape')
@@ -96,9 +105,15 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
 
   // Bulk projects for pagination via the API, with distinct creation times
   const api = (body) => p.request.post(`${B}/api/projects`, { data: { workspace: 'free', color: 'blue', ...body } })
-  for (let i = 1; i <= 99; i++) await api({ name: `Bulk ${String(i).padStart(3, '0')}` })
+  const made = []
+  for (let i = 1; i <= 99; i++) made.push((await api({ name: `Bulk ${String(i).padStart(3, '0')}` })).status())
+  if (process.env.E2E_DEBUG) console.log('  create statuses', JSON.stringify([...new Set(made)]))
   await p.reload()
-  await p.locator('[data-project-card]').first().waitFor()
+  await p.locator('[data-project-card]').first().waitFor().catch(async (e) => {
+    if (process.env.E2E_SHOTS) await p.screenshot({ path: process.env.E2E_SHOTS + '/projects-bulk.png' })
+    console.log('  at', p.url())
+    throw e
+  })
   const count = () => p.getByTestId('project-count').innerText()
   check((await count()) === 'Showing 1–12 of 100 projects', `100 projects: ${await count()}`)
   check((await p.locator('[data-project-card]').count()) === 12, 'each page shows at most 12 projects')
@@ -147,7 +162,7 @@ const shot = async (p, name) => SHOTS && p.screenshot({ path: `${SHOTS}/${name}.
   // Remember page + search when returning from a project
   await pager.getByRole('button', { name: 'Page 2' }).click()
   const onPage2 = await p.locator('[data-project-card] h3').first().innerText()
-  await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
+  await p.getByRole('button', { name: 'Open ' + onPage2, exact: true }).first().click()
   await p.getByText('Full Week').first().waitFor()
   check(true, `opening “${onPage2}” shows its calendar`)
   await p.getByRole('button', { name: /Back to Projects/ }).click()

@@ -6,7 +6,7 @@
  * for the inbox preview line. Every value that reaches the HTML is escaped.
  */
 
-export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt'
+export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt' | 'welcome'
 
 /** What a template may fill in. `email` and `count` are used by the waitlist emails. */
 export interface EmailData {
@@ -14,6 +14,8 @@ export interface EmailData {
   name?: string
   email?: string
   count?: number
+  /** Receipt only: the amount actually charged, already formatted (e.g. £12.00). */
+  amount?: string
 }
 
 export interface RenderedEmail {
@@ -112,13 +114,20 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
       paragraphs: [hello, 'Thanks for signing up for Desknoty. Confirm your email address to finish creating your account.'],
       action: 'Confirm email',
     },
+    welcome: {
+      subject: 'Welcome to Desknoty',
+      preheader: 'Your email is confirmed. Your account is ready.',
+      heading: 'You’re all set',
+      paragraphs: [hello, 'Your email address is confirmed and your Desknoty account is ready to use.'],
+      action: 'Open Desknoty',
+    },
     'order-receipt': {
       subject: `Your download: ${data.name ?? 'your purchase'}`,
       preheader: `Thanks for buying from ${data.email ?? 'this store'}. Your download is ready.`,
       heading: 'Your download is ready',
       paragraphs: [
         'Hi,',
-        `Thanks for buying ${data.name ?? 'your product'} from ${data.email ?? 'this store'}. Payment is confirmed.`,
+        `Thanks for buying ${data.name ?? 'your product'} from ${data.email ?? 'this store'}.${data.amount ? ` You paid ${data.amount}.` : ''} Payment is confirmed.`,
         'Use the button below any time to get a fresh download link. Keep this email: the link is private to your order.',
       ],
       action: 'Get your download',

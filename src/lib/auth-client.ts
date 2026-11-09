@@ -1,5 +1,5 @@
 import { createAuthClient } from 'better-auth/react'
-import { API_BASE, readToken, writeToken } from './api-base'
+import { API_BASE, readToken } from './api-base'
 
 /**
  * Better Auth browser client. Requests go to `/api/auth/*` on the API origin.
@@ -22,10 +22,7 @@ export const authClient = createAuthClient({
     ? {
         fetchOptions: {
           auth: { type: 'Bearer' as const, token: () => readToken() ?? '' },
-          onSuccess: (ctx: { response: Response }) => {
-            const t = ctx.response.headers.get('set-auth-token')
-            if (t) writeToken(t)
-          },
+
         },
       }
     : {}),

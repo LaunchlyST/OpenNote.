@@ -27,6 +27,9 @@ const pickerReady = (p) => p.getByText('Your space to make').first().waitFor({ t
 async function enterProject(p, name) {
   await pickerReady(p)
   await p.getByRole('button', { name: /Get Started Free/ }).click()
+  // Free opens straight into the latest project (or a new one) since 9911c62.
+  await p.waitForURL(/\/app\/(project\/|free)/, { timeout: 15000 })
+  if (/\/app\/project\//.test(p.url())) return appReady(p)
   await p.getByText(/Your workspace starts here|Showing \d/).first().waitFor({ timeout: 15000 })
   const card = p.getByRole('button', { name: `Open ${name}`, exact: true }).first()
   if (await card.count()) await card.click()
@@ -34,7 +37,7 @@ async function enterProject(p, name) {
     await p.getByRole('button', { name: 'Create Project', exact: true }).first().click()
     await p.getByLabel('Project name').fill(name)
     await p.getByRole('dialog').getByRole('button', { name: 'Create Project' }).click()
-    await p.locator('[data-project-card]').first().getByRole('button', { name: /^Open Project/ }).click()
+    await p.getByRole('button', { name: `Open ${name}`, exact: true }).first().click()
   }
   await appReady(p)
 }
@@ -61,7 +64,7 @@ async function signUp(p, u) {
   await p.getByLabel('Password', { exact: true }).fill(u.pw)
   await p.getByLabel('Confirm password', { exact: true }).fill(u.pw)
   await p.getByRole('button', { name: 'Create account' }).click()
-  await Promise.race([p.getByText('Check your email').first().waitFor({ timeout: 15000 }), pickerReady(p)])
+  await Promise.race([p.getByText('Check your email').first().waitFor({ timeout: 15000 }), pickerReady(p)]).catch(async (e) => { if (process.env.E2E_SHOTS) await p.screenshot({ path: process.env.E2E_SHOTS + '/privacy-signup.png' }); console.log('  at', p.url()); throw e })
   if (await p.getByText('Check your email').count()) await confirmViaInbox(p, u.email)
   await enterProject(p, 'Private')
 }

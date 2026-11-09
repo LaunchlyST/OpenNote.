@@ -223,8 +223,10 @@ function defaultMessage() {
 function push(message) {
   say(c.bold('Pushing OpenNote'))
 
-  if (operationInProgress()) {
-    say(c.red('Push blocked: a merge, rebase or cherry-pick is in progress.'))
+  // A user-authorized merge can be committed by this same checked workflow.
+  // Unresolved conflicts still stop before tests, staging or committing.
+  if (hasUnmergedPaths()) {
+    say(c.red('Push blocked: resolve all merge conflicts first.'))
     return 1
   }
   if (currentBranch() !== BRANCH) {

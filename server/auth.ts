@@ -6,6 +6,7 @@ import { passwordProblem } from './password-policy.ts'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { enqueueEmail } from './mail/index.ts'
 import { syncRoles } from './roles.ts'
+import { sql } from './db.ts'
 
 export const auth = betterAuth({
   appName: 'Desknoty',
@@ -40,13 +41,31 @@ export const auth = betterAuth({
     sendVerificationEmail: async ({ user, url }) => {
       await enqueueEmail('verify-email', user.email, { url, name: user.name })
     },
+    // Once per account: verification only happens once.
+    afterEmailVerification: async (user) => {
+      await enqueueEmail('welcome', user.email, { url: `${(process.env.PUBLIC_SITE_URL || env.baseURL).replace(/\/+$/, '')}/app`, name: user.name })
+    },
   },
 
   user: {
     // Users can delete their own account from Settings. Better Auth checks
     // the password (email accounts) or a recent sign-in (Google) first;
     // their projects and preferences are removed with them (ON DELETE CASCADE).
-    deleteUser: { enabled: true },
+    deleteUser: {
+      enabled: true,
+      // A seller's customers keep their downloads: an account whose store has
+      // paid orders is not deleted (the store's rows would cascade with it).
+      beforeDelete: async (user) => {
+        const row = await sql.get<{ n: number }>(
+          `SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order o JOIN seller_store s ON s.id = o."storeId" WHERE s."userId" = ? AND o.status = 'paid'`,
+          user.id,
+        ).catch(() => undefined)
+        if (row?.n)
+          throw new APIError('BAD_REQUEST', {
+            message: 'This account has a store with paid customer orders, so it can’t be deleted: buyers would lose their downloads. Contact support to close the store first.',
+          })
+      },
+    },
     additionalFields: {
       // Subscription plan. input: false — a sign-up or profile update can
       // never set it; only the server can.

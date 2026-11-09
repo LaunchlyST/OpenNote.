@@ -1,3 +1,4 @@
+import { acceptSession, authGeneration, sessionToken } from './session-state'
 /**
  * Where the OpenNote API lives.
  *
@@ -25,6 +26,7 @@ export function apiUrl(path: string): string {
 const TOKEN_KEY = 'desknoty.session'
 const ACCESS_KEY = 'desknoty.early-access'
 export function readToken(key = TOKEN_KEY): string | null {
+  if (key === TOKEN_KEY) return sessionToken()
   try {
     return localStorage.getItem(key)
   } catch {
@@ -33,6 +35,7 @@ export function readToken(key = TOKEN_KEY): string | null {
 }
 export function writeToken(t: string | null, key = TOKEN_KEY) {
   try {
+    if (t && key === TOKEN_KEY) { acceptSession(t, authGeneration()); return }
     if (t) localStorage.setItem(key, t)
     else localStorage.removeItem(key)
   } catch {
@@ -44,16 +47,16 @@ if (API_BASE && typeof window !== 'undefined' && typeof window.fetch === 'functi
   const original = window.fetch.bind(window)
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-    if (!url.startsWith(API_BASE)) return original(input, init)
+    if (!(url === API_BASE || url.startsWith(`${API_BASE}/`))) return original(input, init)
     const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined))
     const token = readToken()
     if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`)
     const access = readToken(ACCESS_KEY)
     if (access) headers.set('X-Early-Access', access)
+    const generation = authGeneration()
     const res = await original(input, { ...init, headers })
     const fresh = res.headers.get('set-auth-token')
-    if (fresh) writeToken(fresh)
-    if (url.includes('/api/auth/sign-out')) writeToken(null)
+    if (fresh && res.ok) acceptSession(fresh, generation)
     // Early-access unlock: keep the signed pass for browsers that drop the cookie.
     if (res.ok && /\/api\/early-access$/.test(url.split('?')[0])) {
       const b = (await res.clone().json().catch(() => null)) as { token?: string } | null
