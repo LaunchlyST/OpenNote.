@@ -63,6 +63,9 @@ function boot(extra: Record<string, string> = {}): Promise<ChildProcess> {
     env: {
       ...process.env,
       NODE_ENV: 'development',
+      DATABASE_URL: '', SUPABASE_DB_URL: '', SUPABASE_URL: '', SUPABASE_SERVICE_ROLE_KEY: '',
+      SIGNUP_ALLOWLIST: '', PRO_EMAILS: '', ADMIN_EMAILS: '',
+      STRIPE_MODE: 'test', STRIPE_TEST_SECRET_KEY: '', STRIPE_TEST_WEBHOOK_SECRET: '',
       BETTER_AUTH_URL: ORIGIN,
       BETTER_AUTH_SECRET: 'e'.repeat(64),
       DATABASE_PATH: join(tmp, 'seller.db'),
@@ -93,6 +96,11 @@ function boot(extra: Record<string, string> = {}): Promise<ChildProcess> {
 
 let ip = 0
 async function req(method: string, path: string, body?: unknown, cookie = '', headers: Record<string, string> = {}) {
+  if (body && typeof body === 'object' && !(body instanceof Buffer)) {
+    const data = body as Record<string, unknown>
+    if (path === '/api/seller/store/draft' && data.revision === undefined) data.revision = (await req('GET', '/api/seller/store', undefined, cookie)).json?.store?.revision
+    if (method === 'PATCH' && /^\/api\/seller\/products\/[^/]+$/.test(path) && data.revision === undefined) data.revision = (await req('GET', '/api/seller/store', undefined, cookie)).json?.store?.products?.find((p: {id: string}) => path.endsWith(p.id))?.revision
+  }
   ip += 1
   const raw = body instanceof Buffer
   const res = await fetch(`${BASE}${path}`, {
@@ -123,8 +131,19 @@ try {
   const PASSWORD = 'a-long-enough-password'
   const a = await req('POST', '/api/auth/sign-up/email', { name: 'Ava', email: 'ava@seller.test', password: PASSWORD })
   const b = await req('POST', '/api/auth/sign-up/email', { name: 'Ben', email: 'ben@seller.test', password: PASSWORD })
+  const fixtures = new Database(join(tmp, 'seller.db'))
+  fixtures.prepare(`UPDATE "user" SET "emailVerified" = 1, plan = 'pro' WHERE email IN ('ava@seller.test','ben@seller.test')`).run()
+  fixtures.close()
   const A = a.cookies
   const B = b.cookies
+
+  const accessDb = new Database(join(tmp, 'seller.db'))
+  accessDb.prepare(`UPDATE "user" SET plan = 'free' WHERE email = 'ben@seller.test'`).run()
+  check('free accounts cannot call seller API', (await req('GET', '/api/seller/store', undefined, B)).status === 403)
+  accessDb.prepare(`UPDATE "user" SET plan = 'pro', "emailVerified" = 0 WHERE email = 'ben@seller.test'`).run()
+  check('unverified Pro accounts cannot call seller API', (await req('GET', '/api/seller/store', undefined, B)).status === 403)
+  accessDb.prepare(`UPDATE "user" SET "emailVerified" = 1 WHERE email = 'ben@seller.test'`).run()
+  accessDb.close()
 
   console.log('\n  Setup state')
   const setup = await req('GET', '/api/seller/setup')
@@ -172,6 +191,14 @@ try {
   const foreign = await req('PUT', '/api/seller/store/draft', { page: { ...store.draft, blocks: [{ id: 'blk_x123', type: 'featured', data: { productId: 'prd_not_mine' } }] } }, B)
   check('a block can only point at the seller’s own products', foreign.json?.store?.draft?.blocks?.[0]?.data?.productId === null)
   check('store is not public before Publish', (await req('GET', '/api/store/ava-makes')).status === 404)
+  const beforeRevision = (await req('GET', '/api/seller/store', undefined, A)).json.store
+  const writes = await Promise.all([
+    req('PATCH', `/api/seller/products/${pid}`, { title: 'Latest title', revision: beforeRevision.products[0].revision }, A),
+    req('PATCH', `/api/seller/products/${pid}`, { title: 'Conflicting title', revision: beforeRevision.products[0].revision }, A),
+  ])
+  check('concurrent stale product write is refused', writes.map(r => r.status).sort().join(',') === '200,409')
+  check('stale page writes are refused', (await req('PUT', '/api/seller/store/draft', { page: beforeRevision.draft, revision: -1 }, A)).status === 409)
+  await req('PATCH', `/api/seller/products/${pid}`, { title: 'Content planner' }, A)
   const pubd = await req('POST', '/api/seller/store/publish', undefined, A)
   check('Publish', pubd.status === 200 && pubd.json.store.unpublishedChanges === false)
   const live = await req('GET', '/api/store/ava-makes')
@@ -209,6 +236,9 @@ try {
   check('account.updated webhook → Ready for payouts', ready.status === 'ready' && ready.checkoutReady === true)
   check('Manage payouts opens Stripe', String((await req('POST', '/api/seller/stripe/manage', undefined, A)).json?.url).includes('/dashboard/'))
   check('Ben’s store has no payouts from Ava’s account', (await req('GET', '/api/seller/store', undefined, B)).json.store.payouts.status === 'not_connected')
+
+  const parallelOnboard = await Promise.all([req('POST', '/api/seller/stripe/onboard', {}, B), req('POST', '/api/seller/stripe/onboard', {}, B)])
+  check('concurrent onboarding reuses one account', parallelOnboard.every(r => r.status === 200) && fake.accounts.size === 2)
 
   console.log('\n  Checkout and fulfilment')
   const co = await req('POST', '/api/store/ava-makes/checkout', { productId: pid })
@@ -291,6 +321,50 @@ try {
   check('private files are not under the public static folder', !join(tmp, 'files').includes('dist'))
   const leak = await req('GET', `/${'data/seller-files'}`)
   check('the files folder is not served by URL', leak.status !== 200 || !leak.text.includes('SECRET'))
+  console.log('\n  Purchase durability and retries')
+  const retryKey = 'retry_test_checkout_001'
+  const repeated = await Promise.all([req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: retryKey }), req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: retryKey })])
+  check('concurrent checkout retries share one Stripe session', repeated[0].json?.url === repeated[1].json?.url && repeated.every(r => r.status === 200))
+  const reservedSid = String(repeated[0].json.url).split('/pay/')[1]
+  const jsonFile = await req('PUT', `/api/seller/products/${pid}/file`, Buffer.from('{"version":2}'), A, { 'content-type': 'application/json', 'x-file-name': 'version.json' })
+  check('JSON uploads remain raw files', jsonFile.status === 200 && jsonFile.json.product.file.name === 'version.json')
+  await req('DELETE', `/api/seller/products/${pid}`, undefined, A)
+  await sendWebhook(HOOK, fake.pay(reservedSid))
+  const reservedOrder = (await req('GET', `/api/store/ava-makes/session/${reservedSid}`)).json.order
+  check('pending checkout keeps original file after replacement and deletion', (await (await fetch(reservedOrder.downloadUrl.replace(ORIGIN, BASE))).text()) === 'SECRET-PLANNER-CONTENT')
+  await req('PUT', '/api/seller/handle', { handle: 'ava-renamed' }, A)
+  check('old receipt survives handle change', (await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)).status === 200)
+  const stablePath = new URL(reservedOrder.retrievalUrl).pathname.replace('/store/', '/api/store/') + new URL(reservedOrder.retrievalUrl).search
+  check('permanent purchase URL survives handle change', (await req('GET', stablePath)).json?.order?.status === 'paid')
+
+  const charge = fake.charges.get(`ch_${reservedSid}`)!
+  fake.disputes.set('du_test', { id: 'du_test', charge: charge.id, status: 'needs_response' })
+  await sendWebhook(HOOK, fake.event('charge.dispute.created', { id: 'du_test' }, accountId))
+  check('open dispute suspends download', (await req('GET', stablePath)).json.order.status === 'disputed' && (await fetch(reservedOrder.downloadUrl.replace(ORIGIN, BASE))).status === 403)
+  fake.disputes.get('du_test')!.status = 'won'
+  await sendWebhook(HOOK, fake.event('charge.dispute.closed', { id: 'du_test' }, accountId))
+  check('won dispute restores access', (await req('GET', stablePath)).json.order.status === 'paid')
+  await sendWebhook(HOOK, fake.event('charge.dispute.created', { id: 'du_test', status: 'needs_response' }, accountId))
+  check('out-of-order dispute event uses current Stripe state', (await req('GET', stablePath)).json.order.status === 'paid')
+  charge.amount_refunded = 100
+  await sendWebhook(HOOK, fake.event('charge.refunded', charge, accountId))
+  await sendWebhook(HOOK, fake.event('checkout.session.completed', fake.sessions.get(reservedSid)!, accountId))
+  check('partial refund revokes access and late payment cannot restore it', (await req('GET', stablePath)).json.order.status === 'refunded')
+
+  const ledger = new Database(join(tmp, 'seller.db'))
+  const template = ledger.prepare('SELECT * FROM seller_order WHERE id = ?').get(oid) as Record<string, unknown>
+  const insert = ledger.prepare(`INSERT INTO seller_order (${Object.keys(template).map(k => '"' + k + '"').join(',')}) VALUES (${Object.keys(template).map(() => '?').join(',')})`)
+  for (let i = 0; i < 105; i++) insert.run(...Object.values({ ...template, id: `ord_page_${i}`, sessionId: null, checkoutKey: null }))
+  const firstPage = (await req('GET', '/api/seller/orders', undefined, A)).json
+  const secondPage = (await req('GET', `/api/seller/orders?offset=${firstPage.nextOffset}`, undefined, A)).json
+  check('orders beyond 100 can be retrieved without overlap', firstPage.orders.length === 100 && secondPage.orders.length > 0 && !secondPage.orders.some((o: {id: string}) => firstPage.orders.some((p: {id: string}) => p.id === o.id)))
+  ledger.pragma('foreign_keys = ON')
+  ledger.prepare('DELETE FROM "user" WHERE email = ?').run('ava@seller.test')
+  check('seller closure retains purchase ledger', (ledger.prepare('SELECT COUNT(*) AS n FROM seller_order').get() as {n: number}).n > 100)
+  check('seller closure removes public selling access', (await req('GET', '/api/store/ava-renamed')).status === 404)
+  check('buyer entitlement survives seller closure', (await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)).json?.order?.status === 'paid')
+  check('retained data satisfies foreign keys', (ledger.pragma('foreign_key_check') as unknown[]).length === 0)
+  ledger.close()
 } finally {
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   await fake.close()

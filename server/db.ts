@@ -40,6 +40,13 @@ async function open(): Promise<{ sql: Sql; authDatabase: unknown }> {
 const opened = await open()
 /** The app's data. Every query goes through this. */
 export const sql = opened.sql
+/** Release resources in isolated test runs and graceful shutdown. */
+export async function closeDatabase() {
+  const db = opened.authDatabase as { close?: () => void; end?: () => Promise<void> }
+  if (db.close) db.close()
+  else await db.end?.()
+}
+
 /** The same store, in the form Better Auth accepts (pg Pool or SQLite handle). */
 export const authDatabase = opened.authDatabase as never
 

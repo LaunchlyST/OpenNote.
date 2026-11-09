@@ -1,0 +1,38 @@
+import { sql, authDatabase } from './db.ts'
+import type Database from 'better-sqlite3'
+
+/** Retain the store and purchase ledger when its owner closes their account. */
+export async function migrateSeller() {
+  if (sql.dialect === 'sqlite') {
+    const db = authDatabase as unknown as Database.Database
+    const schema = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'seller_store'").get() as { sql: string }
+    if (/"?userId"? TEXT NOT NULL/.test(schema.sql)) {
+      db.pragma('foreign_keys = OFF')
+      try {
+        db.transaction(() => {
+          db.exec(schema.sql.replace('seller_store', 'seller_store_retained').replace(/"?userId"? TEXT NOT NULL UNIQUE REFERENCES "user"\(id\) ON DELETE CASCADE/, '"userId" TEXT UNIQUE REFERENCES "user"(id) ON DELETE SET NULL'))
+          db.exec('INSERT INTO seller_store_retained SELECT * FROM seller_store; DROP TABLE seller_store; ALTER TABLE seller_store_retained RENAME TO seller_store; CREATE INDEX seller_store_account ON seller_store ("stripeAccountId");')
+          if ((db.pragma('foreign_key_check') as unknown[]).length) throw new Error('Seller retention migration failed integrity check')
+        })()
+      } finally { db.pragma('foreign_keys = ON') }
+    }
+  } else {
+    await sql.tx(async tx => {
+      const constraints = await tx.all<{ name: string }>(`SELECT conname AS name FROM pg_constraint WHERE conrelid = 'seller_store'::regclass AND contype = 'f' AND confrelid = '"user"'::regclass`)
+      for (const c of constraints) await tx.exec(`ALTER TABLE seller_store DROP CONSTRAINT "${c.name.replace(/"/g, '""')}"`)
+      await tx.exec('ALTER TABLE seller_store ALTER COLUMN "userId" DROP NOT NULL; ALTER TABLE seller_store ADD CONSTRAINT seller_store_owner FOREIGN KEY ("userId") REFERENCES "user"(id) ON DELETE SET NULL;')
+    })
+  }
+  for (const [table, columns] of Object.entries({
+    seller_store: { revision: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'" },
+    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0' },
+    seller_order: { checkoutKey: 'TEXT', checkoutUrl: 'TEXT', receiptId: 'INTEGER', paymentIntent: 'TEXT', refunded: 'INTEGER NOT NULL DEFAULT 0', disputed: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'" },
+  })) {
+    const existing = sql.dialect === 'sqlite'
+      ? await sql.all<{ name: string }>(`PRAGMA table_info(${table})`)
+      : await sql.all<{ name: string }>('SELECT column_name AS name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?', table)
+    for (const [name, type] of Object.entries(columns)) if (!existing.some(c => c.name === name)) await sql.exec(`ALTER TABLE ${table} ADD COLUMN "${name}" ${type}`)
+  }
+  await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_checkout_key ON seller_order ("storeId", "checkoutKey"); CREATE TABLE IF NOT EXISTS seller_connections ("storeId" TEXT NOT NULL REFERENCES seller_store(id), mode TEXT NOT NULL, "accountId" TEXT NOT NULL, PRIMARY KEY ("storeId", mode));')
+  await sql.run('INSERT INTO seller_connections ("storeId", mode, "accountId") SELECT id, "stripeMode", "stripeAccountId" FROM seller_store WHERE "stripeAccountId" IS NOT NULL ON CONFLICT DO NOTHING')
+}

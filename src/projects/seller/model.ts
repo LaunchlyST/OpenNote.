@@ -34,6 +34,7 @@ export interface ShopProduct {
 
 /** The seller's own (draft) view of a product. */
 export interface DraftProduct extends ShopProduct {
+  revision: number
   file: { name: string; size: number; type: string } | null
   listed: boolean
   published: boolean
@@ -44,6 +45,7 @@ export interface DraftProduct extends ShopProduct {
 export type PayoutStatus = 'not_connected' | 'incomplete' | 'pending' | 'ready'
 
 export interface StoreView {
+  revision: number
   id: string
   handle: string
   url: string

@@ -33,6 +33,8 @@ function parseForm(body: string): Obj {
 
 export interface FakeStripe {
   url: string
+  charges: Map<string, Obj>
+  disputes: Map<string, Obj>
   accounts: Map<string, Obj>
   sessions: Map<string, Obj>
   calls: Array<{ method: string; path: string; account?: string; body: Obj }>
@@ -47,6 +49,9 @@ export interface FakeStripe {
 }
 
 export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: string }): Promise<FakeStripe> {
+  const charges = new Map<string, Obj>()
+  const disputes = new Map<string, Obj>()
+  const idempotent = new Map<string, Obj>()
   const accounts = new Map<string, Obj>()
   const sessions = new Map<string, Obj>()
   const calls: FakeStripe['calls'] = []
@@ -81,7 +86,8 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
   }
   const pay: FakeStripe['pay'] = (id, email = 'buyer@example.test') => {
     const s = sessions.get(id)!
-    Object.assign(s, { payment_status: 'paid', status: 'complete', customer_details: { email } })
+    charges.set(`ch_${id}`, { id: `ch_${id}`, payment_intent: `pi_${id}`, amount_refunded: 0, disputed: false })
+    Object.assign(s, { payment_intent: `pi_${id}`, payment_status: 'paid', status: 'complete', customer_details: { email } })
     return event('checkout.session.completed', s, s._account as string)
   }
 
@@ -99,12 +105,15 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     const account = req.headers['stripe-account'] as string | undefined
     if (p.startsWith('/v1/') || p.startsWith('/v2/')) calls.push({ method: req.method ?? 'GET', path: p, account, body: form })
 
+    const idem = String(req.headers['idempotency-key'] ?? '')
+    if (idem && idempotent.has(idem)) return json(res, 200, idempotent.get(idem))
     if (req.method === 'POST' && p === '/v2/core/accounts') {
       const j = JSON.parse(body || '{}') as Obj
       calls[calls.length - 1].body = j
       const id = `acct_test${++n}`
       const a: Obj = { id, object: 'account', type: 'standard', email: j.contact_email, metadata: j.metadata }
       accounts.set(id, a)
+      if (idem) idempotent.set(idem, a)
       setAccount(id, 'incomplete')
       Object.assign(a, { details_submitted: false })
       return json(res, 200, a)
@@ -137,6 +146,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
         _name: (item.product_data as Obj).name,
       }
       sessions.set(id, s)
+      if (idem) idempotent.set(idem, s)
       return json(res, 200, s)
     }
     m = p.match(/^\/v1\/checkout\/sessions\/(cs_\w+)$/)
@@ -145,6 +155,9 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
       if (!s || s._account !== account) return json(res, 404, { error: { message: 'No such checkout.session' } })
       return json(res, 200, s)
     }
+
+    if (p.startsWith('/v1/charges/')) return json(res, 200, charges.get(p.split('/').pop()!) ?? {})
+    if (p.startsWith('/v1/disputes/')) return json(res, 200, disputes.get(p.split('/').pop()!) ?? {})
 
     // ---- fake hosted pages (what a browser sees) ----
     m = p.match(/^\/pay\/(cs_\w+)$/)
@@ -187,7 +200,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     srv.listen(0, '127.0.0.1', () => {
       const addr = srv.address() as { port: number }
       base = `http://127.0.0.1:${addr.port}`
-      resolve({ url: base, accounts, sessions, calls, sent, setAccount, pay, event, close: () => new Promise((r) => srv.close(() => r())) })
+      resolve({ url: base, charges, disputes, accounts, sessions, calls, sent, setAccount, pay, event, close: () => new Promise((r) => srv.close(() => r())) })
     })
   })
 }

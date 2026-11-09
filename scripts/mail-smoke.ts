@@ -16,6 +16,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 const tmp = mkdtempSync(join(tmpdir(), 'opennote-mail-'))
+process.env.DATABASE_URL = ''; process.env.SUPABASE_DB_URL = ''; process.env.SUPABASE_URL = ''; process.env.SUPABASE_SERVICE_ROLE_KEY = ''
+process.env.DATABASE_URL = ''; process.env.SUPABASE_DB_URL = ''; process.env.SUPABASE_URL = ''; process.env.SUPABASE_SERVICE_ROLE_KEY = ''
 process.env.NODE_ENV = 'test'
 process.env.BETTER_AUTH_URL = 'http://localhost:5173'
 process.env.BETTER_AUTH_SECRET = 'c'.repeat(64)
@@ -85,6 +87,23 @@ try {
     check('it arrives in the local inbox', inbox.length === 1 && inbox[0].to === 'sam@example.com')
     check('the delivery log never contains bodies or links', !JSON.stringify(outboxLog()).includes('TOKEN123'))
     check('emails are masked in logs', maskEmail('sam@example.com') === 's***@example.com')
+  }
+
+  console.log('\n  Receipt scheduling survives rate limits and failures')
+  {
+    setTransport({ name: 'smtp', send: async () => { throw new Error('temporary provider failure') } })
+    for (let i = 0; i < 5; i++) await enqueueEmail('reset-password', 'receipts@example.test', { url: LINK })
+    const receipt = await enqueueEmail('order-receipt', 'receipts@example.test', { url: LINK, name: 'Product' })
+    check('rate-limited receipt remains queued with its body', receipt.queued && row(receipt.id).status === 'queued' && Boolean(row(receipt.id).text))
+    if (receipt.queued) {
+      raw.prepare('UPDATE email_outbox SET nextAttemptAt = 0 WHERE id = ?').run(receipt.id)
+      await processOutbox()
+      check('failed receipt retains recoverable body and retry schedule', row(receipt.id).status === 'failed' && Boolean(row(receipt.id).text) && row(receipt.id).nextAttemptAt > Date.now())
+      setTransport(localTransport())
+      raw.prepare('UPDATE email_outbox SET nextAttemptAt = 0 WHERE id = ?').run(receipt.id)
+      await processOutbox()
+      check('receipt recovers after provider returns', row(receipt.id).status === 'sent')
+    }
   }
 
   console.log('\n  Retries and giving up')
@@ -326,6 +345,8 @@ try {
     }
   }
 } finally {
+  await (await import('../server/db.ts')).closeDatabase()
+  raw.close()
   rmSync(tmp, { recursive: true, force: true })
 }
 

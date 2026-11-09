@@ -128,7 +128,9 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           <Cover p={prod} big />
           <div className="sp-feat-body">
             {d.note && <p className="sp-kicker">{d.note}</p>}
-            <h2>{prod.title}</h2>
+            <ProductLink prod={prod} live={p.live} handle={p.handle}>
+              <h2>{prod.title}</h2>
+            </ProductLink>
             {prod.description && <p>{prod.description.split('\n')[0]}</p>}
             <BuyRow prod={prod} {...p} />
           </div>

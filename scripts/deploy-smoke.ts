@@ -22,6 +22,7 @@ import express from 'express'
 const SECRET = 'a'.repeat(64)
 const tmp = mkdtempSync(join(tmpdir(), 'opennote-deploy-'))
 
+process.env.DATABASE_URL = ''; process.env.SUPABASE_DB_URL = ''; process.env.SUPABASE_URL = ''; process.env.SUPABASE_SERVICE_ROLE_KEY = ''
 process.env.NODE_ENV = 'test'
 process.env.BETTER_AUTH_URL = 'http://localhost:3001'
 process.env.BETTER_AUTH_SECRET = SECRET
@@ -212,8 +213,8 @@ try {
   server.close()
   hook.close()
   // Release the SQLite handle before deleting the file, or Windows refuses.
-  const { sql } = await import('../server/db.ts')
   await new Promise((r) => setTimeout(r, 100))
+  await (await import('../server/db.ts')).closeDatabase()
   rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
 

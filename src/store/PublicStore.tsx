@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { StorePage, storeStyle } from '../projects/seller/StorePage'
 import { formatPrice } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
@@ -23,9 +23,11 @@ export default function PublicStore({ path }: { path: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [buying, setBuying] = useState<string | null>(null)
   const [buyErr, setBuyErr] = useState<string | null>(null)
+  const checkoutBusy = useRef(false)
   const params = new URLSearchParams(window.location.search)
 
   useEffect(() => {
+    if (kind === 'thanks' || kind === 'order') return
     storeApi.get(handle).then(setStore).catch((e: Error) => setErr(e.message))
   }, [handle])
   useEffect(() => {
@@ -33,23 +35,29 @@ export default function PublicStore({ path }: { path: string }) {
   }, [store])
 
   const buy = async (p: ShopProduct) => {
+    if (checkoutBusy.current) return
+    checkoutBusy.current = true
     setBuying(p.id)
     setBuyErr(null)
     try {
-      window.location.assign((await storeApi.checkout(handle, p.id)).url)
+      const keyName = `desknoty.checkout.${handle}.${p.id}`
+      const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
+      sessionStorage.setItem(keyName, key)
+      window.location.assign((await storeApi.checkout(handle, p.id, key)).url)
     } catch (e) {
       setBuyErr((e as Error).message)
       setBuying(null)
+      checkoutBusy.current = false
     }
   }
 
+  if (kind === 'thanks') return <Shell><OrderStatus handle={handle} load={() => storeApi.session(handle, params.get('session_id') ?? '')} /></Shell>
+  if (kind === 'order') return <Shell><OrderStatus handle={handle} load={() => storeApi.order(handle, id, params.get('k') ?? '')} /></Shell>
   if (err) return <Shell><Message title="Store not found" text={err} /></Shell>
   if (!store) return <Shell><Message title="Loading…" text="" /></Shell>
 
   const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying }
 
-  if (kind === 'thanks') return <Shell store={store}><OrderStatus store={store} load={() => storeApi.session(handle, params.get('session_id') ?? '')} /></Shell>
-  if (kind === 'order') return <Shell store={store}><OrderStatus store={store} load={() => storeApi.order(handle, id, params.get('k') ?? '')} /></Shell>
   if (kind === 'p') {
     const product = store.products.find((p) => p.id === id)
     if (!product) return <Shell store={store}><Message title="Product not found" text="It may have been removed or isn’t on sale right now." back={`/store/${store.handle}`} /></Shell>
@@ -97,7 +105,7 @@ function Message({ title, text, back }: { title: string; text: string; back?: st
 }
 
 /** Waits for Stripe's confirmation, then shows the download. */
-function OrderStatus({ store, load }: { store: Store; load: () => Promise<{ order: PublicOrder }> }) {
+function OrderStatus({ handle, load }: { handle: string; load: () => Promise<{ order: PublicOrder }> }) {
   const [order, setOrder] = useState<PublicOrder | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [tries, setTries] = useState(0)
@@ -118,7 +126,7 @@ function OrderStatus({ store, load }: { store: Store; load: () => Promise<{ orde
     return () => window.clearTimeout(t)
   }, [order, tries])
 
-  const back = `/store/${store.handle}`
+  const back = `/store/${handle}`
   if (err) return <Message title="Order not found" text={err} back={back} />
   if (!order) return <Message title="Checking your payment…" text="" />
   if (order.status === 'paid')
@@ -128,12 +136,19 @@ function OrderStatus({ store, load }: { store: Store; load: () => Promise<{ orde
         <h1>Thanks for your order</h1>
         <p>
           {order.product} · {formatPrice(order.amountMinor, order.currency)}
-          {order.email ? ` · receipt sent to ${order.email}` : ''}
+          {order.receiptSent && order.email ? ` · receipt accepted for sending to ${order.email} (delivery unconfirmed)` : ''}
         </p>
         <a className="sp-btn ps-download" href={order.downloadUrl!} download>
           Download {order.fileName}
         </a>
-        <p className="ps-fine">This download link works for 24 hours. The email we sent you can make a new one any time.</p>
+        <p className="ps-fine">
+          {order.downloadExpiresAt
+            ? `This download link works until ${new Date(order.downloadExpiresAt).toLocaleString()}.`
+            : 'This download link works for 24 hours.'}
+          {' Save your permanent purchase link below to get a new download link later.'}
+        </p>
+        {order.retrievalUrl && <a href={order.retrievalUrl}>Permanent purchase link</a>}
+        <p className="ps-fine">Receipt: {order.receiptStatus.replaceAll('_', ' ')}. Email delivery is not confirmed.</p>
         <a href={back}>Back to the store</a>
       </div>
     )
@@ -144,6 +159,8 @@ function OrderStatus({ store, load }: { store: Store; load: () => Promise<{ orde
         text={tries > 40 ? 'This is taking longer than usual. Some payment methods take a while to clear; we’ll email you the download as soon as it does.' : 'This usually takes a few seconds. Keep this page open.'}
       />
     )
+  if (order.status === 'refunded') return <Message title="Purchase refunded" text="Download access ends after a full or partial refund. Contact the seller with questions." back={back} />
+  if (order.status === 'disputed') return <Message title="Download access suspended" text="This payment is disputed. Access returns if the dispute is resolved in the seller’s favour and no refund applies." back={back} />
   if (order.status === 'cancelled') return <Message title="Checkout cancelled" text="You weren’t charged." back={back} />
   return <Message title="Payment didn’t go through" text="You weren’t charged. Try again with another payment method." back={back} />
 }

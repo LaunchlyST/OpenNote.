@@ -47,11 +47,11 @@ export const sellerApi = {
   handle: (h: string) => call<{ available: boolean; problem: string | null }>('GET', `/api/seller/handle/${encodeURIComponent(h)}`),
   create: (name: string, handle: string) => call<{ store: StoreView }>('POST', '/api/seller/store', { name, handle }),
   changeHandle: (handle: string) => call<{ store: StoreView }>('PUT', '/api/seller/handle', { handle }),
-  saveDraft: (page: Page) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page }),
+  saveDraft: (page: Page, revision: number) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision }),
   publish: () => call<{ store: StoreView }>('POST', '/api/seller/store/publish'),
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
-  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed'>>) =>
-    call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, p),
+  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed'>>, revision: number) =>
+    call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision }),
   deleteProduct: (id: string) => call<{ store: StoreView }>('DELETE', `/api/seller/products/${id}`),
   uploadFile: (id: string, file: File) =>
     call<{ product: DraftProduct }>('PUT', `/api/seller/products/${id}/file`, file, { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) }),
@@ -59,7 +59,7 @@ export const sellerApi = {
   onboard: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/stripe/onboard', { returnTo }),
   manage: () => call<{ url: string }>('POST', '/api/seller/stripe/manage'),
   tiktok: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/tiktok/start', { returnTo }),
-  orders: () => call<{ orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string }> }>('GET', '/api/seller/orders'),
+  orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string }> }>('GET', `/api/seller/orders?offset=${offset}`),
 }
 
 export interface PublicStore {
@@ -72,7 +72,7 @@ export interface PublicStore {
 }
 export interface PublicOrder {
   id: string
-  status: 'pending' | 'paid' | 'failed' | 'cancelled'
+  status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'disputed'
   product: string
   amountMinor: number
   currency: string
@@ -80,11 +80,14 @@ export interface PublicOrder {
   fileName: string
   downloadUrl: string | null
   retrievalUrl: string | null
+  downloadExpiresAt: number | null
+  receiptSent: boolean
+  receiptStatus: string
 }
 
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string) => call<{ url: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId }),
+  checkout: (handle: string, productId: string, checkoutKey: string) => call<{ url: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey }),
   session: (handle: string, sessionId: string) => call<{ order: PublicOrder }>('GET', `/api/store/${encodeURIComponent(handle)}/session/${encodeURIComponent(sessionId)}`),
   order: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('GET', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}?k=${encodeURIComponent(k)}`),
 }

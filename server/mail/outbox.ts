@@ -69,7 +69,7 @@ export async function enqueueEmail(kind: EmailKind, to: string, data: EmailData,
     recipient,
     now - HOUR,
   )
-  if ((recent?.n ?? 0) >= env.mail.perRecipientPerHour) {
+  if (kind !== 'order-receipt' && (recent?.n ?? 0) >= env.mail.perRecipientPerHour) {
     await via.run(
       `INSERT INTO email_outbox (kind, recipient, subject, status, "nextAttemptAt", "lastError", "createdAt") VALUES (?, ?, ?, 'skipped', ?, 'rate limited', ?)`,
       kind,
@@ -90,7 +90,7 @@ export async function enqueueEmail(kind: EmailKind, to: string, data: EmailData,
     email.subject,
     email.html,
     email.text,
-    now,
+    kind === 'order-receipt' && (recent?.n ?? 0) >= env.mail.perRecipientPerHour ? now + HOUR : now,
     now,
   )
   const id = Number(row!.id)
@@ -111,13 +111,13 @@ async function sendDue() {
   // after the claim has expired, so a live worker is never doubled.
   await sql.run(`UPDATE email_outbox SET status = 'retrying' WHERE status = 'sending' AND "nextAttemptAt" <= ?`, now)
   const due = await sql.all<Row>(
-    `SELECT id, kind, recipient, subject, html, text, attempts FROM email_outbox WHERE status IN ('queued','retrying') AND "nextAttemptAt" <= ? ORDER BY id LIMIT 20`,
+    `SELECT id, kind, recipient, subject, html, text, attempts FROM email_outbox WHERE (status IN ('queued','retrying') OR (kind = 'order-receipt' AND status = 'failed')) AND "nextAttemptAt" <= ? ORDER BY id LIMIT 20`,
     now,
   )
 
   for (const row of due) {
     // Claim the row so a second worker (or a restart) cannot send it twice.
-    const claimed = await sql.run(`UPDATE email_outbox SET status = 'sending', "nextAttemptAt" = ? WHERE id = ? AND status IN ('queued','retrying')`, now + CLAIM_MS, row.id)
+    const claimed = await sql.run(`UPDATE email_outbox SET status = 'sending', "nextAttemptAt" = ? WHERE id = ? AND (status IN ('queued','retrying') OR (kind = 'order-receipt' AND status = 'failed'))`, now + CLAIM_MS, row.id)
     if (!claimed.changes) continue
 
     try {
@@ -135,7 +135,9 @@ async function sendDue() {
       // authentication): retrying cannot help. 4xx and network errors can.
       const code = (err as { responseCode?: number }).responseCode
       const permanent = typeof code === 'number' && code >= 500 && code < 600
-      if (permanent || attempts >= env.mail.maxAttempts) {
+      if (row.kind === 'order-receipt') {
+        await sql.run(`UPDATE email_outbox SET status = 'failed', attempts = ?, "lastError" = ?, "nextAttemptAt" = ? WHERE id = ?`, attempts, reason, Date.now() + Math.min(HOUR, BASE_DELAY * 4 ** Math.min(attempts - 1, 4)), row.id)
+      } else if (permanent || attempts >= env.mail.maxAttempts) {
         await sql.run(
           `UPDATE email_outbox SET status = 'failed', attempts = ?, "lastError" = ?, html = NULL, text = NULL WHERE id = ?`,
           attempts,
@@ -158,7 +160,7 @@ async function sendDue() {
   }
 
   // Housekeeping: old log rows go after 30 days.
-  await sql.run('DELETE FROM email_outbox WHERE "createdAt" < ?', now - KEEP_LOG_FOR)
+  await sql.run(`DELETE FROM email_outbox WHERE "createdAt" < ? AND kind != 'order-receipt' AND status IN ('sent','skipped','failed')`, now - KEEP_LOG_FOR)
 }
 
 /** Runs one pass of the worker. Concurrent calls share the same pass. */

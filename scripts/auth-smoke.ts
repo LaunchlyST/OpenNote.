@@ -17,6 +17,7 @@ import express from 'express'
 const tmp = mkdtempSync(join(tmpdir(), 'opennote-auth-'))
 const ORIGIN = 'http://localhost:3001'
 
+process.env.DATABASE_URL = ''; process.env.SUPABASE_DB_URL = ''; process.env.SUPABASE_URL = ''; process.env.SUPABASE_SERVICE_ROLE_KEY = ''
 process.env.NODE_ENV = 'development' // 'test' would switch off Better Auth's origin checks
 process.env.BETTER_AUTH_URL = ORIGIN
 process.env.BETTER_AUTH_SECRET = 'b'.repeat(64)
@@ -278,6 +279,8 @@ try {
   }
 } finally {
   server.close()
+  raw.close()
+  await (await import('../server/db.ts')).closeDatabase()
   rmSync(tmp, { recursive: true, force: true })
 }
 

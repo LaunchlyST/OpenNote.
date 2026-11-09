@@ -26,15 +26,19 @@ import { sql } from './db.ts'
 import { ddl } from './sql.ts'
 import type { Sql } from './sql.ts'
 import { env } from './env.ts'
-import { enqueueEmail } from './mail/index.ts'
+import { enqueueEmail, transportName } from './mail/index.ts'
+import { migrateSeller } from './seller-migrations.ts'
 
 /* ------------------------------------------------------------- config --- */
 
 export const PLATFORM_FEE_PERCENT = 0
 
+const stripeMode = process.env.STRIPE_MODE === 'live' ? 'live' : 'test'
+const modeKey = process.env[stripeMode === 'live' ? 'STRIPE_LIVE_SECRET_KEY' : 'STRIPE_TEST_SECRET_KEY']
+const legacyKey = process.env.STRIPE_SECRET_KEY ?? ''
 const seller = {
-  stripeSecret: (process.env.STRIPE_SECRET_KEY ?? '').trim(),
-  webhookSecret: (process.env.STRIPE_WEBHOOK_SECRET ?? '').trim(),
+  stripeSecret: (modeKey || (legacyKey.includes(`_${stripeMode}_`) ? legacyKey : '')).trim(),
+  webhookSecret: (process.env[stripeMode === 'live' ? 'STRIPE_LIVE_WEBHOOK_SECRET' : 'STRIPE_TEST_WEBHOOK_SECRET'] || (stripeMode === 'test' ? process.env.STRIPE_WEBHOOK_SECRET : '') || '').trim(),
   /** Test-only: point the Stripe SDK at a local stand-in. Ignored in production. */
   stripeApiBase: env.isProduction ? '' : (process.env.STRIPE_API_BASE ?? '').trim(),
   tiktokKey: (process.env.TIKTOK_CLIENT_KEY ?? '').trim(),
@@ -178,11 +182,14 @@ export async function ensureSellerTables() {
       "expiresAt" ${t.big} NOT NULL
     );
   `)
+  await migrateSeller()
 }
 
 /* -------------------------------------------------------------- types --- */
 
 interface StoreRow {
+  revision: number
+  stripeMode: string
   id: string
   userId: string
   handle: string
@@ -197,6 +204,7 @@ interface StoreRow {
   updatedAt: string
 }
 interface ProductRow {
+  revision: number
   id: string
   storeId: string
   title: string
@@ -222,6 +230,13 @@ interface ProductRow {
   updatedAt: string
 }
 interface OrderRow {
+  checkoutKey: string | null
+  checkoutUrl: string | null
+  receiptId: number | null
+  paymentIntent: string | null
+  refunded: number
+  disputed: number
+  stripeMode: string
   id: string
   storeId: string
   productId: string
@@ -232,7 +247,7 @@ interface OrderRow {
   accountId: string
   amountMinor: number
   currency: string
-  status: 'pending' | 'paid' | 'failed' | 'cancelled'
+  status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'disputed'
   buyerEmail: string | null
   accessKey: string
   createdAt: string
@@ -391,6 +406,7 @@ export function defaultPage(name: string): Page {
 function productDraftView(p: ProductRow) {
   return {
     id: p.id,
+    revision: p.revision,
     title: p.title,
     description: p.description,
     cover: p.cover,
@@ -449,6 +465,8 @@ async function requireUser(req: Authed, res: Response, next: NextFunction) {
   try {
     const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
     if (!session) return void res.status(401).json({ error: 'Not signed in.' })
+    if (!session.user.emailVerified) return void res.status(403).json({ error: 'Verify your email before using Seller Studio.', code: 'EMAIL_NOT_VERIFIED' })
+    if ((session.user as { plan?: string }).plan !== 'pro') return void res.status(403).json({ error: 'Seller Studio requires the Pro plan.', code: 'SELLER_PLAN_REQUIRED' })
     req.userId = session.user.id
     req.userEmail = session.user.email
     next()
@@ -473,7 +491,14 @@ export function payoutStatusOf(a: Pick<Stripe.Account, 'details_submitted' | 'ch
   return { status, chargesReady }
 }
 
+async function activeConnection(s: StoreRow): Promise<StoreRow> {
+  if (s.stripeMode === stripeMode) return s
+  const connection = await sql.get<{accountId: string}>('SELECT "accountId" FROM seller_connections WHERE "storeId" = ? AND mode = ?', s.id, stripeMode)
+  return { ...s, stripeMode, stripeAccountId: connection?.accountId ?? null, stripeStatus: 'not_connected', chargesReady: 0 }
+}
+
 async function refreshAccount(s: StoreRow): Promise<StoreRow> {
+  s = await activeConnection(s)
   const st = stripe()
   if (!st || !s.stripeAccountId) return s
   const a = await st.accounts.retrieve(s.stripeAccountId)
@@ -503,8 +528,7 @@ function verifyDownload(token: string): string | null {
   if (!/^\d+$/.test(exp) || Number(exp) < Date.now()) return null
   return orderId
 }
-const downloadUrl = (orderId: string) => `${seller.apiUrl}/api/store-download/${signDownload(orderId)}`
-const retrievalUrl = (o: OrderRow, handle: string) => `${seller.siteUrl}/store/${handle}/order/${o.id}?k=${o.accessKey}`
+const retrievalUrl = (o: OrderRow, _handle?: string) => `${seller.siteUrl}/store/${o.storeId}/order/${o.id}?k=${o.accessKey}`
 
 /* ------------------------------------------------------- fulfilment --- */
 
@@ -512,7 +536,7 @@ const retrievalUrl = (o: OrderRow, handle: string) => `${seller.siteUrl}/store/$
  * Marks an order paid once Stripe confirms it, and sends the receipt exactly
  * once. Safe to call any number of times, from the webhook or the return page.
  */
-export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Session, 'payment_status' | 'amount_total' | 'currency' | 'customer_details' | 'id'>): Promise<OrderRow> {
+export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Session, 'payment_status' | 'amount_total' | 'currency' | 'customer_details' | 'id' | 'payment_intent'>): Promise<OrderRow> {
   if (session.id !== order.sessionId) return order
   if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return order
   if (session.amount_total !== order.amountMinor || (session.currency ?? '').toLowerCase() !== order.currency) {
@@ -522,23 +546,28 @@ export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Sess
   await sql.tx(async (tx) => {
     const email = session.customer_details?.email ?? null
     await tx.run(
-      `UPDATE seller_order SET status = 'paid', "paidAt" = ?, "buyerEmail" = COALESCE(?, "buyerEmail") WHERE id = ? AND status != 'paid'`,
+      `UPDATE seller_order SET status = 'paid', "paidAt" = ?, "buyerEmail" = COALESCE(?, "buyerEmail") WHERE id = ? AND status IN ('pending','failed','cancelled')`,
       now(),
       email,
       order.id,
     )
+    const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+    if (intent) await tx.run('UPDATE seller_order SET "paymentIntent" = ? WHERE id = ?', intent, order.id)
     // Claim the receipt atomically: only the call that sets emailedAt sends it.
     const claim = await tx.run(`UPDATE seller_order SET "emailedAt" = ? WHERE id = ? AND status = 'paid' AND "emailedAt" IS NULL AND "buyerEmail" IS NOT NULL`, now(), order.id)
     if (!claim.changes) return
     const row = (await q.order(order.id, tx))!
     const store = await q.storeById(row.storeId, tx)
-    if (store)
-      await enqueueEmail(
+    if (store) {
+      const queued = await enqueueEmail(
         'order-receipt',
         row.buyerEmail!,
         { url: retrievalUrl(row, store.handle), name: row.productTitle, email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle },
         tx,
       )
+      if (queued.queued) await tx.run('UPDATE seller_order SET "receiptId" = ? WHERE id = ?', queued.id, row.id)
+      else await tx.run('UPDATE seller_order SET "emailedAt" = NULL WHERE id = ?', row.id)
+    }
   })
   return (await q.order(order.id))!
 }
@@ -587,20 +616,48 @@ async function handleEvent(event: Stripe.Event) {
     case 'checkout.session.completed':
     case 'checkout.session.async_payment_succeeded': {
       const s = event.data.object as Stripe.Checkout.Session
-      const order = s.id ? await q.orderBySession(s.id) : undefined
-      if (!order) return
-      if (event.account && event.account !== order.accountId) return
+      let order = s.id ? await q.orderBySession(s.id) : undefined
+      if (!order && s.metadata?.desknotyOrderId) {
+        const reserved = await q.order(s.metadata.desknotyOrderId)
+        if (reserved && reserved.accountId === event.account && reserved.stripeMode === stripeMode && !reserved.sessionId) {
+          await sql.run('UPDATE seller_order SET "sessionId" = ? WHERE id = ? AND "sessionId" IS NULL', s.id, reserved.id)
+          order = await q.order(reserved.id)
+        }
+      }
+      if (!order) throw new Error('Checkout reservation is not available yet')
+      if (event.account !== order.accountId || order.stripeMode !== stripeMode) return
       await fulfil(order, s)
       return
     }
     case 'checkout.session.async_payment_failed': {
       const s = event.data.object as Stripe.Checkout.Session
+      const order = await q.orderBySession(s.id)
+      if (!order || order.accountId !== event.account) return
       await markOrder(s.id, 'failed')
       return
     }
     case 'checkout.session.expired': {
       const s = event.data.object as Stripe.Checkout.Session
+      const order = await q.orderBySession(s.id)
+      if (!order || order.accountId !== event.account) return
       await markOrder(s.id, 'cancelled')
+      return
+    }
+    case 'charge.refunded':
+    case 'charge.dispute.created':
+    case 'charge.dispute.updated':
+    case 'charge.dispute.closed': {
+      const st = stripe()
+      if (!st || !event.account) return
+      const obj = event.data.object as unknown as { id: string; charge?: string }
+      const isDispute = event.type.startsWith('charge.dispute.')
+      const dispute = isDispute ? await st.disputes.retrieve(obj.id, { stripeAccount: event.account }) : null
+      const chargeId = dispute ? (typeof dispute.charge === 'string' ? dispute.charge : dispute.charge.id) : obj.id
+      const charge = await st.charges.retrieve(chargeId, { stripeAccount: event.account })
+      const intent = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+      if (!intent) return
+      const disputed = dispute ? !['won', 'warning_closed'].includes(dispute.status) : Boolean(charge.disputed)
+      await sql.run(`UPDATE seller_order SET refunded = ?, disputed = ?, status = CASE WHEN ? > 0 THEN 'refunded' WHEN ? = 1 THEN 'disputed' WHEN "paidAt" IS NOT NULL THEN 'paid' ELSE status END WHERE "paymentIntent" = ? AND "accountId" = ? AND "stripeMode" = ?`, charge.amount_refunded, disputed ? 1 : 0, charge.amount_refunded, disputed ? 1 : 0, intent, event.account, stripeMode)
       return
     }
     case 'account.updated': {
@@ -620,6 +677,7 @@ async function storeView(s: StoreRow) {
   const products = await q.products(s.id)
   return {
     id: s.id,
+    revision: s.revision,
     handle: s.handle,
     url: `${seller.siteUrl}/store/${s.handle}`,
     draft: JSON.parse(s.draft) as Page,
@@ -647,12 +705,13 @@ export function sellerRouter() {
       res.status(404).json({ error: 'You have no store yet.' })
       return null
     }
-    return s
+    return activeConnection(s)
   }
 
   me.get('/store', async (req: Authed, res) => {
     let s = await q.storeByUser(req.userId!)
     if (!s) return void res.json({ store: null })
+    s = await activeConnection(s)
     if (req.query.refresh === '1') s = await refreshAccount(s).catch(() => s!)
     res.json({ store: await storeView(s) })
   })
@@ -699,10 +758,12 @@ export function sellerRouter() {
   me.put('/store/draft', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
+    if (req.body?.revision !== s.revision) return void res.status(409).json({ error: 'This page changed elsewhere. Reload before saving; your edits are kept locally.' })
     const ids = new Set((await q.products(s.id)).map((p) => p.id))
     const page = cleanPage((req.body as { page?: unknown })?.page, ids)
     if (typeof page === 'string') return void res.status(400).json({ error: page })
-    await sql.run(`UPDATE seller_store SET draft = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(page), now(), s.id)
+    const saved = await sql.run(`UPDATE seller_store SET draft = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, JSON.stringify(page), now(), s.id, s.revision)
+    if (!saved.changes) return void res.status(409).json({ error: 'Page changed elsewhere. Your edits are kept locally.' })
     res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -764,8 +825,10 @@ export function sellerRouter() {
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
+    if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
     const next = { ...p, ...fields, updatedAt: now() }
-    await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, "updatedAt" = ? WHERE id = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.updatedAt, next.id)
+    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.updatedAt, next.id, p.revision)
+    if (!saved.changes) return void res.status(409).json({ error: 'Product changed elsewhere. Your edits are kept locally.' })
     res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -774,10 +837,8 @@ export function sellerRouter() {
     if (!s) return
     const p = await q.product(String(req.params.id), s.id)
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
-    // Keep the file while any paid order still needs it.
-    const paid = (await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order WHERE "productId" = ? AND status = 'paid'`, p.id))?.n ?? 0
+    // Retain immutable files: delayed payments, disputes and refunds can resolve later.
     await sql.run(`DELETE FROM seller_product WHERE id = ?`, p.id)
-    if (!paid) for (const f of [p.fileId, p.pubFileId]) if (f) removeFile(f)
     res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -796,7 +857,7 @@ export function sellerRouter() {
     const old = p.fileId
     await sql.run(`UPDATE seller_product SET "fileId" = ?, "fileName" = ?, "fileSize" = ?, "fileType" = ?, "updatedAt" = ? WHERE id = ?`, fileId, name, body.length, type, now(), p.id)
     // The old file stays if the live product or a paid order still points at it.
-    if (old && old !== p.pubFileId && !(await sql.get(`SELECT 1 AS one FROM seller_order WHERE "fileId" = ? LIMIT 1`, old))) removeFile(old)
+    void old // Immutable versions are retained, including in-flight checkout reservations.
     res.json({ product: productDraftView((await q.product(p.id, s.id))!) })
   })
 
@@ -817,8 +878,12 @@ export function sellerRouter() {
   me.get('/orders', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
-    const rows = await sql.all(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC LIMIT 100`, s.id)
-    res.json({ orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt })) })
+    const offset = Number(req.query.offset ?? 0)
+    if (!Number.isSafeInteger(offset) || offset < 0) return void res.status(400).json({ error: 'Invalid order offset.' })
+    const rows = await sql.all<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC, id DESC LIMIT 101 OFFSET ?`, s.id, offset)
+    const more = rows.length > 100
+    if (more) rows.pop()
+    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt })) })
   })
 
   /* payouts: Stripe-hosted Connect onboarding */
@@ -847,10 +912,11 @@ export function sellerRouter() {
           },
           metadata: { desknotyStoreId: s.id },
         },
-        { apiVersion: STRIPE_V2_VERSION },
+        { apiVersion: STRIPE_V2_VERSION, idempotencyKey: `onboard_${stripeMode}_${s.id}` },
       )) as unknown as { id: string }
       accountId = a.id
-      await sql.run(`UPDATE seller_store SET "stripeAccountId" = ?, "stripeStatus" = 'incomplete', "updatedAt" = ? WHERE id = ?`, accountId, now(), s.id)
+      await sql.run('INSERT INTO seller_connections ("storeId", mode, "accountId") VALUES (?, ?, ?) ON CONFLICT ("storeId", mode) DO NOTHING', s.id, stripeMode, accountId)
+      await sql.run(`UPDATE seller_store SET "stripeAccountId" = ?, "stripeStatus" = 'incomplete', "updatedAt" = ?, "stripeMode" = ? WHERE id = ?`, accountId, now(), stripeMode, s.id)
     }
     const sep = returnTo.includes('?') ? '&' : '?'
     const link = await st.accountLinks.create({
@@ -939,8 +1005,8 @@ export function sellerRouter() {
   pub.use((_req, res, next) => (res.set('Cache-Control', 'no-store'), next()))
 
   async function liveStore(req: Request, res: Response): Promise<StoreRow | null> {
-    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
-    if (!s || !s.published) {
+    const s = await q.storeById(String(req.params.handle)) ?? await q.storeByHandle(String(req.params.handle).toLowerCase())
+    if (!s || !s.published || !s.userId) {
       res.status(404).json({ error: 'This store doesn’t exist or isn’t published yet.' })
       return null
     }
@@ -959,7 +1025,7 @@ export function sellerRouter() {
   pub.get('/:handle', async (req, res) => {
     const s = await liveStore(req, res)
     if (!s) return
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: Boolean(s.chargesReady) && Boolean(stripe()), testMode: sellerSetup().stripeMode !== 'live' })
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: s.stripeMode === stripeMode && Boolean(s.chargesReady) && Boolean(stripe()), testMode: sellerSetup().stripeMode !== 'live' })
   })
 
   pub.post('/:handle/checkout', async (req, res) => {
@@ -972,26 +1038,30 @@ export function sellerRouter() {
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
     const fresh = await refreshAccount(s).catch(() => s)
     if (!fresh.stripeAccountId || !fresh.chargesReady) return void res.status(409).json({ error: 'This seller can’t take payments yet.' })
-    const orderId = `ord_${randomBytes(12).toString('hex')}`
-    const session = await st.checkout.sessions.create(
-      {
-        mode: 'payment',
-        // Charge exactly the seller's published price and currency (Adaptive Pricing would show the
-        // buyer a converted amount, which then wouldn't match the order).
-        adaptive_pricing: { enabled: false },
-        line_items: [{ quantity: 1, price_data: { currency: p.pubCurrency, unit_amount: p.pubPriceMinor, product_data: { name: p.pubTitle ?? 'Digital product' } } }],
-        success_url: `${seller.siteUrl}/store/${s.handle}/thanks?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${seller.siteUrl}/store/${s.handle}/p/${p.id}?checkout=cancelled`,
-        metadata: { desknotyOrderId: orderId, desknotyStoreId: s.id, desknotyProductId: p.id },
-        payment_intent_data: { metadata: { desknotyOrderId: orderId } },
-      },
-      { stripeAccount: fresh.stripeAccountId, idempotencyKey: `checkout_${orderId}` },
-    )
-    await sql.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "sessionId", "accountId", "amountMinor", currency, "accessKey", "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, orderId, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', session.id, fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now())
+    const key = String(req.body?.checkoutKey ?? randomUUID())
+    if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
+    const order = await sql.tx(async tx => {
+      await tx.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`, `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode)
+      return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
+    })
+    if (order.productId !== p.id || order.stripeMode !== stripeMode) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
+    if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
+    if (Date.now() - Date.parse(order.createdAt) > 23 * 60 * 60 * 1000) return void res.status(409).json({ error: 'This checkout attempt expired. Start a new purchase.' })
+    const session = await st.checkout.sessions.create({
+      mode: 'payment', adaptive_pricing: { enabled: false },
+      line_items: [{ quantity: 1, price_data: { currency: order.currency, unit_amount: order.amountMinor, product_data: { name: order.productTitle } } }],
+      success_url: `${seller.siteUrl}/store/${s.id}/thanks?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${seller.siteUrl}/store/${s.id}?checkout=cancelled`,
+      metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
+      payment_intent_data: { metadata: { desknotyOrderId: order.id } },
+    }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}` })
+    await sql.run('UPDATE seller_order SET "sessionId" = ?, "checkoutUrl" = ? WHERE id = ?', session.id, session.url, order.id)
     res.json({ url: session.url })
   })
 
-  function orderView(o: OrderRow, s: StoreRow) {
+  async function orderView(o: OrderRow, s: StoreRow) {
+    const downloadExpiresAt = Date.now() + DOWNLOAD_TTL
+    const receipt = o.receiptId ? await sql.get<{status: string}>('SELECT status FROM email_outbox WHERE id = ?', o.receiptId) : null
     return {
       id: o.id,
       status: o.status,
@@ -1000,16 +1070,20 @@ export function sellerRouter() {
       currency: o.currency,
       email: o.buyerEmail,
       fileName: o.fileName,
-      downloadUrl: o.status === 'paid' ? downloadUrl(o.id) : null,
+      downloadUrl: o.status === 'paid' ? `${seller.apiUrl}/api/store-download/${signDownload(o.id, downloadExpiresAt)}` : null,
       retrievalUrl: o.status === 'paid' ? retrievalUrl(o, s.handle) : null,
+      downloadExpiresAt,
+      receiptSent: receipt?.status === 'sent',
+      receiptStatus: receipt?.status === 'sent' ? 'accepted' : receipt?.status ?? 'not_queued',
     }
   }
 
   /** The Checkout success page asks here; if the webhook hasn't arrived yet, Stripe is asked directly. */
   pub.get('/:handle/session/:sessionId', async (req, res) => {
-    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
+    const s = await q.storeById(String(req.params.handle)) ?? await q.storeByHandle(String(req.params.handle).toLowerCase())
     let o = await q.orderBySession(String(req.params.sessionId))
-    if (!s || !o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
+    const purchaseStore = o ? await q.storeById(o.storeId) : undefined
+    if (!purchaseStore || !o || (s && o.storeId !== s.id)) return void res.status(404).json({ error: 'Order not found.' })
     const st = stripe()
     // SELLER_CONFIRM_FALLBACK=off: only the signed webhook may fulfil (used to prove webhook delivery).
     if (o.status === 'pending' && st && process.env.SELLER_CONFIRM_FALLBACK !== 'off') {
@@ -1020,18 +1094,18 @@ export function sellerRouter() {
         o = (await q.order(o.id))!
       }
     }
-    res.json({ order: orderView(o, s) })
+    res.json({ order: await orderView(o, purchaseStore) })
   })
 
   /** The link in the receipt email: re-issues a fresh download link for a paid order. */
   pub.get('/:handle/order/:orderId', async (req, res) => {
-    const s = await q.storeByHandle(String(req.params.handle).toLowerCase())
     const o = await q.order(String(req.params.orderId))
+    const ownerStore = o ? await q.storeById(o.storeId) : undefined
     const k = Buffer.from(String(req.query.k ?? ''))
-    if (!s || !o || o.storeId !== s.id || k.length !== o.accessKey.length || !timingSafeEqual(k, Buffer.from(o.accessKey))) {
+    if (!ownerStore || !o || k.length !== o.accessKey.length || !timingSafeEqual(k, Buffer.from(o.accessKey))) {
       return void res.status(404).json({ error: 'Order not found.' })
     }
-    res.json({ order: orderView(o, s) })
+    res.json({ order: await orderView(o, ownerStore) })
   })
 
   r.use('/api/store', pub)
@@ -1055,8 +1129,5 @@ export function sellerRouter() {
   return r
 }
 
-function removeFile(id: string) {
-  if (!/^fil_[a-f0-9]{32}$/.test(id)) return
-  void blobs().remove('files', id)
-}
+
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import {
   ArrowDown,
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { StorePage } from './StorePage'
+import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
 import {
   BLOCKS,
@@ -295,16 +296,21 @@ async function importLegacy(store: StoreView): Promise<StoreView> {
   const upload = async (u: string | null) => {
     if (!u?.startsWith('data:image/')) return null
     const blob = await dataUrlToBlob(u)
-    return blob ? (await sellerApi.uploadMedia(blob).catch(() => null))?.id ?? null : null
+    if (!blob) throw new Error('Could not read a legacy image. The original draft is preserved.')
+    return (await sellerApi.uploadMedia(blob)).id
   }
   let current = store
   const ids: string[] = []
-  for (const p of legacy.products) {
+  const checkpointKey = `desknoty.seller.import.${store.id}`
+  const checkpoint: Record<string, string> = JSON.parse(localStorage.getItem(checkpointKey) ?? '{}')
+  for (const [index, p] of legacy.products.entries()) {
+    if (checkpoint[index]) { ids.push(checkpoint[index]); continue }
     const priceMinor = Math.round(Number(p.price || 0) * 100)
     const r = await sellerApi
       .addProduct({ title: p.title.slice(0, 80), description: p.short ?? '', priceMinor, currency: (p.currency || 'gbp').toLowerCase(), cover: await upload(p.cover) })
-      .catch(() => null)
     if (r) {
+      checkpoint[index] = r.product.id
+      localStorage.setItem(checkpointKey, JSON.stringify(checkpoint))
       ids.push(r.product.id)
       current = r.store
     }
@@ -318,9 +324,10 @@ async function importLegacy(store: StoreView): Promise<StoreView> {
     socials: legacy.socials,
     blocks: current.draft.blocks.map((b) => (b.type === 'grid' ? { ...b, data: { ...b.data, productIds: ids } } : b)),
   }
-  const saved = await sellerApi.saveDraft(page).catch(() => null)
+  const saved = await sellerApi.saveDraft(page, current.revision)
   forgetLegacyDraft()
-  return saved?.store ?? current
+  localStorage.removeItem(checkpointKey)
+  return saved.store
 }
 
 function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup: SellerSetup; notice: string | null; onDone: () => void }) {
@@ -376,41 +383,25 @@ function Studio({
 }) {
   const [tab, setTab] = useState<Tab>('page')
   const [view, setView] = useState<'mobile' | 'desktop'>('mobile')
-  const [page, setPage] = useState<Page>(store.draft)
-  const [saving, setSaving] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const dirty = useRef(false)
-
-  // Autosave the draft page, debounced.
-  useEffect(() => {
-    if (!dirty.current) return
-    setSaving('saving')
-    const t = window.setTimeout(() => {
-      sellerApi
-        .saveDraft(page)
-        .then((r) => {
-          dirty.current = false
-          setStore(r.store)
-          setSaving('saved')
-        })
-        .catch((e: Error) => (setSaving('error'), setErr(e.message)))
-    }, 700)
-    return () => window.clearTimeout(t)
-  }, [page, setStore])
-  const edit = (next: Page) => {
-    dirty.current = true
-    setPage(next)
+  const pageSave = useSellerSave(`desknoty.seller.recovery.${store.id}.page`, store.draft, store.revision, async (value, revision) => {
+    const r = await sellerApi.saveDraft(value, revision)
+    setStore(r.store)
+    return r.store.revision
+  })
+  const page = pageSave.value
+  const edit = pageSave.edit
+  const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' ? 'saving' : 'error'
+  const navigate = async (id: Tab) => {
+    try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
   }
 
   const publish = async () => {
     setPublishing(true)
     setErr(null)
     try {
-      if (dirty.current) {
-        await sellerApi.saveDraft(page)
-        dirty.current = false
-      }
+      await flushSellerEdits()
       const r = await sellerApi.publish()
       setStore(r.store)
     } catch (e) {
@@ -420,7 +411,7 @@ function Studio({
   }
 
   const productsForPreview = store.products.filter((p) => p.title.trim())
-  const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || dirty.current ? 'Unpublished changes' : 'Live'
+  const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
     <div className="ss">
@@ -458,13 +449,15 @@ function Studio({
                 ['orders', 'Orders'],
               ] as Array<[Tab, string]>
             ).map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}>
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => void navigate(id)}>
                 {label}
               </button>
             ))}
           </nav>
         </header>
 
+        {pageSave.state !== 'Saved' && <p role="status">{pageSave.state} <button type="button" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
+        {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
         {tab === 'page' && <PageEditor page={page} onChange={edit} products={store.products} />}
         {tab === 'products' && <ProductsEditor store={store} setStore={setStore} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -522,7 +515,7 @@ function useUpload() {
     setBusy(true)
     setErr(null)
     try {
-      done((await sellerApi.uploadMedia(file)).id)
+      await trackSellerWork(sellerApi.uploadMedia(file).then(r => done(r.id)))
     } catch (e) {
       setErr((e as Error).message)
     }
@@ -831,6 +824,7 @@ function ProductsEditor({ store, setStore }: { store: StoreView; setStore: (s: S
 
   const add = async () => {
     try {
+      await flushSellerEdits()
       const r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
       setStore(r.store)
       setEditing(r.product.id)
@@ -843,7 +837,7 @@ function ProductsEditor({ store, setStore }: { store: StoreView; setStore: (s: S
     <div className="ss-stack">
       <div className="ss-chips">
         {store.products.map((p) => (
-          <button key={p.id} type="button" aria-pressed={p.id === editing} onClick={() => setEditing(p.id)}>
+          <button key={p.id} type="button" aria-pressed={p.id === editing} onClick={() => void flushSellerEdits().then(() => setEditing(p.id)).catch((e: Error) => setErr(e.message))}>
             {p.title.trim() || 'Untitled product'}
             {p.published && <span className="ss-chip-live"> · live</span>}
           </button>
@@ -863,27 +857,17 @@ function ProductsEditor({ store, setStore }: { store: StoreView; setStore: (s: S
 }
 
 function ProductForm({ product, store, setStore, onDeleted }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void }) {
-  const [form, setForm] = useState({ title: product.title, description: product.description, price: (product.priceMinor / 100).toFixed(2), currency: product.currency })
   const [state, setState] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const first = useRef(true)
-
-  // Save edits a moment after typing stops.
-  useEffect(() => {
-    if (first.current) return void (first.current = false)
-    const t = window.setTimeout(() => {
-      const priceMinor = Math.round(Number(form.price || 0) * 100)
-      sellerApi
-        .updateProduct(product.id, { title: form.title, description: form.description, priceMinor, currency: form.currency })
-        .then((r) => (setStore(r.store), setState('Saved')))
-        .catch((e: Error) => setState(e.message))
-    }, 600)
-    return () => window.clearTimeout(t)
-  }, [form, product.id, setStore])
-
-  const patch = (p: Partial<Pick<DraftProduct, 'cover' | 'listed'>>) =>
-    void sellerApi.updateProduct(product.id, p).then((r) => setStore(r.store)).catch((e: Error) => setState(e.message))
+  const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, { title: product.title, description: product.description, price: (product.priceMinor / 100).toFixed(2), currency: product.currency, cover: product.cover, listed: product.listed }, product.revision, async (value, revision) => {
+    const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price || 0) * 100) }, revision)
+    setStore(r.store)
+    return r.product.revision
+  })
+  const form = saved.value
+  const setForm = saved.edit
+  const patch = (p: Partial<Pick<DraftProduct, 'cover' | 'listed'>>) => saved.edit({ ...form, ...p })
 
   const sym = CURRENCIES.find((c) => c.code === form.currency)?.symbol ?? '£'
   const shareUrl = `${store.url}/p/${product.id}`
@@ -905,7 +889,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
           </select>
         </Field>
       </div>
-      <ImagePicker value={product.cover} onChange={(cover) => patch({ cover })} label="Cover image" />
+      <ImagePicker value={form.cover} onChange={(cover) => patch({ cover })} label="Cover image" />
       <div className="ss-field">
         <span className="ss-label">File buyers download</span>
         <div className="ss-row">
@@ -920,10 +904,10 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
                 if (!f) return
                 if (f.size > MAX_PRODUCT_FILE_MB * 1024 * 1024) return setState(`Files can be up to ${MAX_PRODUCT_FILE_MB} MB.`)
                 setUploading(true)
-                sellerApi
+                trackSellerWork(sellerApi
                   .uploadFile(product.id, f)
                   .then(() => sellerApi.store())
-                  .then((r) => r.store && setStore(r.store))
+                  .then((r) => r.store && setStore(r.store)))
                   .catch((er: SellerError) => setState(er.status === 413 ? `That file is too big. Files can be up to ${MAX_PRODUCT_FILE_MB} MB.` : er.message))
                   .finally(() => setUploading(false))
               }}
@@ -933,7 +917,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after payment.</span>
       </div>
       <label className="ss-check">
-        <input type="checkbox" checked={product.listed} onChange={(e) => patch({ listed: e.target.checked })} /> Put this product on sale when I publish
+        <input type="checkbox" checked={form.listed} onChange={(e) => patch({ listed: e.target.checked })} /> Put this product on sale when I publish
       </label>
       <div className="ss-status">
         <span>Status</span>
@@ -947,13 +931,13 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
           </button>
         </div>
       )}
-      {state && <p className="ss-muted" aria-live="polite">{state}</p>}
+      <p className="ss-muted" aria-live="polite">{state ?? saved.state} <button type="button" onClick={() => void saved.flush().catch(() => {})}>Retry save</button></p>
       <button
         type="button"
         className="ss-danger self-start"
         onClick={() => {
           if (!window.confirm(`Delete “${product.title || 'Untitled product'}”? Buyers who already paid keep their downloads.`)) return
-          void sellerApi.deleteProduct(product.id).then((r) => (setStore(r.store), onDeleted()))
+          void flushSellerEdits().then(() => sellerApi.deleteProduct(product.id)).then((r) => (setStore(r.store), onDeleted()))
         }}
       >
         Delete product
@@ -1066,11 +1050,21 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
 
 function OrdersPanel() {
   const [orders, setOrders] = useState<Awaited<ReturnType<typeof sellerApi.orders>>['orders'] | null>(null)
-  useEffect(() => void sellerApi.orders().then((r) => setOrders(r.orders)).catch(() => setOrders([])), [])
+  const [error, setError] = useState<string | null>(null)
+  const [next, setNext] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const load = async (offset = 0) => {
+    setBusy(true); setError(null)
+    try { const r = await sellerApi.orders(offset); setOrders(old => offset ? [...(old ?? []), ...r.orders] : r.orders); setNext(r.nextOffset) }
+    catch (e) { setError((e as Error).message) }
+    finally { setBusy(false) }
+  }
+  useEffect(() => { void load() }, [])
+  if (error) return <div role="alert">Could not load orders: {error} <button onClick={() => void load(orders?.length ?? 0)}>Retry</button></div>
   if (!orders) return <p className="ss-muted">Loading…</p>
   if (!orders.length) return <p className="ss-muted">No orders yet. They appear here as soon as a buyer opens checkout.</p>
   return (
-    <ul className="ss-orders">
+    <div><ul className="ss-orders">
       {orders.map((o) => (
         <li key={o.id}>
           <b>{o.product}</b>
@@ -1079,6 +1073,6 @@ function OrdersPanel() {
           <small>{o.buyer ?? '—'} · {new Date(o.createdAt).toLocaleString()}</small>
         </li>
       ))}
-    </ul>
+    </ul>{next !== null && <button disabled={busy} onClick={() => void load(next)}>{busy ? 'Loading…' : 'Load more orders'}</button>}</div>
   )
 }

@@ -65,7 +65,7 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Vary', 'Origin')
     res.setHeader('Access-Control-Allow-Credentials', 'true')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, X-File-Name, X-Early-Access')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-File-Name, Accept, X-File-Name, X-Early-Access')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
     res.setHeader('Access-Control-Expose-Headers', 'set-auth-token')
   }
@@ -90,7 +90,8 @@ app.all('/api/auth/*splat', (req, res) => {
 // Stripe signs the raw body, so its webhook is mounted before the JSON parser.
 app.post('/api/stripe/webhook', ...stripeWebhookHandler())
 
-app.use(express.json({ limit: '2mb' }))
+const jsonBody = express.json({ limit: '2mb' })
+app.use((req, res, next) => /^\/api\/seller\/products\/[^/]+\/file$/.test(req.path) || req.path === '/api/seller/media' ? next() : jsonBody(req, res, next))
 
 /**
  * Scheduled email run (Supabase Cron calls this every minute): hosted
