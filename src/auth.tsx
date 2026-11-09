@@ -116,20 +116,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   useEffect(() => {
     if (!finishingSignOut) return
+    let alive = true
     clearAllUserCaches()
-    authClient
-      .signOut()
-      .then(({ error }) => {
-        if (!error) {
+    void (async () => {
+      try {
+        await authClient.signOut()
+      } catch {
+        /* retried on the next load */
+      }
+      // Only release the signed-out guard once the server positively says the
+      // session is gone. If a cookie session survived, keeping the flag stops
+      // the app from signing the user straight back in.
+      const session = await authClient.getSession().catch(() => null)
+      writeToken(null)
+      if (alive && session && !session.error && !session.data) {
+        try {
           window.sessionStorage.removeItem(SIGNOUT_PENDING)
-          writeToken(null)
+        } catch {
+          /* ignore */
         }
-      })
-      .catch(() => {})
-      .finally(() => {
-        void refetch()
-        setFinishingSignOut(false)
-      })
+      }
+      if (!alive) return
+      void refetch()
+      setFinishingSignOut(false)
+    })()
+    return () => {
+      alive = false
+    }
   }, [finishingSignOut, refetch])
   // While a sign-out is unconfirmed, nobody is treated as signed in.
   let pendingFlag = false
@@ -232,19 +245,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * 5. leave for the sign-in page straight away — no network call can stall it.
    */
   const signOut = useCallback(async () => {
-    stopSync()
-    blockCacheWrites()
-    const token = readToken()
-    writeToken(null)
     try {
-      window.sessionStorage.setItem(SIGNOUT_PENDING, '1')
-    } catch {
-      /* ignore */
-    }
-    clearAllUserCaches()
-    // Finish any save already in flight; the request itself uses keepalive.
-    void flushPendingSave().catch(() => {})
-    try {
+      stopSync()
+      blockCacheWrites()
+      const token = readToken()
+      writeToken(null)
+      try {
+        window.sessionStorage.setItem(SIGNOUT_PENDING, '1')
+      } catch {
+        /* ignore */
+      }
+      clearAllUserCaches()
+      // Finish any save already in flight; the request itself uses keepalive.
+      void flushPendingSave().catch(() => {})
       const headers: Record<string, string> = {}
       if (token) headers.Authorization = `Bearer ${token}`
       void fetch(apiUrl('/api/auth/sign-out'), {
@@ -254,9 +267,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         headers,
       }).catch(() => {})
     } catch {
-      /* stays pending; finished on the next load */
+      /* stay signed out locally even when a helper fails */
+    } finally {
+      // Leave the page no matter what happened above.
+      window.location.replace('/app/signin')
     }
-    window.location.replace('/app/signin')
   }, [])
 
   const updateProfile = useCallback(async (patch: { fullName?: string; avatar?: string | null }) => {
