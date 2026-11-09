@@ -117,8 +117,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!finishingSignOut) return
     let alive = true
-    clearAllUserCaches()
-    void (async () => {
+    const finish = async () => {
+      clearAllUserCaches()
       try {
         await authClient.signOut()
       } catch {
@@ -139,7 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!alive) return
       void refetch()
       setFinishingSignOut(false)
-    })()
+    }
+    void finish()
     return () => {
       alive = false
     }
@@ -246,20 +247,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const signOut = useCallback(async () => {
     try {
+      // Stop the sync loop and block cache writes so no late save can write the
+      // old account's data back anywhere.
       stopSync()
       blockCacheWrites()
-      const token = readToken()
-      writeToken(null)
+      // Flag the pending sign-out before touching anything else: while it is
+      // set, no screen treats the user as signed in.
       try {
         window.sessionStorage.setItem(SIGNOUT_PENDING, '1')
       } catch {
         /* ignore */
       }
       clearAllUserCaches()
-      // Finish any save already in flight; the request itself uses keepalive.
-      void flushPendingSave().catch(() => {})
+      // Drop the stored bearer token first, so nothing can restore the session.
+      const token = readToken()
+      writeToken(null)
       const headers: Record<string, string> = {}
       if (token) headers.Authorization = `Bearer ${token}`
+      // Finish any save already in flight; the request itself uses keepalive.
+      void flushPendingSave().catch(() => {})
+      // Tell the server to end the session in the background; the page leaves
+      // straight away so no network call can stall the sign-out.
       void fetch(apiUrl('/api/auth/sign-out'), {
         method: 'POST',
         credentials: 'include',
