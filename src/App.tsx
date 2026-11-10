@@ -195,22 +195,25 @@ export function ProjectCalendar({
   project,
   data,
   persist = true,
+  preview = false,
 }: {
   project: ProjectSummary
   data: ProjectData
   persist?: boolean
+  /** Read-only look at the workspace (under the Video page's peel): nothing is saved. */
+  preview?: boolean
 }) {
   return (
     <ProjectContext.Provider value={project}>
       <AppProvider key={project.id} projectId={persist ? project.id : undefined} initial={data}>
-        {project.workspace === 'pro' ? <ProShell project={project} /> : <CalendarShell />}
+        {project.workspace === 'pro' ? <ProShell project={project} preview={preview} /> : <CalendarShell />}
       </AppProvider>
     </ProjectContext.Provider>
   )
 }
 
 /** Loads a project the signed-in user owns, then opens its calendar. */
-function ProjectView({ id }: { id: string }) {
+function ProjectView({ id, preview = false }: { id: string; preview?: boolean }) {
   const { navigate } = useRouter()
   const [state, setState] = useState<
     | { status: 'loading' }
@@ -239,7 +242,7 @@ function ProjectView({ id }: { id: string }) {
     }
   }, [id, attempt])
 
-  if (state.status === 'ready') return <ProjectCalendar project={state.project} data={state.data} />
+  if (state.status === 'ready') return <ProjectCalendar project={state.project} data={state.data} persist={!preview} preview={preview} />
   if (state.status === 'loading')
     return (
       <PageChrome>
@@ -285,7 +288,8 @@ function VideoPage() {
         tone="#f3efe6"
         onDone={() => navigate(from ? paths.project(from) : paths.dashboard('pro'))}
       >
-        <div className="pp-back-sheet" />
+        {/* the workspace the user came from, so peeling back shows it (read-only, nothing saved) */}
+        {from ? <ProjectView id={from} preview /> : <div className="pp-back-sheet" />}
       </PagePeel>
     </div>
   )

@@ -99,7 +99,8 @@ const ALL = GROUPS.flatMap((g) => g.items)
 const COLLAPSE_KEY = 'desknoty.pro.rail-collapsed'
 const GROUPS_KEY = 'desknoty.pro.closed-groups'
 
-export function ProShell({ project }: { project: ProjectSummary }) {
+/** `preview`: shown under the Video page's peel — the same workspace, without its own peel. */
+export function ProShell({ project, preview = false }: { project: ProjectSummary; preview?: boolean }) {
   const { navigate } = useRouter()
   const { user } = useAuth()
   const { settingsOpen, openSettings, closeSettings } = useApp()
@@ -348,6 +349,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
           </>
         )}
       </main>
+      {!preview && (
       <PagePeel
         label="Video projects"
         tone="#f3efe6"
@@ -363,6 +365,7 @@ export function ProShell({ project }: { project: ProjectSummary }) {
       >
         <VideoSoon preview />
       </PagePeel>
+      )}
     </div>
   )
 }

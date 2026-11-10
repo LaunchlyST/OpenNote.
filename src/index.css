@@ -5569,7 +5569,9 @@ select.ss-input option {
   left: 0;
   right: 0;
   bottom: 0;
-  height: 22px;
+  /* a comfortable grab area, kept above the phone's home-bar gesture zone */
+  height: calc(36px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   cursor: grab;
   touch-action: none;
   display: flex;
@@ -5579,7 +5581,7 @@ select.ss-input option {
 }
 .pp-m-hint .pp-edge,
 .pp-m-drag .pp-edge {
-  height: 64px;
+  height: calc(64px + env(safe-area-inset-bottom, 0px));
 }
 .pp-m-drag .pp-edge {
   cursor: grabbing;
