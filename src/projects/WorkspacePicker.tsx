@@ -159,7 +159,20 @@ export function WorkspacePicker() {
             {hasPro ? (
               <button
                 type="button"
-                onClick={() => navigate(paths.dashboard('pro'))}
+                disabled={opening}
+                onClick={async () => {
+                  // straight into the Pro workspace (sidebar with Seller, Projects…): the
+                  // most recently edited Pro project, or a first one made on the spot
+                  setOpening(true)
+                  try {
+                    const list = await projectsApi.list('pro')
+                    const last = [...list].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0]
+                    const project = last ?? (await projectsApi.create('pro', { name: 'My workspace', color: 'lime' }))
+                    navigate(paths.project(project.id))
+                  } catch {
+                    navigate(paths.dashboard('pro'))
+                  }
+                }}
                 className="mt-7 inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-white text-[15px] font-semibold text-[#17161b] transition hover:bg-[#ede9fe]"
               >
                 Open Pro workspace <ArrowRight className="h-4 w-4" />
