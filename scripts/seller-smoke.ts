@@ -190,7 +190,8 @@ try {
   const saved = await req('PUT', '/api/seller/store/draft', { page: { ...store.draft, blocks: between } }, A)
   check('draft saves with the product between text and FAQ', saved.status === 200 && saved.json.store.draft.blocks[2].data.productId === pid)
   const foreign = await req('PUT', '/api/seller/store/draft', { page: { ...store.draft, blocks: [{ id: 'blk_x123', type: 'featured', data: { productId: 'prd_not_mine' } }] } }, B)
-  check('a block can only point at the seller’s own products', foreign.json?.store?.draft?.blocks?.[0]?.data?.productId === null)
+  check('a block can only point at the seller’s own products', foreign.json?.store?.draft?.blocks?.find((x: { type: string }) => x.type === 'featured')?.data?.productId === null)
+  check('the profile header is pinned first and the footer last', foreign.json?.store?.draft?.blocks?.[0]?.type === 'header' && foreign.json.store.draft.blocks.at(-1)?.type === 'footer')
   check('store is not public before Publish', (await req('GET', '/api/store/ava-makes')).status === 404)
   const beforeRevision = (await req('GET', '/api/seller/store', undefined, A)).json.store
   const writes = await Promise.all([
