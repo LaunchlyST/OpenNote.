@@ -275,7 +275,7 @@ export type PayoutStatus = 'not_connected' | 'incomplete' | 'pending' | 'ready'
 /* ------------------------------------------------------------ helpers --- */
 
 const now = () => new Date().toISOString()
-const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog', 'store', 'desknoty', 'support'])
+const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog', 'store', 'desknoty', 'support', 'signin', 'signup', 'login', 'logout', 'account', 'landing', 'design', 'video', 'pro', 'free', 'assets', 'fonts', 'icons', 'settings', 'projects', 'privacy', 'terms', 'pricing', 'legal', 'about', 'contact', 'static', 'favicon'])
 export function handleProblem(h: unknown): string | null {
   if (typeof h !== 'string') return 'Choose a handle.'
   if (h.length < 3) return 'At least 3 characters.'
@@ -726,7 +726,8 @@ async function storeView(s: StoreRow) {
     id: s.id,
     revision: s.revision,
     handle: s.handle,
-    url: `${seller.siteUrl}/store/${s.handle}`,
+    // the short public address: desknoty.com/<handle> (old /store/<handle> links still work)
+    url: `${seller.siteUrl}/${s.handle}`,
     draft: JSON.parse(s.draft) as Page,
     published: s.published ? (JSON.parse(s.published) as Page) : null,
     publishedAt: s.publishedAt,

@@ -86,7 +86,7 @@ export default function PublicStore({ path }: { path: string }) {
 
   if (kind === 'p') {
     const product = store.products.find((p) => p.id === id)
-    if (!product) return <Shell store={store}><Message title="Product not found" text="It may have been removed or isn’t on sale right now." back={`/store/${store.handle}`} /></Shell>
+    if (!product) return <Shell store={store}><Message title="Product not found" text="It may have been removed or isn’t on sale right now." back={`/${store.handle}`} /></Shell>
     return (
       <Shell store={store}>
         {params.get('checkout') === 'cancelled' && <Banner>Checkout cancelled. You weren’t charged.</Banner>}
@@ -94,7 +94,7 @@ export default function PublicStore({ path }: { path: string }) {
         {!store.checkoutReady && <Banner>This seller isn’t taking payments yet.</Banner>}
         {chooser}
         <StorePage {...base} only={product} />
-        <p className="ps-back"><a href={`/store/${store.handle}`}>← All products</a></p>
+        <p className="ps-back"><a href={`/${store.handle}`}>← All products</a></p>
       </Shell>
     )
   }
@@ -221,7 +221,7 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
     return () => window.clearTimeout(t)
   }, [order, tries])
 
-  const back = `/store/${handle}`
+  const back = `/${handle}`
   if (err) return <Message title="Order not found" text={err} back={back} />
   if (!order) return <Message title="Checking your payment…" text="" />
   if (order.status === 'paid')

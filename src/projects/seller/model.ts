@@ -139,7 +139,7 @@ export function formatPrice(minor: number, currency: string) {
   return `${sym}${v.toFixed(v % 1 ? 2 : 0)}`
 }
 
-const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog', 'store', 'desknoty', 'support'])
+const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog', 'store', 'desknoty', 'support', 'signin', 'signup', 'login', 'logout', 'account', 'landing', 'design', 'video', 'pro', 'free', 'assets', 'fonts', 'icons', 'settings', 'projects', 'privacy', 'terms', 'pricing', 'legal', 'about', 'contact', 'static', 'favicon'])
 
 /** Why a store handle can't be used, or null if it's fine (the server checks again, and for uniqueness). */
 export function handleProblem(h: string): string | null {

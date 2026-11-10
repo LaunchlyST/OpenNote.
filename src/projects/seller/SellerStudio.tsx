@@ -267,7 +267,7 @@ function StartCard({
               >
                 <input className="ss-input ss-input-light" placeholder="Store name" aria-label="Store name" maxLength={60} value={name} onChange={(e) => (setName(e.target.value), !handle && setHandle(toHandle(e.target.value)))} />
                 <div className="ss-affix ss-affix-light">
-                  <span>/store/</span>
+                  <span>desknoty.com/</span>
                   <input className="ss-input ss-input-light" placeholder="yourname" aria-label="Store handle" maxLength={30} value={handle} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
                 </div>
                 <span className={cn('ss-start-check', check?.ok ? 'ok' : 'no')} aria-live="polite">{check ? `● ${check.msg}` : 'Checking…'}</span>
@@ -477,7 +477,7 @@ function Studio({
             </button>
           </div>
           {store.publishedAt && (
-            <a className="ss-ghost" href={`/store/${store.handle}`} target="_blank" rel="noreferrer">
+            <a className="ss-ghost" href={`/${store.handle}`} target="_blank" rel="noreferrer">
               <ExternalLink className="h-3.5 w-3.5" /> View live
             </a>
           )}
@@ -1247,7 +1247,7 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
       <Field label="Change handle" hint={check ? <span className={check.ok ? 'text-[#2f7a1d]' : 'text-[#b42318]'}>● {handle === store.handle ? 'Your current handle' : check.msg}</span> : 'Checking…'}>
         <div className="flex gap-2">
           <div className="ss-affix">
-            <span>/store/</span>
+            <span>desknoty.com/</span>
             <input className="ss-input" value={handle} maxLength={30} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
           </div>
           <button
@@ -1262,7 +1262,7 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
       </Field>
       <p className="ss-muted">Changing your handle changes your link; the old link stops working.</p>
       {err && <div className="ss-note" role="alert">{err}</div>}
-      <div className="ss-note">Custom domains and yourname.desknoty.com subdomains aren’t offered yet: they need DNS, TLS certificates and routing on Desknoty’s hosting. Your /store/{store.handle} link works everywhere today.</div>
+      <div className="ss-note">Custom domains and yourname.desknoty.com subdomains aren’t offered yet: they need DNS, TLS certificates and routing on Desknoty’s hosting. Your desknoty.com/{store.handle} link works everywhere today.</div>
     </div>
   )
 }

@@ -150,6 +150,15 @@ function Routes() {
       </Suspense>
     )
   }
+  // A store's short address: desknoty.com/<handle> (plus /p/<id>, /thanks, /order/<id>).
+  // App paths above always win; store handles can't use their names (reserved on the server).
+  if (/^\/[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])(?:\/(?:p\/[^/]+|thanks|order\/[^/]+))?\/?$/.test(path)) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <PublicStore path={`/store${path}`} />
+      </Suspense>
+    )
+  }
   return <NotFound />
 }
 

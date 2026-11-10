@@ -176,7 +176,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
 
 function ProductLink({ prod, live, handle, children }: { prod: ShopProduct; live?: boolean; handle: string; children: ReactNode }) {
   return live ? (
-    <a className="sp-card-link" href={`/store/${handle}/p/${prod.id}`}>
+    <a className="sp-card-link" href={`/${handle}/p/${prod.id}`}>
       {children}
     </a>
   ) : (

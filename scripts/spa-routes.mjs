@@ -30,10 +30,13 @@ if (api) {
     const { stores } = await r.json()
     for (const s of stores ?? []) {
       if (!/^[a-z0-9-]{2,40}$/.test(s.handle)) continue
-      place(`/store/${s.handle}`)
-      place(`/store/${s.handle}/thanks`)
-      pages += 2
-      for (const id of s.products ?? []) if (/^prd_[a-f0-9]+$/.test(id)) (place(`/store/${s.handle}/p/${id}`), pages++)
+      // both addresses: the short desknoty.com/<handle> and the older /store/<handle>
+      for (const base of [`/${s.handle}`, `/store/${s.handle}`]) {
+        place(base)
+        place(`${base}/thanks`)
+        pages += 2
+        for (const id of s.products ?? []) if (/^prd_[a-f0-9]+$/.test(id)) (place(`${base}/p/${id}`), pages++)
+      }
     }
   } catch (e) {
     console.warn(`[spa-routes] store directory unavailable (${e instanceof Error ? e.message : e}); store links use the 404 fallback`)
