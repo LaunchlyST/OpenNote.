@@ -367,6 +367,23 @@ try {
   check('buyer entitlement survives seller closure', (await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)).json?.order?.status === 'paid')
   check('retained data satisfies foreign keys', (ledger.pragma('foreign_key_check') as unknown[]).length === 0)
   ledger.close()
+
+  console.log('\n  Start over (delete an empty store)')
+  {
+    const benStore = (await req('GET', '/api/seller/store', undefined, B)).json?.store
+    check('start over needs the handle typed to confirm', (await req('DELETE', '/api/seller/store', { confirm: 'wrong' }, B)).status === 400)
+    check('an empty store can be deleted by its owner', (await req('DELETE', '/api/seller/store', { confirm: benStore?.handle }, B)).status === 200)
+    const again = await req('POST', '/api/seller/store', { name: 'Ben Again', handle: 'ben-again' }, B)
+    check('…after which the seller has no store and can start again', again.status === 201)
+    // give the new store one order (test database only) and try again
+    {
+      const d = new Database(join(tmp, 'seller.db'))
+      d.prepare(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", status) VALUES ('ord_startover_test', ?, 'prd_x', 'X', 'fil_x', 'x', 'acct_x', 100, 'gbp', 'k', ?, 'paid')`).run(again.json.store.id, new Date().toISOString())
+      d.close()
+    }
+    check('a store with orders can’t be deleted', (await req('DELETE', '/api/seller/store', { confirm: 'ben-again' }, B)).status === 409)
+    check('…and is still there with its order', (await req('GET', '/api/seller/store', undefined, B)).json?.store?.handle === 'ben-again')
+  }
 } finally {
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   await fake.close()

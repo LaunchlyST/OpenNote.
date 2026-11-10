@@ -962,6 +962,29 @@ export function sellerRouter() {
     res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt })) })
   })
 
+  /**
+   * Start over: the seller deletes their own store to set it up again. Only
+   * while it has no orders, so no buyer ever loses a purchase.
+   */
+  me.delete('/store', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    if (String((req.body as { confirm?: unknown })?.confirm ?? '') !== s.handle) return void res.status(400).json({ error: 'Type your handle to confirm.' })
+    const orders = (await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_order WHERE "storeId" = ?`, s.id))?.n ?? 0
+    if (orders) return void res.status(409).json({ error: 'This store has orders, so it can’t be deleted: buyers keep their purchases.' })
+    const files = await sql.all<{ fileId: string | null; pubFileId: string | null }>(`SELECT "fileId", "pubFileId" FROM seller_product WHERE "storeId" = ?`, s.id)
+    const media = await sql.all<{ id: string }>(`SELECT id FROM seller_media WHERE "storeId" = ?`, s.id)
+    await sql.tx(async (tx) => {
+      await tx.run(`DELETE FROM seller_connections WHERE "storeId" = ?`, s.id)
+      await tx.run(`DELETE FROM seller_product WHERE "storeId" = ?`, s.id)
+      await tx.run(`DELETE FROM seller_media WHERE "storeId" = ?`, s.id)
+      await tx.run(`DELETE FROM seller_store WHERE id = ?`, s.id)
+    })
+    for (const f of files) for (const id of [f.fileId, f.pubFileId]) if (id && /^fil_[a-f0-9]{32}$/.test(id)) void blobs().remove('files', id)
+    for (const m of media) void blobs().remove('media', m.id)
+    res.json({ store: null })
+  })
+
   /* payment methods: the seller's own PayPal and bank details */
   me.get('/payments', async (req: Authed, res) => {
     const s = await mine(req, res)

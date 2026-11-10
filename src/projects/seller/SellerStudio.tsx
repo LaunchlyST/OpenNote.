@@ -1299,7 +1299,61 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
           <li><b>YouTube, X and others:</b> the same link works anywhere.</li>
         </ol>
       </section>
+
+      <StartOver store={store} />
     </div>
+  )
+}
+
+/** Delete this store and set it up again from the start (only while it has no orders). */
+function StartOver({ store }: { store: StoreView }) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const go = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await sellerApi.startOver(typed)
+      try {
+        localStorage.removeItem(TT_KEY(store.id))
+      } catch {
+        /* storage blocked */
+      }
+      window.location.reload()
+    } catch (e) {
+      setErr((e as Error).message)
+      setBusy(false)
+    }
+  }
+  return (
+    <section className="ss-paycard" aria-label="Start over">
+      <div className="ss-paycard-head">
+        <span className="ss-paycard-icon"><Trash2 className="h-4 w-4" /></span>
+        <div className="min-w-0">
+          <h3>Start over</h3>
+          <p className="ss-muted">Delete this store and set it up again from the start. Only possible while it has no orders.</p>
+        </div>
+      </div>
+      {!open ? (
+        <div className="ss-paycard-actions">
+          <button type="button" className="ss-ghost" onClick={() => setOpen(true)}>Start over…</button>
+        </div>
+      ) : (
+        <>
+          <label className="ss-mfield">
+            <span>Type <b>{store.handle}</b> to confirm. Your page, products and payout link for this store are deleted.</span>
+            <input className="ss-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+          </label>
+          <div className="ss-paycard-actions">
+            <button type="button" className="ss-ghost" onClick={() => (setOpen(false), setTyped(''))}>Cancel</button>
+            <button type="button" className="ss-dark" disabled={busy || typed !== store.handle} onClick={() => void go()}>{busy ? 'Deleting…' : 'Delete store and start over'}</button>
+          </div>
+          {err && <div className="ss-note" role="alert">{err}</div>}
+        </>
+      )}
+    </section>
   )
 }
 

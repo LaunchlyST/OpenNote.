@@ -46,6 +46,8 @@ export const sellerApi = {
   store: (refresh = false) => call<{ store: StoreView | null }>('GET', `/api/seller/store${refresh ? '?refresh=1' : ''}`),
   handle: (h: string) => call<{ available: boolean; problem: string | null }>('GET', `/api/seller/handle/${encodeURIComponent(h)}`),
   create: (name: string, handle: string) => call<{ store: StoreView }>('POST', '/api/seller/store', { name, handle }),
+  /** Delete the store to set it up again (only without orders). */
+  startOver: (confirm: string) => call<{ store: null }>('DELETE', '/api/seller/store', { confirm }),
   changeHandle: (handle: string) => call<{ store: StoreView }>('PUT', '/api/seller/handle', { handle }),
   saveDraft: (page: Page, revision: number) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision }),
   publish: () => call<{ store: StoreView }>('POST', '/api/seller/store/publish'),
