@@ -7579,3 +7579,7 @@ select.ss-input option {
 .sp-soon h2 { font-size: 17px; font-weight: 700; }
 .sp-soon p { font-size: 14px; opacity: 0.7; }
 @media (prefers-reduced-motion: reduce) { .sp-card, .sp-card:hover, .sp-links .sp-btn-line:hover { transition: none; transform: none; } }
+/* Bio link tab */
+.ss-linkurl { margin-top: 2px; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
+.ss-steps { display: grid; gap: 8px; padding-left: 18px; list-style: decimal; font-size: 13.5px; line-height: 1.45; }
+.ss-paycard-actions a.ss-ghost { display: inline-flex; align-items: center; gap: 6px; }

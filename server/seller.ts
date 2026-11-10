@@ -383,9 +383,10 @@ function cleanPage(input: unknown, productIds: Set<string>): Page | string {
     }
     blocks.push({ id, type, hidden: b.hidden === true, data })
   }
-  // The footer is pinned: exactly one, always last, always shown.
+  // Pinned: exactly one profile header, always first, and one footer, always last; both shown.
+  const head = blocks.find((b) => b.type === 'header') ?? { id: `blk_${randomBytes(6).toString('hex')}`, type: 'header' as BlockType, hidden: false, data: { showSocials: true } }
   const foot = blocks.find((b) => b.type === 'footer') ?? { id: `blk_${randomBytes(6).toString('hex')}`, type: 'footer' as BlockType, hidden: false, data: { text: '' } }
-  const ordered = [...blocks.filter((b) => b.type !== 'footer'), { ...foot, hidden: false }]
+  const ordered = [{ ...head, hidden: false }, ...blocks.filter((b) => b.type !== 'footer' && b.type !== 'header'), { ...foot, hidden: false }]
   blocks.length = 0
   blocks.push(...ordered)
   const socials = (p.socials ?? {}) as Record<string, unknown>

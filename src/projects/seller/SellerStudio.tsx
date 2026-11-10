@@ -17,6 +17,8 @@ import {
   Smartphone,
   Store,
   Trash2,
+  AtSign,
+  Globe,
   Upload,
   Banknote,
 } from 'lucide-react'
@@ -551,8 +553,8 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<number | null>(null)
   // The footer is pinned: always last, can't be moved, hidden or deleted (its text can still be edited).
-  const blocks = footerLast(page.blocks)
-  const setBlocks = (b: Block[]) => onChange({ ...page, blocks: footerLast(b) })
+  const blocks = pinEnds(page.blocks)
+  const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
   const update = (id: string, data: Record<string, unknown>) => setBlocks(blocks.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...data } } : b)))
   // the section that just moved flashes briefly, so it's clear where it landed
   const [landed, setLanded] = useState<string | null>(null)
@@ -564,8 +566,9 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
   }, [landed])
   const move = (from: number, to: number) => {
     // the pinned footer stays last: nothing moves below it
+    // the profile header stays first and the footer last: sections move between them
     const last = blocks.length - 2
-    if (to < 0 || to > last || from === to) return
+    if (to < 1 || to > last || from === to) return
     const next = [...blocks]
     const [b] = next.splice(from, 1)
     next.splice(to, 0, b)
@@ -583,7 +586,7 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
 
   const dragFrom = dragId ? blocks.findIndex((b) => b.id === dragId) : -1
   const where = (at: number) =>
-    at === 0 ? 'at the top' : at >= blocks.length - 1 ? `after ${blockLabel(blocks[blocks.length - 2]?.type ?? 'header')} (just above the footer)` : `between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`
+    at <= 1 ? 'at the top (under the profile header)' : at >= blocks.length - 1 ? `after ${blockLabel(blocks[blocks.length - 2]?.type ?? 'header')} (just above the footer)` : `between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`
   const Inserter = ({ at }: { at: number }) => {
     // While dragging, every place the section can go becomes a labelled slot; no-op slots disappear.
     if (dragId) {
@@ -609,7 +612,7 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
     <div className="sb-ins">
       {inserting === at ? (
         <div className="sb-menu" role="menu" aria-label="Add a block">
-          {BLOCKS.filter((t) => t.type !== 'footer').map((t) => (
+          {BLOCKS.filter((t) => t.type !== 'footer' && t.type !== 'header').map((t) => (
             <button key={t.type} type="button" role="menuitem" onClick={() => insert(at, t.type)}>
               <b>{t.label}</b>
               <small>{t.hint}</small>
@@ -630,18 +633,20 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
     <div className="ss-stack">
       <ThemeEditor page={page} onChange={onChange} />
       <div className="sb-list" aria-label="Page sections">
-        <Inserter at={0} />
         {blocks.map((b, i) => (
-          b.type === 'footer' ? (
-            <div key={b.id} className="sb-block sb-pinned">
+          b.type === 'footer' || b.type === 'header' ? (
+            <div key={b.id}>
+            <div className="sb-block sb-pinned">
               <div className="sb-row">
                 <span className="sb-grip" aria-hidden="true" />
                 <button type="button" className="sb-title" aria-expanded={open === b.id} onClick={() => setOpen(open === b.id ? null : b.id)}>
                   <b>{blockLabel(b.type)}</b>
-                  <small>Always at the bottom, centred · {summary(b, products)}</small>
+                  <small>{b.type === 'header' ? 'Always at the top' : 'Always at the bottom, centred'} · {summary(b, products)}</small>
                 </button>
               </div>
               {open === b.id && <BlockEditor block={b} products={products} update={(d) => update(b.id, d)} />}
+            </div>
+            {b.type === 'header' && <Inserter at={1} />}
             </div>
           ) : (
           <div key={b.id}>
@@ -659,7 +664,7 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
                   <small>{summary(b, products)}</small>
                 </button>
                 <div className="sb-tools">
-                  <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i === 0} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
+                  <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
                   <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
                   <button type="button" aria-label={`Duplicate ${blockLabel(b.type)}`} onClick={() => {
                     const copy = { ...newBlock(b.type), data: structuredClone(b.data), hidden: b.hidden }
@@ -684,10 +689,11 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
   )
 }
 
-/** Exactly one footer, always last and shown. */
-function footerLast(blocks: Block[]): Block[] {
+/** Exactly one profile header, always first, and one footer, always last; both always shown. */
+function pinEnds(blocks: Block[]): Block[] {
+  const head = blocks.find((b) => b.type === 'header') ?? newBlock('header')
   const foot = blocks.find((b) => b.type === 'footer') ?? newBlock('footer')
-  return [...blocks.filter((b) => b.type !== 'footer'), { ...foot, hidden: false }]
+  return [{ ...head, hidden: false }, ...blocks.filter((b) => b.type !== 'footer' && b.type !== 'header'), { ...foot, hidden: false }]
 }
 
 function summary(b: Block, products: DraftProduct[]) {
@@ -1222,47 +1228,77 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
   const [copied, setCopied] = useState(false)
   const [handle, setHandle] = useState(store.handle)
   const [err, setErr] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
   const check = useHandleCheck(handle)
+  const short = store.url.replace(/^https?:\/\//, '')
   const copy = () => void navigator.clipboard?.writeText(store.url).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1600)))
+  const save = () =>
+    void sellerApi
+      .changeHandle(handle)
+      .then((r) => (setStore(r.store), setErr(null), setSaved(true), window.setTimeout(() => setSaved(false), 1800)))
+      .catch((e: Error) => setErr(e.message))
   return (
     <div className="ss-stack">
-      <Field label="Your bio link">
-        <div className="ss-row">
-          <code className="ss-code ss-code-big">{store.url}</code>
-        </div>
-      </Field>
-      <button type="button" className="ss-primary" onClick={copy}>
-        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy bio link'}
-      </button>
-      {!store.publishedAt && <div className="ss-note">Publish your store first: until then this link shows “not published”.</div>}
-      <div className="ss-howto">
-        <h3>Add it to TikTok</h3>
-        <ol>
-          <li>Open TikTok and go to your <b>Profile</b>.</li>
-          <li>Tap <b>Edit profile</b>, then <b>Website</b> (Business accounts) or <b>Links</b>.</li>
-          <li>Paste the link and save.</li>
-        </ol>
-        <p className="ss-muted">If you don’t see a Website field, TikTok hasn’t enabled it for your account yet; switching to a Business account in TikTok’s settings usually adds it. The same link works on Instagram (Edit profile → Links), YouTube, X or anywhere else.</p>
-      </div>
-      <Field label="Change handle" hint={check ? <span className={check.ok ? 'text-[#2f7a1d]' : 'text-[#b42318]'}>● {handle === store.handle ? 'Your current handle' : check.msg}</span> : 'Checking…'}>
-        <div className="flex gap-2">
-          <div className="ss-affix">
-            <span>desknoty.com/</span>
-            <input className="ss-input" value={handle} maxLength={30} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
+      {/* the link itself: copy it or open it */}
+      <section className="ss-paycard" aria-label="Your bio link">
+        <div className="ss-paycard-head">
+          <span className="ss-paycard-icon"><Globe className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <h3>Your bio link</h3>
+            <p className="ss-linkurl">{short}</p>
           </div>
-          <button
-            type="button"
-            className="ss-ghost shrink-0"
-            disabled={!check?.ok || handle === store.handle}
-            onClick={() => void sellerApi.changeHandle(handle).then((r) => (setStore(r.store), setErr(null))).catch((e: Error) => setErr(e.message))}
-          >
-            Save
+          <b className={cn('ss-pay', store.publishedAt ? 'ss-pay-ready' : 'ss-pay-incomplete')}>{store.publishedAt ? 'Live' : 'Not published'}</b>
+        </div>
+        {!store.publishedAt && <p className="ss-muted">Publish your store first: until then this link shows “not published”.</p>}
+        <div className="ss-paycard-actions">
+          <button type="button" className="ss-primary" onClick={copy}>
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied' : 'Copy link'}
+          </button>
+          <a className="ss-ghost" href={`/${store.handle}`} target="_blank" rel="noreferrer">
+            Open <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
+      </section>
+
+      {/* change the handle */}
+      <section className="ss-paycard" aria-label="Change handle">
+        <div className="ss-paycard-head">
+          <span className="ss-paycard-icon"><AtSign className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <h3>Your handle</h3>
+            <p className="ss-muted">Changing it changes your link. Past buyers’ receipt links keep working.</p>
+          </div>
+        </div>
+        <div className="ss-affix">
+          <span>desknoty.com/</span>
+          <input className="ss-input" aria-label="Handle" value={handle} maxLength={30} onChange={(e) => setHandle(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))} />
+        </div>
+        <div className="ss-paycard-actions">
+          <span className={cn('text-[12.5px]', check?.ok ? 'text-[#2f7a1d]' : 'text-[#b42318]')}>
+            {handle === store.handle ? 'Your current handle' : check ? `● ${check.msg}` : 'Checking…'}
+          </span>
+          <button type="button" className="ss-ghost ml-auto" disabled={!check?.ok || handle === store.handle} onClick={save}>
+            {saved ? 'Saved' : 'Save handle'}
           </button>
         </div>
-      </Field>
-      <p className="ss-muted">Changing your handle changes your link; the old link stops working.</p>
-      {err && <div className="ss-note" role="alert">{err}</div>}
-      <div className="ss-note">Custom domains and yourname.desknoty.com subdomains aren’t offered yet: they need DNS, TLS certificates and routing on Desknoty’s hosting. Your desknoty.com/{store.handle} link works everywhere today.</div>
+        {err && <div className="ss-note" role="alert">{err}</div>}
+      </section>
+
+      {/* where to paste it */}
+      <section className="ss-paycard" aria-label="Add it to your profiles">
+        <div className="ss-paycard-head">
+          <span className="ss-paycard-icon"><Smartphone className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <h3>Add it to your profiles</h3>
+            <p className="ss-muted">Paste the link where your followers look.</p>
+          </div>
+        </div>
+        <ol className="ss-steps">
+          <li><b>TikTok:</b> Profile → Edit profile → Website (Business account) or Links.</li>
+          <li><b>Instagram:</b> Edit profile → Links → Add external link.</li>
+          <li><b>YouTube, X and others:</b> the same link works anywhere.</li>
+        </ol>
+      </section>
     </div>
   )
 }
