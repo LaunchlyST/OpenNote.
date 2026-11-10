@@ -60,6 +60,10 @@ export const sellerApi = {
   uploadMedia: (file: Blob) => call<{ id: string; url: string }>('POST', '/api/seller/media', file, { 'Content-Type': file.type }),
   onboard: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/stripe/onboard', { returnTo }),
   manage: () => call<{ url: string }>('POST', '/api/seller/stripe/manage'),
+  /** TikTok by bio code: get a code for a username, then check the bio. */
+  tiktokCode: (username: string) => call<{ username: string; code: string; expiresInMinutes: number }>('POST', '/api/seller/tiktok/code', { username }),
+  tiktokDisconnect: () => call<{ store: StoreView }>('POST', '/api/seller/tiktok/disconnect'),
+  tiktokVerify: () => call<{ store: StoreView }>('POST', '/api/seller/tiktok/verify', {}),
   tiktok: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/tiktok/start', { returnTo }),
   orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null }> }>('GET', `/api/seller/orders?offset=${offset}`),
   savePayments: (p: Partial<{ [K in keyof PaymentSettings]: Partial<PaymentSettings[K]> }>) => call<{ store: StoreView }>('PUT', '/api/seller/payments', p),

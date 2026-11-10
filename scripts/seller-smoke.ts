@@ -56,6 +56,18 @@ async function dbGet<T>(text: string, ...params: unknown[]): Promise<T> {
   }
 }
 
+// A stand-in for public TikTok profile pages (bio-code verification).
+const ttBio: Record<string, string> = {}
+const ttServer = (await import('node:http')).createServer((rq, rs) => {
+  const user = decodeURIComponent((rq.url ?? '').replace(/^\/@/, ''))
+  if (!(user in ttBio)) return void (rs.writeHead(404), rs.end('not found'))
+  const data = { __DEFAULT_SCOPE__: { 'webapp.user-detail': { userInfo: { user: { uniqueId: user, nickname: 'Ben From TikTok', signature: ttBio[user], avatarLarger: '' } } } } }
+  rs.writeHead(200, { 'content-type': 'text/html' })
+  rs.end(`<html><script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">${JSON.stringify(data)}</script></html>`)
+})
+await new Promise<void>((r) => ttServer.listen(0, '127.0.0.1', () => r()))
+const TT_BASE = `http://127.0.0.1:${(ttServer.address() as { port: number }).port}`
+
 const fake = await startFakeStripe({ webhookUrl: HOOK, webhookSecret: WHSEC })
 
 function boot(extra: Record<string, string> = {}): Promise<ChildProcess> {
@@ -79,6 +91,7 @@ function boot(extra: Record<string, string> = {}): Promise<ChildProcess> {
       STRIPE_SECRET_KEY: 'sk_test_fake',
       STRIPE_WEBHOOK_SECRET: WHSEC,
       STRIPE_API_BASE: fake.url,
+      TIKTOK_WEB_BASE: TT_BASE,
       TIKTOK_CLIENT_KEY: '',
       TIKTOK_CLIENT_SECRET: '',
       ...extra,
@@ -384,9 +397,25 @@ try {
     check('a store with orders can’t be deleted', (await req('DELETE', '/api/seller/store', { confirm: 'ben-again' }, B)).status === 409)
     check('…and is still there with its order', (await req('GET', '/api/seller/store', undefined, B)).json?.store?.handle === 'ben-again')
   }
+
+  console.log('\n  TikTok by bio code')
+  {
+    ttBio['benmakes'] = 'Digital planners'
+    check('a bad TikTok username is refused', (await req('POST', '/api/seller/tiktok/code', { username: 'no spaces!' }, B)).status === 400)
+    const c = await req('POST', '/api/seller/tiktok/code', { username: '@benmakes' }, B)
+    check('a code is issued for the username', c.status === 200 && /^DESK-[A-Z2-9]{6}$/.test(c.json?.code) && c.json.username === 'benmakes')
+    check('verify before the code is in the bio is refused', (await req('POST', '/api/seller/tiktok/verify', {}, B)).status === 409)
+    check('another seller can’t verify Ben’s code', (await req('POST', '/api/seller/tiktok/verify', {}, A)).status !== 200)
+    ttBio['benmakes'] = `Digital planners ${c.json.code}`
+    const v = await req('POST', '/api/seller/tiktok/verify', {}, B)
+    check('with the code in the bio, TikTok connects', v.status === 200 && v.json?.store?.tiktok?.username === 'benmakes', String(v.status))
+    check('the store takes the TikTok name and username', v.json?.store?.draft?.name === 'Ben From TikTok' && v.json?.store?.handle === 'benmakes')
+    check('the code works once', (await req('POST', '/api/seller/tiktok/verify', {}, B)).status === 410)
+  }
 } finally {
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   await fake.close()
+  ttServer.close()
   rmSync(tmp, { recursive: true, force: true })
 }
 

@@ -7587,3 +7587,12 @@ select.ss-input option {
 .ps { display: flex; flex-direction: column; }
 .ps-main { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; }
 .ps-main > .sp { flex: 1 0 auto; }
+/* preview: the address pill blends with the store's own colours */
+.ss-addr { color: inherit; opacity: 0.85; background: color-mix(in srgb, currentColor 10%, transparent); backdrop-filter: blur(8px); }
+/* TikTok by bio code */
+.ss-ttflow { display: grid; gap: 10px; width: 100%; text-align: left; }
+.ss-ttflow-row { display: grid; gap: 10px; }
+.ss-ttflow-step { font-size: 13.5px; line-height: 1.45; }
+.ss-ttcode { display: flex; align-items: center; gap: 8px; }
+.ss-ttcode code { flex: 1; padding: 10px 12px; border-radius: 10px; font-size: 17px; font-weight: 700; letter-spacing: 0.08em; text-align: center; background: #f3f2ee; color: #111114; }
+.ss-tt-ok { padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 600; text-align: center; color: #2f7a1d; background: #ecfccb; }

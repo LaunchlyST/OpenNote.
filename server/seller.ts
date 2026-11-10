@@ -766,6 +766,23 @@ async function applyTiktokProfile(store: StoreRow, t: { username: string; displa
   }
 }
 
+/** A public TikTok profile (no login): username, display name, bio and photo. */
+async function readTiktokProfile(username: string): Promise<{ username: string; displayName: string; bio: string; avatarUrl: string } | null> {
+  const base = (process.env.TIKTOK_WEB_BASE || 'https://www.tiktok.com').replace(/\/+$/, '')
+  const r = await fetch(`${base}/@${encodeURIComponent(username)}`, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36', 'Accept-Language': 'en-GB,en;q=0.9' },
+    signal: AbortSignal.timeout(12_000),
+  })
+  if (!r.ok) return null
+  const html = await r.text()
+  const m = html.match(/<script[^>]+id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/)
+  if (!m) return null
+  const data = JSON.parse(m[1]) as { __DEFAULT_SCOPE__?: Record<string, { userInfo?: { user?: { uniqueId?: string; nickname?: string; signature?: string; avatarLarger?: string; avatarMedium?: string } } }> }
+  const u = data.__DEFAULT_SCOPE__?.['webapp.user-detail']?.userInfo?.user
+  if (!u?.uniqueId || u.uniqueId.toLowerCase() !== username.toLowerCase()) return null
+  return { username: u.uniqueId, displayName: u.nickname ?? '', bio: u.signature ?? '', avatarUrl: u.avatarLarger || u.avatarMedium || '' }
+}
+
 export function sellerRouter() {
   const r = Router()
 
@@ -1087,6 +1104,38 @@ export function sellerRouter() {
     )
     const u = new URLSearchParams({ client_key: seller.tiktokKey, scope: 'user.info.basic,user.info.profile', response_type: 'code', redirect_uri: tiktokRedirect(), state })
     res.json({ url: `https://www.tiktok.com/v2/auth/authorize/?${u}` })
+  })
+
+  /*
+   * TikTok by bio code (works without TikTok developer keys): the seller gets a
+   * short code, puts it in their TikTok bio, and Desknoty reads their public
+   * profile. The code proves they control the account; then the profile
+   * (name, photo, username) is copied onto the store.
+   */
+  me.post('/tiktok/code', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const username = String((req.body as { username?: unknown })?.username ?? '').trim().replace(/^@/, '')
+    if (!/^[A-Za-z0-9._]{2,24}$/.test(username)) return void res.status(400).json({ error: 'Enter your TikTok username, e.g. @yourname.' })
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    const code = 'DESK-' + Array.from(randomBytes(6), (b) => alphabet[b % alphabet.length]).join('')
+    await sql.run(`DELETE FROM oauth_state WHERE "userId" = ? AND provider = 'tiktok-bio'`, req.userId!)
+    await sql.run(`INSERT INTO oauth_state (state, "userId", provider, "returnTo", verifier, "expiresAt") VALUES (?, ?, 'tiktok-bio', ?, ?, ?)`, randomBytes(16).toString('hex'), req.userId!, username, code, Date.now() + 30 * 60 * 1000)
+    res.json({ username, code, expiresInMinutes: 30 })
+  })
+  me.post('/tiktok/verify', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const row = await sql.get<{ returnTo: string; verifier: string; expiresAt: number }>(`SELECT "returnTo", verifier, "expiresAt" FROM oauth_state WHERE "userId" = ? AND provider = 'tiktok-bio'`, req.userId!)
+    if (!row || Number(row.expiresAt) < Date.now()) return void res.status(410).json({ error: 'That code expired. Generate a new one.' })
+    const profile = await readTiktokProfile(row.returnTo).catch(() => null)
+    if (!profile) return void res.status(502).json({ error: 'TikTok didn’t show that profile right now. Check the username is right and public, then try again in a minute.' })
+    if (!profile.bio.toUpperCase().includes(row.verifier)) return void res.status(409).json({ error: `We couldn’t find ${row.verifier} in @${row.returnTo}’s bio yet. Save your bio on TikTok, wait a few seconds, then verify again.` })
+    const saved = JSON.stringify({ openId: '', username: profile.username, displayName: profile.displayName, avatarUrl: profile.avatarUrl })
+    await sql.run(`UPDATE seller_store SET tiktok = ?, "updatedAt" = ? WHERE id = ?`, saved, now(), s.id)
+    await sql.run(`DELETE FROM oauth_state WHERE "userId" = ? AND provider = 'tiktok-bio'`, req.userId!)
+    await applyTiktokProfile(s, profile).catch((err) => console.error('[seller] TikTok profile copy failed', err))
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
 
   me.post('/tiktok/disconnect', async (req: Authed, res) => {

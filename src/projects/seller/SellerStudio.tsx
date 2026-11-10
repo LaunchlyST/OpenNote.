@@ -23,7 +23,7 @@ import {
   Banknote,
 } from 'lucide-react'
 import { cn } from '../../lib/id'
-import { StorePage } from './StorePage'
+import { StorePage, storeStyle } from './StorePage'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
 import {
@@ -341,7 +341,9 @@ function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup:
         <div className="ss-start-card">
           <span className="ss-start-icon"><TikTokMark /></span>
           <h2>Connect TikTok</h2>
-          <p>Optional. Connecting shows your TikTok name and photo on your store. You can build and publish without it.</p>
+          <p>Optional. Connecting puts your TikTok name, photo and username on your store. You can build and publish without it.</p>
+          <TikTokBioConnect />
+          {setup.tiktok && (
           <button
             type="button"
             className="ss-tt"
@@ -353,9 +355,9 @@ function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup:
                 .catch((e: Error) => setErr(e.message))
             }
           >
-            <TikTokMark /> Connect TikTok
+            <TikTokMark /> Log in with TikTok instead
           </button>
-          {!setup.tiktok && <p className="ss-start-note">TikTok login isn’t switched on for this Desknoty server yet.</p>}
+          )}
           {err && <div className="ss-start-err" role="alert">{err}</div>}
           <button type="button" className="ss-start-skip" onClick={onDone}>
             Continue without TikTok
@@ -364,6 +366,59 @@ function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup:
         </div>
       </div>
     </Solo>
+  )
+}
+
+/**
+ * Connect TikTok by bio code: 1) enter your username, 2) put the code in your
+ * TikTok bio, 3) verify. Desknoty then copies your TikTok name, photo and
+ * username onto your store. You can remove the code from your bio afterwards.
+ */
+function TikTokBioConnect() {
+  const [step, setStep] = useState<'name' | 'code' | 'done'>('name')
+  const [username, setUsername] = useState('')
+  const [code, setCode] = useState('')
+  const [copied, setCopied] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await fn()
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+    setBusy(false)
+  }
+  if (step === 'done') return <div className="ss-tt-ok" role="status">TikTok connected. Opening your studio…</div>
+  return (
+    <div className="ss-ttflow">
+      {step === 'name' ? (
+        <form className="ss-ttflow-row" onSubmit={(e) => (e.preventDefault(), void run(async () => { const r = await sellerApi.tiktokCode(username); setUsername(r.username); setCode(r.code); setStep('code') }))}>
+          <label className="ss-mfield">
+            <span>Your TikTok username</span>
+            <div className="ss-affix"><span>@</span><input className="ss-input" value={username} onChange={(e) => setUsername(e.target.value.replace(/^@/, ''))} autoComplete="off" placeholder="yourname" /></div>
+          </label>
+          <button type="submit" className="ss-tt" disabled={busy || username.trim().length < 2}><TikTokMark /> {busy ? 'Getting your code…' : 'Connect TikTok'}</button>
+        </form>
+      ) : (
+        <div className="ss-ttflow-row">
+          <p className="ss-ttflow-step"><b>1.</b> Copy this code:</p>
+          <div className="ss-ttcode">
+            <code>{code}</code>
+            <button type="button" className="ss-ghost" onClick={() => void navigator.clipboard?.writeText(code).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)))}>{copied ? 'Copied' : 'Copy'}</button>
+          </div>
+          <p className="ss-ttflow-step"><b>2.</b> On TikTok go to <b>Profile → Edit profile → Bio</b>, paste it anywhere in your bio and save.</p>
+          <p className="ss-ttflow-step"><b>3.</b> Come back and press Verify. You can delete the code from your bio afterwards.</p>
+          <button type="button" className="ss-tt" disabled={busy} onClick={() => void run(async () => { await sellerApi.tiktokVerify(); setStep('done'); window.setTimeout(() => window.location.reload(), 900) })}>
+            <TikTokMark /> {busy ? 'Checking your bio…' : `Verify @${username}`}
+          </button>
+          <button type="button" className="ss-start-skip" onClick={() => (setStep('name'), setCode(''), setErr(null))}>Use a different username</button>
+        </div>
+      )}
+      {err && <div className="ss-start-err" role="alert">{err}</div>}
+    </div>
   )
 }
 
@@ -486,7 +541,8 @@ function Studio({
         </div>
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
-          <div className="ss-screen">
+          {/* the whole phone screen takes the store's colours, top strip included */}
+          <div className="ss-screen" style={storeStyle(page)}>
             <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
             <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} />
           </div>
@@ -1298,6 +1354,25 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
           <li><b>Instagram:</b> Edit profile → Links → Add external link.</li>
           <li><b>YouTube, X and others:</b> the same link works anywhere.</li>
         </ol>
+      </section>
+
+      {/* TikTok: connect any time (also after "Continue without TikTok") */}
+      <section className="ss-paycard" aria-label="TikTok">
+        <div className="ss-paycard-head">
+          <span className="ss-paycard-icon"><TikTokMark /></span>
+          <div className="min-w-0">
+            <h3>TikTok</h3>
+            <p className="ss-muted">{store.tiktok ? `Connected as @${store.tiktok.username || store.tiktok.displayName}` : 'Connect to put your TikTok name, photo and username on your store.'}</p>
+          </div>
+          <b className={cn('ss-pay', store.tiktok ? 'ss-pay-ready' : 'ss-pay-not_connected')}>{store.tiktok ? 'Connected' : 'Not connected'}</b>
+        </div>
+        <div className="ss-paycard-actions">
+          {store.tiktok ? (
+            <button type="button" className="ss-ghost" onClick={() => void sellerApi.tiktokDisconnect().then((r) => setStore(r.store)).catch((e: Error) => setErr(e.message))}>Disconnect</button>
+          ) : (
+            <button type="button" className="ss-primary" onClick={() => { try { localStorage.removeItem(TT_KEY(store.id)) } catch { /* storage blocked */ } window.location.reload() }}>Connect TikTok</button>
+          )}
+        </div>
       </section>
 
       <StartOver store={store} />
