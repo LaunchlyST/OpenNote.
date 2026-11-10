@@ -57,7 +57,8 @@ export function WorkspacePicker() {
         }}
       />
 
-      <header className="relative z-10">
+      {/* Keep the account dropdown above main, which otherwise intercepts its clicks. */}
+      <header className="relative z-20">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <a href="/" aria-label="Desknoty home">
             <Logo size="sm" />
