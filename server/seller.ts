@@ -28,6 +28,8 @@ import type { Sql } from './sql.ts'
 import { env } from './env.ts'
 import { enqueueEmail, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
+import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook } from './payments.ts'
+import type { PaymentSettings } from './payments.ts'
 
 /* ------------------------------------------------------------- config --- */
 
@@ -60,6 +62,9 @@ export const sellerSetup = () => ({
   stripe: Boolean(seller.stripeSecret),
   webhook: Boolean(seller.webhookSecret),
   tiktok: Boolean(seller.tiktokKey && seller.tiktokSecret),
+  /** PayPal is available to sellers (platform app configured), and in which mode. */
+  paypal: paypalConfigured(),
+  paypalMode: paypalConfigured() ? paypalMode() : 'none',
   email: transportName() === 'smtp' || transportName() === 'resend',
   /** Never the key itself: only whether it is a Sandbox (test) key. */
   stripeMode: seller.stripeSecret.startsWith('sk_test_') || seller.stripeSecret.startsWith('rk_test_') ? 'sandbox' : seller.stripeSecret ? 'live' : 'none',
@@ -188,6 +193,8 @@ export async function ensureSellerTables() {
 /* -------------------------------------------------------------- types --- */
 
 interface StoreRow {
+  /** JSON PaymentSettings (PayPal, bank transfer, Stripe on/off); private to the seller. */
+  payments: string | null
   revision: number
   stripeMode: string
   id: string
@@ -230,6 +237,14 @@ interface ProductRow {
   updatedAt: string
 }
 interface OrderRow {
+  /** stripe | paypal | bank */
+  method: string
+  /** Bank transfer reference the buyer quotes. */
+  reference: string | null
+  /** PayPal order id. */
+  providerOrderId: string | null
+  /** When the buyer said they had paid (bank transfer): informational only, never unlocks. */
+  buyerClaimedAt: string | null
   checkoutKey: string | null
   checkoutUrl: string | null
   receiptId: number | null
@@ -437,8 +452,28 @@ function productProblem(p: ProductRow): string | null {
   return null
 }
 
+/** Which payment methods a buyer can use at this store right now. */
+function readyMethods(s: StoreRow, p: PaymentSettings = readPayments(s.payments)): Array<'stripe' | 'paypal' | 'bank'> {
+  const out: Array<'stripe' | 'paypal' | 'bank'> = []
+  if (p.stripe.enabled && s.stripeMode === stripeMode && Boolean(s.chargesReady) && Boolean(stripe())) out.push('stripe')
+  if (p.paypal.enabled && p.paypal.email && paypalConfigured()) out.push('paypal')
+  if (p.bank.enabled && bankComplete(p)) out.push('bank')
+  return out
+}
+
 function payoutView(s: StoreRow) {
-  return { status: s.stripeStatus, accountId: s.stripeAccountId ? `…${s.stripeAccountId.slice(-6)}` : null, checkoutReady: Boolean(s.chargesReady) }
+  const p = readPayments(s.payments)
+  const methods = readyMethods(s, p)
+  return {
+    status: s.stripeStatus,
+    accountId: s.stripeAccountId ? `…${s.stripeAccountId.slice(-6)}` : null,
+    // Buy works when any method is ready, not only Stripe.
+    checkoutReady: methods.length > 0,
+    stripeReady: methods.includes('stripe'),
+    methods,
+    // The seller's own settings (only ever sent to the seller).
+    payments: p,
+  }
 }
 
 /* --------------------------------------------------------- statements --- */
@@ -543,16 +578,23 @@ export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Sess
     console.error(`[seller] order ${order.id}: paid amount does not match, not fulfilling`)
     return order
   }
+  const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
+  return completeOrder(order, session.customer_details?.email ?? null, intent ?? null)
+}
+
+/**
+ * Marks a verified payment's order paid and sends its receipt exactly once.
+ * Every payment method ends here, after its own verification.
+ */
+export async function completeOrder(order: OrderRow, email: string | null, paymentRef: string | null = null): Promise<OrderRow> {
   await sql.tx(async (tx) => {
-    const email = session.customer_details?.email ?? null
     await tx.run(
       `UPDATE seller_order SET status = 'paid', "paidAt" = ?, "buyerEmail" = COALESCE(?, "buyerEmail") WHERE id = ? AND status IN ('pending','failed','cancelled')`,
       now(),
       email,
       order.id,
     )
-    const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
-    if (intent) await tx.run('UPDATE seller_order SET "paymentIntent" = ? WHERE id = ?', intent, order.id)
+    if (paymentRef && order.method === 'stripe') await tx.run('UPDATE seller_order SET "paymentIntent" = ? WHERE id = ?', paymentRef, order.id)
     // Claim the receipt atomically: only the call that sets emailedAt sends it.
     const claim = await tx.run(`UPDATE seller_order SET "emailedAt" = ? WHERE id = ? AND status = 'paid' AND "emailedAt" IS NULL AND "buyerEmail" IS NOT NULL`, now(), order.id)
     if (!claim.changes) return
@@ -883,7 +925,44 @@ export function sellerRouter() {
     const rows = await sql.all<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC, id DESC LIMIT 101 OFFSET ?`, s.id, offset)
     const more = rows.length > 100
     if (more) rows.pop()
-    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt })) })
+    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt })) })
+  })
+
+  /* payment methods: the seller's own PayPal and bank details */
+  me.get('/payments', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    res.set('Cache-Control', 'no-store').json({ payments: readPayments(s.payments), methods: readyMethods(s), paypalAvailable: paypalConfigured() })
+  })
+  me.put('/payments', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const next = cleanPayments(req.body, readPayments(s.payments))
+    if (typeof next === 'string') return void res.status(400).json({ error: next })
+    await sql.run(`UPDATE seller_store SET payments = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(next), now(), s.id)
+    res.json({ store: await storeView((await q.storeById(s.id))!) })
+  })
+
+  /** Bank transfer: the seller checked their bank and the money is there. Only this unlocks the order. */
+  me.post('/orders/:id/confirm', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const o = await q.order(String(req.params.id))
+    if (!o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
+    if (o.method !== 'bank') return void res.status(400).json({ error: 'Only bank transfers are confirmed by hand.' })
+    if (o.status === 'paid') return void res.json({ order: { id: o.id, status: o.status } })
+    if (o.status !== 'pending') return void res.status(409).json({ error: `This order is ${o.status}.` })
+    const done = await completeOrder(o, null, null)
+    res.json({ order: { id: done.id, status: done.status } })
+  })
+  me.post('/orders/:id/cancel', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const o = await q.order(String(req.params.id))
+    if (!o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
+    if (o.method !== 'bank' || o.status !== 'pending') return void res.status(409).json({ error: 'Only an unpaid bank transfer can be cancelled here.' })
+    await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, o.id)
+    res.json({ order: { id: o.id, status: 'cancelled' } })
   })
 
   /* payouts: Stripe-hosted Connect onboarding */
@@ -1025,7 +1104,7 @@ export function sellerRouter() {
   pub.get('/:handle', async (req, res) => {
     const s = await liveStore(req, res)
     if (!s) return
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: s.stripeMode === stripeMode && Boolean(s.chargesReady) && Boolean(stripe()), testMode: sellerSetup().stripeMode !== 'live' })
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
   pub.post('/:handle/checkout', async (req, res) => {
@@ -1034,6 +1113,10 @@ export function sellerRouter() {
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
     const p = await q.product(productId, s.id)
     if (!p || !p.pubAt || !p.pubFileId || p.pubPriceMinor == null || !p.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    const method = String(req.body?.method ?? 'stripe')
+    if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method))
+    if (method !== 'stripe') return void res.status(400).json({ error: 'Unknown payment method.' })
+    if (!readPayments(s.payments).stripe.enabled) return void res.status(409).json({ error: 'This seller doesn’t take card payments.' })
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
     const fresh = await refreshAccount(s).catch(() => s)
@@ -1044,7 +1127,7 @@ export function sellerRouter() {
       await tx.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`, `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode)
       return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
     })
-    if (order.productId !== p.id || order.stripeMode !== stripeMode) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
+    if (order.productId !== p.id || order.stripeMode !== stripeMode || order.method !== 'stripe') return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     if (Date.now() - Date.parse(order.createdAt) > 23 * 60 * 60 * 1000) return void res.status(409).json({ error: 'This checkout attempt expired. Start a new purchase.' })
     const session = await st.checkout.sessions.create({
@@ -1058,6 +1141,62 @@ export function sellerRouter() {
     await sql.run('UPDATE seller_order SET "sessionId" = ?, "checkoutUrl" = ? WHERE id = ?', session.id, session.url, order.id)
     res.json({ url: session.url })
   })
+
+  /** PayPal and bank transfer checkout. Same order row, receipt and download flow as Stripe. */
+  async function altCheckout(req: Request, res: Response, s: StoreRow, p: ProductRow, method: 'paypal' | 'bank') {
+    const pay = readPayments(s.payments)
+    if (!readyMethods(s, pay).includes(method)) return void res.status(409).json({ error: method === 'paypal' ? 'This seller doesn’t take PayPal.' : 'This seller doesn’t take bank transfers.' })
+    const key = String(req.body?.checkoutKey ?? randomUUID())
+    if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
+    const buyerEmail = String(req.body?.email ?? '').trim().toLowerCase()
+    if (method === 'bank' && !/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(buyerEmail)) return void res.status(400).json({ error: 'Enter your email: the seller sends your download there once your transfer arrives.' })
+    const id = `ord_${randomBytes(12).toString('hex')}`
+    const order = await sql.tx(async (tx) => {
+      await tx.run(
+        `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, reference, "buyerEmail") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
+        id, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download',
+        method === 'paypal' ? `paypal:${pay.paypal.email}` : 'bank',
+        p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode, method,
+        method === 'bank' ? bankReference(id) : null,
+        method === 'bank' ? buyerEmail : null,
+      )
+      return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
+    })
+    // A retry with the same key returns the same order; a key from another purchase is refused.
+    if (order.productId !== p.id || order.method !== method) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
+    if (method === 'bank') {
+      return void res.json({ orderUrl: `/store/${s.handle}/order/${order.id}?k=${encodeURIComponent(order.accessKey)}`, order: await orderView(order, s) })
+    }
+    if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
+    const payee = order.accountId.replace(/^paypal:/, '')
+    const back = `${seller.siteUrl}/store/${s.id}/thanks?paypal_order=${order.id}&k=${encodeURIComponent(order.accessKey)}`
+    const { paypalOrderId, approveUrl } = await createPaypalOrder({ id: order.id, amountMinor: order.amountMinor, currency: order.currency, title: order.productTitle }, payee, back, `${seller.siteUrl}/store/${s.handle}?checkout=cancelled`)
+    await sql.run('UPDATE seller_order SET "providerOrderId" = ?, "checkoutUrl" = ? WHERE id = ? AND "providerOrderId" IS NULL', paypalOrderId, approveUrl, order.id)
+    const saved = (await q.order(order.id))!
+    res.json({ url: saved.checkoutUrl })
+  }
+
+  /** Looks up an order from a buyer link (order id + private access key). */
+  async function buyerOrder(orderId: string, k: string) {
+    const o = await q.order(orderId)
+    const st = o ? await q.storeById(o.storeId) : undefined
+    const key = Buffer.from(k)
+    if (!o || !st || key.length !== o.accessKey.length || !timingSafeEqual(key, Buffer.from(o.accessKey))) return null
+    return { o, st }
+  }
+
+  /** PayPal: verify with PayPal itself (capture or re-read), then complete. Safe to repeat. */
+  async function settlePaypal(o: OrderRow): Promise<OrderRow> {
+    if (o.status === 'paid' || o.method !== 'paypal' || !o.providerOrderId) return o
+    const po = await captureOrRead(o.providerOrderId, o.id)
+    const v = verifyPaypalPayment(po, o, o.accountId.replace(/^paypal:/, ''))
+    if (!v.ok) {
+      if (po.status === 'VOIDED') await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, o.id)
+      else if (po.status === 'COMPLETED') console.error(`[seller] PayPal order ${o.providerOrderId} for ${o.id} refused: ${v.reason}`)
+      return (await q.order(o.id))!
+    }
+    return completeOrder(o, v.payerEmail)
+  }
 
   async function orderView(o: OrderRow, s: StoreRow) {
     const downloadExpiresAt = Date.now() + DOWNLOAD_TTL
@@ -1073,6 +1212,10 @@ export function sellerRouter() {
       downloadUrl: o.status === 'paid' ? `${seller.apiUrl}/api/store-download/${signDownload(o.id, downloadExpiresAt)}` : null,
       retrievalUrl: o.status === 'paid' ? retrievalUrl(o, s.handle) : null,
       downloadExpiresAt,
+      method: o.method,
+      // Bank transfer: what to pay and where, until the seller confirms it arrived.
+      bank: o.method === 'bank' && o.status === 'pending' ? { ...bankDetails(readPayments(s.payments)), reference: o.reference } : null,
+      buyerClaimedAt: o.buyerClaimedAt,
       receiptSent: receipt?.status === 'sent',
       receiptStatus: receipt?.status === 'sent' ? 'accepted' : receipt?.status ?? 'not_queued',
     }
@@ -1108,7 +1251,49 @@ export function sellerRouter() {
     res.json({ order: await orderView(o, ownerStore) })
   })
 
+  /** Bank transfer: the buyer says they've sent it. Recorded for the seller; it never unlocks the download. */
+  pub.post('/:handle/order/:orderId/claim', async (req, res) => {
+    const found = await buyerOrder(String(req.params.orderId), String(req.body?.k ?? ''))
+    if (!found) return void res.status(404).json({ error: 'Order not found.' })
+    if (found.o.method === 'bank' && found.o.status === 'pending')
+      await sql.run(`UPDATE seller_order SET "buyerClaimedAt" = COALESCE("buyerClaimedAt", ?) WHERE id = ?`, now(), found.o.id)
+    res.json({ order: await orderView((await q.order(found.o.id))!, found.st) })
+  })
+
+  /** PayPal return page: the server verifies the payment with PayPal; the URL's token is not trusted. */
+  pub.post('/:handle/paypal/confirm', async (req, res) => {
+    const found = await buyerOrder(String(req.body?.orderId ?? ''), String(req.body?.k ?? ''))
+    if (!found || found.o.method !== 'paypal') return void res.status(404).json({ error: 'Order not found.' })
+    const o = await settlePaypal(found.o).catch((err) => {
+      console.error('[seller] PayPal confirm failed', err)
+      return found.o
+    })
+    res.json({ order: await orderView(o, found.st) })
+  })
+
   r.use('/api/store', pub)
+
+  /** PayPal webhooks (signature checked with PayPal): finish orders even if the buyer never came back. */
+  r.post('/api/paypal/webhook', async (req, res) => {
+    const event = req.body as { id?: string; event_type?: string; resource?: { id?: string; supplementary_data?: { related_ids?: { order_id?: string } } } }
+    if (!event?.id || !(await verifyPaypalWebhook(req.headers, event).catch(() => false))) return void res.status(400).json({ error: 'Invalid signature.' })
+    const paypalOrderId = event.event_type === 'CHECKOUT.ORDER.APPROVED' ? event.resource?.id : event.resource?.supplementary_data?.related_ids?.order_id
+    const o = paypalOrderId ? await sql.get<OrderRow>(`SELECT * FROM seller_order WHERE "providerOrderId" = ?`, paypalOrderId) : undefined
+    if (!o) return void res.json({ received: true })
+    try {
+      // Completing is idempotent, so a repeated or concurrent notification changes nothing.
+      if (event.event_type === 'CHECKOUT.ORDER.APPROVED') await settlePaypal(o)
+      else if (event.event_type === 'PAYMENT.CAPTURE.COMPLETED' && o.status !== 'paid') {
+        const po = await readPaypalOrder(paypalOrderId!)
+        const v = verifyPaypalPayment(po, o, o.accountId.replace(/^paypal:/, ''))
+        if (v.ok) await completeOrder(o, v.payerEmail)
+      }
+      res.json({ received: true })
+    } catch (err) {
+      console.error('[seller] PayPal webhook failed', err)
+      res.status(500).json({ error: 'Webhook handling failed.' })
+    }
+  })
 
   /** Private file, only through a valid, unexpired link for a paid order. */
   r.get('/api/store-download/:token', async (req, res) => {

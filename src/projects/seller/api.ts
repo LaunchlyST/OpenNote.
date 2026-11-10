@@ -1,5 +1,5 @@
 import { API_BASE, apiUrl } from '../../lib/api-base'
-import type { DraftProduct, Page, SellerSetup, ShopProduct, StoreView } from './model'
+import type { DraftProduct, Page, PayMethod, PaymentSettings, SellerSetup, ShopProduct, StoreView } from './model'
 
 export class SellerError extends Error {
   status: number
@@ -59,7 +59,11 @@ export const sellerApi = {
   onboard: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/stripe/onboard', { returnTo }),
   manage: () => call<{ url: string }>('POST', '/api/seller/stripe/manage'),
   tiktok: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/tiktok/start', { returnTo }),
-  orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string }> }>('GET', `/api/seller/orders?offset=${offset}`),
+  orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null }> }>('GET', `/api/seller/orders?offset=${offset}`),
+  savePayments: (p: Partial<{ [K in keyof PaymentSettings]: Partial<PaymentSettings[K]> }>) => call<{ store: StoreView }>('PUT', '/api/seller/payments', p),
+  /** Bank transfer arrived: unlocks the order and sends the receipt. */
+  confirmOrder: (id: string) => call<{ order: { id: string; status: string } }>('POST', `/api/seller/orders/${encodeURIComponent(id)}/confirm`),
+  cancelOrder: (id: string) => call<{ order: { id: string; status: string } }>('POST', `/api/seller/orders/${encodeURIComponent(id)}/cancel`),
 }
 
 export interface PublicStore {
@@ -67,6 +71,8 @@ export interface PublicStore {
   page: Page
   products: ShopProduct[]
   checkoutReady: boolean
+  /** Payment methods this seller accepts right now. */
+  methods?: PayMethod[]
   /** Payments go through Stripe Sandbox: no real money moves. */
   testMode?: boolean
 }
@@ -83,11 +89,20 @@ export interface PublicOrder {
   downloadExpiresAt: number | null
   receiptSent: boolean
   receiptStatus: string
+  method?: PayMethod
+  /** Bank transfer still to pay: where, how much and the reference. */
+  bank?: { accountName: string; sortCode: string | null; accountNumber: string | null; iban: string | null; bic: string | null; instructions: string | null; reference: string | null } | null
+  buyerClaimedAt?: string | null
 }
 
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string, checkoutKey: string) => call<{ url: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey }),
+  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string) =>
+    call<{ url?: string; orderUrl?: string; order?: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email }),
+  /** Bank transfer: "I've sent it" (never unlocks the download). */
+  claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
+  /** Back from PayPal: the server verifies the payment with PayPal. */
+  paypalConfirm: (handle: string, orderId: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/paypal/confirm`, { orderId, k }),
   session: (handle: string, sessionId: string) => call<{ order: PublicOrder }>('GET', `/api/store/${encodeURIComponent(handle)}/session/${encodeURIComponent(sessionId)}`),
   order: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('GET', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}?k=${encodeURIComponent(k)}`),
 }

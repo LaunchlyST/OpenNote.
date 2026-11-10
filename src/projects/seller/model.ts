@@ -54,11 +54,29 @@ export interface StoreView {
   publishedAt: string | null
   unpublishedChanges: boolean
   tiktok: { username: string; displayName: string; avatarUrl: string } | null
-  payouts: { status: PayoutStatus; accountId: string | null; checkoutReady: boolean }
+  payouts: {
+    status: PayoutStatus
+    accountId: string | null
+    /** Any payment method is ready (Stripe, PayPal or bank transfer). */
+    checkoutReady: boolean
+    stripeReady?: boolean
+    methods?: PayMethod[]
+    payments?: PaymentSettings
+  }
   products: DraftProduct[]
 }
 
+export type PayMethod = 'stripe' | 'paypal' | 'bank'
+export interface PaymentSettings {
+  stripe: { enabled: boolean }
+  paypal: { enabled: boolean; email: string }
+  bank: { enabled: boolean; accountName: string; sortCode: string; accountNumber: string; iban: string; bic: string; instructions: string }
+}
+
 export interface SellerSetup {
+  /** The platform has PayPal set up, so sellers can turn it on. */
+  paypal?: boolean
+  paypalMode?: string
   stripe: boolean
   webhook: boolean
   tiktok: boolean

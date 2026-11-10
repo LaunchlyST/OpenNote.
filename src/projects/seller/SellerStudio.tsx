@@ -989,8 +989,78 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           {busy ? 'Opening Stripe…' : copy.action} <ExternalLink className="h-3.5 w-3.5" />
         </button>
       )}
-      {s !== 'ready' && setup.stripe && <p className="ss-muted">Buy now stays off until Stripe says your account can take card payments.</p>}
+      {s !== 'ready' && setup.stripe && <p className="ss-muted">Card payments stay off until Stripe says your account can take them. PayPal or bank transfer below can take payments meanwhile.</p>}
       {err && <div className="ss-note" role="alert">{err}</div>}
+      <PaymentMethods store={store} setup={setup} />
+    </div>
+  )
+}
+
+/** The seller's own PayPal and bank details. Saved privately; buyers only see bank details after choosing bank transfer. */
+function PaymentMethods({ store, setup }: { store: StoreView; setup: SellerSetup }) {
+  const [p, setP] = useState(() => store.payouts.payments ?? { stripe: { enabled: true }, paypal: { enabled: false, email: '' }, bank: { enabled: false, accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' } })
+  const [state, setState] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const methods = store.payouts.methods ?? []
+  const save = async (next = p) => {
+    setSaving(true)
+    setState(null)
+    try {
+      const r = await sellerApi.savePayments(next)
+      setP(r.store.payouts.payments ?? next)
+      setState({ ok: true, msg: `Saved. Buyers can pay by: ${(r.store.payouts.methods ?? []).map((m) => ({ stripe: 'card', paypal: 'PayPal', bank: 'bank transfer' })[m]).join(', ') || 'nothing yet'}.` })
+    } catch (e) {
+      setState({ ok: false, msg: (e as Error).message })
+    }
+    setSaving(false)
+  }
+  const bank = p.bank
+  const setBank = (patch: Partial<typeof bank>) => setP({ ...p, bank: { ...bank, ...patch } })
+  return (
+    <div className="ss-stack">
+      <h3 className="ss-label">Ways buyers can pay</h3>
+      <p className="ss-muted">Turn on any you like. Buy now works as soon as one is ready{methods.length ? `: right now ${methods.map((m) => ({ stripe: 'card', paypal: 'PayPal', bank: 'bank transfer' })[m]).join(', ')}` : ''}.</p>
+
+      <label className="ss-row">
+        <input type="checkbox" checked={p.stripe.enabled} onChange={(e) => void save({ ...p, stripe: { enabled: e.target.checked } })} />
+        <span>Card payments through Stripe {store.payouts.stripeReady ? '(ready)' : '(needs the Stripe setup above)'}</span>
+      </label>
+
+      <div className="ss-field">
+        <span className="ss-label">PayPal</span>
+        {!setup.paypal ? (
+          <div className="ss-note">PayPal isn’t switched on for this Desknoty server yet. Your details are kept and PayPal appears at checkout once it is.</div>
+        ) : (
+          <p className="ss-muted">Payments go straight to this PayPal account{setup.paypalMode === 'sandbox' ? ' (PayPal Sandbox: test money only)' : ''}.</p>
+        )}
+        <input className="ss-input" type="email" placeholder="Your PayPal account email" value={p.paypal.email} onChange={(e) => setP({ ...p, paypal: { ...p.paypal, email: e.target.value } })} />
+        <label className="ss-row">
+          <input type="checkbox" checked={p.paypal.enabled} onChange={(e) => setP({ ...p, paypal: { ...p.paypal, enabled: e.target.checked } })} />
+          <span>Accept PayPal</span>
+        </label>
+      </div>
+
+      <div className="ss-field">
+        <span className="ss-label">Bank transfer</span>
+        <p className="ss-muted">Buyers see these details and a unique reference. You confirm each payment in Orders once it’s in your bank; only then does the buyer get the download.</p>
+        <input className="ss-input" placeholder="Account name" value={bank.accountName} onChange={(e) => setBank({ accountName: e.target.value })} />
+        <div className="ss-grid2">
+          <input className="ss-input" placeholder="Sort code (12-34-56)" inputMode="numeric" value={bank.sortCode} onChange={(e) => setBank({ sortCode: e.target.value })} />
+          <input className="ss-input" placeholder="Account number" inputMode="numeric" value={bank.accountNumber} onChange={(e) => setBank({ accountNumber: e.target.value })} />
+        </div>
+        <div className="ss-grid2">
+          <input className="ss-input" placeholder="IBAN (optional)" value={bank.iban} onChange={(e) => setBank({ iban: e.target.value })} />
+          <input className="ss-input" placeholder="BIC / SWIFT (optional)" value={bank.bic} onChange={(e) => setBank({ bic: e.target.value })} />
+        </div>
+        <input className="ss-input" placeholder="Note for buyers (optional)" value={bank.instructions} onChange={(e) => setBank({ instructions: e.target.value })} />
+        <label className="ss-row">
+          <input type="checkbox" checked={bank.enabled} onChange={(e) => setBank({ enabled: e.target.checked })} />
+          <span>Accept bank transfers</span>
+        </label>
+      </div>
+
+      <button type="button" className="ss-primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save payment methods'}</button>
+      {state && <div className="ss-note" role={state.ok ? 'status' : 'alert'}>{state.msg}</div>}
     </div>
   )
 }
@@ -1060,6 +1130,16 @@ function OrdersPanel() {
     finally { setBusy(false) }
   }
   useEffect(() => { void load() }, [])
+  // Bank transfers: the seller checks their bank, then confirms (sends the receipt and unlocks the download).
+  const act = async (id: string, what: 'confirm' | 'cancel') => {
+    if (what === 'confirm' && !window.confirm('Only confirm once the money is in your bank account. The buyer gets the download straight away.')) return
+    try {
+      const r = what === 'confirm' ? await sellerApi.confirmOrder(id) : await sellerApi.cancelOrder(id)
+      setOrders((old) => old?.map((o) => (o.id === id ? { ...o, status: r.order.status } : o)) ?? null)
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
   if (error) return <div role="alert">Could not load orders: {error} <button onClick={() => void load(orders?.length ?? 0)}>Retry</button></div>
   if (!orders) return <p className="ss-muted">Loading…</p>
   if (!orders.length) return <p className="ss-muted">No orders yet. They appear here as soon as a buyer opens checkout.</p>
@@ -1070,7 +1150,18 @@ function OrdersPanel() {
           <b>{o.product}</b>
           <span>{formatPrice(o.amountMinor, o.currency)}</span>
           <span className={cn('ss-ord', `ss-ord-${o.status}`)}>{o.status}</span>
-          <small>{o.buyer ?? '—'} · {new Date(o.createdAt).toLocaleString()}</small>
+          <small>
+            {({ stripe: 'Card', paypal: 'PayPal', bank: 'Bank transfer' } as Record<string, string>)[o.method ?? 'stripe']}
+            {o.reference ? ` · ref ${o.reference}` : ''}
+            {o.method === 'bank' && o.status === 'pending' && o.buyerClaimedAt ? ' · buyer says it’s sent' : ''}
+            {' · '}{o.buyer ?? '—'} · {new Date(o.createdAt).toLocaleString()}
+          </small>
+          {o.method === 'bank' && o.status === 'pending' && (
+            <span className="ss-row">
+              <button type="button" className="ss-ghost" onClick={() => void act(o.id, 'confirm')}>Payment received</button>
+              <button type="button" className="ss-ghost" onClick={() => void act(o.id, 'cancel')}>Cancel order</button>
+            </span>
+          )}
         </li>
       ))}
     </ul>{next !== null && <button disabled={busy} onClick={() => void load(next)}>{busy ? 'Loading…' : 'Load more orders'}</button>}</div>
