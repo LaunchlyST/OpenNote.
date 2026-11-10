@@ -550,15 +550,27 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
   const [inserting, setInserting] = useState<number | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<number | null>(null)
-  const blocks = page.blocks
-  const setBlocks = (b: Block[]) => onChange({ ...page, blocks: b })
+  // The footer is pinned: always last, can't be moved, hidden or deleted (its text can still be edited).
+  const blocks = footerLast(page.blocks)
+  const setBlocks = (b: Block[]) => onChange({ ...page, blocks: footerLast(b) })
   const update = (id: string, data: Record<string, unknown>) => setBlocks(blocks.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...data } } : b)))
+  // the section that just moved flashes briefly, so it's clear where it landed
+  const [landed, setLanded] = useState<string | null>(null)
+  useEffect(() => {
+    if (!landed) return
+    document.querySelector(`[data-block="${landed}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    const t = window.setTimeout(() => setLanded(null), 1300)
+    return () => window.clearTimeout(t)
+  }, [landed])
   const move = (from: number, to: number) => {
-    if (to < 0 || to >= blocks.length || from === to) return
+    // the pinned footer stays last: nothing moves below it
+    const last = blocks.length - 2
+    if (to < 0 || to > last || from === to) return
     const next = [...blocks]
     const [b] = next.splice(from, 1)
     next.splice(to, 0, b)
     setBlocks(next)
+    setLanded(b.id)
   }
   const insert = (at: number, type: BlockType) => {
     const b = newBlock(type)
@@ -569,21 +581,35 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
     setOpen(b.id)
   }
 
-  const Inserter = ({ at }: { at: number }) => (
-    <div className={cn('sb-ins', over === at && dragId && 'sb-ins-drop')}
-      onDragOver={(e) => (e.preventDefault(), setOver(at))}
-      onDragLeave={() => setOver((o) => (o === at ? null : o))}
-      onDrop={(e) => {
-        e.preventDefault()
-        const from = blocks.findIndex((b) => b.id === dragId)
-        if (from >= 0) move(from, from < at ? at - 1 : at)
-        setDragId(null)
-        setOver(null)
-      }}
-    >
+  const dragFrom = dragId ? blocks.findIndex((b) => b.id === dragId) : -1
+  const where = (at: number) =>
+    at === 0 ? 'at the top' : at >= blocks.length - 1 ? `after ${blockLabel(blocks[blocks.length - 2]?.type ?? 'header')} (just above the footer)` : `between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`
+  const Inserter = ({ at }: { at: number }) => {
+    // While dragging, every place the section can go becomes a labelled slot; no-op slots disappear.
+    if (dragId) {
+      if (at === dragFrom || at === dragFrom + 1) return <div className="sb-ins" aria-hidden="true" />
+      const on = over === at
+      return (
+        <div
+          className={cn('sb-ins sb-slot', on && 'sb-slot-on')}
+          onDragOver={(e) => (e.preventDefault(), setOver(at))}
+          onDragLeave={() => setOver((o) => (o === at ? null : o))}
+          onDrop={(e) => {
+            e.preventDefault()
+            if (dragFrom >= 0) move(dragFrom, dragFrom < at ? at - 1 : at)
+            setDragId(null)
+            setOver(null)
+          }}
+        >
+          {on ? `Drop here: ${where(at)}` : 'Move here'}
+        </div>
+      )
+    }
+    return (
+    <div className="sb-ins">
       {inserting === at ? (
         <div className="sb-menu" role="menu" aria-label="Add a block">
-          {BLOCKS.map((t) => (
+          {BLOCKS.filter((t) => t.type !== 'footer').map((t) => (
             <button key={t.type} type="button" role="menuitem" onClick={() => insert(at, t.type)}>
               <b>{t.label}</b>
               <small>{t.hint}</small>
@@ -597,7 +623,8 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
         </button>
       )}
     </div>
-  )
+    )
+  }
 
   return (
     <div className="ss-stack">
@@ -605,9 +632,22 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
       <div className="sb-list" aria-label="Page sections">
         <Inserter at={0} />
         {blocks.map((b, i) => (
+          b.type === 'footer' ? (
+            <div key={b.id} className="sb-block sb-pinned">
+              <div className="sb-row">
+                <span className="sb-grip" aria-hidden="true" />
+                <button type="button" className="sb-title" aria-expanded={open === b.id} onClick={() => setOpen(open === b.id ? null : b.id)}>
+                  <b>{blockLabel(b.type)}</b>
+                  <small>Always at the bottom, centred · {summary(b, products)}</small>
+                </button>
+              </div>
+              {open === b.id && <BlockEditor block={b} products={products} update={(d) => update(b.id, d)} />}
+            </div>
+          ) : (
           <div key={b.id}>
             <div
-              className={cn('sb-block', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging')}
+              data-block={b.id}
+              className={cn('sb-block', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging', landed === b.id && 'sb-landed')}
               draggable
               onDragStart={(e) => (setDragId(b.id), e.dataTransfer.setData('text/plain', b.id), (e.dataTransfer.effectAllowed = 'move'))}
               onDragEnd={() => (setDragId(null), setOver(null))}
@@ -620,7 +660,7 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
                 </button>
                 <div className="sb-tools">
                   <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i === 0} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
-                  <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i === blocks.length - 1} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
+                  <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
                   <button type="button" aria-label={`Duplicate ${blockLabel(b.type)}`} onClick={() => {
                     const copy = { ...newBlock(b.type), data: structuredClone(b.data), hidden: b.hidden }
                     const next = [...blocks]
@@ -637,10 +677,17 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
             </div>
             <Inserter at={i + 1} />
           </div>
+          )
         ))}
       </div>
     </div>
   )
+}
+
+/** Exactly one footer, always last and shown. */
+function footerLast(blocks: Block[]): Block[] {
+  const foot = blocks.find((b) => b.type === 'footer') ?? newBlock('footer')
+  return [...blocks.filter((b) => b.type !== 'footer'), { ...foot, hidden: false }]
 }
 
 function summary(b: Block, products: DraftProduct[]) {

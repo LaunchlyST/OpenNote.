@@ -43,9 +43,13 @@ export function StorePage(props: StorePageProps) {
           <ProductDetail p={only} {...props} />
         </>
       ) : (
-        page.blocks.filter((b) => !b.hidden).map((b) => <BlockView key={b.id} block={b} {...props} />)
+        page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => <BlockView key={b.id} block={b} {...props} />)
       )}
-      <p className="sp-made">Made with Desknoty</p>
+      {/* Pinned to the bottom, centred: the store's footer line, then desknoty.com */}
+      <div className="sp-end">
+        {!only && <BlockView block={page.blocks.find((b) => b.type === 'footer') ?? { id: 'footer', type: 'footer', hidden: false, data: { text: '' } }} {...props} />}
+        <a className="sp-made" href="https://desknoty.com" target="_blank" rel="noopener">desknoty.com</a>
+      </div>
     </div>
   )
 }

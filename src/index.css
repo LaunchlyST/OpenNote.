@@ -7428,6 +7428,11 @@ select.ss-input option {
 .sb-ins:hover .sb-ins-btn, .sb-ins-btn:focus-visible { opacity: 1; background: #f3f2ee; color: #111114; }
 .sb-ins-drop { min-height: 30px; }
 .sb-ins-drop::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 3px; border-radius: 3px; background: #a3e635; }
+/* while dragging a section: labelled places it can go, the one under the pointer in lime */
+.sb-slot { margin: 4px 0; min-height: 34px; align-items: center; border: 1.5px dashed #d6d4cd; border-radius: 12px; font-size: 12px; font-weight: 600; color: #8a8985; transition: background 0.12s, border-color 0.12s, color 0.12s; }
+.sb-slot-on { min-height: 44px; border: 2px solid #84cc16; background: #ecfccb; color: #3f6212; }
+.sb-dragging { opacity: 0.4; outline: 2px dashed #a3a19a; outline-offset: 2px; }
+.sb-landed { box-shadow: 0 0 0 2px #a3e635, 0 6px 18px -8px rgba(101, 163, 13, 0.6); transition: box-shadow 0.3s; }
 .sb-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; padding: 10px; border-radius: 14px; border: 1px solid #e3e1db; background: #fff; box-shadow: 0 14px 30px -18px rgba(0, 0, 0, 0.35); }
 .sb-menu button { display: flex; flex-direction: column; align-items: flex-start; padding: 8px 10px; border-radius: 10px; text-align: left; }
 .sb-menu button:hover, .sb-menu button:focus-visible { background: #f3f2ee; }
@@ -7468,7 +7473,13 @@ select.ss-input option {
 .sp-faq-item button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; text-align: left; font-size: 14.5px; font-weight: 600; color: inherit; }
 .sp-faq-item p { padding-bottom: 12px; font-size: 14px; line-height: 1.5; opacity: 0.8; }
 .sp-foot { margin-top: 0; text-align: center; font-size: 12.5px; opacity: 0.6; }
-.sp-made { text-align: center; font-size: 11px; opacity: 0.4; }
+.sp-made { text-align: center; font-size: 11px; opacity: 0.45; color: inherit; text-decoration: none; }
+.sp-made:hover { text-decoration: underline; }
+/* store page: footer line and desknoty.com pinned to the bottom, centred */
+.sp { display: flex; flex-direction: column; }
+.sp-end { margin-top: auto; padding-top: 32px; display: grid; justify-items: center; gap: 6px; text-align: center; }
+.sp-end .sp-block { margin: 0; }
+.sb-pinned { background: #faf9f6; }
 .sp-empty { padding: 16px; border-radius: var(--r); border: 1.5px dashed color-mix(in srgb, currentColor 35%, transparent); text-align: center; font-size: 12.5px; opacity: 0.6; }
 .sp-detail { display: grid; gap: 12px; }
 .sp-desc p { font-size: 14.5px; line-height: 1.6; opacity: 0.85; }
