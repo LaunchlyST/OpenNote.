@@ -22,15 +22,27 @@ export interface StorePageProps {
   only?: ShopProduct
 }
 
+/**
+ * A store left on the default black accent gets its own colour, picked from
+ * its name, so no two new stores look alike. Choosing an accent overrides it.
+ */
+const AUTO_ACCENTS = ['#6d4aff', '#ff5a3c', '#0f9f9a', '#2563eb', '#db2777', '#d97706', '#16a34a', '#7c3aed']
+export function accentOf(page: Page): string {
+  if (page.theme.preset !== 'clean' || page.theme.accent.toLowerCase() !== '#111114') return page.theme.accent
+  let h = 0
+  for (const ch of page.name || 'store') h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return AUTO_ACCENTS[h % AUTO_ACCENTS.length]
+}
+
 export function storeStyle(page: Page): CSSProperties {
   const preset = PRESETS.find((p) => p.id === page.theme.preset) ?? PRESETS[0]
   const font = FONTS.find((f) => f.id === page.theme.font)?.css ?? FONTS[0].css
   const radius = page.theme.button === 'pill' ? 999 : page.theme.button === 'sharp' ? 4 : 12
   const bg =
     page.theme.background === 'gradient'
-      ? `linear-gradient(180deg, ${preset.bg} 0%, color-mix(in srgb, ${page.theme.accent} 22%, ${preset.bg}) 100%)`
+      ? `linear-gradient(180deg, ${preset.bg} 0%, color-mix(in srgb, ${accentOf(page)} 22%, ${preset.bg}) 100%)`
       : preset.bg
-  return { background: bg, color: preset.ink, fontFamily: font, '--ac': page.theme.accent, '--on': preset.bg, '--r': `${radius}px` } as CSSProperties
+  return { background: bg, color: preset.ink, fontFamily: font, '--ac': accentOf(page), '--on': preset.bg, '--r': `${radius}px` } as CSSProperties
 }
 
 export function StorePage(props: StorePageProps) {
@@ -64,7 +76,9 @@ function Header({ page, handle, showSocials, compact = false }: { page: Page; ha
   const avatar = mediaUrl(page.avatar)
   return (
     <header className={compact ? 'sp-head sp-head-compact' : 'sp-head'}>
-      <span className="sp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : { background: page.theme.accent, color: 'var(--on)' }}>
+      {/* a banner in the store's own accent colour, so every store looks like its own */}
+      {!compact && <span className="sp-band" aria-hidden="true" />}
+      <span className="sp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : { background: 'var(--ac)', color: 'var(--on)' }}>
         {!avatar && (page.name.trim().charAt(0).toUpperCase() || handle.charAt(0).toUpperCase())}
       </span>
       <h1 className="sp-name">{page.name || handle}</h1>
@@ -145,13 +159,23 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
     }
     case 'grid': {
       const ids: string[] = d.productIds ?? []
-      const list = ids.map((id) => p.products.find((x) => x.id === id)).filter((x): x is ShopProduct => Boolean(x))
+      const picked = ids.map((id) => p.products.find((x) => x.id === id)).filter((x): x is ShopProduct => Boolean(x))
+      // Nothing picked yet: show every product on sale rather than an empty shop.
+      const list = picked.length ? picked : p.products
+      if (list.length === 0)
+        return p.live ? (
+          <section className="sp-block sp-soon">
+            <span aria-hidden="true">✦</span>
+            <h2>New products are on the way</h2>
+            <p>Check back soon, or follow along on socials.</p>
+          </section>
+        ) : (
+          <div className="sp-block sp-empty">Product grid: add products to show them here</div>
+        )
       return (
         <section className="sp-block sp-grid-wrap">
           {d.heading && <h2 className="sp-h2">{d.heading}</h2>}
-          {list.length === 0 ? (
-            p.live ? null : <div className="sp-empty">Product grid: pick the products to show</div>
-          ) : (
+          {(
             <div className="sp-grid">
               {list.map((prod) => (
                 <article key={prod.id} className="sp-card">
@@ -186,8 +210,14 @@ function ProductLink({ prod, live, handle, children }: { prod: ShopProduct; live
 
 function Cover({ p, big = false }: { p: ShopProduct; big?: boolean }) {
   const src = mediaUrl(p.cover)
-  return <span className={big ? 'sp-cover sp-cover-big' : 'sp-cover'} style={src ? { backgroundImage: `url(${src})` } : undefined} aria-hidden="true" />
+  // No picture yet: a tinted cover with the product's first letter instead of a blank box.
+  return (
+    <span className={cn('sp-cover', big && 'sp-cover-big', !src && 'sp-cover-auto')} style={src ? { backgroundImage: `url(${src})` } : undefined} aria-hidden="true">
+      {!src && (p.title.trim().charAt(0).toUpperCase() || '✦')}
+    </span>
+  )
 }
+const cn = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ')
 
 function BuyRow({ prod, live, checkoutReady, onBuy, buying, small }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id

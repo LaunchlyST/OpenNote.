@@ -178,9 +178,6 @@ function Shell({ store, children }: { store?: Store; children: React.ReactNode }
   return (
     <div className="ps" style={store ? storeStyle(store.page) : undefined}>
       <main className="ps-main">
-        {store?.testMode && (
-          <Banner>Test store: payments run in Stripe and PayPal test mode (Sandbox). No real money is taken, and nothing bought here is a real sale. Don’t use a real card.</Banner>
-        )}
         {children}
       </main>
     </div>
