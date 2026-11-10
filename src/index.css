@@ -7334,7 +7334,7 @@ select.ss-input option {
 .ss-live { font-size: 12.5px; font-weight: 600; color: #8a6d1d; }
 .ss-live.on { color: #2f7a1d; }
 .ss-primary-sm { height: 38px !important; padding: 0 16px !important; font-size: 13.5px !important; }
-.ss-tabs { display: flex; flex-wrap: nowrap; gap: 4px; padding: 4px; border-radius: 12px; background: #f1f0ec; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.ss-tabs { display: flex; width: max-content; max-width: 100%; flex-wrap: nowrap; gap: 4px; padding: 4px; border-radius: 12px; background: #f1f0ec; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .ss-tabs::-webkit-scrollbar { display: none; }
 .ss-tabs button { flex: 0 0 auto; white-space: nowrap; padding: 7px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; color: #5f5e5b; }
 .ss-tabs button[aria-selected='true'] { background: #fff; color: #111114; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
