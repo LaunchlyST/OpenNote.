@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import {
   ArrowDown,
@@ -18,6 +18,8 @@ import {
   Store,
   Trash2,
   Upload,
+  Banknote,
+  Wallet,
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { StorePage } from './StorePage'
@@ -42,7 +44,7 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, DraftProduct, Page, SellerSetup, StoreView } from './model'
+import type { Block, BlockType, DraftProduct, Page, PayMethod, PaymentSettings, SellerSetup, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -958,6 +960,9 @@ const PAYOUT_COPY: Record<StoreView['payouts']['status'], { label: string; text:
 function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: SellerSetup; reload: (refresh?: boolean) => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [payments, setPayments] = useState<PaymentSettings>(() => store.payouts.payments ?? EMPTY_PAYMENTS)
+  const [methods, setMethods] = useState<PayMethod[]>(() => store.payouts.methods ?? [])
+  const [bankOpen, setBankOpen] = useState(false)
   const s = store.payouts.status
   const copy = PAYOUT_COPY[s]
   const go = async () => {
@@ -971,97 +976,196 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       setBusy(false)
     }
   }
+  const saved = (v: StoreView) => {
+    setPayments(v.payouts.payments ?? payments)
+    setMethods(v.payouts.methods ?? [])
+  }
+  const bank = payments.bank
+  const bankSet = bankComplete(payments)
   return (
     <div className="ss-stack">
-      <p className="ss-big">Sales go straight to your Stripe account. Desknoty’s platform fee is {PLATFORM_FEE_PERCENT}%.</p>
-      <p className="ss-muted">Stripe’s card processing fees are separate: Stripe deducts them from each payment before paying out.</p>
-      <div className="ss-status">
-        <Landmark className="h-4 w-4" />
-        <span>Status</span>
-        <b className={cn('ss-pay', `ss-pay-${s}`)}>{copy.label}</b>
-        <button type="button" className="ss-ghost ml-auto" onClick={() => void reload(true)}>Refresh</button>
-      </div>
-      <p className="ss-muted">{copy.text}</p>
-      {!setup.stripe ? (
-        <div className="ss-note">Payouts aren’t switched on for this Desknoty server yet. You can build your page and add products now; Buy now turns on once Stripe is connected.</div>
-      ) : (
-        <button type="button" className="ss-primary" onClick={() => void go()} disabled={busy}>
-          {busy ? 'Opening Stripe…' : copy.action} <ExternalLink className="h-3.5 w-3.5" />
-        </button>
-      )}
-      {s !== 'ready' && setup.stripe && <p className="ss-muted">Card payments stay off until Stripe says your account can take them. PayPal or bank transfer below can take payments meanwhile.</p>}
-      {err && <div className="ss-note" role="alert">{err}</div>}
-      <PaymentMethods store={store} setup={setup} />
+      <p className="ss-muted">Desknoty takes {PLATFORM_FEE_PERCENT}%. Payment providers charge their own fees (Stripe deducts its card fees before paying out).</p>
+
+      {/* Stripe: status, refresh and the one action, together */}
+      <section className="ss-paycard" aria-label="Card payments with Stripe">
+        <div className="ss-paycard-head">
+          <span className="ss-paycard-icon"><Landmark className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <h3>Card payments · Stripe</h3>
+            <p className="ss-muted">{copy.text}</p>
+          </div>
+          <b className={cn('ss-pay', `ss-pay-${s}`)}>{copy.label}</b>
+        </div>
+        {!setup.stripe ? (
+          <div className="ss-note">Stripe isn’t switched on for this Desknoty server yet.</div>
+        ) : (
+          <div className="ss-paycard-actions">
+            <button type="button" className="ss-primary" onClick={() => void go()} disabled={busy}>
+              {busy ? 'Opening Stripe…' : copy.action} <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+            <button type="button" className="ss-ghost" onClick={() => void reload(true)}>Refresh</button>
+          </div>
+        )}
+        {err && <div className="ss-note" role="alert">{err}</div>}
+      </section>
+
+      {/* Bank transfer: fields stay in the dialog until the seller asks for them */}
+      <section className="ss-paycard" aria-label="Bank transfer">
+        <div className="ss-paycard-head">
+          <span className="ss-paycard-icon"><Banknote className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <h3>Bank transfer</h3>
+            <p className="ss-muted">
+              {bankSet
+                ? `${bank.accountName} · ${bank.accountNumber ? `•••• ${bank.accountNumber.slice(-4)}` : `IBAN •••• ${bank.iban.slice(-4)}`}`
+                : 'Buyers pay straight into your bank. You confirm each payment in Orders.'}
+            </p>
+          </div>
+          <b className={cn('ss-pay', methods.includes('bank') ? 'ss-pay-ready' : 'ss-pay-not_connected')}>{methods.includes('bank') ? 'On' : bankSet ? 'Off' : 'Not set up'}</b>
+        </div>
+        <div className="ss-paycard-actions">
+          <button type="button" className={bankSet ? 'ss-ghost' : 'ss-primary'} onClick={() => setBankOpen(true)}>
+            {bankSet ? 'Edit bank details' : 'Connect bank account'}
+          </button>
+        </div>
+      </section>
+
+      <PaypalRow payments={payments} methods={methods} setup={setup} onSaved={saved} />
+
+      {bankOpen && <BankDialog payments={payments} onClose={() => setBankOpen(false)} onSaved={(v) => (saved(v), setBankOpen(false))} />}
     </div>
   )
 }
 
-/** The seller's own PayPal and bank details. Saved privately; buyers only see bank details after choosing bank transfer. */
-function PaymentMethods({ store, setup }: { store: StoreView; setup: SellerSetup }) {
-  const [p, setP] = useState(() => store.payouts.payments ?? { stripe: { enabled: true }, paypal: { enabled: false, email: '' }, bank: { enabled: false, accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' } })
-  const [state, setState] = useState<{ ok: boolean; msg: string } | null>(null)
+const EMPTY_PAYMENTS: PaymentSettings = {
+  stripe: { enabled: true },
+  paypal: { enabled: false, email: '' },
+  bank: { enabled: false, accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
+}
+const bankComplete = (p: PaymentSettings) => Boolean(p.bank.accountName && ((p.bank.sortCode && p.bank.accountNumber) || p.bank.iban))
+
+/** Bank details for receiving transfers (never card details). Saved through the existing validation. */
+function BankDialog({ payments, onClose, onSaved }: { payments: PaymentSettings; onClose: () => void; onSaved: (s: StoreView) => void }) {
+  // First connection: accepting transfers is on by default; editing keeps the seller's choice.
+  const [b, setB] = useState(() => ({ ...payments.bank, enabled: bankComplete(payments) ? payments.bank.enabled : true }))
+  const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const methods = store.payouts.methods ?? []
-  const save = async (next = p) => {
+  const panel = useRef<HTMLFormElement>(null)
+  useEffect(() => {
+    panel.current?.querySelector<HTMLInputElement>('input')?.focus()
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+  const set = (patch: Partial<typeof b>) => setB({ ...b, ...patch })
+  const save = async () => {
     setSaving(true)
-    setState(null)
+    setErr(null)
     try {
-      const r = await sellerApi.savePayments(next)
-      setP(r.store.payouts.payments ?? next)
-      setState({ ok: true, msg: `Saved. Buyers can pay by: ${(r.store.payouts.methods ?? []).map((m) => ({ stripe: 'card', paypal: 'PayPal', bank: 'bank transfer' })[m]).join(', ') || 'nothing yet'}.` })
+      // Saving complete details switches bank transfer on; the switch below can turn it off.
+      onSaved((await sellerApi.savePayments({ bank: b })).store)
     } catch (e) {
-      setState({ ok: false, msg: (e as Error).message })
+      setErr((e as Error).message)
+      setSaving(false)
     }
-    setSaving(false)
   }
-  const bank = p.bank
-  const setBank = (patch: Partial<typeof bank>) => setP({ ...p, bank: { ...bank, ...patch } })
+  const masked = b.accountNumber ? `•••• •••• ${b.accountNumber.slice(-4).padStart(4, '•')}` : b.iban ? `IBAN •••• ${b.iban.slice(-4)}` : '•••• •••• ••••'
   return (
-    <div className="ss-stack">
-      <h3 className="ss-label">Ways buyers can pay</h3>
-      <p className="ss-muted">Turn on any you like. Buy now works as soon as one is ready{methods.length ? `: right now ${methods.map((m) => ({ stripe: 'card', paypal: 'PayPal', bank: 'bank transfer' })[m]).join(', ')}` : ''}.</p>
+    <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form
+        ref={panel}
+        className="ss-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bank-dialog-title"
+        onSubmit={(e) => (e.preventDefault(), void save())}
+      >
+        <div className="ss-bankart" aria-hidden="true">
+          <div className="ss-bankcard">
+            <span className="ss-bankcard-brand"><Banknote className="h-4 w-4" /> Bank account</span>
+            <span className="ss-bankcard-name">{b.accountName || 'ACCOUNT HOLDER'}</span>
+            <span className="ss-bankcard-row">
+              <span>{masked}</span>
+              <span>{b.sortCode || '00-00-00'}</span>
+            </span>
+          </div>
+        </div>
+        <div className="ss-modal-body">
+          <h2 id="bank-dialog-title">Connect bank account</h2>
+          <p className="ss-muted">Where buyers send bank transfers. Only buyers who choose bank transfer see these details.</p>
+          <label className="ss-mfield">
+            <span>Account holder name<i aria-hidden="true">*</i></span>
+            <input className="ss-input" required autoComplete="name" value={b.accountName} onChange={(e) => set({ accountName: e.target.value })} />
+          </label>
+          <div className="ss-mgrid">
+            <label className="ss-mfield">
+              <span>Sort code</span>
+              <input className="ss-input" inputMode="numeric" placeholder="12-34-56" value={b.sortCode} onChange={(e) => set({ sortCode: e.target.value })} />
+            </label>
+            <label className="ss-mfield">
+              <span>Account number</span>
+              <input className="ss-input" inputMode="numeric" placeholder="12345678" value={b.accountNumber} onChange={(e) => set({ accountNumber: e.target.value })} />
+            </label>
+          </div>
+          <div className="ss-mgrid">
+            <label className="ss-mfield">
+              <span>IBAN <small>(optional)</small></span>
+              <input className="ss-input" value={b.iban} onChange={(e) => set({ iban: e.target.value })} />
+            </label>
+            <label className="ss-mfield">
+              <span>BIC / SWIFT <small>(optional)</small></span>
+              <input className="ss-input" value={b.bic} onChange={(e) => set({ bic: e.target.value })} />
+            </label>
+          </div>
+          <label className="ss-row">
+            <input type="checkbox" checked={b.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
+            <span>Accept bank transfers at checkout</span>
+          </label>
+          {err && <div className="ss-note" role="alert">{err}</div>}
+        </div>
+        <div className="ss-modal-foot">
+          <button type="button" className="ss-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="ss-dark" disabled={saving}>{saving ? 'Saving…' : 'Save bank details'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
 
-      <label className="ss-row">
-        <input type="checkbox" checked={p.stripe.enabled} onChange={(e) => void save({ ...p, stripe: { enabled: e.target.checked } })} />
-        <span>Card payments through Stripe {store.payouts.stripeReady ? '(ready)' : '(needs the Stripe setup above)'}</span>
-      </label>
-
-      <div className="ss-field">
-        <span className="ss-label">PayPal</span>
-        {!setup.paypal ? (
-          <div className="ss-note">PayPal isn’t switched on for this Desknoty server yet. Your details are kept and PayPal appears at checkout once it is.</div>
-        ) : (
-          <p className="ss-muted">Payments go straight to this PayPal account{setup.paypalMode === 'sandbox' ? ' (PayPal Sandbox: test money only)' : ''}.</p>
-        )}
-        <input className="ss-input" type="email" placeholder="Your PayPal account email" value={p.paypal.email} onChange={(e) => setP({ ...p, paypal: { ...p.paypal, email: e.target.value } })} />
+/** PayPal stays a compact row (unchanged behaviour). */
+function PaypalRow({ payments, methods, setup, onSaved }: { payments: PaymentSettings; methods: PayMethod[]; setup: SellerSetup; onSaved: (s: StoreView) => void }) {
+  const [email, setEmail] = useState(payments.paypal.email)
+  const [on, setOn] = useState(payments.paypal.enabled)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  const save = async () => {
+    setMsg(null)
+    try {
+      onSaved((await sellerApi.savePayments({ paypal: { enabled: on, email } })).store)
+      setMsg({ ok: true, text: 'Saved.' })
+    } catch (e) {
+      setMsg({ ok: false, text: (e as Error).message })
+    }
+  }
+  return (
+    <section className="ss-paycard" aria-label="PayPal">
+      <div className="ss-paycard-head">
+        <span className="ss-paycard-icon"><Wallet className="h-4 w-4" /></span>
+        <div className="min-w-0">
+          <h3>PayPal</h3>
+          <p className="ss-muted">{setup.paypal ? 'Payments go straight to your PayPal account.' : 'Not switched on for this Desknoty server yet; your details are kept.'}</p>
+        </div>
+        <b className={cn('ss-pay', methods.includes('paypal') ? 'ss-pay-ready' : 'ss-pay-not_connected')}>{methods.includes('paypal') ? 'On' : 'Off'}</b>
+      </div>
+      <div className="ss-paycard-actions">
+        <input className="ss-input" type="email" placeholder="PayPal account email" aria-label="PayPal account email" value={email} onChange={(e) => setEmail(e.target.value)} />
         <label className="ss-row">
-          <input type="checkbox" checked={p.paypal.enabled} onChange={(e) => setP({ ...p, paypal: { ...p.paypal, enabled: e.target.checked } })} />
+          <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} />
           <span>Accept PayPal</span>
         </label>
+        <button type="button" className="ss-ghost" onClick={() => void save()}>Save</button>
       </div>
-
-      <div className="ss-field">
-        <span className="ss-label">Bank transfer</span>
-        <p className="ss-muted">Buyers see these details and a unique reference. You confirm each payment in Orders once it’s in your bank; only then does the buyer get the download.</p>
-        <input className="ss-input" placeholder="Account name" value={bank.accountName} onChange={(e) => setBank({ accountName: e.target.value })} />
-        <div className="ss-grid2">
-          <input className="ss-input" placeholder="Sort code (12-34-56)" inputMode="numeric" value={bank.sortCode} onChange={(e) => setBank({ sortCode: e.target.value })} />
-          <input className="ss-input" placeholder="Account number" inputMode="numeric" value={bank.accountNumber} onChange={(e) => setBank({ accountNumber: e.target.value })} />
-        </div>
-        <div className="ss-grid2">
-          <input className="ss-input" placeholder="IBAN (optional)" value={bank.iban} onChange={(e) => setBank({ iban: e.target.value })} />
-          <input className="ss-input" placeholder="BIC / SWIFT (optional)" value={bank.bic} onChange={(e) => setBank({ bic: e.target.value })} />
-        </div>
-        <input className="ss-input" placeholder="Note for buyers (optional)" value={bank.instructions} onChange={(e) => setBank({ instructions: e.target.value })} />
-        <label className="ss-row">
-          <input type="checkbox" checked={bank.enabled} onChange={(e) => setBank({ enabled: e.target.checked })} />
-          <span>Accept bank transfers</span>
-        </label>
-      </div>
-
-      <button type="button" className="ss-primary" disabled={saving} onClick={() => void save()}>{saving ? 'Saving…' : 'Save payment methods'}</button>
-      {state && <div className="ss-note" role={state.ok ? 'status' : 'alert'}>{state.msg}</div>}
-    </div>
+      {msg && <div className="ss-note" role={msg.ok ? 'status' : 'alert'}>{msg.text}</div>}
+    </section>
   )
 }
 
