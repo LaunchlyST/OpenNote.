@@ -91,7 +91,7 @@ export interface PublicOrder {
   receiptStatus: string
   method?: PayMethod
   /** Bank transfer still to pay: where, how much and the reference. */
-  bank?: { accountName: string; sortCode: string | null; accountNumber: string | null; iban: string | null; bic: string | null; instructions: string | null; reference: string | null } | null
+  bank?: { bankName?: string | null; accountName: string; sortCode: string | null; accountNumber: string | null; iban: string | null; bic: string | null; instructions: string | null; reference: string | null } | null
   buyerClaimedAt?: string | null
 }
 

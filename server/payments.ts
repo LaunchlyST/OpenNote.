@@ -21,6 +21,8 @@ export interface PaymentSettings {
   paypal: { enabled: boolean; email: string }
   bank: {
     enabled: boolean
+    /** The seller's bank, as they named it (e.g. Revolut). */
+    bankName: string
     accountName: string
     sortCode: string
     accountNumber: string
@@ -33,7 +35,7 @@ export interface PaymentSettings {
 export const defaultPayments = (): PaymentSettings => ({
   stripe: { enabled: true },
   paypal: { enabled: false, email: '' },
-  bank: { enabled: false, accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
+  bank: { enabled: false, bankName: '', accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
 })
 
 export function readPayments(raw: string | null | undefined): PaymentSettings {
@@ -68,6 +70,7 @@ export function cleanPayments(input: unknown, current: PaymentSettings): Payment
   if (b.bank) {
     const k = b.bank
     next.bank.enabled = Boolean(k.enabled)
+    if ('bankName' in k) next.bank.bankName = str(k.bankName, 60)
     if ('accountName' in k) next.bank.accountName = str(k.accountName, 80)
     if ('sortCode' in k) next.bank.sortCode = str(k.sortCode, 8).replace(/[^\d]/g, '').replace(/^(\d{2})(\d{2})(\d{2})$/, '$1-$2-$3')
     if ('accountNumber' in k) next.bank.accountNumber = str(k.accountNumber, 12).replace(/\s/g, '')
@@ -88,6 +91,7 @@ export const bankComplete = (p: PaymentSettings) =>
 
 /** What a buyer is shown for a bank transfer (only after they choose it). */
 export const bankDetails = (p: PaymentSettings) => ({
+  bankName: p.bank.bankName || null,
   accountName: p.bank.accountName,
   sortCode: p.bank.sortCode || null,
   accountNumber: p.bank.accountNumber || null,

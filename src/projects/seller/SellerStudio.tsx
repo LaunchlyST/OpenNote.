@@ -19,7 +19,6 @@ import {
   Trash2,
   Upload,
   Banknote,
-  Wallet,
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { StorePage } from './StorePage'
@@ -418,44 +417,44 @@ function Studio({
   return (
     <div className="ss">
       <section className="ss-editor" aria-label="Store builder">
-        <header className="ss-head">
-          <p className="ss-kicker">Seller · Digital products</p>
-          <div className="ss-titlebar">
-            <h1>{page.name || store.handle}</h1>
-            <div className="ss-publish">
+        {/* One navbar at the very top; scrolls sideways in one row on phones */}
+        <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
+          {(
+            [
+              ['page', 'Page'],
+              ['products', `Products (${store.products.length})`],
+              ['payouts', 'Payouts'],
+              ['link', 'Bio link'],
+              ['orders', 'Orders'],
+            ] as Array<[Tab, string]>
+          ).map(([id, label]) => (
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => void navigate(id)}>
+              {label}
+            </button>
+          ))}
+        </nav>
+
+        {/* The store header: name and status on the left, Publish always top-right, fees once */}
+        <header className="ss-head ss-storebox">
+          <div className="ss-storebox-top">
+            <div className="ss-storebox-name">
+              <h1>{page.name || store.handle}</h1>
               <span className={cn('ss-live', status === 'Live' && 'on')} aria-live="polite">
                 ● {status}
                 {saving === 'saving' ? ' · saving…' : saving === 'error' ? ' · not saved' : ''}
               </span>
-              <button type="button" className="ss-primary ss-primary-sm" onClick={() => void publish()} disabled={publishing}>
-                {publishing ? 'Publishing…' : store.publishedAt ? 'Publish changes' : 'Publish'}
-              </button>
             </div>
+            <button type="button" className="ss-primary ss-primary-sm" onClick={() => void publish()} disabled={publishing}>
+              {publishing ? 'Publishing…' : store.publishedAt ? 'Publish changes' : 'Publish'}
+            </button>
           </div>
-          <p className="ss-lede">
-            Desknoty takes a {PLATFORM_FEE_PERCENT}% platform fee. Stripe’s card processing fees are separate and are charged by Stripe.
-          </p>
+          <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
           {(notice || err) && (
             <div className="ss-note" role="status">
               {err ?? notice}{' '}
               <button type="button" className="underline" onClick={() => (setErr(null), clearNotice())}>Dismiss</button>
             </div>
           )}
-          <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
-            {(
-              [
-                ['page', 'Page'],
-                ['products', `Products (${store.products.length})`],
-                ['payouts', 'Payouts'],
-                ['link', 'Bio link'],
-                ['orders', 'Orders'],
-              ] as Array<[Tab, string]>
-            ).map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => void navigate(id)}>
-                {label}
-              </button>
-            ))}
-          </nav>
         </header>
 
         {pageSave.state !== 'Saved' && <p role="status">{pageSave.state} <button type="button" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
@@ -984,8 +983,6 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const bankSet = bankComplete(payments)
   return (
     <div className="ss-stack">
-      <p className="ss-muted">Desknoty takes {PLATFORM_FEE_PERCENT}%. Payment providers charge their own fees (Stripe deducts its card fees before paying out).</p>
-
       {/* Stripe: status, refresh and the one action, together */}
       <section className="ss-paycard" aria-label="Card payments with Stripe">
         <div className="ss-paycard-head">
@@ -1017,7 +1014,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             <h3>Bank transfer</h3>
             <p className="ss-muted">
               {bankSet
-                ? `${bank.accountName} · ${bank.accountNumber ? `•••• ${bank.accountNumber.slice(-4)}` : `IBAN •••• ${bank.iban.slice(-4)}`}`
+                ? `${bank.bankName || bank.accountName} · Account ending in ${last4(payments)}`
                 : 'Buyers pay straight into your bank. You confirm each payment in Orders.'}
             </p>
           </div>
@@ -1030,8 +1027,6 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         </div>
       </section>
 
-      <PaypalRow payments={payments} methods={methods} setup={setup} onSaved={saved} />
-
       {bankOpen && <BankDialog payments={payments} onClose={() => setBankOpen(false)} onSaved={(v) => (saved(v), setBankOpen(false))} />}
     </div>
   )
@@ -1040,53 +1035,79 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
 const EMPTY_PAYMENTS: PaymentSettings = {
   stripe: { enabled: true },
   paypal: { enabled: false, email: '' },
-  bank: { enabled: false, accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
+  bank: { enabled: false, bankName: '', accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
 }
 const bankComplete = (p: PaymentSettings) => Boolean(p.bank.accountName && ((p.bank.sortCode && p.bank.accountNumber) || p.bank.iban))
+
+/**
+ * Bank colours for the account preview only (the rest of the dialog keeps Desknoty's look).
+ * Each pairs a background with a text colour chosen to keep the bank name readable.
+ */
+const BANKS: Array<{ name: string; bg: string; fg: string }> = [
+  { name: 'Revolut', bg: 'linear-gradient(135deg, #191c1f 0%, #0666eb 100%)', fg: '#ffffff' },
+  { name: 'Monzo', bg: 'linear-gradient(135deg, #14233c 0%, #ff4f40 100%)', fg: '#ffffff' },
+  { name: 'Starling Bank', bg: 'linear-gradient(135deg, #2e1a6d 0%, #7433ff 100%)', fg: '#ffffff' },
+  { name: 'Barclays', bg: 'linear-gradient(135deg, #00395d 0%, #00aeef 100%)', fg: '#ffffff' },
+  { name: 'HSBC', bg: 'linear-gradient(135deg, #8b000b 0%, #db0011 100%)', fg: '#ffffff' },
+  { name: 'Lloyds Bank', bg: 'linear-gradient(135deg, #024731 0%, #11b67a 100%)', fg: '#ffffff' },
+  { name: 'NatWest', bg: 'linear-gradient(135deg, #2b0c3f 0%, #5a287d 100%)', fg: '#ffffff' },
+  { name: 'Santander', bg: 'linear-gradient(135deg, #a50000 0%, #ec0000 100%)', fg: '#ffffff' },
+  { name: 'Halifax', bg: 'linear-gradient(135deg, #0a3f8c 0%, #005eb8 100%)', fg: '#ffffff' },
+  { name: 'Nationwide', bg: 'linear-gradient(135deg, #12164f 0%, #1a1f71 100%)', fg: '#ffffff' },
+  { name: 'Wise', bg: 'linear-gradient(135deg, #9fe870 0%, #c8f5a8 100%)', fg: '#163300' },
+]
+const NEUTRAL = { bg: 'linear-gradient(135deg, #1d1d1b 0%, #3a3a36 100%)', fg: '#ffffff' } // before a bank is chosen
+const CUSTOM = { bg: 'linear-gradient(135deg, #f1f0ec 0%, #dcdbd5 100%)', fg: '#191919' } // "Other bank"
+const OTHER = '__other__'
+const bankTheme = (name: string) => (!name ? NEUTRAL : BANKS.find((b) => b.name === name) ?? CUSTOM)
+const formatSort = (v: string) => v.replace(/\D/g, '').slice(0, 6).replace(/^(\d{2})(\d{1,2})?(\d{1,2})?$/, (_m, a, b2, c) => [a, b2, c].filter(Boolean).join('-'))
+const last4 = (p: PaymentSettings) => (p.bank.accountNumber ? p.bank.accountNumber.slice(-4) : p.bank.iban.slice(-4))
 
 /** Bank details for receiving transfers (never card details). Saved through the existing validation. */
 function BankDialog({ payments, onClose, onSaved }: { payments: PaymentSettings; onClose: () => void; onSaved: (s: StoreView) => void }) {
   // First connection: accepting transfers is on by default; editing keeps the seller's choice.
   const [b, setB] = useState(() => ({ ...payments.bank, enabled: bankComplete(payments) ? payments.bank.enabled : true }))
+  const known = BANKS.some((x) => x.name === b.bankName)
+  const [choice, setChoice] = useState(() => (!payments.bank.bankName ? '' : known ? payments.bank.bankName : OTHER))
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const panel = useRef<HTMLFormElement>(null)
   useEffect(() => {
-    panel.current?.querySelector<HTMLInputElement>('input')?.focus()
+    panel.current?.querySelector<HTMLSelectElement>('select')?.focus()
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
   const set = (patch: Partial<typeof b>) => setB({ ...b, ...patch })
+  const pick = (v: string) => {
+    setChoice(v)
+    set({ bankName: v === OTHER ? '' : v })
+  }
   const save = async () => {
+    if (!b.bankName.trim()) return setErr(choice === OTHER ? 'Enter your bank’s name.' : 'Choose your bank.')
     setSaving(true)
     setErr(null)
     try {
-      // Saving complete details switches bank transfer on; the switch below can turn it off.
       onSaved((await sellerApi.savePayments({ bank: b })).store)
     } catch (e) {
       setErr((e as Error).message)
       setSaving(false)
     }
   }
-  const masked = b.accountNumber ? `•••• •••• ${b.accountNumber.slice(-4).padStart(4, '•')}` : b.iban ? `IBAN •••• ${b.iban.slice(-4)}` : '•••• •••• ••••'
+  const theme = bankTheme(choice === OTHER ? (b.bankName ? '__custom__' : '') : b.bankName)
+  const digits = b.accountNumber.replace(/\D/g, '')
+  const shownNumber = digits ? `•••• ${digits.slice(-4)}` : b.iban ? `IBAN •••• ${b.iban.replace(/\s/g, '').slice(-4)}` : '•••• ••••'
   return (
     <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form
-        ref={panel}
-        className="ss-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bank-dialog-title"
-        onSubmit={(e) => (e.preventDefault(), void save())}
-      >
+      <form ref={panel} className="ss-modal" role="dialog" aria-modal="true" aria-labelledby="bank-dialog-title" onSubmit={(e) => (e.preventDefault(), void save())}>
+        {/* live account preview: the only place with bank colours */}
         <div className="ss-bankart" aria-hidden="true">
-          <div className="ss-bankcard">
-            <span className="ss-bankcard-brand"><Banknote className="h-4 w-4" /> Bank account</span>
-            <span className="ss-bankcard-name">{b.accountName || 'ACCOUNT HOLDER'}</span>
+          <div className="ss-bankcard" style={{ background: theme.bg, color: theme.fg }}>
+            <span className="ss-bankcard-brand">{b.bankName || 'Desknoty · Bank account'}</span>
+            <span className="ss-bankcard-name">{b.accountName || 'Account holder'}</span>
             <span className="ss-bankcard-row">
-              <span>{masked}</span>
-              <span>{b.sortCode || '00-00-00'}</span>
+              <span>{shownNumber}</span>
+              <span>{formatSort(b.sortCode) || '00-00-00'}</span>
             </span>
           </div>
         </div>
@@ -1094,13 +1115,29 @@ function BankDialog({ payments, onClose, onSaved }: { payments: PaymentSettings;
           <h2 id="bank-dialog-title">Connect bank account</h2>
           <p className="ss-muted">Where buyers send bank transfers. Only buyers who choose bank transfer see these details.</p>
           <label className="ss-mfield">
+            <span>Bank name<i aria-hidden="true">*</i></span>
+            <select className="ss-input" value={choice} onChange={(e) => pick(e.target.value)}>
+              <option value="">Choose your bank</option>
+              {BANKS.map((x) => (
+                <option key={x.name} value={x.name}>{x.name}</option>
+              ))}
+              <option value={OTHER}>Other bank</option>
+            </select>
+          </label>
+          {choice === OTHER && (
+            <label className="ss-mfield">
+              <span>Your bank’s name<i aria-hidden="true">*</i></span>
+              <input className="ss-input" maxLength={60} value={b.bankName} onChange={(e) => set({ bankName: e.target.value })} />
+            </label>
+          )}
+          <label className="ss-mfield">
             <span>Account holder name<i aria-hidden="true">*</i></span>
             <input className="ss-input" required autoComplete="name" value={b.accountName} onChange={(e) => set({ accountName: e.target.value })} />
           </label>
           <div className="ss-mgrid">
             <label className="ss-mfield">
               <span>Sort code</span>
-              <input className="ss-input" inputMode="numeric" placeholder="12-34-56" value={b.sortCode} onChange={(e) => set({ sortCode: e.target.value })} />
+              <input className="ss-input" inputMode="numeric" placeholder="12-34-56" value={b.sortCode} onChange={(e) => set({ sortCode: formatSort(e.target.value) })} />
             </label>
             <label className="ss-mfield">
               <span>Account number</span>
@@ -1125,47 +1162,10 @@ function BankDialog({ payments, onClose, onSaved }: { payments: PaymentSettings;
         </div>
         <div className="ss-modal-foot">
           <button type="button" className="ss-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="ss-dark" disabled={saving}>{saving ? 'Saving…' : 'Save bank details'}</button>
+          <button type="submit" className="ss-primary" disabled={saving}>{saving ? 'Saving…' : 'Save bank details'}</button>
         </div>
       </form>
     </div>
-  )
-}
-
-/** PayPal stays a compact row (unchanged behaviour). */
-function PaypalRow({ payments, methods, setup, onSaved }: { payments: PaymentSettings; methods: PayMethod[]; setup: SellerSetup; onSaved: (s: StoreView) => void }) {
-  const [email, setEmail] = useState(payments.paypal.email)
-  const [on, setOn] = useState(payments.paypal.enabled)
-  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
-  const save = async () => {
-    setMsg(null)
-    try {
-      onSaved((await sellerApi.savePayments({ paypal: { enabled: on, email } })).store)
-      setMsg({ ok: true, text: 'Saved.' })
-    } catch (e) {
-      setMsg({ ok: false, text: (e as Error).message })
-    }
-  }
-  return (
-    <section className="ss-paycard" aria-label="PayPal">
-      <div className="ss-paycard-head">
-        <span className="ss-paycard-icon"><Wallet className="h-4 w-4" /></span>
-        <div className="min-w-0">
-          <h3>PayPal</h3>
-          <p className="ss-muted">{setup.paypal ? 'Payments go straight to your PayPal account.' : 'Not switched on for this Desknoty server yet; your details are kept.'}</p>
-        </div>
-        <b className={cn('ss-pay', methods.includes('paypal') ? 'ss-pay-ready' : 'ss-pay-not_connected')}>{methods.includes('paypal') ? 'On' : 'Off'}</b>
-      </div>
-      <div className="ss-paycard-actions">
-        <input className="ss-input" type="email" placeholder="PayPal account email" aria-label="PayPal account email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <label className="ss-row">
-          <input type="checkbox" checked={on} onChange={(e) => setOn(e.target.checked)} />
-          <span>Accept PayPal</span>
-        </label>
-        <button type="button" className="ss-ghost" onClick={() => void save()}>Save</button>
-      </div>
-      {msg && <div className="ss-note" role={msg.ok ? 'status' : 'alert'}>{msg.text}</div>}
-    </section>
   )
 }
 

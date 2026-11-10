@@ -70,7 +70,7 @@ export type PayMethod = 'stripe' | 'paypal' | 'bank'
 export interface PaymentSettings {
   stripe: { enabled: boolean }
   paypal: { enabled: boolean; email: string }
-  bank: { enabled: boolean; accountName: string; sortCode: string; accountNumber: string; iban: string; bic: string; instructions: string }
+  bank: { enabled: boolean; bankName: string; accountName: string; sortCode: string; accountNumber: string; iban: string; bic: string; instructions: string }
 }
 
 export interface SellerSetup {

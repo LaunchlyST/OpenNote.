@@ -7334,8 +7334,9 @@ select.ss-input option {
 .ss-live { font-size: 12.5px; font-weight: 600; color: #8a6d1d; }
 .ss-live.on { color: #2f7a1d; }
 .ss-primary-sm { height: 38px !important; padding: 0 16px !important; font-size: 13.5px !important; }
-.ss-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 16px; padding: 4px; border-radius: 12px; background: #f1f0ec; }
-.ss-tabs button { padding: 7px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; color: #5f5e5b; }
+.ss-tabs { display: flex; flex-wrap: nowrap; gap: 4px; padding: 4px; border-radius: 12px; background: #f1f0ec; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.ss-tabs::-webkit-scrollbar { display: none; }
+.ss-tabs button { flex: 0 0 auto; white-space: nowrap; padding: 7px 12px; border-radius: 9px; font-size: 13px; font-weight: 600; color: #5f5e5b; }
 .ss-tabs button[aria-selected='true'] { background: #fff; color: #111114; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); }
 .ss-check { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }
 .ss-check small { margin-left: auto; color: #8a8985; }
@@ -7348,6 +7349,13 @@ select.ss-input option {
 .ss-pay-pending { color: #8a6d1d; }
 .ss-pay-incomplete { color: #b4530f; }
 .ss-pay-not_connected { color: #5f5e5b; }
+/* Seller Studio: store header box under the tabs */
+.ss-storebox { margin: 12px 0 14px; padding: 16px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--bd); background: var(--bg); display: grid; gap: 8px; }
+.ss-storebox-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.ss-storebox-name { display: grid; gap: 4px; min-width: 0; }
+.ss-storebox-name h1 { overflow-wrap: anywhere; }
+.ss-storebox .ss-primary { white-space: nowrap; }
+.ss-storebox .ss-lede { margin: 0; }
 /* Payouts: one compact card per payment method */
 .ss-paycard { display: grid; gap: 12px; padding: 14px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--bd); background: var(--bg); }
 .ss-paycard-head { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; }
@@ -7363,7 +7371,7 @@ select.ss-input option {
 .ss-modal { width: min(100%, 400px); max-height: calc(100dvh - 32px); overflow: auto; border-radius: 20px; background: #fff; color: #191919; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.35), inset 0 0 0 1px #ececea; }
 .ss-bankart { margin: 8px 8px 0; padding: 24px 24px 0; border-radius: 14px 14px 0 0; background: #f1f1ef; overflow: hidden; }
 .ss-bankcard { display: grid; gap: 14px; padding: 16px 18px 20px; border-radius: 12px 12px 0 0; color: #fff; background: linear-gradient(135deg, #b9a7f5 0%, #f5a06a 55%, #f3d34a 100%); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.06em; }
-.ss-bankcard-brand { display: inline-flex; align-items: center; gap: 6px; font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0; }
+.ss-bankcard-brand { font-family: inherit; font-size: 18px; font-weight: 750; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .ss-bankcard-name { margin-top: 18px; font-size: 11.5px; text-transform: uppercase; opacity: 0.95; }
 .ss-bankcard-row { display: flex; justify-content: space-between; gap: 12px; font-size: 15px; font-weight: 600; }
 .ss-modal-body { display: grid; gap: 12px; padding: 18px 16px 16px; }

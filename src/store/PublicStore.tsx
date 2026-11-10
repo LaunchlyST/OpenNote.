@@ -150,6 +150,7 @@ function BankPending({ order, claim }: { order: PublicOrder; claim?: () => Promi
       <p className="ps-kicker">Bank transfer · waiting for payment</p>
       <h1>Pay {formatPrice(order.amountMinor, order.currency)} by bank transfer</h1>
       <dl className="ps-bank-details">
+        {b.bankName && (<><dt>Bank</dt><dd>{b.bankName}</dd></>)}
         <dt>Account name</dt><dd>{b.accountName}</dd>
         {b.sortCode && (<><dt>Sort code</dt><dd>{b.sortCode}</dd></>)}
         {b.accountNumber && (<><dt>Account number</dt><dd>{b.accountNumber}</dd></>)}
