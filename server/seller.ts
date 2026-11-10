@@ -739,6 +739,33 @@ async function storeView(s: StoreRow) {
   }
 }
 
+/**
+ * After TikTok connects: the store page takes the TikTok display name and
+ * profile photo (copied into Desknoty's own image storage, since TikTok's
+ * image links expire), and the TikTok username becomes the store handle when
+ * it's a valid, free handle. Changes go to the draft; the seller publishes.
+ */
+async function applyTiktokProfile(store: StoreRow, t: { username: string; displayName: string; avatarUrl: string }) {
+  const draft = JSON.parse(store.draft) as Page
+  if (t.displayName) draft.name = t.displayName.slice(0, 60)
+  if (/^https:\/\//.test(t.avatarUrl)) {
+    const img = await fetch(t.avatarUrl, { signal: AbortSignal.timeout(10_000) })
+    const type = (img.headers.get('content-type') ?? '').split(';')[0]
+    const body = Buffer.from(await img.arrayBuffer())
+    if (img.ok && /^image\/(png|jpe?g|gif|webp)$/.test(type) && body.length > 0 && body.length <= 5 * 1024 * 1024) {
+      const id = `med_${randomBytes(12).toString('hex')}`
+      await blobs().put('media', id, body, type)
+      await sql.run(`INSERT INTO seller_media (id, "storeId", type, size, "createdAt") VALUES (?, ?, ?, ?, ?)`, id, store.id, type, body.length, now())
+      draft.avatar = id
+    }
+  }
+  await sql.run(`UPDATE seller_store SET draft = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(draft), now(), store.id)
+  const handle = t.username.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 30)
+  if (handle && handle !== store.handle && !handleProblem(handle) && !(await q.storeByHandle(handle))) {
+    await sql.run(`UPDATE seller_store SET handle = ?, "updatedAt" = ? WHERE id = ?`, handle, now(), store.id).catch(() => {})
+  }
+}
+
 export function sellerRouter() {
   const r = Router()
 
@@ -1078,6 +1105,7 @@ export function sellerRouter() {
       // Profile only; the access token is not kept.
       const profile = JSON.stringify({ openId: u.open_id, username: u.username ?? '', displayName: u.display_name ?? '', avatarUrl: u.avatar_url ?? '' })
       await sql.run(`UPDATE seller_store SET tiktok = ?, "updatedAt" = ? WHERE id = ?`, profile, now(), store.id)
+      await applyTiktokProfile(store, { username: u.username ?? '', displayName: u.display_name ?? '', avatarUrl: u.avatar_url ?? '' }).catch((err) => console.error('[seller] TikTok profile copy failed', err))
       return back('connected')
     } catch (err) {
       console.error('[seller] TikTok login failed', err)

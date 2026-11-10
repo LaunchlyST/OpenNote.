@@ -7583,3 +7583,7 @@ select.ss-input option {
 .ss-linkurl { margin-top: 2px; font-size: 15px; font-weight: 650; overflow-wrap: anywhere; }
 .ss-steps { display: grid; gap: 8px; padding-left: 18px; list-style: decimal; font-size: 13.5px; line-height: 1.45; }
 .ss-paycard-actions a.ss-ghost { display: inline-flex; align-items: center; gap: 6px; }
+/* the store page fills the screen, so the footer (© name · desknoty.com) sits at the bottom middle */
+.ps { display: flex; flex-direction: column; }
+.ps-main { flex: 1 0 auto; display: flex; flex-direction: column; width: 100%; }
+.ps-main > .sp { flex: 1 0 auto; }
