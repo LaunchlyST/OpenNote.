@@ -76,8 +76,6 @@ function Header({ page, handle, showSocials, compact = false }: { page: Page; ha
   const avatar = mediaUrl(page.avatar)
   return (
     <header className={compact ? 'sp-head sp-head-compact' : 'sp-head'}>
-      {/* a banner in the store's own accent colour, so every store looks like its own */}
-      {!compact && <span className="sp-band" aria-hidden="true" />}
       <span className="sp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : { background: 'var(--ac)', color: 'var(--on)' }}>
         {!avatar && (page.name.trim().charAt(0).toUpperCase() || handle.charAt(0).toUpperCase())}
       </span>
@@ -181,7 +179,10 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
                 <article key={prod.id} className="sp-card">
                   <ProductLink prod={prod} live={p.live} handle={p.handle}>
                     <Cover p={prod} />
-                    <h3>{prod.title}</h3>
+                    <span className="sp-tile-text">
+                      <h3>{prod.title}</h3>
+                      {prod.description && <small>{prod.description.split('\n')[0]}</small>}
+                    </span>
                   </ProductLink>
                   <BuyRow prod={prod} {...p} small />
                 </article>
