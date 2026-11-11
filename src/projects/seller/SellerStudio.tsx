@@ -631,6 +631,11 @@ function Studio({
             </button>
           </div>
           <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
+          {!store.payouts.checkoutReady && (
+            <p className="ss-needbank" role="status">
+              Buyers can’t pay yet. <button type="button" onClick={() => void navigate('payouts')}>Add a bank account in Payouts</button>
+            </p>
+          )}
           {(notice || err) && (
             <div className="ss-note" role="status">
               {err ?? notice}{' '}
@@ -642,7 +647,8 @@ function Studio({
         <div className="ss-soonwrap">
         {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
-        {tab === 'page' && <>
+        {/* Style 2: the Page and Products tabs are empty for now */}
+        {tab === 'page' && slide === 0 && <>
           <div className="ss-undo">
             <button type="button" onClick={undo} disabled={!hist.current.past.length} aria-label="Undo"><span aria-hidden="true">↶</span> Undo</button>
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
@@ -651,13 +657,13 @@ function Studio({
           <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} />
           {picked && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
-        {tab === 'products' && <ProductsEditor store={store} setStore={setStore} />}
+        {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
         </div>
         {/* Style switch: pinned to the bottom middle of this panel */}
-        {tab === 'page' && (
+        {(tab === 'page' || tab === 'products') && (
           <div className="ss-stylebar">
             <div className="ss-stylepick" role="tablist" aria-label="Store style">
               <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>

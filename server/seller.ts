@@ -28,7 +28,7 @@ import type { Sql } from './sql.ts'
 import { env } from './env.ts'
 import { enqueueEmail, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
-import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook } from './payments.ts'
+import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices } from './payments.ts'
 import type { PaymentSettings } from './payments.ts'
 
 /* ------------------------------------------------------------- config --- */
@@ -253,6 +253,7 @@ interface OrderRow {
   buyerClaimedAt: string | null
   payerName?: string | null
   payerBank?: string | null
+  payTo?: string | null
   checkoutKey: string | null
   checkoutUrl: string | null
   receiptId: number | null
@@ -1354,7 +1355,7 @@ export function sellerRouter() {
   pub.get('/:handle', async (req, res) => {
     const s = await liveStore(req, res)
     if (!s) return
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
   pub.post('/:handle/checkout', async (req, res) => {
@@ -1404,10 +1405,18 @@ export function sellerRouter() {
     // Bank transfer: which bank the buyer pays from and the name on their account, so the seller can match it
     const payerName = method === 'bank' ? str(req.body?.payerName, 80).trim() : ''
     const payerBank = method === 'bank' ? str(req.body?.payerBank, 60).trim() : ''
+    // which of the seller's saved accounts the buyer pays into (default: the one in use)
+    let payTo: string | null = null
+    if (method === 'bank') {
+      const i = Number(req.body?.bankIndex)
+      const chosen = Number.isInteger(i) && i >= 0 ? pay.savedBanks[i] : undefined
+      if (req.body?.bankIndex !== undefined && !chosen) return void res.status(400).json({ error: 'Choose one of the seller’s bank accounts.' })
+      payTo = JSON.stringify(chosen ?? { ...pay.bank, enabled: undefined })
+    }
     const id = `ord_${randomBytes(12).toString('hex')}`
     const order = await sql.tx(async (tx) => {
       await tx.run(
-        `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, reference, "buyerEmail", "payerName", "payerBank") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
+        `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, reference, "buyerEmail", "payerName", "payerBank", "payTo") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
         id, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download',
         method === 'paypal' ? `paypal:${pay.paypal.email}` : 'bank',
         p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode, method,
@@ -1415,6 +1424,7 @@ export function sellerRouter() {
         method === 'bank' ? buyerEmail : null,
         payerName || null,
         payerBank || null,
+        payTo,
       )
       return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
     })
@@ -1471,7 +1481,7 @@ export function sellerRouter() {
       downloadExpiresAt,
       method: o.method,
       // Bank transfer: what to pay and where, until the seller confirms it arrived.
-      bank: o.method === 'bank' && o.status === 'pending' ? { ...bankDetails(readPayments(s.payments)), reference: o.reference } : null,
+      bank: o.method === 'bank' && o.status === 'pending' ? { ...(o.payTo ? bankDetailsOf(JSON.parse(o.payTo), readPayments(s.payments).bank.instructions) : bankDetails(readPayments(s.payments))), reference: o.reference } : null,
       buyerClaimedAt: o.buyerClaimedAt,
       payerBank: o.method === 'bank' ? o.payerBank ?? null : null,
       receiptSent: receipt?.status === 'sent',

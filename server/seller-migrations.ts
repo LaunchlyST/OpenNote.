@@ -26,7 +26,7 @@ export async function migrateSeller() {
   for (const [table, columns] of Object.entries({
     seller_store: { revision: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", payments: 'TEXT' },
     seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0' },
-    seller_order: { checkoutKey: 'TEXT', checkoutUrl: 'TEXT', receiptId: 'INTEGER', paymentIntent: 'TEXT', refunded: 'INTEGER NOT NULL DEFAULT 0', disputed: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", method: "TEXT NOT NULL DEFAULT 'stripe'", reference: 'TEXT', providerOrderId: 'TEXT', buyerClaimedAt: 'TEXT', payerName: 'TEXT', payerBank: 'TEXT' },
+    seller_order: { checkoutKey: 'TEXT', checkoutUrl: 'TEXT', receiptId: 'INTEGER', paymentIntent: 'TEXT', refunded: 'INTEGER NOT NULL DEFAULT 0', disputed: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", method: "TEXT NOT NULL DEFAULT 'stripe'", reference: 'TEXT', providerOrderId: 'TEXT', buyerClaimedAt: 'TEXT', payerName: 'TEXT', payerBank: 'TEXT', payTo: 'TEXT' },
   })) {
     const existing = sql.dialect === 'sqlite'
       ? await sql.all<{ name: string }>(`PRAGMA table_info(${table})`)

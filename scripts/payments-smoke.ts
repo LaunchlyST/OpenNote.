@@ -130,6 +130,11 @@ try {
   const bo = b1.json?.order
   check('bank checkout creates a pending order with amount, details and a reference', b1.status === 200 && bo?.status === 'pending' && bo.method === 'bank' && /^DK-[A-Z2-9]{8}$/.test(bo.bank?.reference) && bo.bank.accountNumber === '12345678' && bo.amountMinor === 1250, JSON.stringify(b1.json).slice(0, 200))
   check('the buyer’s bank shows on their order page', b1.json?.order?.payerBank === 'Monzo')
+  const pubBanks = (await req('GET', '/api/store/ava-pay')).json.banks
+  check('the store lists the seller’s bank accounts by name and last 4 digits only', Array.isArray(pubBanks) && pubBanks.length >= 1 && pubBanks[0].last4.length === 4 && !JSON.stringify(pubBanks).includes('12345678'))
+  check('a bank account the seller doesn’t have is refused', (await req('POST', '/api/store/ava-pay/checkout', { productId: pid, method: 'bank', checkoutKey: key(), email: 'x@pay.test', bankIndex: 9 })).status === 400)
+  const pick = await req('POST', '/api/store/ava-pay/checkout', { productId: pid, method: 'bank', checkoutKey: key(), email: 'pick@pay.test', bankIndex: pubBanks[0].index })
+  check('the chosen account’s details are shown to pay into', pick.status === 200 && String(pick.json?.order?.bank?.accountNumber ?? '').endsWith(pubBanks[0].last4))
   check('a retried bank checkout returns the same order', b2.json?.order?.id === bo.id && dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "checkoutKey" = ?`, bk).n === 1)
   const k = new URL(b1.json.orderUrl, ORIGIN).searchParams.get('k')!
   check('the unpaid bank order has no download link', bo.downloadUrl === null)

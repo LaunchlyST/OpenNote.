@@ -60,7 +60,7 @@ export default function PublicStore({ path }: { path: string }) {
     setBuyErr(null)
     setChoosing(p)
   }
-  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName: string; payerBank: string }) => {
+  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => {
     if (checkoutBusy.current) return
     checkoutBusy.current = true
     setBuying(p.id)
@@ -96,6 +96,7 @@ export default function PublicStore({ path }: { path: string }) {
     <PayChooser
       product={choosing}
       methods={store.methods ?? ['stripe']}
+      banks={store.banks ?? []}
       busy={buying === choosing.id}
       error={buyErr}
       seller={store.page.name || store.handle}
@@ -111,7 +112,7 @@ export default function PublicStore({ path }: { path: string }) {
       <Shell store={store}>
         {params.get('checkout') === 'cancelled' && <Banner>Checkout cancelled. You weren’t charged.</Banner>}
         {buyErr && <Banner>{buyErr}</Banner>}
-        {!store.checkoutReady && <Banner>This seller isn’t taking payments yet.</Banner>}
+        {!store.checkoutReady && <Banner>This seller hasn’t added a bank account in Payouts yet, so you can’t buy right now.</Banner>}
         {chooser}
         {store.page.layout === 'style2' ? <Style2Page {...base} only={product} /> : <StorePage {...base} only={product} />}
         <p className="ps-back"><a href={`/${store.handle}`}>← All products</a></p>
@@ -131,7 +132,6 @@ export default function PublicStore({ path }: { path: string }) {
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
 type Choice = 'card' | 'paypal' | 'bank'
 const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', paypal: 'paypal', bank: 'bank' }
-const PAYER_BANKS = ['Revolut', 'Monzo', 'Starling Bank', 'Barclays', 'HSBC', 'Lloyds Bank', 'NatWest', 'Santander', 'Halifax', 'Nationwide', 'Wise', 'Other bank']
 
 /** A bank's app icon when we have its logo; otherwise a neat initial. */
 function BankIcon({ name }: { name: string }) {
@@ -153,7 +153,7 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName: string; payerBank: string }) => void; onClose: () => void }) {
+function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => void; onClose: () => void }) {
   const choices: Choice[] = [
     ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
     ...(methods.includes('stripe') ? (['card'] as Choice[]) : []),
@@ -161,17 +161,17 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
   ]
   const [choice, setChoice] = useState<Choice>(choices[0] ?? 'card')
   const [email, setEmail] = useState('')
-  const [payerBank, setPayerBank] = useState('')
-  const [payerName, setPayerName] = useState('')
+  const [payTo, setPayTo] = useState<number>(() => (banks.find((b) => b.inUse) ?? banks[0])?.index ?? -1)
   const [remember, setRemember] = useState(() => { try { return Boolean(localStorage.getItem('desknoty.payer')) } catch { return false } })
   useEffect(() => {
     // details this buyer chose to remember on this device
-    try { const j = JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null'); if (j) { setEmail(j.email ?? ''); setPayerName(j.name ?? ''); setPayerBank(j.bank ?? '') } } catch { /* none */ }
+    try { const j = JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null'); if (j) setEmail(j.email ?? '') } catch { /* none */ }
   }, [])
   const method = CHOICE_METHOD[choice]
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
   const isBank = method === 'bank'
-  const ready = isBank ? valid && Boolean(payerBank) && payerName.trim().length > 1 : valid || !email.trim()
+  const noBank = isBank && banks.length === 0
+  const ready = isBank ? valid && !noBank && payTo >= 0 : valid || !email.trim()
   const canPay = !busy && ready
   const price = formatPrice(product.priceMinor, product.currency)
   useEffect(() => {
@@ -184,10 +184,10 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
   const submit = () => {
     if (!canPay) return
     try {
-      if (remember) localStorage.setItem('desknoty.payer', JSON.stringify({ email: email.trim(), name: payerName.trim(), bank: payerBank }))
+      if (remember) localStorage.setItem('desknoty.payer', JSON.stringify({ email: email.trim() }))
       else localStorage.removeItem('desknoty.payer')
     } catch { /* storage blocked */ }
-    onPay(method, email.trim() || undefined, isBank ? { payerName: payerName.trim(), payerBank } : undefined)
+    onPay(method, email.trim() || undefined, isBank ? { bankIndex: payTo } : undefined)
   }
   const cover = product.cover ? mediaUrl(product.cover) : null
   return (
@@ -217,17 +217,19 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
 
             {isBank ? (
               <>
-                <label className="co3-field"><span>Name on the account</span><input autoComplete="name" placeholder="Jane Doe" value={payerName} onChange={(e) => setPayerName(e.target.value)} maxLength={80} aria-label="Name on your bank account" /></label>
-                <label className="co3-field">
-                  <span>Your bank</span>
-                  <div className="co3-selectwrap">
-                    <select value={payerBank} onChange={(e) => setPayerBank(e.target.value)} aria-label="Your bank">
-                      <option value="">Choose your bank</option>
-                      {PAYER_BANKS.map((b) => <option key={b} value={b}>{b}</option>)}
-                    </select>
-                    {payerBank && <BankIcon name={payerBank} />}
-                  </div>
-                </label>
+                {noBank ? (
+                  <p className="co3-warn" role="alert">{seller} hasn’t added a bank account yet. The seller needs to add one in Payouts before you can pay by bank transfer.</p>
+                ) : (
+                  <label className="co3-field">
+                    <span>Pay to</span>
+                    <div className="co3-selectwrap">
+                      <select value={payTo} onChange={(e) => setPayTo(Number(e.target.value))} aria-label="Pay to">
+                        {banks.map((b) => <option key={b.index} value={b.index}>{b.bankName} ••{b.last4}</option>)}
+                      </select>
+                      {banks.find((b) => b.index === payTo) && <BankIcon name={banks.find((b) => b.index === payTo)!.bankName} />}
+                    </div>
+                  </label>
+                )}
                 <label className="co3-field"><span>Email for your download</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" /></label>
                 
               </>

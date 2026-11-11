@@ -133,6 +133,21 @@ export const bankDetails = (p: PaymentSettings) => ({
   instructions: p.bank.instructions || null,
 })
 
+/** The same, for one particular saved account (the one the buyer chose to pay into). */
+export const bankDetailsOf = (b: SavedBank, instructions = '') => ({
+  bankName: b.bankName || null,
+  accountName: b.accountName,
+  sortCode: b.sortCode || null,
+  accountNumber: b.accountNumber || null,
+  iban: b.iban || null,
+  bic: b.bic || null,
+  instructions: b.instructions || instructions || null,
+})
+
+/** What a buyer may pick from before paying: bank name and last 4 digits only. */
+export const bankChoices = (p: PaymentSettings) =>
+  p.savedBanks.map((b, index) => ({ index, bankName: b.bankName || 'Bank account', last4: (b.accountNumber || b.iban).slice(-4), inUse: (Boolean(b.iban) && b.iban === p.bank.iban) || (Boolean(b.accountNumber) && b.accountNumber === p.bank.accountNumber && b.sortCode === p.bank.sortCode) }))
+
 /** Short, unique, typo-resistant reference for a bank transfer (no 0/O/1/I). */
 export function bankReference(orderId: string): string {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'

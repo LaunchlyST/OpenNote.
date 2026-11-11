@@ -8064,3 +8064,6 @@ select.ss-input option {
 .co3-pay { align-content: start; }
 .co3-thumb { width: 84px; height: 84px; border-radius: 12px; }
 .co3-item b { font-size: 15px; }
+.co3-warn { margin: 0; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.45; color: #92400e; background: #fef3c7; }
+.ss-needbank { margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; font-size: 13px; font-weight: 500; color: #92400e; background: #fef3c7; }
+.ss-needbank button { margin-left: 4px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }

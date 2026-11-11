@@ -83,6 +83,8 @@ export interface PublicStore {
   checkoutReady: boolean
   /** Payment methods this seller accepts right now. */
   methods?: PayMethod[]
+  /** The seller's bank accounts a buyer can pay into (bank name and last 4 digits only). */
+  banks?: Array<{ index: number; bankName: string; last4: string; inUse: boolean }>
   /** Payments go through Stripe Sandbox: no real money moves. */
   testMode?: boolean
 }
@@ -110,7 +112,7 @@ export interface PublicOrder {
 
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName: string; payerBank: string }) =>
+  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) =>
     call<{ url?: string; orderUrl?: string; order?: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, ...(payer ?? {}) }),
   /** Bank transfer: "I've sent it" (never unlocks the download). */
   claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
