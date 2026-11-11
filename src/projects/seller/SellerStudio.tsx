@@ -641,7 +641,7 @@ function Studio({
           )}
         </header>}
 
-        <div className={cn('ss-soonwrap', slide !== 0 && 'ss-editor-soon')} inert={slide !== 0 ? true : undefined}>
+        <div className="ss-soonwrap">
         {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
         {tab === 'page' && <>
