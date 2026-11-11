@@ -7619,3 +7619,11 @@ select.ss-input option {
 .ss-ttflow .ss-tt { width: 100%; height: 48px; justify-content: center; background: #111; color: #fff; opacity: 1; }
 .ss-ttflow .ss-tt:disabled { background: #111; color: rgba(255,255,255,.55); cursor: not-allowed; }
 @media (max-width: 420px) { .ss-ttsteps { gap: 4px; font-size: 11.5px; } .ss-ttsteps li { padding-right: 8px; } }
+/* View live ↔ Connect TikTok: hover swipes up, leave swipes back */
+.ss-swap { height: 34px; overflow: hidden; border-radius: 10px; }
+.ss-swap-track { display: flex; flex-direction: column; transition: transform .28s cubic-bezier(.2,.8,.2,1); }
+.ss-swap-track > * { height: 34px; flex: none; justify-content: center; white-space: nowrap; }
+.ss-swap.can:hover .ss-swap-track, .ss-swap.can:focus-within .ss-swap-track { transform: translateY(-34px); }
+.ss-swap:not(.can) .ss-swap-track > * + * { display: none; }
+.ss-swap-off { opacity: .6; cursor: default; }
+@media (hover: none) { .ss-swap { height: auto; } .ss-swap.can .ss-swap-track { gap: 6px; } .ss-swap.can:hover .ss-swap-track { transform: none; } }

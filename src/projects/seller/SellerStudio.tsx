@@ -542,18 +542,24 @@ function Studio({
               <Monitor className="h-3.5 w-3.5" /> Desktop
             </button>
           </div>
-          {/* View live and, until TikTok is connected, Connect TikTok side by side */}
+          {/* View live; hovering swipes up to Connect TikTok until TikTok is connected */}
           <div className="ss-livebar">
-            {store.publishedAt && (
-              <a className="ss-ghost" href={`/${store.handle}`} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-3.5 w-3.5" /> View live
-              </a>
-            )}
-            {!store.tiktok && (
-              <button type="button" className="ss-ghost" onClick={() => (skipTT.clear(store.id), window.location.reload())}>
-                <TikTokMark /> Connect TikTok
-              </button>
-            )}
+            <div className={cn('ss-swap', store.publishedAt && !store.tiktok && 'can')}>
+              <div className="ss-swap-track">
+                {store.publishedAt ? (
+                  <a className="ss-ghost" href={`/${store.handle}`} target="_blank" rel="noreferrer">
+                    <ExternalLink className="h-3.5 w-3.5" /> View live
+                  </a>
+                ) : (
+                  <span className="ss-ghost ss-swap-off">Not published yet</span>
+                )}
+                {!store.tiktok && (
+                  <button type="button" className="ss-ghost" onClick={() => (skipTT.clear(store.id), window.location.reload())}>
+                    <TikTokMark /> Connect TikTok
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
