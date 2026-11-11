@@ -607,7 +607,14 @@ function Studio({
         </nav>
 
         {/* The store header: name and status on the left, Publish always top-right, fees once */}
-        <header className="ss-head ss-storebox">
+        {tab === 'payouts' && (notice || err) && (
+          <div className="ss-note" role="status">
+            {err ?? notice}{' '}
+            <button type="button" className="underline" onClick={() => (setErr(null), clearNotice())}>Dismiss</button>
+          </div>
+        )}
+        {/* On Payouts the Earnings card takes this box's place */}
+        {tab !== 'payouts' && <header className="ss-head ss-storebox">
           <div className="ss-storebox-top">
             <div className="ss-storebox-name">
               <h1>{page.name || store.handle}</h1>
@@ -628,7 +635,7 @@ function Studio({
               <button type="button" className="underline" onClick={() => (setErr(null), clearNotice())}>Dismiss</button>
             </div>
           )}
-        </header>
+        </header>}
 
         {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
