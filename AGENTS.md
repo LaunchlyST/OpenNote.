@@ -100,6 +100,15 @@ scripts/        sync tooling and smoke tests
 CLAUDE.md       mirror of this file
 ```
 
+## Seller Studio: Style 2
+
+Style 2 is the seller store's second layout (Shopify-style). Design it in
+`src/projects/seller/Style2.tsx` and `src/projects/seller/style2.css`.
+Whatever you change there shows in Seller Studio's phone when "Style 2" is
+selected, and on the live store once the seller publishes Style 2.
+Style 1 (`StorePage.tsx`) stays as it is. Keep Buy now calling `onBuy` (the
+real checkout) and product links as `/<handle>/p/<productId>`.
+
 ## Checks
 
 ```sh

@@ -33,6 +33,8 @@ export interface Page {
   /** A second design to try; `use` picks which one Publish puts live. */
   style2?: Page | null
   use?: 1 | 2
+  /** Set on the published page when Style 2 went live. */
+  layout?: 'style2'
 }
 
 /** What the storefront renderer needs to know about a product. */

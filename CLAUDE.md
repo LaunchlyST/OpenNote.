@@ -68,6 +68,12 @@ elayadesign/ai-design-skills (MIT, see the LICENSE beside it).
   explicit "DEPLOY NOW".
 - Never commit secrets; `.env` is git-ignored.
 
+## Seller Studio: Style 2
+
+Design Style 2 in `src/projects/seller/Style2.tsx` + `style2.css`; it shows in
+the Studio phone (Style 2) and on the live store when Style 2 is published.
+Leave Style 1 (`StorePage.tsx`) unchanged.
+
 ## Checks
 
 `npm run build`, `npm test`, `npm run test:deploy` must pass before a push.

@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { StorePage, storeStyle } from './StorePage'
+import { Style2Page } from './Style2'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
 import type { Earnings } from './api'
@@ -462,7 +463,7 @@ function Studio({
   const full = pageSave.value
   // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
   const page: Page = full
-  const [slide, setSlide] = useState<0 | 1>(0)
+  const [slide, setSlide] = useState<0 | 1>(full.use === 2 ? 1 : 0)
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [toast, setToast] = useState(false)
   // Undo / redo over the draft (every change still autosaves as the draft only).
@@ -564,14 +565,18 @@ function Studio({
   const swiped = useRef(false)
   const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' || pageSave.state === 'Unsaved changes' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
-    try { await flushSellerEdits(); setTab(id); if (id !== 'page') setSlide(0) } catch (e) { setErr((e as Error).message) }
+    try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
   }
 
   const publish = async () => {
     setPublishing(true)
     setErr(null)
     try {
-      if (slide !== 0) throw new Error('Style 2 is coming soon and can’t be published.')
+      // Publishing from a style puts that style live (same content, its own layout).
+      const use = slide === 1 ? 2 : 1
+      if ((full.use ?? 1) !== use) pageSave.edit({ ...full, use })
+      // save this editor's draft (with the chosen style) before anything else
+      await pageSave.flush()
       await flushSellerEdits()
       const r = await sellerApi.publish()
       setStore(r.store)
@@ -623,8 +628,8 @@ function Studio({
               </span>
               <span className="ss-draftstate" aria-live="polite">{saving === 'saving' || pageSave.dirty ? 'Saving draft…' : saving === 'error' ? 'Draft not saved' : 'Draft saved'}</span>
             </div>
-            <button type="button" className="ss-primary ss-primary-sm" onClick={() => void publish()} disabled={publishing || slide !== 0} title={slide !== 0 ? 'Style 2 is coming soon: publishing is off' : undefined}>
-              {slide !== 0 ? 'Style 2 · Coming soon' : publishing ? 'Publishing…' : store.publishedAt ? 'Publish changes' : 'Publish'}
+            <button type="button" className="ss-primary ss-primary-sm" onClick={() => void publish()} disabled={publishing}>
+              {publishing ? 'Publishing…' : `Publish ${slide === 1 ? 'Style 2' : store.publishedAt ? 'changes' : ''}`.trim()}
             </button>
           </div>
           <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
@@ -658,7 +663,7 @@ function Studio({
           <div className="ss-stylebar">
             <div className="ss-stylepick" role="tablist" aria-label="Store style">
               <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
-              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2 <em>Soon</em></button>
+              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2</button>
             </div>
           </div>
         )}
@@ -717,7 +722,9 @@ function Studio({
                 <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onPick={(id, el) => (setTab('page'), openEditor(id, el))} />
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
               </div>
-              <div className="ss-slide ss-slide-empty" aria-label="Style 2 (empty, coming soon)" aria-hidden={slide !== 1} />
+              <div className="ss-slide" aria-label="Style 2 preview" aria-hidden={slide !== 1}>
+                <Style2Page page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} />
+              </div>
             </div>
           </div>
         </div>

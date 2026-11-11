@@ -330,16 +330,19 @@ interface Page {
   /** Editor only: a second design the seller can try, and which one Publish puts live. */
   style2?: Page | null
   use?: 1 | 2
+  /** Set on the published page when Style 2 went live. */
+  layout?: 'style2'
 }
 
 /** The page that goes live: the style the seller picked, without the editor-only fields. */
 export function liveOf(draftJson: string): string {
   const d = JSON.parse(draftJson) as Page
-  const { style2, use, ...one } = d
-  // Style 2 is "coming soon": it is never published. Publish always puts Style 1 live.
+  const { style2, use, layout, ...one } = d
   void style2
-  void use
-  return JSON.stringify(one)
+  void layout
+  // Style 2 shows the same content (name, products, sections) in its own layout
+  // (src/projects/seller/Style2.tsx). The page remembers which layout went live.
+  return JSON.stringify(use === 2 ? { ...one, layout: 'style2' } : one)
 }
 
 /** Accepts a page from the editor, keeping only known fields and products this store owns. */
@@ -445,10 +448,11 @@ function cleanLook(input: unknown): Record<string, string> | null {
 }
 
 function cleanStyle2(p: Record<string, unknown>, productIds: Set<string>): { style2?: Page; use?: 1 | 2 } {
-  if (!p.style2 || typeof p.style2 !== 'object') return {}
+  const use = p.use === 2 ? 2 : 1
+  if (!p.style2 || typeof p.style2 !== 'object') return use === 2 ? { use } : {}
   const two = cleanPage(p.style2, productIds, true)
-  if (typeof two === 'string') return {}
-  return { style2: two, use: p.use === 2 ? 2 : 1 }
+  if (typeof two === 'string') return use === 2 ? { use } : {}
+  return { style2: two, use }
 }
 
 export function defaultPage(name: string): Page {

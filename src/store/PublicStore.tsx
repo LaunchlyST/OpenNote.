@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { StorePage, storeStyle } from '../projects/seller/StorePage'
+import { Style2Page } from '../projects/seller/Style2'
 import { formatPrice } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import type { PublicOrder, PublicStore as Store } from '../projects/seller/api'
@@ -93,7 +94,7 @@ export default function PublicStore({ path }: { path: string }) {
         {buyErr && <Banner>{buyErr}</Banner>}
         {!store.checkoutReady && <Banner>This seller isn’t taking payments yet.</Banner>}
         {chooser}
-        <StorePage {...base} only={product} />
+        {store.page.layout === 'style2' ? <Style2Page {...base} only={product} /> : <StorePage {...base} only={product} />}
         <p className="ps-back"><a href={`/${store.handle}`}>← All products</a></p>
       </Shell>
     )
@@ -102,7 +103,7 @@ export default function PublicStore({ path }: { path: string }) {
     <Shell store={store}>
       {buyErr && <Banner>{buyErr}</Banner>}
       {chooser}
-      <StorePage {...base} />
+      {store.page.layout === 'style2' ? <Style2Page {...base} /> : <StorePage {...base} />}
     </Shell>
   )
 }
