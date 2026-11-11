@@ -35,6 +35,8 @@ export function HomeGate() {
     }
   }, [navigate])
 
+  // desknoty.com/?preview=coming-soon shows the Coming soon page whatever the mode (view only)
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'coming-soon') return <LaunchPage mode="construction" />
   if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
   return mode === 'construction' ? <LaunchPage mode="construction" /> : <ComingSoon />
 }
