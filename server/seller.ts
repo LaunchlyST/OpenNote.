@@ -58,6 +58,12 @@ const seller = {
 const STRIPE_V2_VERSION = '2026-10-28.endive'
 const tiktokRedirect = () => (process.env.TIKTOK_REDIRECT_URI ?? `${seller.apiUrl}/api/seller/tiktok/callback`).trim()
 
+/**
+ * Withdrawals move money, so they are on in Stripe Sandbox (test keys) only,
+ * unless the owner explicitly sets SELLER_LIVE_PAYOUTS=true for live keys.
+ */
+const payoutsAllowed = () => Boolean(seller.stripeSecret) && (stripeMode === 'test' || process.env.SELLER_LIVE_PAYOUTS === 'true')
+
 export const sellerSetup = () => ({
   stripe: Boolean(seller.stripeSecret),
   webhook: Boolean(seller.webhookSecret),
@@ -1039,6 +1045,69 @@ export function sellerRouter() {
     for (const f of files) for (const id of [f.fileId, f.pubFileId]) if (id && /^fil_[a-f0-9]{32}$/.test(id)) void blobs().remove('files', id)
     for (const m of media) void blobs().remove('media', m.id)
     res.json({ store: null })
+  })
+
+  /* earnings: what the seller has made, and their Stripe balance */
+  me.get('/earnings', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const rows = await sql.all<{ amountMinor: number; currency: string; method: string; paidAt: string | null; createdAt: string }>(
+      `SELECT "amountMinor", currency, method, "paidAt", "createdAt" FROM seller_order WHERE "storeId" = ? AND status = 'paid' AND refunded = 0`,
+      s.id,
+    )
+    const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0)
+    const totals = new Map<string, { currency: string; totalMinor: number; monthMinor: number; sales: number; byMethod: Record<string, number> }>()
+    for (const o of rows) {
+      const t = totals.get(o.currency) ?? { currency: o.currency, totalMinor: 0, monthMinor: 0, sales: 0, byMethod: {} }
+      // Desknoty's fee comes off first (0% today); payment providers' own fees are not included.
+      const net = Math.round(o.amountMinor * (1 - PLATFORM_FEE_PERCENT / 100))
+      t.totalMinor += net
+      t.sales += 1
+      if (new Date(o.paidAt ?? o.createdAt) >= monthStart) t.monthMinor += net
+      t.byMethod[o.method] = (t.byMethod[o.method] ?? 0) + net
+      totals.set(o.currency, t)
+    }
+    let balance: { available: Array<{ amountMinor: number; currency: string }>; pending: Array<{ amountMinor: number; currency: string }>; payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string }> } | null = null
+    const st = stripe()
+    if (st && s.stripeAccountId && s.chargesReady) {
+      try {
+        const b = await st.balance.retrieve({}, { stripeAccount: s.stripeAccountId })
+        const list = await st.payouts.list({ limit: 5 }, { stripeAccount: s.stripeAccountId }).catch(() => ({ data: [] as Stripe.Payout[] }))
+        balance = {
+          available: b.available.map((x) => ({ amountMinor: x.amount, currency: x.currency })),
+          pending: b.pending.map((x) => ({ amountMinor: x.amount, currency: x.currency })),
+          payouts: list.data.map((p) => ({ id: p.id, amountMinor: p.amount, currency: p.currency, status: p.status, arrival: new Date(p.arrival_date * 1000).toISOString() })),
+        }
+      } catch (err) {
+        console.error('[seller] could not read the Stripe balance:', (err as Error).message)
+      }
+    }
+    res.set('Cache-Control', 'no-store').json({ totals: [...totals.values()], balance, withdrawals: payoutsAllowed() })
+  })
+
+  /** Send the available Stripe balance to the seller's bank. Sandbox only unless SELLER_LIVE_PAYOUTS=true. */
+  me.post('/payouts', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    if (!payoutsAllowed()) return void res.status(403).json({ error: 'Withdrawals are switched off on this Desknoty server. Stripe still pays you out automatically on its schedule.' })
+    const st = stripe()
+    if (!st || !s.stripeAccountId || !s.chargesReady) return void res.status(409).json({ error: 'Finish setting up Stripe first.' })
+    const currency = String((req.body as { currency?: unknown })?.currency ?? '').toLowerCase()
+    if (!/^[a-z]{3}$/.test(currency)) return void res.status(400).json({ error: 'Choose a currency.' })
+    try {
+      const b = await st.balance.retrieve({}, { stripeAccount: s.stripeAccountId })
+      const amount = b.available.find((x) => x.currency === currency)?.amount ?? 0
+      if (amount <= 0) return void res.status(409).json({ error: 'There is nothing available to withdraw yet. New sales become available after a few days.' })
+      // one withdrawal of the same amount per minute, even if the button is pressed twice
+      const payout = await st.payouts.create(
+        { amount, currency, description: 'Desknoty withdrawal' },
+        { stripeAccount: s.stripeAccountId, idempotencyKey: `payout_${s.id}_${currency}_${amount}_${Math.floor(Date.now() / 60000)}` },
+      )
+      res.json({ payout: { id: payout.id, amountMinor: payout.amount, currency: payout.currency, status: payout.status, arrival: new Date(payout.arrival_date * 1000).toISOString() } })
+    } catch (err) {
+      const msg = (err as Error).message
+      res.status(502).json({ error: /external account|bank account/i.test(msg) ? 'Add a bank account in Stripe first (Resume setup).' : `Stripe couldn’t send the payout: ${msg}` })
+    }
   })
 
   /* payment methods: the seller's own PayPal and bank details */

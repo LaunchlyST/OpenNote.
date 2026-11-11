@@ -26,6 +26,7 @@ import { cn } from '../../lib/id'
 import { StorePage, storeStyle } from './StorePage'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
+import type { Earnings } from './api'
 import {
   BLOCKS,
   BUTTON_STYLES,
@@ -1348,6 +1349,65 @@ const PAYOUT_COPY: Record<StoreView['payouts']['status'], { label: string; text:
   ready: { label: 'Ready for payouts', text: 'Buyers can pay, and Stripe pays out to your bank on its usual schedule.', action: 'Manage payouts on Stripe' },
 }
 
+/** Earnings at a glance, and a button to send the Stripe balance to the seller's bank. */
+function EarningsCard({ ready }: { ready: boolean }) {
+  const [data, setData] = useState<Earnings | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
+  const load = useCallback(() => sellerApi.earnings().then(setData).catch((e: Error) => setErr(e.message)), [])
+  useEffect(() => { void load() }, [load])
+  const main = data?.totals[0]
+  const cur = main?.currency ?? data?.balance?.available[0]?.currency ?? 'gbp'
+  const avail = data?.balance?.available.find((x) => x.currency === cur)?.amountMinor ?? 0
+  const pending = data?.balance?.pending.find((x) => x.currency === cur)?.amountMinor ?? 0
+  const withdraw = async () => {
+    setBusy(true)
+    setErr(null)
+    try {
+      const { payout } = await sellerApi.withdraw(cur)
+      setSent(`${formatPrice(payout.amountMinor, payout.currency)} is on its way to your bank · arrives ${new Date(payout.arrival).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`)
+      await load()
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+    setBusy(false)
+  }
+  return (
+    <section className="ss-earn" aria-label="Earnings">
+      <div className="ss-earn-top">
+        <span className="ss-earn-label">Total earned</span>
+        <b className="ss-earn-big">{data ? formatPrice(main?.totalMinor ?? 0, cur) : '…'}</b>
+        <span className="ss-earn-sub">{main ? `${main.sales} sale${main.sales === 1 ? '' : 's'} · ${formatPrice(main.monthMinor, cur)} this month` : 'No sales yet. Your first one will show here.'}</span>
+      </div>
+      <div className="ss-earn-grid">
+        <div><span>Ready to withdraw</span><b>{data?.balance ? formatPrice(avail, cur) : '—'}</b></div>
+        <div><span>On the way from Stripe</span><b>{data?.balance ? formatPrice(pending, cur) : '—'}</b></div>
+        <div><span>Paid by bank transfer</span><b>{formatPrice(main?.byMethod.bank ?? 0, cur)}</b></div>
+      </div>
+      {ready ? (
+        <div className="ss-earn-act">
+          <button type="button" className="ss-primary ss-primary-sm" disabled={busy || !data?.withdrawals || avail <= 0} onClick={() => void withdraw()}>
+            {busy ? 'Sending…' : `Withdraw ${data?.balance && avail > 0 ? formatPrice(avail, cur) + ' ' : ''}to bank`}
+          </button>
+          <small>{!data?.withdrawals ? 'Stripe pays your balance out to your bank automatically.' : avail > 0 ? 'Goes to the bank account you added in Stripe. Usually 1–3 working days.' : 'New card sales become available to withdraw after a few days.'}</small>
+        </div>
+      ) : (
+        <p className="ss-earn-note">Finish Stripe setup below to withdraw card earnings to your bank.</p>
+      )}
+      {sent && <p className="ss-earn-ok" role="status">✓ {sent}</p>}
+      {err && <p className="ss-earn-err" role="alert">{err}</p>}
+      {data?.balance?.payouts.length ? (
+        <ul className="ss-earn-list" aria-label="Recent withdrawals">
+          {data.balance.payouts.map((p) => (
+            <li key={p.id}><span>{new Date(p.arrival).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span><b>{formatPrice(p.amountMinor, p.currency)}</b><em>{p.status === 'paid' ? 'Arrived' : p.status === 'failed' ? 'Failed' : 'On the way'}</em></li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  )
+}
+
 function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: SellerSetup; reload: (refresh?: boolean) => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -1375,6 +1435,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const bankSet = bankComplete(payments)
   return (
     <div className="ss-stack">
+      <EarningsCard ready={s === 'ready'} />
       {/* Stripe: status, refresh and the one action, together */}
       <section className="ss-paycard" aria-label="Card payments with Stripe">
         <div className="ss-paycard-head">

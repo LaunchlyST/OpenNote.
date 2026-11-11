@@ -65,6 +65,8 @@ export const sellerApi = {
   tiktokDisconnect: () => call<{ store: StoreView }>('POST', '/api/seller/tiktok/disconnect'),
   tiktokVerify: () => call<{ store: StoreView }>('POST', '/api/seller/tiktok/verify', {}),
   tiktok: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/tiktok/start', { returnTo }),
+  earnings: () => call<Earnings>('GET', '/api/seller/earnings'),
+  withdraw: (currency: string) => call<{ payout: { id: string; amountMinor: number; currency: string; status: string; arrival: string } }>('POST', '/api/seller/payouts', { currency }),
   orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null }> }>('GET', `/api/seller/orders?offset=${offset}`),
   savePayments: (p: Partial<{ [K in keyof PaymentSettings]: Partial<PaymentSettings[K]> }>) => call<{ store: StoreView }>('PUT', '/api/seller/payments', p),
   /** Bank transfer arrived: unlocks the order and sends the receipt. */
@@ -120,4 +122,14 @@ export async function dataUrlToBlob(u: string): Promise<Blob | null> {
   } catch {
     return null
   }
+}
+
+export interface Earnings {
+  totals: Array<{ currency: string; totalMinor: number; monthMinor: number; sales: number; byMethod: Record<string, number> }>
+  balance: {
+    available: Array<{ amountMinor: number; currency: string }>
+    pending: Array<{ amountMinor: number; currency: string }>
+    payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string }>
+  } | null
+  withdrawals: boolean
 }

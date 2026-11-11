@@ -324,6 +324,20 @@ try {
   check('Ava sees her orders', ords.length === 3 && ords.some((o: { status: string }) => o.status === 'paid'))
   check('Ben sees none', (await req('GET', '/api/seller/orders', undefined, B)).json.orders.length === 0)
 
+  console.log('\n  Earnings and withdrawals')
+  const paidMinor = ords.filter((o: { status: string }) => o.status === 'paid').reduce((n: number, o: { amountMinor: number }) => n + o.amountMinor, 0)
+  const earn = (await req('GET', '/api/seller/earnings', undefined, A)).json
+  check('earnings add up the paid orders', earn.totals[0]?.totalMinor === paidMinor && earn.totals[0]?.sales === ords.filter((o: { status: string }) => o.status === 'paid').length, JSON.stringify(earn.totals))
+  check('the Stripe balance is shown and withdrawals are on in Sandbox', earn.withdrawals === true && earn.balance?.available[0]?.amountMinor === paidMinor, JSON.stringify(earn.balance))
+  const w = await req('POST', '/api/seller/payouts', { currency: earn.totals[0].currency }, A)
+  check('withdraw sends the whole available balance to the bank', w.status === 200 && w.json.payout.amountMinor === paidMinor, JSON.stringify(w.json))
+  const twice = await req('POST', '/api/seller/payouts', { currency: earn.totals[0].currency }, A)
+  check('nothing left to withdraw afterwards', twice.status === 409)
+  const earn2 = (await req('GET', '/api/seller/earnings', undefined, A)).json
+  check('the withdrawal is listed and earnings are unchanged', earn2.balance.payouts.length === 1 && earn2.totals[0].totalMinor === paidMinor)
+  check('Ben can’t withdraw (no Stripe set up)', (await req('POST', '/api/seller/payouts', { currency: 'gbp' }, B)).status === 409)
+  check('signed-out visitors can’t see earnings', (await req('GET', '/api/seller/earnings')).status === 401)
+
   console.log('\n  Restart keeps everything')
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
   server = await boot()

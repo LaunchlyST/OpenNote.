@@ -54,6 +54,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
   const idempotent = new Map<string, Obj>()
   const accounts = new Map<string, Obj>()
   const sessions = new Map<string, Obj>()
+  const payouts: Obj[] = []
   const calls: FakeStripe['calls'] = []
   const sent: FakeStripe['sent'] = []
   const signer = new Stripe('sk_test_fake')
@@ -156,6 +157,20 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
       return json(res, 200, s)
     }
 
+    // Balance = paid checkouts on that account minus payouts already sent (all "available").
+    if (req.method === 'GET' && p === '/v1/balance') {
+      const by = new Map<string, number>()
+      for (const x of sessions.values()) if (x._account === account && x.payment_status === 'paid') by.set(String(x.currency), (by.get(String(x.currency)) ?? 0) + Number(x.amount_total))
+      for (const po of payouts) if (po._account === account) by.set(String(po.currency), (by.get(String(po.currency)) ?? 0) - Number(po.amount))
+      return json(res, 200, { object: 'balance', available: [...by].map(([currency, amount]) => ({ currency, amount })), pending: [] })
+    }
+    if (p === '/v1/payouts') {
+      if (req.method === 'GET') return json(res, 200, { object: 'list', data: payouts.filter((x) => x._account === account), has_more: false })
+      const po: Obj = { id: `po_test_${++n}`, object: 'payout', amount: Number(form.amount), currency: form.currency, status: 'pending', arrival_date: Math.floor(Date.now() / 1000) + 2 * 86400, _account: account }
+      payouts.unshift(po)
+      if (idem) idempotent.set(idem, po)
+      return json(res, 200, po)
+    }
     if (p.startsWith('/v1/charges/')) return json(res, 200, charges.get(p.split('/').pop()!) ?? {})
     if (p.startsWith('/v1/disputes/')) return json(res, 200, disputes.get(p.split('/').pop()!) ?? {})
 
