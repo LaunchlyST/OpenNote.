@@ -588,7 +588,7 @@ function Studio({
 
   return (
     <div className="ss">
-      <section className="ss-editor" aria-label="Store builder">
+      <section className={cn('ss-editor', slide !== 0 && 'ss-editor-soon')} aria-label="Store builder" inert={slide !== 0 ? true : undefined}>
         {/* One navbar at the very top; scrolls sideways in one row on phones */}
         <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
           {(
@@ -627,7 +627,6 @@ function Studio({
               {slide !== 0 ? 'Style 2 · Coming soon' : publishing ? 'Publishing…' : store.publishedAt ? 'Publish changes' : 'Publish'}
             </button>
           </div>
-          {slide !== 0 && <p className="ss-s2note">You’re looking at Style 2, which is coming soon. It can’t be edited or published yet. Swipe right in the phone to go back to Style 1.</p>}
           <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
           {(notice || err) && (
             <div className="ss-note" role="status">
@@ -707,7 +706,7 @@ function Studio({
                 <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onPick={(id, el) => (setTab('page'), openEditor(id, el))} />
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
               </div>
-              <div className="ss-slide" aria-hidden={slide !== 1}><Style2Soon /></div>
+              <div className="ss-slide ss-slide-empty" aria-label="Style 2 (empty, coming soon)" aria-hidden={slide !== 1} />
             </div>
             <div className="ss-pills" role="tablist" aria-label="Store style">
               <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
@@ -784,27 +783,6 @@ function DesignChat() {
       <input disabled placeholder="Describe a change to your store…" aria-label="Message the design assistant (coming soon)" />
       <span className="ss-chatsoon-tag">AI · Coming soon</span>
     </section>
-  )
-}
-
-/** Style 2 inside the phone: a premium "coming soon" preview. Not editable or publishable. */
-function Style2Soon() {
-  return (
-    <div className="s2" aria-label="Style 2, coming soon">
-      <div className="s2-orb s2-orb1" /><div className="s2-orb s2-orb2" /><div className="s2-orb s2-orb3" />
-      <div className="s2-ghost" aria-hidden="true">
-        <i className="s2-g-head" /><i className="s2-g-line" /><i className="s2-g-line s2-short" />
-        <div className="s2-g-row"><i /><i /></div>
-        <div className="s2-g-row"><i /><i /></div>
-        <i className="s2-g-btn" />
-      </div>
-      <div className="s2-glass">
-        <span className="s2-badge">STYLE 2 · COMING SOON</span>
-        <h3>Something beautiful is coming.</h3>
-        <p>We’re creating a whole new way to design your digital storefront.</p>
-        <div className="s2-bar"><i /></div>
-      </div>
-    </div>
   )
 }
 
