@@ -111,7 +111,7 @@ try {
       const page = await ctx.newPage()
       const errors: string[] = []
       page.on('pageerror', (e) => errors.push(e.message))
-      await page.addInitScript((k) => localStorage.setItem(k, '1'), `desknoty.seller.tiktok-step.${store.id}`)
+      await page.addInitScript((k) => sessionStorage.setItem(k, '1'), `desknoty.seller.tiktok-step.${store.id}`)
       await page.goto(`${BASE}/app/project/${project.id}?tool=seller`)
       await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
       await page.getByText(/^Products \(/).first().click()

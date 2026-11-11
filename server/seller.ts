@@ -1241,7 +1241,8 @@ export function sellerRouter() {
       mode: 'payment', adaptive_pricing: { enabled: false },
       line_items: [{ quantity: 1, price_data: { currency: order.currency, unit_amount: order.amountMinor, product_data: { name: order.productTitle } } }],
       success_url: `${seller.siteUrl}/store/${s.id}/thanks?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${seller.siteUrl}/store/${s.id}?checkout=cancelled`,
+      // back to the product being bought, at the store's public address (not its internal id)
+      cancel_url: `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`,
       metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
       payment_intent_data: { metadata: { desknotyOrderId: order.id } },
     }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}` })
@@ -1277,7 +1278,7 @@ export function sellerRouter() {
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     const payee = order.accountId.replace(/^paypal:/, '')
     const back = `${seller.siteUrl}/store/${s.id}/thanks?paypal_order=${order.id}&k=${encodeURIComponent(order.accessKey)}`
-    const { paypalOrderId, approveUrl } = await createPaypalOrder({ id: order.id, amountMinor: order.amountMinor, currency: order.currency, title: order.productTitle }, payee, back, `${seller.siteUrl}/store/${s.handle}?checkout=cancelled`)
+    const { paypalOrderId, approveUrl } = await createPaypalOrder({ id: order.id, amountMinor: order.amountMinor, currency: order.currency, title: order.productTitle }, payee, back, `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`)
     await sql.run('UPDATE seller_order SET "providerOrderId" = ?, "checkoutUrl" = ? WHERE id = ? AND "providerOrderId" IS NULL', paypalOrderId, approveUrl, order.id)
     const saved = (await q.order(order.id))!
     res.json({ url: saved.checkoutUrl })

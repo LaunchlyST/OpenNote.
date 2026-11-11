@@ -7596,3 +7596,5 @@ select.ss-input option {
 .ss-ttcode { display: flex; align-items: center; gap: 8px; }
 .ss-ttcode code { flex: 1; padding: 10px 12px; border-radius: 10px; font-size: 17px; font-weight: 700; letter-spacing: 0.08em; text-align: center; background: #f3f2ee; color: #111114; }
 .ss-tt-ok { padding: 12px; border-radius: 12px; font-size: 14px; font-weight: 600; text-align: center; color: #2f7a1d; background: #ecfccb; }
+.ss-livebar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.ss-livebar .ss-ghost { display: inline-flex; align-items: center; gap: 6px; }

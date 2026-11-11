@@ -67,6 +67,15 @@ function Solo({ compact = false, children }: { compact?: boolean; children: Reac
   )
 }
 const TT_KEY = (id: string) => `desknoty.seller.tiktok-step.${id}`
+/**
+ * "Continue without TikTok" lasts for this visit only (sessionStorage): until
+ * TikTok is connected, each new visit opens on the Connect TikTok screen.
+ */
+const skipTT = {
+  get: (id: string) => { try { return sessionStorage.getItem(TT_KEY(id)) === '1' } catch { return false } },
+  set: (id: string) => { try { sessionStorage.setItem(TT_KEY(id), '1') } catch { /* storage blocked */ } },
+  clear: (id: string) => { try { sessionStorage.removeItem(TT_KEY(id)); localStorage.removeItem(TT_KEY(id)) } catch { /* storage blocked */ } },
+}
 
 /** Where Stripe and TikTok send the seller back to: this page, Seller open. */
 function returnPath() {
@@ -129,9 +138,9 @@ export function SellerStudio() {
     )
   if (error && !setup)
     return <StartCard setup={null} problem={error} retrying={retrying} onRetry={() => (setRetrying(true), void load().finally(() => setRetrying(false)))} onCreated={() => {}} />
-  if (!store) return <StartCard setup={setup} onCreated={(s, skipTikTok) => (skipTikTok && localStorage.setItem(TT_KEY(s.id), '1'), setStore(s))} />
-  if (!localStorage.getItem(TT_KEY(store.id)) && !store.tiktok) {
-    return <TikTokStep store={store} setup={setup!} notice={notice} onDone={() => (localStorage.setItem(TT_KEY(store.id), '1'), setStore({ ...store }))} />
+  if (!store) return <StartCard setup={setup} onCreated={(s, skipTikTok) => (skipTikTok && skipTT.set(s.id), setStore(s))} />
+  if (!skipTT.get(store.id) && !store.tiktok) {
+    return <TikTokStep store={store} setup={setup!} notice={notice} onDone={() => (skipTT.set(store.id), setStore({ ...store }))} />
   }
   return <Studio store={store} setStore={setStore} setup={setup!} notice={notice} clearNotice={() => setNotice(null)} reload={load} />
 }
@@ -533,11 +542,19 @@ function Studio({
               <Monitor className="h-3.5 w-3.5" /> Desktop
             </button>
           </div>
-          {store.publishedAt && (
-            <a className="ss-ghost" href={`/${store.handle}`} target="_blank" rel="noreferrer">
-              <ExternalLink className="h-3.5 w-3.5" /> View live
-            </a>
-          )}
+          {/* View live and, until TikTok is connected, Connect TikTok side by side */}
+          <div className="ss-livebar">
+            {store.publishedAt && (
+              <a className="ss-ghost" href={`/${store.handle}`} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-3.5 w-3.5" /> View live
+              </a>
+            )}
+            {!store.tiktok && (
+              <button type="button" className="ss-ghost" onClick={() => (skipTT.clear(store.id), window.location.reload())}>
+                <TikTokMark /> Connect TikTok
+              </button>
+            )}
+          </div>
         </div>
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
@@ -1059,7 +1076,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
 /* --------------------------------------------------------- payouts --- */
 
 const PAYOUT_COPY: Record<StoreView['payouts']['status'], { label: string; text: string; action: string }> = {
-  not_connected: { label: 'Not connected', text: 'Connect a bank account through Stripe to take payments. Stripe collects your bank and identity details; Desknoty never sees them.', action: 'Connect bank account' },
+  not_connected: { label: 'Not connected', text: 'Connect a bank account through Stripe to take payments. Stripe collects your bank and identity details; Desknoty never sees them.', action: 'Connect Stripe' },
   incomplete: { label: 'Setup incomplete', text: 'Stripe still needs a few details before you can take payments.', action: 'Resume setup' },
   pending: { label: 'Verification pending', text: 'Stripe is checking your details. This usually takes minutes, sometimes a few days. You can keep building meanwhile.', action: 'Check details on Stripe' },
   ready: { label: 'Ready for payouts', text: 'Buyers can pay, and Stripe pays out to your bank on its usual schedule.', action: 'Manage payouts on Stripe' },
@@ -1370,7 +1387,7 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
           {store.tiktok ? (
             <button type="button" className="ss-ghost" onClick={() => void sellerApi.tiktokDisconnect().then((r) => setStore(r.store)).catch((e: Error) => setErr(e.message))}>Disconnect</button>
           ) : (
-            <button type="button" className="ss-primary" onClick={() => { try { localStorage.removeItem(TT_KEY(store.id)) } catch { /* storage blocked */ } window.location.reload() }}>Connect TikTok</button>
+            <button type="button" className="ss-primary" onClick={() => (skipTT.clear(store.id), window.location.reload())}>Connect TikTok</button>
           )}
         </div>
       </section>
@@ -1391,11 +1408,7 @@ function StartOver({ store }: { store: StoreView }) {
     setErr(null)
     try {
       await sellerApi.startOver(typed)
-      try {
-        localStorage.removeItem(TT_KEY(store.id))
-      } catch {
-        /* storage blocked */
-      }
+      skipTT.clear(store.id)
       window.location.reload()
     } catch (e) {
       setErr((e as Error).message)

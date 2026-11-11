@@ -138,12 +138,12 @@ try {
   await page.locator('.sb-edit select').first().selectOption({ label: 'Content planner' })
   await page.getByRole('button', { name: /^Product grid \d+ product/ }).click()
   await page.getByRole('checkbox', { name: /Content planner/ }).check()
-  // Move-down / move-up controls (keyboard & touch): footer up then back down
-  await page.getByRole('button', { name: 'Move Footer up' }).click()
-  await page.getByRole('button', { name: 'Move Footer down' }).click()
+  // Move-up / move-down controls (keyboard & touch): grid up then back down (header and footer are pinned)
+  await page.getByRole('button', { name: 'Move Product grid up' }).click()
+  await page.getByRole('button', { name: 'Move Product grid down' }).click()
   await page.waitForTimeout(1200)
   const order = await page.locator('.ss-screen .sp > *').evaluateAll((els) => els.map((e) => e.className.split(' ').find((c) => c.startsWith('sp-'))))
-  check('preview order: header, featured, grid, footer', JSON.stringify(order.slice(0, 4)) === JSON.stringify(['sp-head', 'sp-block', 'sp-block', 'sp-block']) && (await page.locator('.ss-screen .sp-featured').count()) === 1)
+  check('preview order: header, featured, grid, footer', JSON.stringify(order.slice(0, 4)) === JSON.stringify(['sp-head', 'sp-block', 'sp-block', 'sp-end']) && (await page.locator('.ss-screen .sp-featured').count()) === 1)
   await page.screenshot({ path: join(SHOTS, 'studio-page.png') })
 
   // 4. Publish
@@ -154,8 +154,8 @@ try {
   // 5. Payouts: leave onboarding incomplete, then resume and finish
   await page.getByRole('tab', { name: 'Payouts' }).click()
   check('payouts start Not connected', await page.getByText('Not connected', { exact: true }).isVisible())
-  check('0% platform fee and Stripe fees are explained separately', await page.getByText(/Stripe’s card processing fees are separate/).first().isVisible())
-  await page.getByRole('button', { name: /Connect bank account/ }).click()
+  check('the 0% platform fee and provider fees are explained once', (await page.getByText(/Desknoty platform fee: 0%\. Payment providers may charge their own fees\./).count()) === 1)
+  await page.getByRole('button', { name: /Connect Stripe/ }).click()
   await page.waitForURL(/\/onboard\//)
   await page.getByRole('button', { name: 'Leave (incomplete)' }).click()
   await page.waitForURL(/tool=seller/)
@@ -172,10 +172,10 @@ try {
 
   // 6. Bio link
   await page.getByRole('tab', { name: 'Bio link' }).click()
-  await page.getByRole('button', { name: 'Copy bio link' }).click()
+  await page.getByRole('button', { name: 'Copy link' }).click()
   const bio = await page.evaluate(() => navigator.clipboard.readText())
-  check('Copy bio link copies the real public URL', bio === `${SITE}/store/ava-makes`, bio)
-  check('TikTok instructions are shown', await page.getByText('Add it to TikTok').isVisible())
+  check('Copy link copies the short public URL', bio === `${SITE}/ava-makes`, bio)
+  check('where-to-paste instructions are shown', await page.getByText('Add it to your profiles').isVisible())
   check('no console errors in the studio', errors.length === 0, errors.join(' | '))
 
   /* -------------------------------- a buyer on a phone, no account --- */
@@ -190,7 +190,7 @@ try {
   await m.screenshot({ path: join(SHOTS, 'mobile-store.png') })
 
   await m.locator('.sp-card-link').first().click()
-  await m.waitForURL(/\/store\/ava-makes\/p\/prd_/)
+  await m.waitForURL(/\/ava-makes\/p\/prd_/)
   const productUrl = m.url()
   await m.reload()
   await m.getByRole('heading', { name: 'Content planner' }).waitFor()
@@ -237,7 +237,7 @@ try {
     mail = files.map((f) => readFileSync(join(dir, f), 'utf8')).find((t) => t.includes('/order/ord_')) ?? ''
     if (!mail) await new Promise((r) => setTimeout(r, 500))
   }
-  const retrieval = mail.match(/https?:\/\/[^"\s<]+\/store\/ava-makes\/order\/ord_[a-f0-9]+\?k=[\w-]+/)?.[0]
+  const retrieval = mail.match(/https?:\/\/[^"\s<]+\/store\/[\w-]+\/order\/ord_[a-f0-9]+\?k=[\w-]+/)?.[0]
   check('the receipt email contains a retrieval link', Boolean(retrieval))
   if (retrieval) {
     await m.goto(retrieval.replace(/&amp;/g, '&'))
