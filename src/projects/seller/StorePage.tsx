@@ -108,7 +108,8 @@ export function StorePage(props: StorePageProps) {
           <ProductDetail p={only} {...props} />
         </>
       ) : (
-        page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => (
+        // product grid / featured product sections are no longer shown on the store page
+        page.blocks.filter((b) => !b.hidden && b.type !== 'footer' && b.type !== 'grid' && b.type !== 'featured').map((b) => (
           <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
         ))
       )}

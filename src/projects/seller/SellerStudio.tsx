@@ -464,6 +464,24 @@ function Studio({
   // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
   const page: Page = full
   const [slide, setSlide] = useState<0 | 1>(full.use === 2 ? 1 : 0)
+  // The Style switch is pinned to the bottom of the screen, centred under the editor panel, and never moves.
+  const styleBar = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const place = () => {
+      const bar = styleBar.current
+      const panel = bar?.closest('.ss-editor')
+      if (!bar || !panel) return
+      const r = panel.getBoundingClientRect()
+      bar.style.left = `${r.left + r.width / 2}px`
+    }
+    place()
+    const ro = new ResizeObserver(place)
+    const panel = styleBar.current?.closest('.ss-editor')
+    if (panel) ro.observe(panel)
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => { ro.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+  })
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [toast, setToast] = useState(false)
   // Undo / redo over the draft (every change still autosaves as the draft only).
@@ -722,7 +740,7 @@ function Studio({
         </div>
         {/* Style switch: pinned to the bottom middle of this panel */}
         {(tab === 'page' || tab === 'products') && (
-          <div className="ss-stylebar">
+          <div className="ss-stylebar" ref={styleBar}>
             <div className="ss-stylepick" role="tablist" aria-label="Store style">
               <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
               <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2</button>
@@ -835,7 +853,7 @@ export const BANNER_ID = '__banner__'
 function PageEditor({ page, onChange, products, open, setOpen, onStartInsert }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent) => void }) {
   const blocks = pinEnds(page.blocks)
   const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
-  const middle = blocks.filter((b) => b.type !== 'header' && b.type !== 'footer')
+  const middle = blocks.filter((b) => b.type !== 'header' && b.type !== 'footer' && b.type !== 'grid' && b.type !== 'featured')
   const move = (from: number, to: number) => {
     const last = blocks.length - 2
     if (to < 1 || to > last || from === to) return
@@ -862,7 +880,7 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert }: 
             <em className="et-badge">{page.banner ? (page.banner.kind === 'video' ? 'Video' : 'Image') : 'Add'}</em>
           </li>
           {blocks.map((b, i) =>
-            b.type === 'header' ? null : (
+            b.type === 'header' || b.type === 'grid' || b.type === 'featured' ? null : (
               <li key={b.id} className={cn('et-row', open === b.id && 'on', b.hidden && 'et-hidden')} data-block={b.id} data-pinned={b.type === 'footer' ? b.id : undefined}>
                 <button type="button" className="et-main" onClick={openRow(b.id)}>
                   <span className="et-ico" aria-hidden="true">{BLOCK_ICON[b.type]}</span>

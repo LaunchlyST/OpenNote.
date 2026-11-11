@@ -487,7 +487,6 @@ export function defaultPage(name: string): Page {
     theme: { preset: 'clean', accent: '#111114', font: 'geist', button: 'rounded', background: 'solid' },
     blocks: [
       { id: id(), type: 'header', hidden: false, data: { showSocials: true } },
-      { id: id(), type: 'grid', hidden: false, data: { heading: 'Shop', productIds: [] } },
       { id: id(), type: 'footer', hidden: false, data: { text: '' } },
     ],
     socials: { instagram: '', youtube: '', x: '', website: '' },
