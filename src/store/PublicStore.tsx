@@ -77,8 +77,7 @@ export default function PublicStore({ path }: { path: string }) {
 
   const buy = async (p: ShopProduct) => {
     setBuyErr(null)
-    // free: no checkout, straight to the download
-    if (p.priceMinor === 0) return pay(p, 'stripe')
+    // every product, free or paid, opens the checkout popup first
     setChoosing(p)
   }
   const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => {
@@ -198,7 +197,8 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
 function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => void; onClose: () => void }) {
-  const choices: Choice[] = [
+  const free = product.priceMinor === 0
+  const choices: Choice[] = free ? ['card'] : [
     ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
     ...(methods.includes('stripe') ? (['card'] as Choice[]) : []),
     ...(methods.includes('paypal') ? (['paypal'] as Choice[]) : []),
@@ -283,7 +283,9 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
             ) : (
               <>
                 <label className="co3-field"><span>Email for your receipt</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" /></label>
-                {method === 'paypal' ? (
+                {free ? (
+                  <p className="co3-hint">This product is free. Enter your email (optional) and press Get it free to download.</p>
+                ) : method === 'paypal' ? (
                   <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
                 ) : (
                   <>
@@ -320,7 +322,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
             </dl>
             <div className="co3-total"><span>Total</span><b>{price}</b></div>
             {error && <p className="co-err" role="alert">{error}</p>}
-            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy ? 'Opening…' : 'Pay Now'}</button>
+            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy ? 'Opening…' : free ? 'Get it free' : 'Pay Now'}</button>
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>
           </section>
         </div>
