@@ -336,6 +336,7 @@ try {
   const earn2 = (await req('GET', '/api/seller/earnings', undefined, A)).json
   check('the withdrawal is listed and earnings are unchanged', earn2.balance.payouts.length === 1 && earn2.totals[0].totalMinor === paidMinor)
   check('Ben can’t withdraw (no Stripe set up)', (await req('POST', '/api/seller/payouts', { currency: 'gbp' }, B)).status === 409)
+  check('earnings include a 30-day chart series', earn2.totals[0].days.length === 30 && earn2.totals[0].days.reduce((n: number, d: { amountMinor: number }) => n + d.amountMinor, 0) === paidMinor)
   check('signed-out visitors can’t see earnings', (await req('GET', '/api/seller/earnings')).status === 401)
 
   console.log('\n  Restart keeps everything')

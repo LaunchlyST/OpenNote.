@@ -125,7 +125,7 @@ export async function dataUrlToBlob(u: string): Promise<Blob | null> {
 }
 
 export interface Earnings {
-  totals: Array<{ currency: string; totalMinor: number; monthMinor: number; sales: number; byMethod: Record<string, number> }>
+  totals: Array<{ currency: string; totalMinor: number; monthMinor: number; lastMonthMinor: number; sales: number; byMethod: Record<string, number>; days: Array<{ date: string; amountMinor: number }> }>
   balance: {
     available: Array<{ amountMinor: number; currency: string }>
     pending: Array<{ amountMinor: number; currency: string }>

@@ -1337,18 +1337,64 @@ const PAYOUT_COPY: Record<StoreView['payouts']['status'], { label: string; text:
   ready: { label: 'Ready for payouts', text: 'Buyers can pay, and Stripe pays out to your bank on its usual schedule.', action: 'Manage payouts on Stripe' },
 }
 
-/** Earnings at a glance, and a button to send the Stripe balance to the seller's bank. */
-function EarningsCard({ ready }: { ready: boolean }) {
+/** Animated number: counts up to the value once, quickly (instant with reduced motion). */
+function useCountUp(target: number) {
+  const [v, setV] = useState(0)
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return setV(target)
+    let raf = 0
+    const start = performance.now()
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / 900)
+      setV(Math.round(target * (1 - Math.pow(1 - k, 3))))
+      if (k < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target])
+  return v
+}
+
+/**
+ * Payouts hero: total earned (animated), this month vs last, a 30-day chart,
+ * a monthly goal ring the seller sets, the money journey from sale to bank,
+ * and Withdraw to bank.
+ */
+function EarningsCard({ ready, storeId }: { ready: boolean; storeId: string }) {
   const [data, setData] = useState<Earnings | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState<string | null>(null)
+  const [hover, setHover] = useState<number | null>(null)
+  const goalKey = `desknoty.seller.goal.${storeId}`
+  const [goal, setGoal] = useState<number>(() => { try { return Number(localStorage.getItem(goalKey)) || 0 } catch { return 0 } })
+  const [editingGoal, setEditingGoal] = useState(false)
+  const [goalText, setGoalText] = useState('')
   const load = useCallback(() => sellerApi.earnings().then(setData).catch((e: Error) => setErr(e.message)), [])
   useEffect(() => { void load() }, [load])
   const main = data?.totals[0]
   const cur = main?.currency ?? data?.balance?.available[0]?.currency ?? 'gbp'
   const avail = data?.balance?.available.find((x) => x.currency === cur)?.amountMinor ?? 0
   const pending = data?.balance?.pending.find((x) => x.currency === cur)?.amountMinor ?? 0
+  const paidOut = (data?.balance?.payouts ?? []).filter((p) => p.currency === cur && p.status === 'paid').reduce((n, p) => n + p.amountMinor, 0)
+  const total = useCountUp(main?.totalMinor ?? 0)
+  const month = main?.monthMinor ?? 0
+  const last = main?.lastMonthMinor ?? 0
+  const change = last > 0 ? Math.round(((month - last) / last) * 100) : null
+  const days = main?.days ?? Array.from({ length: 30 }, (_, i) => ({ date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10), amountMinor: 0 }))
+  const peak = Math.max(1, ...days.map((d) => d.amountMinor))
+  const pct = goal > 0 ? Math.min(1, month / goal) : 0
+  const R = 30
+  const C = 2 * Math.PI * R
+  const sym = formatPrice(0, cur).replace(/[0-9.,\s]/g, '')
+
+  const saveGoal = () => {
+    const n = Math.round(Number(goalText.replace(/[^0-9.]/g, '')) * 100)
+    const v = Number.isFinite(n) && n > 0 ? n : 0
+    setGoal(v)
+    try { if (v) localStorage.setItem(goalKey, String(v)); else localStorage.removeItem(goalKey) } catch { /* fine */ }
+    setEditingGoal(false)
+  }
   const withdraw = async () => {
     setBusy(true)
     setErr(null)
@@ -1361,31 +1407,82 @@ function EarningsCard({ ready }: { ready: boolean }) {
     }
     setBusy(false)
   }
+  const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+
   return (
     <section className="ss-earn" aria-label="Earnings">
-      <div className="ss-earn-top">
-        <span className="ss-earn-label">Total earned</span>
-        <b className="ss-earn-big">{data ? formatPrice(main?.totalMinor ?? 0, cur) : '…'}</b>
-        <span className="ss-earn-sub">{main ? `${main.sales} sale${main.sales === 1 ? '' : 's'} · ${formatPrice(main.monthMinor, cur)} this month` : 'No sales yet. Your first one will show here.'}</span>
+      <div className="ss-earn-head">
+        <div className="ss-earn-top">
+          <span className="ss-earn-label">Total earned</span>
+          <b className="ss-earn-big" aria-live="polite">{data ? formatPrice(total, cur) : '…'}</b>
+          <span className="ss-earn-sub">
+            {main ? <>{main.sales} sale{main.sales === 1 ? '' : 's'} · {formatPrice(month, cur)} this month</> : 'No sales yet. Your first one will show here.'}
+            {change !== null && <em className={change >= 0 ? 'up' : 'down'}>{change >= 0 ? '▲' : '▼'} {Math.abs(change)}% vs this time last month</em>}
+          </span>
+        </div>
+        {/* Monthly goal ring: set your own target, watch it fill */}
+        <div className="ss-goal">
+          <button type="button" className="ss-goal-ring" onClick={() => (setGoalText(goal ? String(goal / 100) : ''), setEditingGoal(true))} aria-label={goal ? `Monthly goal ${formatPrice(goal, cur)}, ${Math.round(pct * 100)}% reached. Change goal` : 'Set a monthly goal'}>
+            <svg viewBox="0 0 76 76" aria-hidden="true">
+              <circle cx="38" cy="38" r={R} className="ss-goal-track" />
+              <circle cx="38" cy="38" r={R} className={cn('ss-goal-fill', pct >= 1 && 'done')} strokeDasharray={C} strokeDashoffset={C * (1 - pct)} />
+            </svg>
+            <span>{goal ? (pct >= 1 ? '🎉' : `${Math.round(pct * 100)}%`) : '+'}</span>
+          </button>
+          <small>{goal ? (pct >= 1 ? 'Goal reached!' : `of ${formatPrice(goal, cur)} goal`) : 'Set a goal'}</small>
+        </div>
       </div>
-      <div className="ss-earn-grid">
-        <div><span>Ready to withdraw</span><b>{data?.balance ? formatPrice(avail, cur) : '—'}</b></div>
-        <div><span>On the way from Stripe</span><b>{data?.balance ? formatPrice(pending, cur) : '—'}</b></div>
-        <div><span>Paid by bank transfer</span><b>{formatPrice(main?.byMethod.bank ?? 0, cur)}</b></div>
+      {editingGoal && (
+        <form className="ss-goal-form" onSubmit={(e) => (e.preventDefault(), saveGoal())}>
+          <label>Monthly goal <span>{sym}</span><input autoFocus inputMode="decimal" value={goalText} onChange={(e) => setGoalText(e.target.value)} placeholder="500" aria-label="Monthly goal amount" /></label>
+          <button type="submit">Save</button>
+          <button type="button" className="ghost" onClick={() => setEditingGoal(false)}>Cancel</button>
+        </form>
+      )}
+
+      {/* last 30 days, one bar per day */}
+      <div className="ss-chart" aria-label="Sales in the last 30 days" onMouseLeave={() => setHover(null)}>
+        <div className="ss-chart-bars">
+          {days.map((d, i) => (
+            <button
+              type="button"
+              key={d.date}
+              className={cn('ss-bar', hover === i && 'on', d.amountMinor === 0 && 'zero')}
+              style={{ ['--h' as string]: `${Math.max(d.amountMinor ? 8 : 3, (d.amountMinor / peak) * 100)}%`, animationDelay: `${i * 14}ms` }}
+              onMouseEnter={() => setHover(i)}
+              onFocus={() => setHover(i)}
+              aria-label={`${fmtDay(d.date)}: ${formatPrice(d.amountMinor, cur)}`}
+            />
+          ))}
+        </div>
+        <div className="ss-chart-foot">
+          {hover !== null ? (
+            <span className="ss-chart-tip"><b>{formatPrice(days[hover].amountMinor, cur)}</b> on {fmtDay(days[hover].date)}</span>
+          ) : (
+            <><span>{fmtDay(days[0].date)}</span><span>Last 30 days</span><span>Today</span></>
+          )}
+        </div>
       </div>
+
+      {/* where the money is right now, from sale to your bank */}
+      <ol className="ss-journey" aria-label="Where your money is">
+        <li><span>Clearing</span><b>{data?.balance ? formatPrice(pending, cur) : '—'}</b><small>Stripe holds new sales for a few days</small></li>
+        <li className={avail > 0 ? 'hot' : undefined}><span>Ready</span><b>{data?.balance ? formatPrice(avail, cur) : '—'}</b><small>Can go to your bank now</small></li>
+        <li><span>In your bank</span><b>{formatPrice(paidOut + (main?.byMethod.bank ?? 0), cur)}</b><small>Withdrawn + bank transfers</small></li>
+      </ol>
+
       {ready ? (
         <div className="ss-earn-act">
-          <button type="button" className="ss-primary ss-primary-sm" disabled={busy || !data?.withdrawals || avail <= 0} onClick={() => void withdraw()}>
-            {busy ? 'Sending…' : `Withdraw ${data?.balance && avail > 0 ? formatPrice(avail, cur) + ' ' : ''}to bank`}
+          <button type="button" className="ss-withdraw" disabled={busy || !data?.withdrawals || avail <= 0} onClick={() => void withdraw()}>
+            {busy ? 'Sending…' : <>Withdraw {data?.balance && avail > 0 ? formatPrice(avail, cur) + ' ' : ''}to bank <span aria-hidden="true">→</span></>}
           </button>
-          <small>{!data?.withdrawals ? 'Stripe pays your balance out to your bank automatically.' : avail > 0 ? 'Goes to the bank account you added in Stripe. Usually 1–3 working days.' : 'New card sales become available to withdraw after a few days.'}</small>
+          <small>{!data?.withdrawals ? 'Stripe pays your balance out to your bank automatically.' : avail > 0 ? 'Goes to the bank account you added in Stripe. Usually 1–3 working days.' : 'New card sales become ready to withdraw after a few days.'}</small>
         </div>
       ) : (
         <p className="ss-earn-note">Finish Stripe setup below to withdraw card earnings to your bank.</p>
       )}
       {sent && <p className="ss-earn-ok" role="status">✓ {sent}</p>}
       {err && <p className="ss-earn-err" role="alert">{err}</p>}
-      <p className="ss-earn-fee">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
       {data?.balance?.payouts.length ? (
         <ul className="ss-earn-list" aria-label="Recent withdrawals">
           {data.balance.payouts.map((p) => (
@@ -1393,6 +1490,7 @@ function EarningsCard({ ready }: { ready: boolean }) {
           ))}
         </ul>
       ) : null}
+      <p className="ss-earn-fee">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
     </section>
   )
 }
@@ -1424,7 +1522,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const bankSet = bankComplete(payments)
   return (
     <div className="ss-stack">
-      <EarningsCard ready={s === 'ready'} />
+      <EarningsCard ready={s === 'ready'} storeId={store.id} />
+      <h3 className="ss-getpaid">Get paid</h3>
       {/* Stripe: status, refresh and the one action, together */}
       <section className="ss-paycard" aria-label="Card payments with Stripe">
         <div className="ss-paycard-head">

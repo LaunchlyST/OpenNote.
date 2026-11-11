@@ -1060,14 +1060,20 @@ export function sellerRouter() {
       s.id,
     )
     const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0)
-    const totals = new Map<string, { currency: string; totalMinor: number; monthMinor: number; sales: number; byMethod: Record<string, number> }>()
+    const lastMonthStart = new Date(monthStart); lastMonthStart.setUTCMonth(lastMonthStart.getUTCMonth() - 1)
+    const dayKey = (d: Date) => d.toISOString().slice(0, 10)
+    const totals = new Map<string, { currency: string; totalMinor: number; monthMinor: number; lastMonthMinor: number; sales: number; byMethod: Record<string, number>; daily: Record<string, number> }>()
     for (const o of rows) {
-      const t = totals.get(o.currency) ?? { currency: o.currency, totalMinor: 0, monthMinor: 0, sales: 0, byMethod: {} }
+      const t = totals.get(o.currency) ?? { currency: o.currency, totalMinor: 0, monthMinor: 0, lastMonthMinor: 0, sales: 0, byMethod: {}, daily: {} }
       // Desknoty's fee comes off first (0% today); payment providers' own fees are not included.
       const net = Math.round(o.amountMinor * (1 - PLATFORM_FEE_PERCENT / 100))
       t.totalMinor += net
       t.sales += 1
-      if (new Date(o.paidAt ?? o.createdAt) >= monthStart) t.monthMinor += net
+      const when = new Date(o.paidAt ?? o.createdAt)
+      if (when >= monthStart) t.monthMinor += net
+      // the same stretch of last month (1st up to today's date), so the comparison is fair mid-month
+      else if (when >= lastMonthStart && when.getUTCDate() <= new Date().getUTCDate()) t.lastMonthMinor += net
+      if (Date.now() - when.getTime() < 30 * 86400000) t.daily[dayKey(when)] = (t.daily[dayKey(when)] ?? 0) + net
       t.byMethod[o.method] = (t.byMethod[o.method] ?? 0) + net
       totals.set(o.currency, t)
     }
@@ -1086,7 +1092,11 @@ export function sellerRouter() {
         console.error('[seller] could not read the Stripe balance:', (err as Error).message)
       }
     }
-    res.set('Cache-Control', 'no-store').json({ totals: [...totals.values()], balance, withdrawals: payoutsAllowed() })
+    // last 30 days, oldest first, one entry per day (zeros included) for the chart
+    const days: string[] = []
+    for (let i = 29; i >= 0; i--) days.push(dayKey(new Date(Date.now() - i * 86400000)))
+    const out = [...totals.values()].map(({ daily, ...t }) => ({ ...t, days: days.map((date) => ({ date, amountMinor: daily[date] ?? 0 })) }))
+    res.set('Cache-Control', 'no-store').json({ totals: out, balance, withdrawals: payoutsAllowed() })
   })
 
   /** Send the available Stripe balance to the seller's bank. Sandbox only unless SELLER_LIVE_PAYOUTS=true. */
