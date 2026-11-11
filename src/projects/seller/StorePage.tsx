@@ -154,12 +154,14 @@ function Header({ page, handle, showSocials, compact = false }: { page: Page; ha
   const avatar = mediaUrl(page.avatar)
   return (
     <header className={compact ? 'sp-head sp-head-compact' : page.banner && !compact ? 'sp-head sp-head-banner' : 'sp-head'}>
-      {page.banner && !compact && <Banner banner={page.banner} />}
-      <span className="sp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : { background: 'var(--ac)', color: 'var(--on)' }}>
-        {!avatar && (page.name.trim().charAt(0).toUpperCase() || handle.charAt(0).toUpperCase())}
-      </span>
-      <h1 className="sp-name">{page.name || handle}</h1>
-      <p className="sp-handle">@{handle}</p>
+      <div className="sp-head-id">
+        {page.banner && !compact && <Banner banner={page.banner} />}
+        <span className="sp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : { background: 'var(--ac)', color: 'var(--on)' }}>
+          {!avatar && (page.name.trim().charAt(0).toUpperCase() || handle.charAt(0).toUpperCase())}
+        </span>
+        <h1 className="sp-name">{page.name || handle}</h1>
+        <p className="sp-handle">@{handle}</p>
+      </div>
       {!compact && page.bio && <p className="sp-bio">{page.bio}</p>}
       {showSocials && socials.length > 0 && (
         <div className="sp-socials">

@@ -8285,3 +8285,16 @@ select.ss-input option {
 /* Style switch: back in its own place at the bottom middle of the editor box, under the blocks (not floating over them) */
 .ss-stylebar { position: static; bottom: auto; translate: none; margin-top: auto; padding: 24px 0 4px; pointer-events: auto; }
 @media (max-width: 1439px) { .pv-bar { flex-wrap: wrap; justify-content: center; row-gap: 8px; } }
+
+/* Banner: profile picture, name and username sit centred on top of the banner */
+.sp-head-id { display: contents; }
+.sp-head-banner .sp-head-id { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; width: calc(100% + 32px); margin: -12px -16px 0; aspect-ratio: 16 / 9; padding: 12px; overflow: hidden; border-radius: 0 0 22px 22px; color: #fff; }
+.ps-main .sp-head-banner .sp-head-id { margin-top: -32px; }
+.sp-head-banner .sp-banner { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0 !important; aspect-ratio: auto; border-radius: 0; }
+.sp-head-banner .sp-head-id::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,.05), rgba(0,0,0,.45)); }
+.sp-head-banner .sp-head-id > :not(.sp-banner) { position: relative; z-index: 1; pointer-events: none; }
+.sp-head-banner .sp-avatar { box-shadow: 0 0 0 3px #fff, 0 8px 20px rgba(0,0,0,.3) !important; }
+.sp-head-banner:not(.sp-head-compact) .sp-avatar { width: 84px; height: 84px; }
+.sp-head-banner .sp-name { margin-top: 10px !important; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.45); }
+.sp-head-banner .sp-handle { color: rgba(255,255,255,.9); text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+.sp-head-banner .sp-banner-hint { bottom: 10px; z-index: 2; }
