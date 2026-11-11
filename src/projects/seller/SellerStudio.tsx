@@ -1404,42 +1404,72 @@ function BankMark({ name }: { name: string }) {
 
 type OrderRow = Awaited<ReturnType<typeof sellerApi.orders>>['orders'][number]
 
-/** Bank transfer money is already in the seller's bank: show it, payment by payment. */
-function PaidToBankDialog({ total, currency, bank, last, orders, onClose, onChange }: { total: number; currency: string; bank: PaymentSettings['bank']; last: string; orders: OrderRow[]; onClose: () => void; onChange: () => void }) {
+/**
+ * "Send money to your bank": the seller picks which of their bank accounts sales
+ * are sent to. Bank-transfer buyers pay straight into that account (Desknoty
+ * never holds the money), so choosing an account is the whole "send".
+ */
+function PaidToBankDialog({ total, currency, saved, activeIndex, orders, onClose, onPick, onAdd }: { total: number; currency: string; saved: SavedBank[]; activeIndex: number; orders: OrderRow[]; onClose: () => void; onPick: (i: number) => Promise<void>; onAdd: () => void }) {
+  const [pick, setPick] = useState(Math.max(0, activeIndex))
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState(false)
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', k)
     return () => document.removeEventListener('keydown', k)
   }, [onClose])
   const paid = orders.filter((o) => o.status === 'paid')
-  const waiting = orders.filter((o) => o.status === 'pending')
+  const chosen = saved[pick]
+  const send = async () => {
+    setBusy(true)
+    if (pick !== activeIndex) await onPick(pick)
+    setBusy(false)
+    setDone(true)
+  }
+  if (done && chosen)
+    return (
+      <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <div className="ss-modal wl-modal" role="dialog" aria-modal="true" aria-labelledby="ptb-done">
+          <div className="ss-modal-body wl-sent">
+            <div className="wl-done-badge" aria-hidden="true">✓</div>
+            <h2 id="ptb-done">Your money goes to {chosen.bankName || 'your bank'}</h2>
+            <p className="ss-muted">Every sale is now sent straight to {chosen.bankName || 'your bank'} ••{chosen.accountNumber.slice(-4) || chosen.iban.slice(-4)} the moment the buyer pays.</p>
+          </div>
+          <div className="ss-modal-foot"><button type="button" className="ss-primary" onClick={onClose}>Done</button></div>
+        </div>
+      </div>
+    )
   return (
     <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="ss-modal wl-modal" role="dialog" aria-modal="true" aria-labelledby="ptb-title">
+      <form className="ss-modal wl-modal" role="dialog" aria-modal="true" aria-labelledby="ptb-title" onSubmit={(e) => (e.preventDefault(), void send())}>
         <div className="ss-modal-body">
-          <div className="wl-done-badge" aria-hidden="true">✓</div>
-          <h2 id="ptb-title">All done: it’s in your bank</h2>
-          <p className="wl-modal-amount">{formatPrice(total, currency)}</p>
-          <p className="ss-muted">Buyers paid this straight into your account by bank transfer, so there’s nothing to send. New payments go to:</p>
-          <div className="wl-pickrow on wl-dest">
-            <BankMark name={bank.bankName} />
-            <span className="wl-pickinfo"><b>{bank.bankName || 'Bank account'}</b><small>{bank.accountName} · ending in {last}</small></span>
-            <button type="button" className="wl-btn" onClick={onChange}>Change account</button>
+          <h2 id="ptb-title">Send money to your bank</h2>
+          <p className="wl-modal-amount">{formatPrice(total, currency)}<small> sent so far</small></p>
+          <p className="ss-muted">Choose the bank account your money is sent to. Buyers pay straight into it.</p>
+          <div className="wl-pick" role="radiogroup" aria-label="Send money to">
+            {saved.map((b, i) => (
+              <label key={i} className={cn('wl-pickrow', pick === i && 'on')}>
+                <input type="radio" name="sendto" checked={pick === i} onChange={() => setPick(i)} />
+                <BankMark name={b.bankName} />
+                <span className="wl-pickinfo"><b>{b.bankName || 'Bank account'}</b><small>{b.accountName} · ending in {b.accountNumber.slice(-4) || b.iban.slice(-4)}</small></span>
+                {i === activeIndex && <em className="wl-tag">In use</em>}
+              </label>
+            ))}
           </div>
+          <button type="button" className="wl-addnew" onClick={onAdd}>+ Add a new bank account</button>
           {paid.length > 0 && (
-            <ul className="wl-paidlist" aria-label="Bank transfer payments">
+            <ul className="wl-paidlist" aria-label="Already sent to your bank">
               {paid.map((o) => (
                 <li key={o.id}><span className="ok">✓</span><span>{o.product}<small>{new Date(o.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{o.reference ? ` · ${o.reference}` : ''}</small></span><b>{formatPrice(o.amountMinor, o.currency)}</b></li>
               ))}
             </ul>
           )}
-          {waiting.length > 0 && <p className="ss-note">{waiting.length} bank transfer{waiting.length === 1 ? ' is' : 's are'} waiting for you to confirm it arrived (in Orders).</p>}
-          {!paid.length && !waiting.length && <p className="ss-muted">No bank transfer sales yet.</p>}
         </div>
         <div className="ss-modal-foot">
-          <button type="button" className="ss-primary" onClick={onClose}>Done</button>
+          <button type="button" className="ss-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="ss-primary" disabled={busy || !chosen}>{busy ? 'Saving…' : `Send to ${chosen?.bankName || 'this account'}`}</button>
         </div>
-      </div>
+      </form>
     </div>
   )
 }
@@ -1681,11 +1711,12 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         <PaidToBankDialog
           total={main?.byMethod.bank ?? 0}
           currency={cur}
-          bank={bank}
-          last={last4(payments)}
+          saved={saved}
+          activeIndex={saved.findIndex(isActive)}
           orders={(orders ?? []).filter((o) => o.method === 'bank')}
           onClose={() => setPaidOpen(false)}
-          onChange={() => (setPaidOpen(false), setChoosing(true))}
+          onPick={useBank}
+          onAdd={() => (setPaidOpen(false), setBankOpen('new'))}
         />
       )}
       {choosing && (
