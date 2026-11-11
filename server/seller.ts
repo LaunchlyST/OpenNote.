@@ -1052,7 +1052,16 @@ export function sellerRouter() {
     const rows = await sql.all<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC, id DESC LIMIT 101 OFFSET ?`, s.id, offset)
     const more = rows.length > 100
     if (more) rows.pop()
-    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt, payerName: o.payerName ?? null, payerBank: o.payerBank ?? null })) })
+    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt, payerName: o.payerName ?? null, payerBank: o.payerBank ?? null, hidden: !!(o as { sellerHidden?: number }).sellerHidden })) })
+  })
+
+  // Remove a row from the seller's Transaction History. The order itself is kept (buyers keep their downloads, totals stay right).
+  me.delete('/orders/:id', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const r = await sql.run(`UPDATE seller_order SET "sellerHidden" = 1 WHERE id = ? AND "storeId" = ?`, String(req.params.id), s.id)
+    if (!r.changes) return void res.status(404).json({ error: 'Order not found.' })
+    res.json({ ok: true })
   })
 
   /**

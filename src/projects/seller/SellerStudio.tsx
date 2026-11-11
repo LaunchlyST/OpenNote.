@@ -1919,6 +1919,12 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
     void load()
     sellerApi.orders().then((r) => setOrders(r.orders)).catch(() => setOrders([]))
   }, [load])
+  const hideOrder = async (id: string) => {
+    if (!window.confirm('Delete this order from your Transaction History? Your earnings and the buyer’s download stay the same.')) return
+    const before = orders
+    setOrders((old) => old?.map((o) => (o.id === id ? { ...o, hidden: true } : o)) ?? null)
+    try { await sellerApi.hideOrder(id) } catch (e) { setOrders(before); setErr((e as Error).message) }
+  }
   const go = async () => {
     setBusy(true)
     setErr(null)
@@ -2080,15 +2086,22 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           <thead><tr><th>Order</th><th>Product</th><th>Date</th><th>Method</th><th className="r">Amount</th><th>Status</th></tr></thead>
           <tbody>
             {orders === null && <tr><td colSpan={6} className="wl-empty">Loading…</td></tr>}
-            {orders?.length === 0 && <tr><td colSpan={6} className="wl-empty">No sales yet. They’ll show here.</td></tr>}
-            {orders?.map((o) => (
+            {orders?.filter((o) => !o.hidden).length === 0 && <tr><td colSpan={6} className="wl-empty">No sales yet. They’ll show here.</td></tr>}
+            {orders?.filter((o) => !o.hidden).map((o) => (
               <tr key={o.id}>
                 <td className="wl-id">{o.id.slice(-6).toUpperCase()}</td>
                 <td>{o.product}</td>
                 <td>{new Date(o.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                 <td>{o.method === 'bank' ? 'Bank transfer' : o.method === 'paypal' ? 'PayPal' : 'Card'}</td>
                 <td className="r">{formatPrice(o.amountMinor, o.currency)}</td>
-                <td><span className={cn('wl-status', `wl-status-${o.status}`)}>{STATUS[o.status] ?? o.status}</span></td>
+                <td>
+                  <span className="wl-status-cell">
+                    <span className={cn('wl-status', `wl-status-${o.status}`)}>{STATUS[o.status] ?? o.status}</span>
+                    <button type="button" className="wl-del" aria-label={`Delete order ${o.id.slice(-6).toUpperCase()} from history`} title="Delete from history" onClick={() => void hideOrder(o.id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

@@ -8298,3 +8298,8 @@ select.ss-input option {
 .sp-head-banner .sp-name { margin-top: 10px !important; color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.45); }
 .sp-head-banner .sp-handle { color: rgba(255,255,255,.9); text-shadow: 0 1px 6px rgba(0,0,0,.5); }
 .sp-head-banner .sp-banner-hint { bottom: 10px; z-index: 2; }
+
+/* Transaction History: delete icon next to the status */
+.wl-status-cell { display: inline-flex; align-items: center; gap: 10px; }
+.wl-del { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: #9ca3af; background: transparent; transition: color .15s, background .15s; }
+.wl-del:hover, .wl-del:focus-visible { color: #dc2626; background: #fee2e2; }
