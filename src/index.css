@@ -7839,3 +7839,6 @@ select.ss-input option {
 .wl-paidlist .ok { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 11px; font-weight: 800; color: #fff; background: #22c55e; }
 @media (prefers-reduced-motion: reduce) { .wl-done-badge { animation: none; } }
 .wl-modal-amount small { margin-left: 6px; font-size: 14px; font-weight: 500; color: #8a8985; } .wl-sent { text-align: center; } .wl-sent .wl-done-badge { margin: 4px auto 12px; }
+/* no swipe: the preview scrolls freely both ways (desktop view can be panned left/right) */
+.ss-slides { touch-action: auto; user-select: auto; }
+.ss-slide { overflow: auto; }

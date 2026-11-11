@@ -559,10 +559,6 @@ function Studio({
     window.addEventListener('pointercancel', up)
   }
 
-  // Swipe inside the phone: left for Style 2, right back to Style 1.
-  const swipe = useRef<{ x: number; y: number; dx: number; on: boolean } | null>(null)
-  const [dx, setDx] = useState(0)
-  const swiped = useRef(false)
   const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' || pageSave.state === 'Unsaved changes' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
     try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
@@ -689,33 +685,8 @@ function Studio({
         </div>
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
-          <div
-            className="ss-screen ss-slides"
-            onPointerDown={(e) => {
-              if ((e.target as HTMLElement).closest('.sp-grip, .ss-pills')) return
-              swipe.current = { x: e.clientX, y: e.clientY, dx: 0, on: false }
-              swiped.current = false
-            }}
-            onPointerMove={(e) => {
-              const sw = swipe.current
-              if (!sw) return
-              const ddx = e.clientX - sw.x
-              if (!sw.on && Math.abs(ddx) > 12 && Math.abs(ddx) > Math.abs(e.clientY - sw.y) * 1.3) sw.on = true
-              if (sw.on) (sw.dx = ddx, setDx(ddx))
-            }}
-            onPointerUp={() => {
-              const sw = swipe.current
-              swipe.current = null
-              if (!sw?.on) return
-              swiped.current = true
-              if (sw.dx < -50 && slide === 0) (setSlide(1), closeEditor())
-              if (sw.dx > 50 && slide === 1) setSlide(0)
-              setDx(0)
-            }}
-            onPointerCancel={() => ((swipe.current = null), setDx(0))}
-            onClickCapture={(e) => { if (swiped.current) (e.stopPropagation(), e.preventDefault(), (swiped.current = false)) }}
-          >
-            <div className={cn('ss-track', dx !== 0 && 'ss-track-drag')} style={{ transform: `translateX(calc(${slide * -50}% + ${slide === 0 ? Math.min(0, dx) : Math.max(0, dx)}px))` }}>
+          <div className="ss-screen ss-slides">
+            <div className="ss-track" style={{ transform: `translateX(${slide * -50}%)` }}>
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
