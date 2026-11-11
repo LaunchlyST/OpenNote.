@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { StorePage, storeStyle } from '../projects/seller/StorePage'
 import { Style2Page } from '../projects/seller/Style2'
-import { formatPrice, mediaUrl } from '../projects/seller/model'
+import { formatPrice } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import type { PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
@@ -111,20 +111,25 @@ export default function PublicStore({ path }: { path: string }) {
 
 
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
-const METHOD_INFO: Record<PayMethod, { title: string; text: string }> = {
-  stripe: { title: 'Credit or debit card', text: 'You’ll enter your card on Stripe’s secure page. Desknoty never sees your card.' },
-  paypal: { title: 'PayPal', text: 'You’ll finish paying on PayPal.' },
-  bank: { title: 'Bank transfer', text: 'Pay from your bank app. Your download unlocks when the seller confirms the money arrived.' },
-}
+type Choice = 'card' | 'applepay' | 'paypal' | 'bank'
+const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', applepay: 'stripe', paypal: 'paypal', bank: 'bank' }
 
-/** The checkout sheet: who you are, how you pay, what it costs, then one Pay button. */
+/** The checkout sheet (styled after the seller's reference): steps, payment rows, order summary, Pay bar. */
 function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string) => void; onClose: () => void }) {
-  const [method, setMethod] = useState<PayMethod>(methods[0] ?? 'stripe')
+  const choices: Choice[] = [
+    ...(methods.includes('stripe') ? (['card', 'applepay'] as Choice[]) : []),
+    ...(methods.includes('paypal') ? (['paypal'] as Choice[]) : []),
+    ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
+  ]
+  const [choice, setChoice] = useState<Choice>(choices[0] ?? 'card')
   const [email, setEmail] = useState('')
+  const [details, setDetails] = useState(false)
+  const method = CHOICE_METHOD[choice]
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
   const needEmail = method === 'bank'
   const canPay = !busy && (valid || (!needEmail && !email.trim()))
   const price = formatPrice(product.priceMinor, product.currency)
+  const zero = formatPrice(0, product.currency).replace(/(\d)$/, '$1.00')
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', k)
@@ -132,79 +137,77 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
     document.body.style.overflow = 'hidden'
     return () => { document.removeEventListener('keydown', k); document.body.style.overflow = prev }
   }, [onClose])
-  const cover = product.cover ? mediaUrl(product.cover) : null
-  const step = !valid && needEmail ? 0 : 1
+  const steps = ['Customer', 'Delivery', 'Payment', 'Confirm', 'Success']
+  const at = 2 // customer and delivery (digital, instant) are done; payment is now
+  const row = (c: Choice, label: string, logo: React.ReactNode, body?: React.ReactNode) => (
+    <div className={choice === c ? 'co2-row on' : 'co2-row'}>
+      <label className="co2-rowhead">
+        <input type="radio" name="pay" checked={choice === c} onChange={() => setChoice(c)} aria-label={label} />
+        <span className="co2-radio" aria-hidden="true" />
+        <span className="co2-rowtitle">{label}</span>
+        <span className="co2-logo" aria-hidden="true">{logo}</span>
+      </label>
+      {choice === c && body && <div className="co2-rowbody">{body}</div>}
+    </div>
+  )
   return (
     <div className="co-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form className="co" role="dialog" aria-modal="true" aria-label={`Pay for ${product.title}`} onSubmit={(e) => (e.preventDefault(), canPay && onPay(method, email.trim() || undefined))}>
-        <header className="co-head">
-          <button type="button" className="co-x" onClick={onClose} aria-label="Close checkout">✕</button>
+      <form className="co2" role="dialog" aria-modal="true" aria-label={`Pay for ${product.title}`} onSubmit={(e) => (e.preventDefault(), canPay && onPay(method, email.trim() || undefined))}>
+        <header className="co2-head">
+          <button type="button" className="co2-back" onClick={onClose} aria-label="Close checkout">←</button>
           <b>Checkout</b>
-          <span className="co-lock" aria-hidden="true">🔒</span>
         </header>
-
-        <ol className="co-steps" aria-label="Checkout steps">
-          {['Details', 'Payment', 'Done'].map((t, i) => (
-            <li key={t} className={i < step ? 'done' : i === step ? 'on' : undefined} aria-current={i === step ? 'step' : undefined}>
-              <span>{i < step ? '✓' : ''}</span>{t}
+        <ol className="co2-steps" aria-label="Checkout steps">
+          {steps.map((t, i) => (
+            <li key={t} className={i < at ? 'done' : i === at ? 'on' : undefined} aria-current={i === at ? 'step' : undefined}>
+              <span className="co2-dot">{i < at ? <svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.3 2.3 4.7-5" /></svg> : null}</span>
+              <small>{t}</small>
             </li>
           ))}
         </ol>
 
-        <div className="co-body">
-          <section className="co-item">
-            <span className="co-thumb" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && (product.title.charAt(0).toUpperCase() || '✦')}</span>
-            <div><b>{product.title}</b><small>Digital download from {seller}</small></div>
-            <strong>{price}</strong>
-          </section>
-
-          <section className="co-card">
-            <h3>Your details</h3>
-            <label className="co-field">
-              <span>Email {needEmail ? '' : <em>(optional)</em>}</span>
-              <input type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={needEmail} />
-              <small>{needEmail ? 'The seller sends your download here once your transfer arrives.' : 'Your receipt and download link are sent here.'}</small>
+        <div className="co2-body">
+          <section className="co2-card">
+            <h3>Customer</h3>
+            <label className="co2-input">
+              <span>Email{needEmail ? '' : ' (optional)'}</span>
+              <div><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14v10H3zM3 5l7 6 7-6" /></svg><input type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={needEmail} /></div>
             </label>
           </section>
 
-          <section className="co-card">
+          <section className="co2-card">
             <h3>Payment</h3>
-            <p className="co-safe">🔒 All payments are secure and encrypted.</p>
-            <div className="co-methods" role="radiogroup" aria-label="Payment method">
-              {methods.map((m) => (
-                <label key={m} className={method === m ? 'co-method on' : 'co-method'}>
-                  <input type="radio" name="method" value={m} checked={method === m} onChange={() => setMethod(m)} aria-label={METHOD_INFO[m].title} />
-                  <span className="co-method-main">
-                    <b>{METHOD_INFO[m].title}</b>
-                    {method === m && <small>{METHOD_INFO[m].text}</small>}
-                  </span>
-                  <span className="co-badges" aria-hidden="true">
-                    {m === 'stripe' && <><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i></>}
-                    {m === 'paypal' && <i className="co-pp">PayPal</i>}
-                    {m === 'bank' && <i className="co-bank">🏦</i>}
-                  </span>
-                </label>
-              ))}
+            <p className="co2-secure"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg> All transactions are secure and encrypted.</p>
+            <div className="co2-rows" role="radiogroup" aria-label="Payment method">
+              {choices.includes('card') && row('card', 'Credit / Debit Card', <><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i></>,
+                <p className="co2-note">You’ll enter your card number, expiry date and CVC on Stripe’s secure page after you press Pay. Desknoty never sees your card.</p>)}
+              {choices.includes('paypal') && row('paypal', 'PayPal', <i className="co2-pp"><b>P</b></i>, <p className="co2-note">You’ll finish paying on PayPal.</p>)}
+              {choices.includes('applepay') && row('applepay', 'Apple Pay', <i className="co2-apple"><svg viewBox="0 0 14 17"><path d="M11.6 9c0-2 1.6-2.9 1.7-3a3.7 3.7 0 0 0-2.9-1.6c-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7A3.9 3.9 0 0 0 1.5 6.4C.1 8.8 1.1 12.4 2.5 14.4c.7 1 1.5 2 2.5 2s1.4-.6 2.6-.6 1.5.6 2.6.6 1.7-1 2.4-2a8 8 0 0 0 1.1-2.2A3.4 3.4 0 0 1 11.6 9zM9.6 3.1A3.4 3.4 0 0 0 10.4.6a3.5 3.5 0 0 0-2.3 1.2 3.3 3.3 0 0 0-.8 2.4 2.9 2.9 0 0 0 2.3-1.1z" /></svg>Pay</i>,
+                <p className="co2-note">Apple Pay appears on Stripe’s secure page on supported devices.</p>)}
+              {choices.includes('bank') && row('bank', 'Bank transfer', <i className="co2-bank"><svg viewBox="0 0 20 20"><path d="M2 8l8-5 8 5zM4 9v6M8 9v6M12 9v6M16 9v6M2 17h16" /></svg></i>,
+                <p className="co2-note">Pay from your bank app. Your download unlocks when the seller confirms the money arrived{valid ? '' : ', so we need your email'}.</p>)}
             </div>
           </section>
 
-          <section className="co-card co-sum">
-            <h3>Order summary</h3>
-            <dl>
+          <section className="co2-card">
+            <div className="co2-sumhead"><h3>Order Summary</h3><button type="button" onClick={() => setDetails(!details)}>{details ? 'Hide details' : 'Show details'}</button></div>
+            {details && <p className="co2-item"><b>{product.title}</b> · digital download from {seller}</p>}
+            <dl className="co2-sum">
               <dt>Subtotal</dt><dd>{price}</dd>
-              <dt>Delivery</dt><dd className={method === 'bank' ? undefined : 'co-free'}>{method === 'bank' ? 'Download after the seller confirms' : 'Instant download'}</dd>
-              <dt className="co-total">Total</dt><dd className="co-total">{price}</dd>
+              <dt>Delivery</dt><dd className="co2-free">{method === 'bank' ? 'After confirmation' : 'Free'}</dd>
+              <dt>Tax</dt><dd>{zero}</dd>
             </dl>
+            <div className="co2-total"><span>Total</span><b>{price}</b></div>
           </section>
           {error && <p className="co-err" role="alert">{error}</p>}
         </div>
 
-        <footer className="co-foot">
-          <button type="submit" className="co-pay" disabled={!canPay}>
-            {busy ? 'Opening secure checkout…' : method === 'bank' ? 'Show bank details' : method === 'paypal' ? `Continue to PayPal · ${price}` : `Pay ${price}`}
-            <span aria-hidden="true">🔒</span>
+        <footer className="co2-foot">
+          <p className="co2-secure"><svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg> Your payment information is secure.</p>
+          <button type="submit" className="co2-pay" disabled={!canPay}>
+            <span>{busy ? 'Opening secure checkout…' : method === 'bank' ? 'Show bank details' : method === 'paypal' ? `Pay ${price} with PayPal` : `Pay ${price}`}</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></svg>
           </button>
-          <small>{method === 'stripe' ? 'Card payments are handled by Stripe.' : method === 'paypal' ? 'Payments are handled by PayPal.' : 'You pay the seller directly from your bank.'}</small>
         </footer>
       </form>
     </div>

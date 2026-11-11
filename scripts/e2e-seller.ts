@@ -206,7 +206,7 @@ try {
   await m.getByRole('button', { name: 'Buy now' }).click()
   const sheet = m.getByRole('dialog', { name: 'Pay for Content planner' })
   await sheet.waitFor()
-  check('Buy now opens the checkout sheet with the total and a card option', (await sheet.locator('.co-total').last().innerText()) === '£12' && (await sheet.getByRole('radio', { name: 'Credit or debit card' }).isChecked()))
+  check('Buy now opens the checkout sheet with the total and a card option', (await sheet.locator('.co2-total b').innerText()) === '£12' && (await sheet.getByRole('radio', { name: 'Credit / Debit Card' }).isChecked()))
   await sheet.getByRole('button', { name: /^Pay £12/ }).click()
   await m.waitForURL(/\/pay\/cs_/)
   check('Pay opens Stripe’s hosted checkout (no account needed)', true)
