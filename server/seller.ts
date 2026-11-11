@@ -251,6 +251,8 @@ interface OrderRow {
   providerOrderId: string | null
   /** When the buyer said they had paid (bank transfer): informational only, never unlocks. */
   buyerClaimedAt: string | null
+  payerName?: string | null
+  payerBank?: string | null
   checkoutKey: string | null
   checkoutUrl: string | null
   receiptId: number | null
@@ -1025,7 +1027,7 @@ export function sellerRouter() {
     const rows = await sql.all<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC, id DESC LIMIT 101 OFFSET ?`, s.id, offset)
     const more = rows.length > 100
     if (more) rows.pop()
-    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt })) })
+    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt, payerName: o.payerName ?? null, payerBank: o.payerBank ?? null })) })
   })
 
   /**
@@ -1399,15 +1401,20 @@ export function sellerRouter() {
     if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
     const buyerEmail = String(req.body?.email ?? '').trim().toLowerCase()
     if (method === 'bank' && !/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(buyerEmail)) return void res.status(400).json({ error: 'Enter your email: the seller sends your download there once your transfer arrives.' })
+    // Bank transfer: which bank the buyer pays from and the name on their account, so the seller can match it
+    const payerName = method === 'bank' ? str(req.body?.payerName, 80).trim() : ''
+    const payerBank = method === 'bank' ? str(req.body?.payerBank, 60).trim() : ''
     const id = `ord_${randomBytes(12).toString('hex')}`
     const order = await sql.tx(async (tx) => {
       await tx.run(
-        `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, reference, "buyerEmail") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
+        `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, reference, "buyerEmail", "payerName", "payerBank") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
         id, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download',
         method === 'paypal' ? `paypal:${pay.paypal.email}` : 'bank',
         p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode, method,
         method === 'bank' ? bankReference(id) : null,
         method === 'bank' ? buyerEmail : null,
+        payerName || null,
+        payerBank || null,
       )
       return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
     })
@@ -1466,6 +1473,7 @@ export function sellerRouter() {
       // Bank transfer: what to pay and where, until the seller confirms it arrived.
       bank: o.method === 'bank' && o.status === 'pending' ? { ...bankDetails(readPayments(s.payments)), reference: o.reference } : null,
       buyerClaimedAt: o.buyerClaimedAt,
+      payerBank: o.method === 'bank' ? o.payerBank ?? null : null,
       receiptSent: receipt?.status === 'sent',
       receiptStatus: receipt?.status === 'sent' ? 'accepted' : receipt?.status ?? 'not_queued',
     }

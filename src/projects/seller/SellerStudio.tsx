@@ -2020,6 +2020,7 @@ function OrdersPanel() {
           <small>
             {({ stripe: 'Card', paypal: 'PayPal', bank: 'Bank transfer' } as Record<string, string>)[o.method ?? 'stripe']}
             {o.reference ? ` · ref ${o.reference}` : ''}
+            {o.method === 'bank' && o.payerName ? ` · from ${o.payerName}${o.payerBank ? ` (${o.payerBank})` : ''}` : ''}
             {o.method === 'bank' && o.status === 'pending' && o.buyerClaimedAt ? ' · buyer says it’s sent' : ''}
             {' · '}{o.buyer ?? '—'} · {new Date(o.createdAt).toLocaleString()}
           </small>

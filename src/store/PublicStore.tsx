@@ -3,6 +3,7 @@ import { StorePage, storeStyle } from '../projects/seller/StorePage'
 import { Style2Page } from '../projects/seller/Style2'
 import { formatPrice } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
+import { bankIcon } from '../projects/seller/bank-icons'
 import type { PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
 
@@ -59,7 +60,7 @@ export default function PublicStore({ path }: { path: string }) {
     setBuyErr(null)
     setChoosing(p)
   }
-  const pay = async (p: ShopProduct, method: PayMethod, email?: string) => {
+  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName: string; payerBank: string }) => {
     if (checkoutBusy.current) return
     checkoutBusy.current = true
     setBuying(p.id)
@@ -69,7 +70,7 @@ export default function PublicStore({ path }: { path: string }) {
       const keyName = `desknoty.checkout.${handle}.${p.id}.${method}`
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
-      const r = await storeApi.checkout(handle, p.id, key, method, email)
+      const r = await storeApi.checkout(handle, p.id, key, method, email, payer)
       window.location.assign(r.url ?? r.orderUrl!)
     } catch (e) {
       setBuyErr((e as Error).message)
@@ -98,7 +99,7 @@ export default function PublicStore({ path }: { path: string }) {
       busy={buying === choosing.id}
       error={buyErr}
       seller={store.page.name || store.handle}
-      onPay={(m, email) => void pay(choosing, m, email)}
+      onPay={(m, email, payer) => void pay(choosing, m, email, payer)}
       onClose={() => setChoosing(null)}
     />
   )
@@ -130,9 +131,29 @@ export default function PublicStore({ path }: { path: string }) {
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
 type Choice = 'card' | 'applepay' | 'paypal' | 'bank'
 const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', applepay: 'stripe', paypal: 'paypal', bank: 'bank' }
+const PAYER_BANKS = ['Revolut', 'Monzo', 'Starling Bank', 'Barclays', 'HSBC', 'Lloyds Bank', 'NatWest', 'Santander', 'Halifax', 'Nationwide', 'Wise', 'Other bank']
+
+/** A bank's app icon when we have its logo; otherwise a neat initial. */
+function BankIcon({ name }: { name: string }) {
+  const icon = bankIcon(name)
+  if (icon) return <span className="co2-bi" style={{ background: icon.bg, color: icon.fg }} aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d={icon.path} /></svg></span>
+  return <span className="co2-bi co2-bi-txt" aria-hidden="true">{name === 'Other bank' ? '…' : name.charAt(0)}</span>
+}
+
+/** Copy a value to the clipboard, with a short "Copied" confirmation. */
+function CopyRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+  const [done, setDone] = useState(false)
+  return (
+    <div className="bp-row">
+      <dt>{label}</dt>
+      <dd>{strong ? <b>{value}</b> : value}</dd>
+      <button type="button" onClick={() => void navigator.clipboard?.writeText(value).then(() => { setDone(true); window.setTimeout(() => setDone(false), 1400) })} aria-label={`Copy ${label}`}>{done ? 'Copied' : 'Copy'}</button>
+    </div>
+  )
+}
 
 /** The checkout sheet (styled after the seller's reference): steps, payment rows, order summary, Pay bar. */
-function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string) => void; onClose: () => void }) {
+function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName: string; payerBank: string }) => void; onClose: () => void }) {
   const choices: Choice[] = [
     ...(methods.includes('stripe') ? (['card', 'applepay'] as Choice[]) : []),
     ...(methods.includes('paypal') ? (['paypal'] as Choice[]) : []),
@@ -144,7 +165,10 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
   const method = CHOICE_METHOD[choice]
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
   const needEmail = method === 'bank'
-  const canPay = !busy && (valid || (!needEmail && !email.trim()))
+  const [payerBank, setPayerBank] = useState('')
+  const [payerName, setPayerName] = useState('')
+  const bankReady = method !== 'bank' || (Boolean(payerBank) && payerName.trim().length > 1)
+  const canPay = !busy && bankReady && (valid || (!needEmail && !email.trim()))
   const price = formatPrice(product.priceMinor, product.currency)
   const zero = formatPrice(0, product.currency).replace(/(\d)$/, '$1.00')
   useEffect(() => {
@@ -169,7 +193,7 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
   )
   return (
     <div className="co-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form className="co2" role="dialog" aria-modal="true" aria-label={`Pay for ${product.title}`} onSubmit={(e) => (e.preventDefault(), canPay && onPay(method, email.trim() || undefined))}>
+      <form className="co2" role="dialog" aria-modal="true" aria-label={`Pay for ${product.title}`} onSubmit={(e) => (e.preventDefault(), canPay && onPay(method, email.trim() || undefined, method === 'bank' ? { payerName: payerName.trim(), payerBank } : undefined))}>
         <header className="co2-head">
           <button type="button" className="co2-back" onClick={onClose} aria-label="Close checkout">←</button>
           <b>Checkout</b>
@@ -202,7 +226,21 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
               {choices.includes('applepay') && row('applepay', 'Apple Pay', <i className="co2-apple"><svg viewBox="0 0 14 17"><path d="M11.6 9c0-2 1.6-2.9 1.7-3a3.7 3.7 0 0 0-2.9-1.6c-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7A3.9 3.9 0 0 0 1.5 6.4C.1 8.8 1.1 12.4 2.5 14.4c.7 1 1.5 2 2.5 2s1.4-.6 2.6-.6 1.5.6 2.6.6 1.7-1 2.4-2a8 8 0 0 0 1.1-2.2A3.4 3.4 0 0 1 11.6 9zM9.6 3.1A3.4 3.4 0 0 0 10.4.6a3.5 3.5 0 0 0-2.3 1.2 3.3 3.3 0 0 0-.8 2.4 2.9 2.9 0 0 0 2.3-1.1z" /></svg>Pay</i>,
                 <p className="co2-note">Apple Pay appears on Stripe’s secure page on supported devices.</p>)}
               {choices.includes('bank') && row('bank', 'Bank transfer', <i className="co2-bank"><svg viewBox="0 0 20 20"><path d="M2 8l8-5 8 5zM4 9v6M8 9v6M12 9v6M16 9v6M2 17h16" /></svg></i>,
-                <p className="co2-note">Pay from your bank app. Your download unlocks when the seller confirms the money arrived{valid ? '' : ', so we need your email'}.</p>)}
+                <div className="co2-bankpay">
+                  <span className="co2-sub">Which bank will you pay from?</span>
+                  <div className="co2-banks" role="radiogroup" aria-label="Your bank">
+                    {PAYER_BANKS.map((b) => (
+                      <button key={b} type="button" role="radio" aria-checked={payerBank === b} className={payerBank === b ? 'co2-bankchip on' : 'co2-bankchip'} onClick={() => setPayerBank(b)}>
+                        <BankIcon name={b} /> <span>{b}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <label className="co2-input">
+                    <span>Name on your bank account</span>
+                    <div><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="7" r="3.5" /><path d="M3.5 17a6.5 6.5 0 0 1 13 0" /></svg><input autoComplete="name" placeholder="e.g. John Smith" value={payerName} onChange={(e) => setPayerName(e.target.value)} maxLength={80} /></div>
+                  </label>
+                  <p className="co2-note">Next you’ll see the seller’s details to pay from your {payerBank || 'bank'} app. Your download unlocks when the seller confirms it arrived.</p>
+                </div>)}
             </div>
           </section>
 
@@ -235,27 +273,34 @@ function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: {
 function BankPending({ order, claim }: { order: PublicOrder; claim?: () => Promise<{ order: PublicOrder }> }) {
   const [claimed, setClaimed] = useState(Boolean(order.buyerClaimedAt))
   const b = order.bank!
+  const amount = formatPrice(order.amountMinor, order.currency)
+  const from = order.payerBank && order.payerBank !== 'Other bank' ? order.payerBank : null
   return (
-    <div className="ps-msg ps-bank">
-      <p className="ps-kicker">Bank transfer · waiting for payment</p>
-      <h1>Pay {formatPrice(order.amountMinor, order.currency)} by bank transfer</h1>
-      <dl className="ps-bank-details">
-        {b.bankName && (<><dt>Bank</dt><dd>{b.bankName}</dd></>)}
-        <dt>Account name</dt><dd>{b.accountName}</dd>
-        {b.sortCode && (<><dt>Sort code</dt><dd>{b.sortCode}</dd></>)}
-        {b.accountNumber && (<><dt>Account number</dt><dd>{b.accountNumber}</dd></>)}
-        {b.iban && (<><dt>IBAN</dt><dd>{b.iban}</dd></>)}
-        {b.bic && (<><dt>BIC / SWIFT</dt><dd>{b.bic}</dd></>)}
-        <dt>Amount</dt><dd>{formatPrice(order.amountMinor, order.currency)}</dd>
-        <dt>Reference</dt><dd><b>{b.reference}</b></dd>
+    <div className="ps-msg ps-bank bp">
+      <div className="bp-head">
+        {from ? <BankIcon name={from} /> : null}
+        <div>
+          <h1>Pay {amount} from your {from ?? 'bank'} app</h1>
+          <p>Open {from ? `the ${from}` : 'your banking'} app, send a payment to the details below, and use the reference exactly.</p>
+        </div>
+      </div>
+      <dl className="bp-details">
+        {b.bankName && <CopyRow label="Bank" value={b.bankName} />}
+        <CopyRow label="Account name" value={b.accountName} />
+        {b.sortCode && <CopyRow label="Sort code" value={b.sortCode} />}
+        {b.accountNumber && <CopyRow label="Account number" value={b.accountNumber} />}
+        {b.iban && <CopyRow label="IBAN" value={b.iban} />}
+        {b.bic && <CopyRow label="BIC / SWIFT" value={b.bic} />}
+        <CopyRow label="Amount" value={amount} />
+        {b.reference && <CopyRow label="Reference" value={b.reference} strong />}
       </dl>
-      <p>Use the reference exactly, so the seller can match your payment.{b.instructions ? ` ${b.instructions}` : ''}</p>
-      <p className="ps-fine">Your download unlocks when the seller confirms the money has arrived. Keep this page’s address to come back to it.</p>
+      {b.instructions && <p>{b.instructions}</p>}
+      <p className="ps-fine">Your download unlocks when the seller confirms the money arrived. Keep this page’s address to come back to it.</p>
       {claimed ? (
         <p className="ps-fine" role="status">Thanks: the seller has been told you sent it. Your download unlocks once they confirm it arrived.</p>
       ) : (
         claim && (
-          <button type="button" className="sp-btn" onClick={() => void claim().then(() => setClaimed(true))}>
+          <button type="button" className="sp-btn bp-sent" onClick={() => void claim().then(() => setClaimed(true))}>
             I’ve sent the payment
           </button>
         )

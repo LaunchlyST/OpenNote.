@@ -67,7 +67,7 @@ export const sellerApi = {
   tiktok: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/tiktok/start', { returnTo }),
   earnings: () => call<Earnings>('GET', '/api/seller/earnings'),
   withdraw: (currency: string, bankId?: string) => call<{ payout: { id: string; amountMinor: number; currency: string; status: string; arrival: string } }>('POST', '/api/seller/payouts', { currency, bankId }),
-  orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null }> }>('GET', `/api/seller/orders?offset=${offset}`),
+  orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null; payerName?: string | null; payerBank?: string | null }> }>('GET', `/api/seller/orders?offset=${offset}`),
   useBank: (index: number) => call<{ store: StoreView }>('PUT', '/api/seller/payments', { useBank: index }),
   removeBank: (index: number) => call<{ store: StoreView }>('PUT', '/api/seller/payments', { removeBank: index }),
   savePayments: (p: Partial<{ [K in keyof PaymentSettings]: Partial<PaymentSettings[K]> }>) => call<{ store: StoreView }>('PUT', '/api/seller/payments', p),
@@ -104,12 +104,14 @@ export interface PublicOrder {
   /** Bank transfer still to pay: where, how much and the reference. */
   bank?: { bankName?: string | null; accountName: string; sortCode: string | null; accountNumber: string | null; iban: string | null; bic: string | null; instructions: string | null; reference: string | null } | null
   buyerClaimedAt?: string | null
+  /** Bank transfer: the bank the buyer said they pay from. */
+  payerBank?: string | null
 }
 
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string) =>
-    call<{ url?: string; orderUrl?: string; order?: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email }),
+  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName: string; payerBank: string }) =>
+    call<{ url?: string; orderUrl?: string; order?: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, ...(payer ?? {}) }),
   /** Bank transfer: "I've sent it" (never unlocks the download). */
   claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
   /** Back from PayPal: the server verifies the payment with PayPal. */

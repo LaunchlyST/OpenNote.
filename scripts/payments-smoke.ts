@@ -125,10 +125,11 @@ try {
   console.log('\n  Bank transfer')
   check('bank checkout needs the buyer’s email', (await req('POST', '/api/store/ava-pay/checkout', { productId: pid, method: 'bank', checkoutKey: key() })).status === 400)
   const bk = key()
-  const b1 = await req('POST', '/api/store/ava-pay/checkout', { productId: pid, method: 'bank', checkoutKey: bk, email: 'bank-buyer@pay.test' })
+  const b1 = await req('POST', '/api/store/ava-pay/checkout', { productId: pid, method: 'bank', checkoutKey: bk, email: 'bank-buyer@pay.test', payerName: 'Jo Buyer', payerBank: 'Monzo' })
   const b2 = await req('POST', '/api/store/ava-pay/checkout', { productId: pid, method: 'bank', checkoutKey: bk, email: 'bank-buyer@pay.test' })
   const bo = b1.json?.order
   check('bank checkout creates a pending order with amount, details and a reference', b1.status === 200 && bo?.status === 'pending' && bo.method === 'bank' && /^DK-[A-Z2-9]{8}$/.test(bo.bank?.reference) && bo.bank.accountNumber === '12345678' && bo.amountMinor === 1250, JSON.stringify(b1.json).slice(0, 200))
+  check('the buyer’s bank shows on their order page', b1.json?.order?.payerBank === 'Monzo')
   check('a retried bank checkout returns the same order', b2.json?.order?.id === bo.id && dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "checkoutKey" = ?`, bk).n === 1)
   const k = new URL(b1.json.orderUrl, ORIGIN).searchParams.get('k')!
   check('the unpaid bank order has no download link', bo.downloadUrl === null)
@@ -140,6 +141,7 @@ try {
   const so = sellerOrders.find((o: { id: string }) => o.id === bo.id)
   check('Ava’s Orders show the method, reference and the buyer’s claim', so?.method === 'bank' && so.reference === bo.bank.reference && Boolean(so.buyerClaimedAt))
   check('Ben can’t confirm Ava’s bank order', (await req('POST', `/api/seller/orders/${bo.id}/confirm`, {}, B)).status === 404)
+  check('the seller sees who paid and from which bank', sellerOrders.some((o: { payerName: string; payerBank: string }) => o.payerName === 'Jo Buyer' && o.payerBank === 'Monzo'))
   check('Ben sees none of Ava’s orders', (await req('GET', '/api/seller/orders', undefined, B)).json.orders.length === 0)
   const c1 = await req('POST', `/api/seller/orders/${bo.id}/confirm`, {}, A)
   const c2 = await req('POST', `/api/seller/orders/${bo.id}/confirm`, {}, A)

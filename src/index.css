@@ -7977,3 +7977,29 @@ select.ss-input option {
 @media (max-width: 520px) { .co2 { width: 100%; max-height: 94dvh; border-radius: 28px 28px 0 0; } }
 @media (prefers-reduced-motion: reduce) { .co2 { animation: none; } }
 .sp-owned { color: #16a34a !important; } .s2p-dl { display: grid; place-items: center; text-decoration: none; background: #16a34a !important; }
+/* checkout: the buyer's bank */
+.co2-bankpay { display: grid; gap: 10px; }
+.co2-sub { font-size: 12.5px; font-weight: 600; color: #3f3f46; }
+.co2-banks { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.co2-bankchip { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 8px; border-radius: 10px; border: 1px solid #e4e1ea; background: #fff; font-size: 12.5px; font-weight: 500; text-align: left; transition: border-color .15s, background .15s; }
+.co2-bankchip span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.co2-bankchip:hover { border-color: #c9c2d8; }
+.co2-bankchip.on { border: 1.5px solid #7c3aed; background: #f5f0fe; }
+.co2-bi { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; }
+.co2-bi svg { width: 62%; height: 62%; }
+.co2-bi-txt { font-size: 12px; font-weight: 800; color: #5b2bc4; background: #ede7fb; }
+.co2-bankpay .co2-input { margin-top: 2px; }
+/* bank transfer page: details with copy buttons */
+.bp { text-align: left; max-width: 520px; margin: 0 auto; }
+.bp-head { display: flex; gap: 14px; align-items: flex-start; }
+.bp-head .co2-bi { width: 48px; height: 48px; border-radius: 14px; }
+.bp-head h1 { margin: 0 0 6px; font-size: clamp(22px, 5vw, 28px); line-height: 1.15; }
+.bp-head p { margin: 0; font-size: 14px; opacity: .8; }
+.bp-details { display: grid; gap: 0; margin: 18px 0; border-radius: 16px; overflow: hidden; box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent); }
+.bp-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 12px 14px; }
+.bp-row + .bp-row { border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent); }
+.bp-row dt { font-size: 13px; opacity: .7; }
+.bp-row dd { margin: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.bp-row button { height: 30px; min-width: 62px; padding: 0 10px; border-radius: 8px; font-size: 12px; font-weight: 600; color: #fff; background: #7c3aed; }
+.bp-sent { width: 100%; height: 50px; border-radius: 14px; color: #fff !important; background: #6a4c9e !important; font-weight: 600; }
+.bp-details { width: 100%; }
