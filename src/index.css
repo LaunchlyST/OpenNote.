@@ -8281,3 +8281,7 @@ select.ss-input option {
 .pv-icon { width: 34px; height: 34px; }
 @media (max-width: 1280px) { .pv-btn svg { display: none; } }
 @media (max-width: 640px) { .pv-bar { flex-wrap: wrap; } }
+
+/* Style switch: back in its own place at the bottom middle of the editor box, under the blocks (not floating over them) */
+.ss-stylebar { position: static; bottom: auto; translate: none; margin-top: auto; padding: 24px 0 4px; pointer-events: auto; }
+@media (max-width: 1439px) { .pv-bar { flex-wrap: wrap; justify-content: center; row-gap: 8px; } }
