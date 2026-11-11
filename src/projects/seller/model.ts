@@ -86,7 +86,10 @@ export interface PaymentSettings {
   stripe: { enabled: boolean }
   paypal: { enabled: boolean; email: string }
   bank: { enabled: boolean; bankName: string; accountName: string; sortCode: string; accountNumber: string; iban: string; bic: string; instructions: string }
+  /** Every saved bank account; `bank` is the one buyers pay into. */
+  savedBanks?: SavedBank[]
 }
+export type SavedBank = Omit<PaymentSettings['bank'], 'enabled'>
 
 export interface SellerSetup {
   /** The platform has PayPal set up, so sellers can turn it on. */

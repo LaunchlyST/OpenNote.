@@ -47,7 +47,7 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, DraftProduct, Page, PayMethod, PaymentSettings, SellerSetup, StoreView } from './model'
+import type { Block, BlockType, DraftProduct, Page, PayMethod, PaymentSettings, SavedBank, SellerSetup, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -1404,12 +1404,90 @@ function BankMark({ name }: { name: string }) {
 
 type OrderRow = Awaited<ReturnType<typeof sellerApi.orders>>['orders'][number]
 
+/** Bank transfer money is already in the seller's bank: show it, payment by payment. */
+function PaidToBankDialog({ total, currency, bank, last, orders, onClose, onChange }: { total: number; currency: string; bank: PaymentSettings['bank']; last: string; orders: OrderRow[]; onClose: () => void; onChange: () => void }) {
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    return () => document.removeEventListener('keydown', k)
+  }, [onClose])
+  const paid = orders.filter((o) => o.status === 'paid')
+  const waiting = orders.filter((o) => o.status === 'pending')
+  return (
+    <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="ss-modal wl-modal" role="dialog" aria-modal="true" aria-labelledby="ptb-title">
+        <div className="ss-modal-body">
+          <div className="wl-done-badge" aria-hidden="true">✓</div>
+          <h2 id="ptb-title">All done: it’s in your bank</h2>
+          <p className="wl-modal-amount">{formatPrice(total, currency)}</p>
+          <p className="ss-muted">Buyers paid this straight into your account by bank transfer, so there’s nothing to send. New payments go to:</p>
+          <div className="wl-pickrow on wl-dest">
+            <BankMark name={bank.bankName} />
+            <span className="wl-pickinfo"><b>{bank.bankName || 'Bank account'}</b><small>{bank.accountName} · ending in {last}</small></span>
+            <button type="button" className="wl-btn" onClick={onChange}>Change account</button>
+          </div>
+          {paid.length > 0 && (
+            <ul className="wl-paidlist" aria-label="Bank transfer payments">
+              {paid.map((o) => (
+                <li key={o.id}><span className="ok">✓</span><span>{o.product}<small>{new Date(o.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}{o.reference ? ` · ${o.reference}` : ''}</small></span><b>{formatPrice(o.amountMinor, o.currency)}</b></li>
+              ))}
+            </ul>
+          )}
+          {waiting.length > 0 && <p className="ss-note">{waiting.length} bank transfer{waiting.length === 1 ? ' is' : 's are'} waiting for you to confirm it arrived (in Orders).</p>}
+          {!paid.length && !waiting.length && <p className="ss-muted">No bank transfer sales yet.</p>}
+        </div>
+        <div className="ss-modal-foot">
+          <button type="button" className="ss-primary" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Pick which saved bank account buyers pay into. */
+function ChooseBankDialog({ saved, activeIndex, onPick, onClose, onAdd }: { saved: SavedBank[]; activeIndex: number; onPick: (i: number) => Promise<void>; onClose: () => void; onAdd: () => void }) {
+  const [pick, setPick] = useState(Math.max(0, activeIndex))
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    return () => document.removeEventListener('keydown', k)
+  }, [onClose])
+  return (
+    <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="ss-modal wl-modal" role="dialog" aria-modal="true" aria-labelledby="cb-title" onSubmit={(e) => { e.preventDefault(); setBusy(true); void onPick(pick).finally(() => setBusy(false)) }}>
+        <div className="ss-modal-body">
+          <h2 id="cb-title">Where should buyers pay?</h2>
+          <p className="ss-muted">Bank transfer sales go straight into the account you choose.</p>
+          <div className="wl-pick" role="radiogroup" aria-label="Bank account">
+            {saved.map((b, i) => (
+              <label key={i} className={cn('wl-pickrow', pick === i && 'on')}>
+                <input type="radio" name="bank" checked={pick === i} onChange={() => setPick(i)} />
+                <BankMark name={b.bankName} />
+                <span className="wl-pickinfo"><b>{b.bankName || 'Bank account'}</b><small>{b.accountName} · ending in {b.accountNumber.slice(-4) || b.iban.slice(-4)}</small></span>
+                {i === activeIndex && <em className="wl-tag">In use</em>}
+              </label>
+            ))}
+          </div>
+          <button type="button" className="wl-addnew" onClick={onAdd}>+ Add a new bank account</button>
+        </div>
+        <div className="ss-modal-foot">
+          <button type="button" className="ss-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="ss-primary" disabled={busy || pick === activeIndex}>{busy ? 'Saving…' : 'Use this account'}</button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
 function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: SellerSetup; reload: (refresh?: boolean) => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [payments, setPayments] = useState<PaymentSettings>(() => store.payouts.payments ?? EMPTY_PAYMENTS)
   const [methods, setMethods] = useState<PayMethod[]>(() => store.payouts.methods ?? [])
-  const [bankOpen, setBankOpen] = useState(false)
+  const [bankOpen, setBankOpen] = useState<false | 'edit' | 'new'>(false)
+  const [choosing, setChoosing] = useState(false)
+  const [paidOpen, setPaidOpen] = useState(false)
   const [data, setData] = useState<Earnings | null>(null)
   const [orders, setOrders] = useState<OrderRow[] | null>(null)
   const [withdrawing, setWithdrawing] = useState(false)
@@ -1432,10 +1510,21 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       setBusy(false)
     }
   }
-  const saved = (v: StoreView) => {
+  const afterSave = (v: StoreView) => {
     setPayments(v.payouts.payments ?? payments)
     setMethods(v.payouts.methods ?? [])
   }
+  const [bankErr, setBankErr] = useState<string | null>(null)
+  const useBank = async (i: number) => {
+    setBankErr(null)
+    try { afterSave((await sellerApi.useBank(i)).store) } catch (e) { setBankErr((e as Error).message) }
+  }
+  const removeBank = async (i: number) => {
+    setBankErr(null)
+    try { afterSave((await sellerApi.removeBank(i)).store) } catch (e) { setBankErr((e as Error).message) }
+  }
+  const saved = payments.savedBanks ?? []
+  const isActive = (b: SavedBank) => (Boolean(b.iban) && b.iban === payments.bank.iban) || (Boolean(b.accountNumber) && b.accountNumber === payments.bank.accountNumber && b.sortCode === payments.bank.sortCode)
   const bank = payments.bank
   const bankSet = bankComplete(payments)
   const main = data?.totals[0]
@@ -1455,10 +1544,12 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             <>
               {/* bank transfer only: buyers pay straight into the seller's bank, nothing to withdraw */}
               <span className="wl-label">Paid straight to your bank</span>
-              <b className="wl-big">{formatPrice(main?.byMethod.bank ?? 0, cur)}</b>
+              <button type="button" className="wl-big wl-bigbtn" onClick={() => setPaidOpen(true)} aria-label={`${formatPrice(main?.byMethod.bank ?? 0, cur)} paid to your bank. Show details`}>{formatPrice(main?.byMethod.bank ?? 0, cur)} <span aria-hidden="true">›</span></button>
               <small className="wl-sub">Bank transfer sales go directly to {bank.bankName || 'your bank'} ••{last4(payments)}. Nothing to withdraw: the money is already yours.</small>
               <div className="wl-balance-foot">
-                <span className="wl-direct"><BankMark name={bank.bankName} /> {bank.bankName || 'Bank'} ••{last4(payments)}</span>
+                <button type="button" className="wl-direct" onClick={() => setChoosing(true)} aria-label={`Buyers pay into ${bank.bankName || 'Bank'} ending ${last4(payments)}. Change account`}>
+                  <BankMark name={bank.bankName} /> {bank.bankName || 'Bank'} ••{last4(payments)} <span className="wl-change">Change ▾</span>
+                </button>
               </div>
             </>
           ) : (
@@ -1485,7 +1576,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
 
       <div className="wl-row">
         <h2 className="wl-h">Your Bank Accounts</h2>
-        {setup.stripe && <button type="button" className="wl-add" onClick={() => void go()} disabled={busy}>+ Add bank account</button>}
+        <button type="button" className="wl-add" onClick={() => setBankOpen(bankSet ? 'new' : 'edit')}>+ Add bank account</button>
       </div>
       <div className="wl-banks">
         {banks.map((b) => (
@@ -1499,27 +1590,39 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             <footer><small>For withdrawals</small></footer>
           </article>
         ))}
-        {/* the account buyers pay into for bank-transfer sales */}
-        <article className={cn('wl-bank', !bankSet && 'wl-bank-empty')} aria-label="Bank transfer">
-          <header>
-            <BankMark name={bank.bankName} />
-            <b>{bankSet ? bank.bankName || 'Bank account' : 'Bank transfer'}</b>
-            <em className={cn('wl-tag', methods.includes('bank') ? 'on' : 'off')}>{methods.includes('bank') ? 'On' : bankSet ? 'Off' : 'Not set up'}</em>
-          </header>
-          {bankSet ? (
-            <dl>
-              <dt>Name</dt><dd>{bank.accountName}</dd>
-              <dt>Account number</dt><dd>•••• {last4(payments)}</dd>
-              {bank.sortCode && <><dt>Sort code</dt><dd>{formatSort(bank.sortCode)}</dd></>}
-            </dl>
-          ) : (
+        {/* the seller's own bank accounts: the one "In use" is where buyers pay */}
+        {saved.map((sb, i) => {
+          const active = isActive(sb)
+          return (
+            <article key={`${sb.sortCode}${sb.accountNumber}${sb.iban}`} className={cn('wl-bank', active && 'wl-bank-active', !active && 'wl-bank-pick')} aria-label={`${sb.bankName || 'Bank'} ending ${sb.accountNumber.slice(-4) || sb.iban.slice(-4)}`}
+              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void useBank(i) }}>
+              <header>
+                <BankMark name={sb.bankName} />
+                <b>{sb.bankName || 'Bank account'}</b>
+                {active ? <em className={cn('wl-tag', methods.includes('bank') ? 'on' : 'off')}>{methods.includes('bank') ? 'In use' : 'Off'}</em> : <button type="button" className="wl-x" aria-label={`Remove ${sb.bankName || 'this bank account'}`} onClick={() => void removeBank(i)}>✕</button>}
+              </header>
+              <dl>
+                <dt>Name</dt><dd>{sb.accountName}</dd>
+                <dt>Account number</dt><dd>•••• {sb.accountNumber.slice(-4) || sb.iban.slice(-4)}</dd>
+                {sb.sortCode && <><dt>Sort code</dt><dd>{formatSort(sb.sortCode)}</dd></>}
+              </dl>
+              <footer>
+                <small>{active ? 'Buyers pay here' : ''}</small>
+                {active
+                  ? <button type="button" className="wl-btn" onClick={() => setBankOpen('edit')}>Edit bank details</button>
+                  : <button type="button" className="wl-btn wl-btn-main" onClick={() => void useBank(i)}>Use this account</button>}
+              </footer>
+            </article>
+          )
+        })}
+        {!saved.length && (
+          <article className="wl-bank wl-bank-empty" aria-label="Bank transfer">
+            <header><BankMark name="" /><b>Bank transfer</b><em className="wl-tag off">Not set up</em></header>
             <p className="ss-muted">Buyers pay straight into your bank. You confirm each payment in Orders.</p>
-          )}
-          <footer>
-            <small>{bankSet ? 'Buyers pay here' : ''}</small>
-            <button type="button" className={bankSet ? 'wl-btn' : 'wl-btn wl-btn-main'} onClick={() => setBankOpen(true)}>{bankSet ? 'Edit bank details' : 'Connect bank account'}</button>
-          </footer>
-        </article>
+            <footer><small /><button type="button" className="wl-btn wl-btn-main" onClick={() => setBankOpen('edit')}>Connect bank account</button></footer>
+          </article>
+        )}
+        {bankErr && <p className="ss-note" role="alert">{bankErr}</p>}
         {s === 'ready' && data && banks.length === 0 && (
           <article className="wl-bank wl-bank-empty">
             <header><b>No payout account yet</b></header>
@@ -1573,7 +1676,22 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       </div>
       <p className="ss-muted wl-fee">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
 
-      {bankOpen && <BankDialog payments={payments} onClose={() => setBankOpen(false)} onSaved={(v) => (saved(v), setBankOpen(false))} />}
+      {bankOpen && <BankDialog fresh={bankOpen === 'new'} payments={payments} onClose={() => setBankOpen(false)} onSaved={(v) => (afterSave(v), setBankOpen(false))} />}
+      {paidOpen && (
+        <PaidToBankDialog
+          total={main?.byMethod.bank ?? 0}
+          currency={cur}
+          bank={bank}
+          last={last4(payments)}
+          orders={(orders ?? []).filter((o) => o.method === 'bank')}
+          onClose={() => setPaidOpen(false)}
+          onChange={() => (setPaidOpen(false), setChoosing(true))}
+        />
+      )}
+      {choosing && (
+        <ChooseBankDialog saved={saved} activeIndex={saved.findIndex(isActive)} onClose={() => setChoosing(false)} onAdd={() => (setChoosing(false), setBankOpen('new'))}
+          onPick={async (i) => { await useBank(i); setChoosing(false) }} />
+      )}
       {withdrawing && <WithdrawDialog amount={avail} currency={cur} banks={banks} onClose={() => setWithdrawing(false)} onSent={(m) => (setSent(m), setWithdrawing(false), void load())} />}
     </div>
   )
@@ -1611,11 +1729,11 @@ const formatSort = (v: string) => v.replace(/\D/g, '').slice(0, 6).replace(/^(\d
 const last4 = (p: PaymentSettings) => (p.bank.accountNumber ? p.bank.accountNumber.slice(-4) : p.bank.iban.slice(-4))
 
 /** Bank details for receiving transfers (never card details). Saved through the existing validation. */
-function BankDialog({ payments, onClose, onSaved }: { payments: PaymentSettings; onClose: () => void; onSaved: (s: StoreView) => void }) {
-  // First connection: accepting transfers is on by default; editing keeps the seller's choice.
-  const [b, setB] = useState(() => ({ ...payments.bank, enabled: bankComplete(payments) ? payments.bank.enabled : true }))
+function BankDialog({ payments, onClose, onSaved, fresh = false }: { payments: PaymentSettings; onClose: () => void; onSaved: (s: StoreView) => void; fresh?: boolean }) {
+  // First connection or a new account: empty and on; editing keeps the seller's choice.
+  const [b, setB] = useState(() => (fresh ? { ...EMPTY_PAYMENTS.bank, enabled: true } : { ...payments.bank, enabled: bankComplete(payments) ? payments.bank.enabled : true }))
   const known = BANKS.some((x) => x.name === b.bankName)
-  const [choice, setChoice] = useState(() => (!payments.bank.bankName ? '' : known ? payments.bank.bankName : OTHER))
+  const [choice, setChoice] = useState(() => (!b.bankName ? '' : known ? b.bankName : OTHER))
   const [err, setErr] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const panel = useRef<HTMLFormElement>(null)

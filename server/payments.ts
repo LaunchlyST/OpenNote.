@@ -30,12 +30,19 @@ export interface PaymentSettings {
     bic: string
     instructions: string
   }
+  /** Every bank account the seller saved. `bank` above is the one buyers pay into. */
+  savedBanks: SavedBank[]
 }
+export type SavedBank = Omit<PaymentSettings['bank'], 'enabled'>
+const BANK_FIELDS = ['bankName', 'accountName', 'sortCode', 'accountNumber', 'iban', 'bic', 'instructions'] as const
+const pickBank = (b: PaymentSettings['bank'] | SavedBank): SavedBank => Object.fromEntries(BANK_FIELDS.map((k) => [k, b[k] ?? ''])) as SavedBank
+const sameBank = (a: SavedBank, b: SavedBank) => (a.iban && a.iban === b.iban) || (Boolean(a.accountNumber) && a.accountNumber === b.accountNumber && a.sortCode === b.sortCode)
 
 export const defaultPayments = (): PaymentSettings => ({
   stripe: { enabled: true },
   paypal: { enabled: false, email: '' },
   bank: { enabled: false, bankName: '', accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
+  savedBanks: [],
 })
 
 export function readPayments(raw: string | null | undefined): PaymentSettings {
@@ -43,11 +50,15 @@ export function readPayments(raw: string | null | undefined): PaymentSettings {
   if (!raw) return d
   try {
     const j = JSON.parse(raw) as Partial<PaymentSettings>
-    return {
+    const out: PaymentSettings = {
       stripe: { ...d.stripe, ...(j.stripe ?? {}) },
       paypal: { ...d.paypal, ...(j.paypal ?? {}) },
       bank: { ...d.bank, ...(j.bank ?? {}) },
+      savedBanks: Array.isArray(j.savedBanks) ? j.savedBanks.slice(0, 10).map((x) => pickBank(x as SavedBank)) : [],
     }
+    // older stores saved just one account: it becomes the first saved one
+    if (!out.savedBanks.length && bankComplete(out)) out.savedBanks = [pickBank(out.bank)]
+    return out
   } catch {
     return d
   }
@@ -82,6 +93,28 @@ export function cleanPayments(input: unknown, current: PaymentSettings): Payment
     if (next.bank.iban && !/^[A-Z]{2}\d{2}[A-Z0-9]{10,30}$/.test(next.bank.iban)) return 'That IBAN doesn’t look right.'
     if (next.bank.bic && !/^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(next.bank.bic)) return 'A BIC/SWIFT code has 8 or 11 characters.'
     if (next.bank.enabled && !bankComplete(next)) return 'Add the account name and either a sort code and account number or an IBAN before turning bank transfer on.'
+    // remember it in the list (updating the same account rather than adding it twice)
+    if (bankComplete(next)) {
+      const saved = pickBank(next.bank)
+      const i = next.savedBanks.findIndex((x) => sameBank(x, saved))
+      if (i >= 0) next.savedBanks[i] = saved
+      else if (next.savedBanks.length >= 10) return 'You can save up to 10 bank accounts. Remove one first.'
+      else next.savedBanks.push(saved)
+    }
+  }
+  // choose which saved account buyers pay into
+  const use = (input as { useBank?: unknown })?.useBank
+  if (typeof use === 'number') {
+    const pick = next.savedBanks[use]
+    if (!pick) return 'That bank account isn’t saved.'
+    next.bank = { ...pick, enabled: true }
+  }
+  const remove = (input as { removeBank?: unknown })?.removeBank
+  if (typeof remove === 'number') {
+    const gone = next.savedBanks[remove]
+    if (!gone) return 'That bank account isn’t saved.'
+    if (sameBank(gone, pickBank(next.bank))) return 'Choose another account for buyers before removing this one.'
+    next.savedBanks.splice(remove, 1)
   }
   return next
 }
