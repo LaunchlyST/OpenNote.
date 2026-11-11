@@ -160,7 +160,7 @@ try {
   await page.screenshot({ path: join(SHOTS, 'studio-page.png') })
 
   // 4. Publish
-  await page.getByRole('button', { name: 'Publish', exact: true }).click()
+  await page.getByLabel('Store builder').getByRole('button', { name: 'Publish', exact: true }).click()
   await page.getByText('● Live').waitFor()
   check('published', true)
 

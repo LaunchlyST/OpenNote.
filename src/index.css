@@ -8241,3 +8241,43 @@ select.ss-input option {
 .ss-preview .ss-device .ss-screen { cursor: auto; }
 .ss-device-drag { cursor: grabbing !important; animation: none !important; transition: none; z-index: 5; }
 .ss-preview .ss-device:not(.ss-device-drag) { transition: transform .25s ease; }
+/* ---- Phone side: light and airy, toolbar on top (like the reference) ---- */
+.ss { background: radial-gradient(70% 60% at 85% 10%, #ffffff 0%, transparent 60%), radial-gradient(60% 70% at 15% 90%, #c9cfdb 0%, transparent 65%), linear-gradient(160deg, #eef0f4 0%, #e3e6ec 100%); }
+.ss-preview { --tx: #111114; --bd: #e4e4e7; --mu: #6b6b76; color: #111114; }
+.pv-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
+.pv-group { display: inline-flex; gap: 4px; margin-right: auto; }
+.pv-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #3f3f46; background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px #e4e4e7; }
+.pv-icon:disabled { color: #c4c4c8; }
+.pv-icon:hover:not(:disabled) { background: #fff; }
+.pv-saved { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #3f3f46; background: rgba(255,255,255,.75); box-shadow: inset 0 0 0 1px #e4e4e7; }
+.pv-saved i { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+.pv-saved.busy i { background: #f59e0b; animation: cz-led 1s ease-in-out infinite; }
+.pv-saved.err i { background: #ef4444; }
+.pv-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 999px; font-size: 13.5px; font-weight: 600; color: #111114; background: #fff; box-shadow: inset 0 0 0 1px #e4e4e7, 0 1px 2px rgba(0,0,0,.05); transition: background .15s, transform .12s; }
+.pv-btn:hover:not(:disabled) { background: #fafafa; }
+.pv-btn:active:not(:disabled) { transform: scale(.97); }
+.pv-publish { color: #fff; background: #111827; box-shadow: 0 6px 16px -6px rgba(17,24,39,.6); }
+.pv-publish:hover:not(:disabled) { background: #1f2937; }
+.pv-publish:disabled { opacity: .6; }
+.pv-caption { display: flex; align-items: center; gap: 6px; margin: 4px 0 0; font: 500 12px ui-monospace, 'SFMono-Regular', Menlo, monospace; color: #6b6b76; }
+.pv-caption a { color: inherit; text-decoration: none; } .pv-caption a:hover { text-decoration: underline; }
+.ss-preview .ss-device { box-shadow: inset 0 0 0 1.5px #3a3a44, 0 40px 80px -36px rgba(15,23,42,.55), 0 0 0 1px #0b0b0f; }
+/* preview popup */
+.pvm-back { position: fixed; inset: 0; z-index: 75; display: grid; place-items: center; padding: 16px; background: rgba(15,23,42,.45); backdrop-filter: blur(4px); animation: co-fade .2s ease; }
+.pvm { display: flex; flex-direction: column; width: min(1100px, 100%); height: min(860px, calc(100dvh - 32px)); border-radius: 22px; background: #f4f5f7; box-shadow: 0 30px 80px rgba(0,0,0,.35); overflow: hidden; animation: co-up .25s cubic-bezier(.2,.8,.2,1); }
+.pvm-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 14px 12px 20px; background: #fff; border-bottom: 1px solid #e4e4e7; }
+.pvm-head b { font-size: 16px; }
+.pvm-url { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 12px ui-monospace, Menlo, monospace; color: #6b6b76; }
+.pvm-seg { --bd: #e4e4e7; --tx: #111114; --sf: #f4f4f5; --mu: #6b6b76; }
+.pvm-stage { flex: 1; min-height: 0; overflow: auto; display: grid; justify-items: center; padding: 22px 16px; }
+.pvm-frame { width: 390px; max-width: 100%; height: fit-content; min-height: 100%; border-radius: 28px; overflow: hidden; background: #fff; box-shadow: 0 0 0 10px #111114, 0 30px 60px -20px rgba(0,0,0,.4); transition: width .3s cubic-bezier(.2,.8,.2,1), border-radius .3s; }
+.pvm-wide { width: 100%; border-radius: 14px; box-shadow: 0 0 0 1px #e4e4e7, 0 20px 50px -20px rgba(0,0,0,.25); }
+.pv-page { min-height: 100%; }
+.pvm-frame .sp { min-height: 100%; }
+@media (max-width: 640px) { .pv-group { margin-right: 0; } .pv-bar { justify-content: center; } .pvm-url { display: none; } }
+.pv-bar { flex-wrap: nowrap; gap: 6px; }
+.pv-btn { height: 34px; padding: 0 11px; font-size: 13px; white-space: nowrap; }
+.pv-saved { height: 34px; padding: 0 11px; font-size: 12.5px; white-space: nowrap; }
+.pv-icon { width: 34px; height: 34px; }
+@media (max-width: 1280px) { .pv-btn svg { display: none; } }
+@media (max-width: 640px) { .pv-bar { flex-wrap: wrap; } }

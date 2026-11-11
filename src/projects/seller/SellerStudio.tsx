@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
+  Monitor,
+  Redo2,
+  Share2,
+  Undo2,
   Film,
   HelpCircle,
   Image as ImageIcon,
@@ -483,6 +488,15 @@ function Studio({
   const styleBar = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [toast, setToast] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [shared, setShared] = useState(false)
+  const share = async () => {
+    const url = store.url
+    try {
+      if (navigator.share && window.innerWidth < 760) await navigator.share({ title: page.name || store.handle, url })
+      else { await navigator.clipboard.writeText(url); setShared(true); window.setTimeout(() => setShared(false), 1600) }
+    } catch { /* cancelled */ }
+  }
   // Undo / redo over the draft (every change still autosaves as the draft only).
   const hist = useRef<{ past: Page[]; future: Page[] }>({ past: [], future: [] })
   const [, rerender] = useState(0)
@@ -771,14 +785,18 @@ function Studio({
       </section>
 
       <aside className="ss-preview" aria-label="Draft preview">
-        <div className="ss-preview-bar">
-          {store.publishedAt && (
-            <div className="ss-livebox">
-              <a href={`/${store.handle}`} target="_blank" rel="noreferrer">
-                <ExternalLink className="h-3.5 w-3.5" /> View live
-              </a>
-            </div>
-          )}
+        {/* toolbar: undo/redo, save state, preview, share, publish */}
+        <div className="pv-bar">
+          <span className="pv-group">
+            <button type="button" className="pv-icon" onClick={undo} disabled={!hist.current.past.length} aria-label="Undo"><Undo2 className="h-4 w-4" /></button>
+            <button type="button" className="pv-icon" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><Redo2 className="h-4 w-4" /></button>
+          </span>
+          <span className={cn('pv-saved', (saving === 'saving' || pageSave.dirty) && 'busy', saving === 'error' && 'err')} aria-live="polite">
+            <i />{saving === 'saving' || pageSave.dirty ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved ✓'}
+          </span>
+          <button type="button" className="pv-btn" onClick={() => setPreviewOpen(true)}><Eye className="h-4 w-4" /> Preview</button>
+          <button type="button" className="pv-btn" onClick={() => void share()}><Share2 className="h-4 w-4" /> {shared ? 'Link copied' : 'Share'}</button>
+          <button type="button" className="pv-btn pv-publish" onClick={() => void publish()} disabled={publishing}><Globe className="h-4 w-4" /> {publishing ? 'Publishing…' : 'Publish'}</button>
         </div>
         <div
           className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}
@@ -819,6 +837,16 @@ function Studio({
             </div>
           </div>
         </div>
+        <p className="pv-caption"><Link2 className="h-3.5 w-3.5" /> {store.publishedAt ? 'Live preview' : 'Draft preview'} · <a href={`/${store.handle}`} target="_blank" rel="noreferrer">{store.url.replace(/^https?:\/\//, '')}</a></p>
+        {previewOpen && (
+          <PreviewModal onClose={() => setPreviewOpen(false)} url={store.url} published={Boolean(store.publishedAt)} onPublish={() => void publish().then(() => setPreviewOpen(false))}>
+            {slide === 1 ? (
+              <Style2Page page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} />
+            ) : (
+              <div style={storeStyle(page)} className="pv-page"><StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} /></div>
+            )}
+          </PreviewModal>
+        )}
         {toast && (
           <div className="ss-toast" role="status">
             <span><Check className="h-4 w-4" /></span> Published successfully · your store is live
@@ -932,6 +960,38 @@ const CATALOG: Record<string, CatalogItem[]> = {
   ],
 }
 export const BANNER_ID = '__banner__'
+
+/** Preview: the whole draft page in a popup, phone or desktop width, before publishing. */
+function PreviewModal({ children, onClose, onPublish, url, published }: { children: ReactNode; onClose: () => void; onPublish: () => void; url: string; published: boolean }) {
+  const [wide, setWide] = useState(false)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', k); document.body.style.overflow = prev }
+  }, [onClose])
+  return createPortal(
+    <div className="pvm-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="pvm" role="dialog" aria-modal="true" aria-label="Preview your page">
+        <header className="pvm-head">
+          <b>Preview</b>
+          <span className="pvm-url">{url.replace(/^https?:\/\//, '')}{published ? '' : ' · not published yet'}</span>
+          <div className="ss-seg pvm-seg" role="tablist" aria-label="Preview size">
+            <button type="button" role="tab" aria-selected={!wide} onClick={() => setWide(false)}><Smartphone className="h-3.5 w-3.5" /> Phone</button>
+            <button type="button" role="tab" aria-selected={wide} onClick={() => setWide(true)}><Monitor className="h-3.5 w-3.5" /> Desktop</button>
+          </div>
+          <button type="button" className="pv-btn pv-publish" onClick={onPublish}><Globe className="h-4 w-4" /> {published ? 'Update page' : 'Publish'}</button>
+          <button type="button" className="ab-x" onClick={onClose} aria-label="Close preview"><CloseIcon className="h-4 w-4" /></button>
+        </header>
+        <div className="pvm-stage">
+          <div className={wide ? 'pvm-frame pvm-wide' : 'pvm-frame'}>{children}</div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, onAdd, createProduct }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
   const blocks = pinEnds(page.blocks)
