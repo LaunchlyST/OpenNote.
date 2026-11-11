@@ -728,7 +728,6 @@ function Studio({
             </div>
           </div>
         </div>
-        <DesignChat />
         {toast && (
           <div className="ss-toast" role="status">
             <span><Check className="h-4 w-4" /></span> Published successfully · your store is live
@@ -787,16 +786,6 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
       )}
       {up.err && <span className="ss-hint text-[#b42318]">{up.err}</span>}
     </div>
-  )
-}
-
-/** Design assistant: a quiet, disabled message box until the AI is ready. */
-function DesignChat() {
-  return (
-    <section className="ss-chatsoon" aria-label="AI design assistant (coming soon)">
-      <input disabled placeholder="Describe a change to your store…" aria-label="Message the design assistant (coming soon)" />
-      <span className="ss-chatsoon-tag">AI · Coming soon</span>
-    </section>
   )
 }
 
