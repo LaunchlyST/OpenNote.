@@ -472,8 +472,6 @@ function Studio({
   const [picked, setPicked] = useState<string | null>(null)
   const view = 'mobile' as 'mobile' | 'desktop'
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
-  const [side, setSide] = useState<'right' | 'left'>(() => { try { return localStorage.getItem('desknoty.seller.previewSide') === 'left' ? 'left' : 'right' } catch { return 'right' } })
-  const flipSide = () => setSide((v) => { const n = v === 'right' ? 'left' : 'right'; try { localStorage.setItem('desknoty.seller.previewSide', n) } catch { /* fine */ } return n })
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const pageSave = useSellerSave(`desknoty.seller.recovery.${store.id}.page`, store.draft, store.revision, async (value, revision) => {
@@ -701,7 +699,7 @@ function Studio({
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
-    <div className={cn('ss', side === 'left' && 'ss-previewleft')}>
+    <div className="ss">
       <section className="ss-editor" aria-label="Store builder">
         {/* One navbar at the very top; scrolls sideways in one row on phones */}
         <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
@@ -800,30 +798,42 @@ function Studio({
         </div>
         <div
           className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}
-          title="Drag the phone's frame to move it to the other side"
-          onPointerDown={(e) => {
-            // only the frame (not the screen) moves the phone
-            if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains('ss-island')) return
-            if (window.innerWidth <= 1100) return
-            const dev = e.currentTarget
-            const x0 = e.clientX
-            dev.setPointerCapture(e.pointerId)
-            dev.classList.add('ss-device-drag')
-            const mv = (ev: PointerEvent) => { dev.style.transform = `translateX(${ev.clientX - x0}px)` }
-            const up = (ev: PointerEvent) => {
-              dev.removeEventListener('pointermove', mv)
-              dev.removeEventListener('pointerup', up)
-              dev.classList.remove('ss-device-drag')
-              dev.style.transform = ''
-              const dx = ev.clientX - x0
-              if ((side === 'right' && dx < -120) || (side === 'left' && dx > 120)) flipSide()
-            }
-            dev.addEventListener('pointermove', mv)
-            dev.addEventListener('pointerup', up)
-          }}
         >
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
-          <div className="ss-screen ss-slides">
+          <div
+            className="ss-screen ss-slides"
+            onPointerDown={(e) => {
+              // swipe the page inside the phone: left for Style 2, right back to Style 1
+              if (e.button !== 0 || (e.target as HTMLElement).closest('.sp-grip, input, textarea, select')) return
+              const scr = e.currentTarget
+              const track = scr.querySelector<HTMLElement>('.ss-track')!
+              const x0 = e.clientX, y0 = e.clientY
+              let on = false
+              const mv = (ev: PointerEvent) => {
+                const dx = ev.clientX - x0, dy = ev.clientY - y0
+                if (!on && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) { on = true; scr.setPointerCapture(ev.pointerId); track.style.transition = 'none' }
+                if (on) track.style.transform = `translateX(calc(${slide * -50}% + ${dx}px))`
+              }
+              const up = (ev: PointerEvent) => {
+                scr.removeEventListener('pointermove', mv)
+                scr.removeEventListener('pointerup', up)
+                scr.removeEventListener('pointercancel', up)
+                if (!on) return
+                track.style.transition = ''
+                track.style.transform = ''
+                const dx = ev.clientX - x0
+                if (dx < -60 && slide === 0) (setSlide(1), closeEditor())
+                else if (dx > 60 && slide === 1) setSlide(0)
+                // a swipe is not a click on a section
+                const stop = (ce: MouseEvent) => (ce.stopPropagation(), ce.preventDefault())
+                scr.addEventListener('click', stop, { capture: true, once: true })
+                setTimeout(() => scr.removeEventListener('click', stop, { capture: true }), 50)
+              }
+              scr.addEventListener('pointermove', mv)
+              scr.addEventListener('pointerup', up)
+              scr.addEventListener('pointercancel', up)
+            }}
+          >
             <div className="ss-track" style={{ transform: `translateX(${slide * -50}%)` }}>
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
@@ -981,7 +991,9 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
             <button type="button" role="tab" aria-selected={!wide} onClick={() => setWide(false)}><Smartphone className="h-3.5 w-3.5" /> Phone</button>
             <button type="button" role="tab" aria-selected={wide} onClick={() => setWide(true)}><Monitor className="h-3.5 w-3.5" /> Desktop</button>
           </div>
-          <button type="button" className="pv-btn pv-publish" onClick={onPublish}><Globe className="h-4 w-4" /> {published ? 'Update page' : 'Publish'}</button>
+          {published
+            ? <a className="pv-btn pv-publish" href={url} target="_blank" rel="noreferrer"><Globe className="h-4 w-4" /> Visit website</a>
+            : <button type="button" className="pv-btn pv-publish" onClick={onPublish}><Globe className="h-4 w-4" /> Publish</button>}
           <button type="button" className="ab-x" onClick={onClose} aria-label="Close preview"><CloseIcon className="h-4 w-4" /></button>
         </header>
         <div className="pvm-stage">
@@ -1285,8 +1297,12 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
   const style: CSSProperties = phone || !anchor
     ? {}
     : {
-        left: Math.max(12, anchor.left - W - 18 < 12 ? Math.min(anchor.right + 18, window.innerWidth - W - 12) : anchor.left - W - 18),
-        top: Math.min(Math.max(12, anchor.top - 10), window.innerHeight - 420),
+        // straight above the section you clicked (below it when there's no room above)
+        left: Math.min(Math.max(12, anchor.left + anchor.width / 2 - W / 2), window.innerWidth - W - 12),
+        ...(anchor.top > 320
+          ? { bottom: window.innerHeight - anchor.top + 10, maxHeight: Math.min(560, anchor.top - 22) }
+          : { top: anchor.bottom + 10, maxHeight: Math.min(560, window.innerHeight - anchor.bottom - 22) }),
+        overflowY: 'auto',
       }
   if (id === BANNER_ID)
     return (

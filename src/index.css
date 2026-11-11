@@ -8236,14 +8236,8 @@ select.ss-input option {
 /* Style switch back inside the white box, bottom middle (sticky to the box) */
 .ss-stylebar { position: sticky; bottom: 16px; left: auto; translate: none; margin-top: auto; padding-top: 20px; }
 .ss-editor { padding-bottom: 28px; }
-/* drag the phone by its frame to move it to the other side */
-.ss-preview .ss-device { cursor: grab; }
-.ss-preview .ss-device .ss-screen { cursor: auto; }
-.ss-device-drag { cursor: grabbing !important; animation: none !important; transition: none; z-index: 5; }
-.ss-preview .ss-device:not(.ss-device-drag) { transition: transform .25s ease; }
+
 /* ---- Phone side: light and airy, toolbar on top (like the reference) ---- */
-.ss { background: radial-gradient(70% 60% at 85% 10%, #ffffff 0%, transparent 60%), radial-gradient(60% 70% at 15% 90%, #c9cfdb 0%, transparent 65%), linear-gradient(160deg, #eef0f4 0%, #e3e6ec 100%); }
-.ss-preview { --tx: #111114; --bd: #e4e4e7; --mu: #6b6b76; color: #111114; }
 .pv-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; width: 100%; }
 .pv-group { display: inline-flex; gap: 4px; margin-right: auto; }
 .pv-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #3f3f46; background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px #e4e4e7; }
