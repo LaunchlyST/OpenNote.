@@ -449,6 +449,7 @@ function Studio({
   reload: (refresh?: boolean) => Promise<void>
 }) {
   const [tab, setTab] = useState<Tab>('page')
+  const [picked, setPicked] = useState<string | null>(null)
   const [view, setView] = useState<'mobile' | 'desktop'>('mobile')
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -525,7 +526,7 @@ function Studio({
 
         {pageSave.state !== 'Saved' && <p role="status">{pageSave.state} <button type="button" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
-        {tab === 'page' && <PageEditor page={page} onChange={edit} products={store.products} />}
+        {tab === 'page' && <><PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={setPicked} /><DesignChat /></>}
         {tab === 'products' && <ProductsEditor store={store} setStore={setStore} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
@@ -555,7 +556,7 @@ function Studio({
           {/* the whole phone screen takes the store's colours, top strip included */}
           <div className="ss-screen" style={storeStyle(page)}>
             <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-            <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} />
+            <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onPick={(id) => (setTab('page'), setPicked(id), window.setTimeout(() => document.querySelector(`[data-block="${id}"], [data-pinned="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60))} />
           </div>
         </div>
       </aside>
@@ -614,8 +615,38 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
   )
 }
 
-function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[] }) {
-  const [open, setOpen] = useState<string | null>(null)
+/** Design assistant chat. The AI itself is coming soon; messages show in the thread. */
+function DesignChat() {
+  const [msgs, setMsgs] = useState<Array<{ me: boolean; text: string }>>([
+    { me: false, text: 'Hi! Tell me how you want your store to look. The AI designer is coming soon.' },
+  ])
+  const [text, setText] = useState('')
+  const list = useRef<HTMLDivElement>(null)
+  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }) }, [msgs])
+  return (
+    <section className="ss-chat" aria-label="Design assistant">
+      <header><span className="ss-chat-dot" /> Design assistant <em>Coming soon</em></header>
+      <div className="ss-chat-list" ref={list} aria-live="polite">
+        {msgs.map((m, i) => <p key={i} className={m.me ? 'me' : 'ai'}>{m.text}</p>)}
+      </div>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          const t = text.trim()
+          if (!t) return
+          setText('')
+          setMsgs((m) => [...m, { me: true, text: t }])
+          window.setTimeout(() => setMsgs((m) => [...m, { me: false, text: 'Got it. I’ll be able to make changes like that soon. For now, click any part of the preview to edit it.' }]), 500)
+        }}
+      >
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Describe a change… e.g. make it blue" aria-label="Message the design assistant" maxLength={500} />
+        <button type="submit" disabled={!text.trim()} aria-label="Send">↑</button>
+      </form>
+    </section>
+  )
+}
+
+function PageEditor({ page, onChange, products, open, setOpen }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null) => void }) {
   const [inserting, setInserting] = useState<number | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<number | null>(null)
@@ -699,11 +730,17 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
   return (
     <div className="ss-stack">
       <ThemeEditor page={page} onChange={onChange} />
+      {!blocks.some((b) => b.type === 'hero') && (
+        <button type="button" className="sb-addhero" onClick={() => insert(1, 'hero')}>
+          <b>✦ Add a welcome intro</b>
+          <small>“Welcome to my store”, your username and what you sell, with a square image</small>
+        </button>
+      )}
       <div className="sb-list" aria-label="Page sections">
         {blocks.map((b, i) => (
           b.type === 'footer' || b.type === 'header' ? (
             <div key={b.id}>
-            <div className="sb-block sb-pinned">
+            <div className={cn('sb-block sb-pinned', open === b.id && 'sb-open')} data-pinned={b.id}>
               <div className="sb-row">
                 <span className="sb-grip" aria-hidden="true" />
                 <button type="button" className="sb-title" aria-expanded={open === b.id} onClick={() => setOpen(open === b.id ? null : b.id)}>
@@ -719,7 +756,7 @@ function PageEditor({ page, onChange, products }: { page: Page; onChange: (p: Pa
           <div key={b.id}>
             <div
               data-block={b.id}
-              className={cn('sb-block', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging', landed === b.id && 'sb-landed')}
+              className={cn('sb-block', open === b.id && 'sb-open', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging', landed === b.id && 'sb-landed')}
               draggable
               onDragStart={(e) => (setDragId(b.id), e.dataTransfer.setData('text/plain', b.id), (e.dataTransfer.effectAllowed = 'move'))}
               onDragEnd={() => (setDragId(null), setOver(null))}
@@ -768,6 +805,7 @@ function summary(b: Block, products: DraftProduct[]) {
   const title = (id: string) => products.find((p) => p.id === id)?.title || 'Untitled'
   switch (b.type) {
     case 'header': return 'Photo, name and bio'
+    case 'hero': return d.eyebrow || d.title || 'Welcome intro'
     case 'text': return d.heading || (d.body ? String(d.body).slice(0, 40) : 'Empty')
     case 'image': return d.media ? d.caption || 'Image' : 'No image yet'
     case 'links': return `${(d.links ?? []).filter((l: { url: string }) => l.url).length} link(s)`
@@ -786,6 +824,16 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
         <div className="sb-edit">
           <p className="ss-muted">Uses your photo, name and bio from “Profile &amp; theme”.</p>
           <label className="ss-check"><input type="checkbox" checked={d.showSocials !== false} onChange={(e) => update({ showSocials: e.target.checked })} /> Show social links</label>
+        </div>
+      )
+    case 'hero':
+      return (
+        <div className="sb-edit">
+          <Field label="Heading"><input className="ss-input" maxLength={80} value={d.eyebrow ?? ''} onChange={(e) => update({ eyebrow: e.target.value })} placeholder="Welcome to my store 👋" /></Field>
+          <Field label="Name under the heading" hint="Empty shows your @username."><input className="ss-input" maxLength={120} value={d.title ?? ''} onChange={(e) => update({ title: e.target.value })} /></Field>
+          <Field label="What you sell"><textarea className="ss-input" rows={3} maxLength={600} value={d.body ?? ''} onChange={(e) => update({ body: e.target.value })} placeholder="Discover digital products designed to help you create, learn, and grow." /></Field>
+          <Field label="Button text" hint="Scrolls to your products. Empty hides it."><input className="ss-input" maxLength={40} value={d.button ?? ''} onChange={(e) => update({ button: e.target.value })} /></Field>
+          <ImagePicker value={d.media ?? null} onChange={(media) => update({ media })} label="Square image on the right" />
         </div>
       )
     case 'text':

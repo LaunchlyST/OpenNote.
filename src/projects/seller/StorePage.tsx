@@ -20,7 +20,26 @@ export interface StorePageProps {
   buying?: string | null
   /** Only one product (the product page). */
   only?: ShopProduct
+  /** Editor preview: clicking a section selects it for editing. */
+  onPick?: (blockId: string) => void
+  picked?: string | null
 }
+
+/** In the editor preview, each section is clickable and shows an outline with its name. */
+function Pickable({ block, onPick, picked, children }: { block: Block; onPick?: (id: string) => void; picked?: string | null; children: ReactNode }) {
+  // the profile header (photo, name, @username) comes from TikTok and isn't editable here
+  if (!onPick || block.type === 'header') return <>{children}</>
+  return (
+    <div
+      className={picked === block.id ? 'sp-pick on' : 'sp-pick'}
+      data-label={PICK_LABEL[block.type] ?? block.type}
+      onClickCapture={(e) => (e.preventDefault(), e.stopPropagation(), onPick(block.id))}
+    >
+      {children}
+    </div>
+  )
+}
+const PICK_LABEL: Record<string, string> = { header: 'Profile', hero: 'Welcome intro', text: 'Text', image: 'Image', links: 'Links', featured: 'Featured product', grid: 'Products', faq: 'FAQ', footer: 'Footer' }
 
 /**
  * A store left on the default black accent gets its own colour, picked from
@@ -55,7 +74,9 @@ export function StorePage(props: StorePageProps) {
           <ProductDetail p={only} {...props} />
         </>
       ) : (
-        page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => <BlockView key={b.id} block={b} {...props} />)
+        page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => (
+          <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked}><BlockView block={b} {...props} /></Pickable>
+        ))
       )}
       {/* Pinned to the bottom, centred: the store's footer line, then desknoty.com */}
       <div className="sp-end">
@@ -100,6 +121,23 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
   switch (block.type) {
     case 'header':
       return <Header page={p.page} handle={p.handle} showSocials={d.showSocials !== false} />
+    case 'hero': {
+      const src = mediaUrl(d.media)
+      const first = p.products[0]
+      return (
+        <section className="sp-block sp-hero">
+          <div className="sp-hero-text">
+            <h2>{d.eyebrow || 'Welcome to my store 👋'}</h2>
+            <p className="sp-hero-user">{d.title || `@${p.handle}`}</p>
+            <p>{d.body || 'Discover digital products designed to help you create, learn, and grow.'}</p>
+            {d.button && <a className="sp-btn" href="#shop" onClick={(e) => (e.preventDefault(), document.querySelector('.sp .sp-grid-wrap, .sp .sp-featured')?.scrollIntoView({ behavior: 'smooth' }))}>{d.button}</a>}
+          </div>
+          <div className="sp-hero-art" style={src ? { backgroundImage: `url(${src})` } : first?.cover ? { backgroundImage: `url(${mediaUrl(first.cover)})` } : undefined}>
+            {!src && !first?.cover && <span>{p.live ? '✦' : 'Your image'}</span>}
+          </div>
+        </section>
+      )
+    }
     case 'text':
       return (
         <section className="sp-block sp-text">

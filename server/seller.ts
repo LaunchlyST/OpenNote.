@@ -305,7 +305,7 @@ const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.
 
 /* ------------------------------------------------------- page schema --- */
 
-export const BLOCK_TYPES = ['header', 'text', 'image', 'links', 'featured', 'grid', 'faq', 'footer'] as const
+export const BLOCK_TYPES = ['header', 'hero', 'text', 'image', 'links', 'featured', 'grid', 'faq', 'footer'] as const
 type BlockType = (typeof BLOCK_TYPES)[number]
 interface Block {
   id: string
@@ -344,6 +344,9 @@ function cleanPage(input: unknown, productIds: Set<string>): Page | string {
     switch (type) {
       case 'header':
         data = { showSocials: d.showSocials !== false }
+        break
+      case 'hero':
+        data = { eyebrow: str(d.eyebrow, 80), title: str(d.title, 120), body: str(d.body, 600), media: mediaRef(d.media), button: str(d.button, 40) }
         break
       case 'text':
         data = { heading: str(d.heading, 120), body: str(d.body, 4000) }
@@ -415,6 +418,7 @@ export function defaultPage(name: string): Page {
     theme: { preset: 'clean', accent: '#111114', font: 'geist', button: 'rounded', background: 'solid' },
     blocks: [
       { id: id(), type: 'header', hidden: false, data: { showSocials: true } },
+      { id: id(), type: 'hero', hidden: false, data: { eyebrow: 'Welcome to my store 👋', title: '', body: '', media: null, button: 'Shop now' } },
       { id: id(), type: 'grid', hidden: false, data: { heading: 'Shop', productIds: [] } },
       { id: id(), type: 'footer', hidden: false, data: { text: '' } },
     ],

@@ -4,7 +4,7 @@ import { apiUrl } from '../../lib/api-base'
 /** Desknoty's cut of each sale. Stripe's own processing fee is separate and charged by Stripe. */
 export const PLATFORM_FEE_PERCENT = 0
 
-export type BlockType = 'header' | 'text' | 'image' | 'links' | 'featured' | 'grid' | 'faq' | 'footer'
+export type BlockType = 'header' | 'hero' | 'text' | 'image' | 'links' | 'featured' | 'grid' | 'faq' | 'footer'
 
 export interface Block {
   id: string
@@ -85,6 +85,7 @@ export interface SellerSetup {
 
 export const BLOCKS: Array<{ type: BlockType; label: string; hint: string }> = [
   { type: 'header', label: 'Profile header', hint: 'Photo, name, bio and socials' },
+  { type: 'hero', label: 'Welcome intro', hint: 'Welcome text left, square image right' },
   { type: 'text', label: 'Text', hint: 'A heading and a paragraph' },
   { type: 'image', label: 'Image', hint: 'A picture with a caption' },
   { type: 'links', label: 'Links', hint: 'Buttons to anywhere' },
@@ -99,6 +100,7 @@ export function newBlock(type: BlockType): Block {
   const id = `blk_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
   const data: Record<BlockType, Record<string, unknown>> = {
     header: { showSocials: true },
+    hero: { eyebrow: 'Welcome to my store 👋', title: '', body: '', media: null, button: 'Shop now' },
     text: { heading: 'About', body: '' },
     image: { media: null, alt: '', caption: '' },
     links: { links: [{ label: 'My YouTube', url: '' }] },
