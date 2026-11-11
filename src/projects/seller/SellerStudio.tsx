@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
+  Film,
+  HelpCircle,
+  Image as ImageIcon,
+  LayoutGrid,
+  Link2,
+  Lock,
+  Minus,
+  MoreHorizontal,
+  PanelBottom,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  Type,
+  User,
+  Video,
+  X as CloseIcon,
   ArrowDown,
   ArrowUp,
   Check,
@@ -464,24 +480,7 @@ function Studio({
   // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
   const page: Page = full
   const [slide, setSlide] = useState<0 | 1>(full.use === 2 ? 1 : 0)
-  // The Style switch is pinned to the bottom of the screen, centred under the editor panel, and never moves.
   const styleBar = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const place = () => {
-      const bar = styleBar.current
-      const panel = bar?.closest('.ss-editor')
-      if (!bar || !panel) return
-      const r = panel.getBoundingClientRect()
-      bar.style.left = `${r.left + r.width / 2}px`
-    }
-    place()
-    const ro = new ResizeObserver(place)
-    const panel = styleBar.current?.closest('.ss-editor')
-    if (panel) ro.observe(panel)
-    window.addEventListener('resize', place)
-    window.addEventListener('scroll', place, true)
-    return () => { ro.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
-  })
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [toast, setToast] = useState(false)
   // Undo / redo over the draft (every change still autosaves as the draft only).
@@ -528,7 +527,7 @@ function Studio({
   const closeEditor = useCallback(() => openEditor(null), [openEditor])
 
   // Drag a new section from Editor tools into the phone; a click (no drag) adds it at the end.
-  const startInsert = (type: BlockType, e: ReactPointerEvent) => {
+  const startInsert = (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => {
     if (e.button !== 0) return
     e.preventDefault()
     closeEditor()
@@ -572,7 +571,7 @@ function Studio({
       ghost.remove()
       setDropAt(null)
       if (moved && target === null) return
-      const nb = newBlock(type)
+      const nb = data ? { ...newBlock(type), data: { ...newBlock(type).data, ...data } } : newBlock(type)
       const all = pinEnds(page.blocks)
       let at = all.length - 1 // before the footer
       if (moved && target !== null && others[target]) at = all.findIndex((b) => b.id === others[target!].dataset.id)
@@ -585,6 +584,28 @@ function Studio({
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
+  }
+
+  // Add a block at the bottom (above the footer) and open its editor
+  const addBlock = (type: BlockType, data?: Record<string, unknown>) => {
+    const nb = data ? { ...newBlock(type), data: { ...newBlock(type).data, ...data } } : newBlock(type)
+    const all = pinEnds(page.blocks)
+    const next = [...all]
+    next.splice(all.length - 1, 0, nb)
+    edit({ ...page, blocks: next })
+    window.setTimeout(() => {
+      const el = slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`)
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      openEditor(nb.id, el ?? undefined)
+    }, 120)
+  }
+  // Digital product from the Add block popup: create it (image, title, headline, price, file) with the existing product API
+  const createProduct = async (f: NewProduct) => {
+    const cover = f.cover ? (await sellerApi.uploadMedia(f.cover)).id : null
+    const made = await sellerApi.addProduct({ title: f.title.trim(), description: f.headline.trim(), priceMinor: f.priceMinor, currency: f.currency, cover })
+    if (f.file) await sellerApi.uploadFile(made.product.id, f.file)
+    await reload(true)
+    return made.product.id
   }
 
   // Drag a section inside the phone preview: a drop line shows where it will land.
@@ -730,7 +751,7 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
-          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} />
+          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} onAdd={addBlock} createProduct={createProduct} />
           {picked && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} />}
@@ -751,9 +772,6 @@ function Studio({
 
       <aside className="ss-preview" aria-label="Draft preview">
         <div className="ss-preview-bar">
-          <button type="button" className="ss-sidebtn" onClick={flipSide} aria-label={`Move the preview to the ${side === 'right' ? 'left' : 'right'} side`} title={`Move to the ${side === 'right' ? 'left' : 'right'}`}>
-            <span aria-hidden="true">{side === 'right' ? '⇠' : '⇢'}</span> Move {side === 'right' ? 'left' : 'right'}
-          </button>
           {store.publishedAt && (
             <div className="ss-livebox">
               <a href={`/${store.handle}`} target="_blank" rel="noreferrer">
@@ -762,7 +780,30 @@ function Studio({
             </div>
           )}
         </div>
-        <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
+        <div
+          className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}
+          title="Drag the phone's frame to move it to the other side"
+          onPointerDown={(e) => {
+            // only the frame (not the screen) moves the phone
+            if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains('ss-island')) return
+            if (window.innerWidth <= 1100) return
+            const dev = e.currentTarget
+            const x0 = e.clientX
+            dev.setPointerCapture(e.pointerId)
+            dev.classList.add('ss-device-drag')
+            const mv = (ev: PointerEvent) => { dev.style.transform = `translateX(${ev.clientX - x0}px)` }
+            const up = (ev: PointerEvent) => {
+              dev.removeEventListener('pointermove', mv)
+              dev.removeEventListener('pointerup', up)
+              dev.classList.remove('ss-device-drag')
+              dev.style.transform = ''
+              const dx = ev.clientX - x0
+              if ((side === 'right' && dx < -120) || (side === 'left' && dx > 120)) flipSide()
+            }
+            dev.addEventListener('pointermove', mv)
+            dev.addEventListener('pointerup', up)
+          }}
+        >
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
           <div className="ss-screen ss-slides">
             <div className="ss-track" style={{ transform: `translateX(${slide * -50}%)` }}>
@@ -839,81 +880,284 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
   )
 }
 
-const BLOCK_ICON: Record<BlockType, string> = { header: '◉', hero: '✦', text: 'T', image: '▣', links: '↗', featured: '★', grid: '▦', faq: '?', tiktok: '▶', email: '✉', footer: '▁' }
-/** Sections a seller can drag into the phone (Products sections stay for existing pages but aren't offered). */
-const ADDABLE: Array<{ type: BlockType; label: string }> = [
-  { type: 'tiktok', label: 'TikTok videos' },
-  { type: 'links', label: 'Links' },
-  { type: 'text', label: 'Text' },
-  { type: 'image', label: 'Images' },
-  { type: 'email', label: 'Email support' },
-]
+const BLOCK_ICON: Record<BlockType, string> = { header: '◉', hero: '✦', text: 'T', image: '▣', links: '↗', featured: '★', grid: '▦', faq: '?', tiktok: '▶', email: '✉', divider: '—', footer: '▁' }
+/** Icon tiles for the block list and the Add block popup (colour per kind). */
+const TILE: Record<string, { icon: ReactNode; bg: string; fg: string }> = {
+  header: { icon: <User className="h-4 w-4" />, bg: '#111114', fg: '#fff' },
+  banner: { icon: <Film className="h-4 w-4" />, bg: '#e0e7ff', fg: '#4338ca' },
+  links: { icon: <Link2 className="h-4 w-4" />, bg: '#bbf7d0', fg: '#166534' },
+  tiktok: { icon: <Video className="h-4 w-4" />, bg: '#111114', fg: '#fff' },
+  image: { icon: <ImageIcon className="h-4 w-4" />, bg: '#f4f4f5', fg: '#27272a' },
+  text: { icon: <Type className="h-4 w-4" />, bg: '#fde68a', fg: '#78350f' },
+  email: { icon: <AtSign className="h-4 w-4" />, bg: '#fef3c7', fg: '#92400e' },
+  featured: { icon: <ShoppingBag className="h-4 w-4" />, bg: '#fce7f3', fg: '#9d174d' },
+  grid: { icon: <LayoutGrid className="h-4 w-4" />, bg: '#ede9fe', fg: '#5b21b6' },
+  faq: { icon: <HelpCircle className="h-4 w-4" />, bg: '#e0f2fe', fg: '#075985' },
+  hero: { icon: <Sparkles className="h-4 w-4" />, bg: '#fae8ff', fg: '#86198f' },
+  divider: { icon: <Minus className="h-4 w-4" />, bg: '#f4f4f5', fg: '#52525b' },
+  footer: { icon: <PanelBottom className="h-4 w-4" />, bg: '#f4f4f5', fg: '#52525b' },
+}
+const Tile = ({ kind, big }: { kind: string; big?: boolean }) => {
+  const t = TILE[kind] ?? TILE.text
+  return <span className={big ? 'ab-tile ab-tile-big' : 'ab-tile'} style={{ background: t.bg, color: t.fg }} aria-hidden="true">{t.icon}</span>
+}
+type CatalogItem = { kind: BlockType | 'banner'; name: string; text: string }
+const CATALOG: Record<string, CatalogItem[]> = {
+  'Quick add': [
+    { kind: 'links', name: 'Links', text: 'Buttons to anywhere' },
+    { kind: 'featured', name: 'Digital product', text: 'Sell a file: image, price, title' },
+    { kind: 'tiktok', name: 'Videos', text: 'Your TikTok videos' },
+    { kind: 'image', name: 'Images', text: 'A picture with a caption' },
+    { kind: 'text', name: 'Text', text: 'A heading and words' },
+    { kind: 'email', name: 'Contact', text: 'An email button' },
+  ],
+  Content: [
+    { kind: 'links', name: 'Links', text: 'Buttons to anywhere' },
+    { kind: 'tiktok', name: 'Videos', text: 'TikTok videos, tap to play' },
+    { kind: 'image', name: 'Images', text: 'A picture with a caption' },
+    { kind: 'text', name: 'Text & layout', text: 'A heading and a paragraph' },
+    { kind: 'hero', name: 'Welcome intro', text: 'Welcome text and a square image' },
+  ],
+  Sell: [
+    { kind: 'featured', name: 'Digital product', text: 'Create a product and show it big' },
+    { kind: 'grid', name: 'Product collection', text: 'A grid of your products' },
+  ],
+  Grow: [
+    { kind: 'email', name: 'Contact', text: 'Visitors email you in one tap' },
+  ],
+  Design: [
+    { kind: 'banner', name: 'Banner', text: 'Image or video behind your profile' },
+    { kind: 'divider', name: 'Divider', text: 'A line or space' },
+    { kind: 'faq', name: 'FAQ', text: 'Questions and answers' },
+  ],
+}
 export const BANNER_ID = '__banner__'
 
-function PageEditor({ page, onChange, products, open, setOpen, onStartInsert }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent) => void }) {
+function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, onAdd, createProduct }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
   const blocks = pinEnds(page.blocks)
   const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
-  const middle = blocks.filter((b) => b.type !== 'header' && b.type !== 'footer' && b.type !== 'grid' && b.type !== 'featured')
+  const [adding, setAdding] = useState(false)
+  const [menu, setMenu] = useState<string | null>(null)
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+  useEffect(() => {
+    if (!menu) return
+    const close = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest('.bl-menu, .bl-more')) setMenu(null) }
+    document.addEventListener('pointerdown', close)
+    return () => document.removeEventListener('pointerdown', close)
+  }, [menu])
   const move = (from: number, to: number) => {
-    const last = blocks.length - 2
-    if (to < 1 || to > last || from === to) return
+    if (to < 1 || to > blocks.length - 2 || from === to) return
     const next = [...blocks]
     const [b] = next.splice(from, 1)
     next.splice(to, 0, b)
     setBlocks(next)
   }
-  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => setOpen(id, e.currentTarget.closest('.et-row') as HTMLElement)
+  const duplicate = (b: Block) => {
+    const i = blocks.findIndex((x) => x.id === b.id)
+    const copy = { ...newBlock(b.type), data: structuredClone(b.data), hidden: b.hidden, look: b.look }
+    const next = [...blocks]
+    next.splice(i + 1, 0, copy)
+    setBlocks(next)
+  }
+  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => setOpen(id, e.currentTarget.closest('.bl-card') as HTMLElement)
   return (
     <div className="ss-stack">
-      <section className="et" aria-label="Editor tools">
-        <h3 className="et-h">Editor tools</h3>
-        <p className="et-hint">Click a section in the phone to edit it, or drag one from below into the phone to place it anywhere below your profile.</p>
-        <h4 className="et-sub">Your sections · {middle.length + 2}</h4>
-        <ul className="et-list" aria-label="Page sections">
-          <li className="et-row et-locked">
-            <span className="et-ico" aria-hidden="true">🔒</span><b>Profile</b><em className="et-badge">Locked</em>
-          </li>
-          <li className={cn('et-row', open === BANNER_ID && 'on')} data-pinned={BANNER_ID}>
-            <button type="button" className="et-main" onClick={openRow(BANNER_ID)}>
-              <span className="et-ico" aria-hidden="true">🎞</span><b>Banner</b>
-            </button>
-            <em className="et-badge">{page.banner ? (page.banner.kind === 'video' ? 'Video' : 'Image') : 'Add'}</em>
-          </li>
-          {blocks.map((b, i) =>
-            b.type === 'header' || b.type === 'grid' || b.type === 'featured' ? null : (
-              <li key={b.id} className={cn('et-row', open === b.id && 'on', b.hidden && 'et-hidden')} data-block={b.id} data-pinned={b.type === 'footer' ? b.id : undefined}>
-                <button type="button" className="et-main" onClick={openRow(b.id)}>
-                  <span className="et-ico" aria-hidden="true">{BLOCK_ICON[b.type]}</span>
-                  <b>{blockLabel(b.type)}</b>
-                  <small>{summary(b, products)}</small>
-                </button>
-                {b.type === 'footer' ? (
-                  <em className="et-badge">Bottom</em>
-                ) : (
-                  <span className="et-tools">
-                    <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
-                    <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
-                    <button type="button" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
-                      {b.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
+      <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
+      <ul className="bl-list" aria-label="Page blocks">
+        <li className="bl-card bl-locked">
+          <span className="bl-grip bl-grip-off" aria-hidden="true" />
+          <Tile kind="header" />
+          <span className="bl-name"><b>Header</b><small>Your TikTok photo, name and username</small></span>
+          <span className="bl-lock" title="Always at the top"><Lock className="h-3.5 w-3.5" /></span>
+        </li>
+        <li className={cn('bl-card', open === BANNER_ID && 'on')} data-pinned={BANNER_ID}>
+          <span className="bl-grip bl-grip-off" aria-hidden="true" />
+          <button type="button" className="bl-main" onClick={openRow(BANNER_ID)}>
+            <Tile kind="banner" />
+            <span className="bl-name"><b>Banner</b><small>{page.banner ? (page.banner.kind === 'video' ? 'Video' : 'Image') : 'Add an image or video'}</small></span>
+          </button>
+        </li>
+        {blocks.map((b, i) => {
+          if (b.type === 'header') return null
+          const pinned = b.type === 'footer'
+          return (
+            <li
+              key={b.id}
+              data-block={b.id}
+              data-pinned={pinned ? b.id : undefined}
+              className={cn('bl-card', open === b.id && 'on', b.hidden && 'bl-hidden', dragId === b.id && 'bl-dragging', overId === b.id && dragId !== b.id && 'bl-over')}
+              draggable={!pinned}
+              onDragStart={(e) => (setDragId(b.id), e.dataTransfer.setData('text/plain', b.id), (e.dataTransfer.effectAllowed = 'move'))}
+              onDragEnd={() => (setDragId(null), setOverId(null))}
+              onDragOver={(e) => { if (dragId && !pinned) { e.preventDefault(); setOverId(b.id) } }}
+              onDrop={(e) => { e.preventDefault(); const from = blocks.findIndex((x) => x.id === dragId); if (from >= 0) move(from, i); setDragId(null); setOverId(null) }}
+            >
+              <span className={cn('bl-grip', pinned && 'bl-grip-off')} aria-hidden="true" title={pinned ? undefined : 'Drag to reorder'}>{pinned ? null : <><i /><i /><i /><i /><i /><i /></>}</span>
+              <button type="button" className="bl-main" onClick={openRow(b.id)}>
+                <Tile kind={b.type} />
+                <span className="bl-name"><b>{blockLabel(b.type)}</b><small>{summary(b, products)}</small></span>
+              </button>
+              {!pinned && (
+                <>
+                  <span className="sr-only">
+                    <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)} />
+                    <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)} />
                   </span>
-                )}
-              </li>
-            ),
-          )}
-        </ul>
-        <h4 className="et-sub">Add a section · drag into the phone</h4>
-        <div className="et-tiles">
-          {ADDABLE.map((t) => (
-            <button key={t.type} type="button" className="et-tile" onPointerDown={(e) => onStartInsert(t.type, e)} aria-label={`Add ${t.label}`}>
-              <span className="et-ico" aria-hidden="true">{BLOCK_ICON[t.type]}</span>
-              <b>{t.label}</b>
-              <small>Drag or click</small>
+                  <button type="button" className="bl-more" aria-label={`More for ${blockLabel(b.type)}`} aria-expanded={menu === b.id} onClick={() => setMenu(menu === b.id ? null : b.id)}><MoreHorizontal className="h-4 w-4" /></button>
+                  <button type="button" className="bl-eye" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
+                    {b.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                  {menu === b.id && (
+                    <div className="bl-menu" role="menu">
+                      <button type="button" role="menuitem" onClick={(e) => (setMenu(null), openRow(b.id)(e))}>Edit</button>
+                      <button type="button" role="menuitem" onClick={() => (setMenu(null), duplicate(b))}>Duplicate</button>
+                      <button type="button" role="menuitem" onClick={() => (setMenu(null), setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x))))}>{b.hidden ? 'Show' : 'Hide'}</button>
+                      <button type="button" role="menuitem" className="bl-del" onClick={() => (setMenu(null), setBlocks(blocks.filter((x) => x.id !== b.id)))}>Delete</button>
+                    </div>
+                  )}
+                </>
+              )}
+            </li>
+          )
+        })}
+      </ul>
+      <ThemeEditor page={page} onChange={onChange} />
+      {adding && <AddBlockDialog products={products} onClose={() => setAdding(false)} onAdd={(t, d) => (setAdding(false), t === 'banner' ? setOpen(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : onAdd(t, d))} onDragStart={(t, e, d) => { setAdding(false); onStartInsert(t, e, d) }} createProduct={createProduct} />}
+    </div>
+  )
+}
+
+export type NewProduct = { title: string; headline: string; priceMinor: number; currency: string; cover: File | null; file: File | null }
+
+/** The Add block popup: search, categories, quick add, recommended; Digital product opens a small creator. */
+function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }: { products: DraftProduct[]; onClose: () => void; onAdd: (t: BlockType | 'banner', d?: Record<string, unknown>) => void; onDragStart: (t: BlockType, e: ReactPointerEvent, d?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
+  const [cat, setCat] = useState('Quick add')
+  const [q, setQ] = useState('')
+  const [making, setMaking] = useState(false)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    return () => document.removeEventListener('keydown', k)
+  }, [onClose])
+  const all = Object.values(CATALOG).flat().filter((x, i, arr) => arr.findIndex((y) => y.name === x.name) === i)
+  const list = q.trim() ? all.filter((x) => `${x.name} ${x.text}`.toLowerCase().includes(q.trim().toLowerCase())) : CATALOG[cat]
+  const pick = (it: CatalogItem) => (it.kind === 'featured' ? setMaking(true) : onAdd(it.kind))
+  // pointer-drag an item straight out of the popup onto the phone
+  const drag = (it: CatalogItem) => (e: ReactPointerEvent) => {
+    if (it.kind === 'banner' || it.kind === 'featured' || e.button !== 0) return
+    const x0 = e.clientX, y0 = e.clientY
+    const mv = (ev: PointerEvent) => {
+      if (Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return
+      window.removeEventListener('pointermove', mv)
+      onDragStart(it.kind as BlockType, { ...e, clientX: ev.clientX, clientY: ev.clientY, button: 0, preventDefault: () => {} } as unknown as ReactPointerEvent)
+    }
+    window.addEventListener('pointermove', mv)
+    window.addEventListener('pointerup', () => window.removeEventListener('pointermove', mv), { once: true })
+  }
+  return (
+    <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="ab" role="dialog" aria-modal="true" aria-label="Add a block">
+        <header className="ab-head"><h2>{making ? 'New digital product' : 'Add a block'}</h2><button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button></header>
+        {making ? (
+          <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={(id) => onAdd('featured', { productId: id })} createProduct={async (f) => { const id = await createProduct(f); onAdd('featured', { productId: id }) }} />
+        ) : (
+          <div className="ab-body">
+            <nav className="ab-nav" aria-label="Block categories">
+              <label className="ab-search"><Search className="h-4 w-4" /><input placeholder="Search blocks…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search blocks" /></label>
+              {Object.keys(CATALOG).map((c) => (
+                <button key={c} type="button" className={cn('ab-cat', !q && cat === c && 'on')} onClick={() => (setQ(''), setCat(c))}>
+                  <Tile kind={CATALOG[c][0].kind} /> <span>{c}</span>
+                </button>
+              ))}
+            </nav>
+            <section className="ab-main">
+              {!q && cat === 'Quick add' && (
+                <>
+                  <div className="ab-quick">
+                    {CATALOG['Quick add'].map((it) => (
+                      <button key={it.name} type="button" className="ab-q" onClick={() => pick(it)} onPointerDown={drag(it)}><Tile kind={it.kind} big /><span>{it.name}</span></button>
+                    ))}
+                  </div>
+                  <h3 className="ab-sub">Recommended</h3>
+                  <div className="ab-recs">
+                    <article className="ab-rec">
+                      <div className="ab-rec-art ab-rec-product" aria-hidden="true"><span /><b>£29.99</b><i>Buy now</i></div>
+                      <footer><Tile kind="featured" /><b>Digital product</b><button type="button" onClick={() => setMaking(true)}>Add</button></footer>
+                    </article>
+                    <article className="ab-rec">
+                      <div className="ab-rec-art ab-rec-video" aria-hidden="true"><span>▶</span><span>▶</span></div>
+                      <footer><Tile kind="tiktok" /><b>TikTok videos</b><button type="button" onClick={() => onAdd('tiktok')}>Add</button></footer>
+                    </article>
+                  </div>
+                </>
+              )}
+              {(q || cat !== 'Quick add') && (
+                <div className="ab-grid">
+                  {list.length === 0 && <p className="ss-muted">No blocks match “{q}”.</p>}
+                  {list.map((it) => (
+                    <button key={it.name} type="button" className="ab-item" onClick={() => pick(it)} onPointerDown={drag(it)}>
+                      <Tile kind={it.kind} big />
+                      <span><b>{it.name}</b><small>{it.text}</small></span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <p className="ab-tip">Tip: click to add at the bottom, or drag a block straight onto the phone.</p>
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Create a digital product (image, title, headline, price, file) and add it to the page, or pick an existing one. */
+function ProductMaker({ products, onBack, onPickExisting, createProduct }: { products: DraftProduct[]; onBack: () => void; onPickExisting: (id: string) => void; createProduct: (f: NewProduct) => Promise<void> }) {
+  const [f, setF] = useState<NewProduct>({ title: '', headline: '', priceMinor: 0, currency: 'gbp', cover: null, file: null })
+  const [price, setPrice] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const coverUrl = f.cover ? URL.createObjectURL(f.cover) : null
+  const valid = f.title.trim() && f.file && /^\d+(\.\d{1,2})?$/.test(price.trim())
+  const save = async () => {
+    setBusy(true)
+    setErr(null)
+    try { await createProduct({ ...f, priceMinor: Math.round(Number(price) * 100) }) } catch (e) { setErr((e as Error).message); setBusy(false) }
+  }
+  return (
+    <div className="pm">
+      <div className="pm-form">
+        <label className="pm-cover">
+          {coverUrl ? <img src={coverUrl} alt="" /> : <span><ImagePlus className="h-5 w-5" /> Add image</span>}
+          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" className="sr-only" aria-label="Product image" onChange={(e) => setF({ ...f, cover: e.target.files?.[0] ?? null })} />
+        </label>
+        <div className="pm-fields">
+          <Field label="Title"><input className="ss-input" maxLength={80} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Notion content planner" /></Field>
+          <Field label="Main headline"><input className="ss-input" maxLength={200} value={f.headline} onChange={(e) => setF({ ...f, headline: e.target.value })} placeholder="Plan a month of posts in one hour" /></Field>
+          <Field label="Price (£)" hint="0 makes it free."><input className="ss-input" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))} placeholder="9.99" /></Field>
+          <Field label="File buyers get">
+            <label className="ss-ghost cursor-pointer self-start"><Upload className="h-3.5 w-3.5" /> {f.file ? f.file.name : 'Upload PDF, ZIP…'}<input type="file" className="sr-only" aria-label="Product file" onChange={(e) => setF({ ...f, file: e.target.files?.[0] ?? null })} /></label>
+          </Field>
+        </div>
+      </div>
+      {err && <p className="ss-note" role="alert">{err}</p>}
+      <div className="pm-foot">
+        <button type="button" className="ss-ghost" onClick={onBack}>Back</button>
+        <button type="button" className="ss-primary" disabled={!valid || busy} onClick={() => void save()}>{busy ? 'Creating…' : 'Create and add to page'}</button>
+      </div>
+      {products.length > 0 && (
+        <div className="pm-existing">
+          <h3 className="ab-sub">Or add one you already have</h3>
+          {products.map((p) => (
+            <button key={p.id} type="button" className="pm-row" onClick={() => onPickExisting(p.id)}>
+              <span className="pm-thumb" style={p.cover ? { backgroundImage: `url(${mediaUrl(p.cover)})` } : undefined} />
+              <b>{p.title || 'Untitled product'}</b>
+              <small>{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}</small>
             </button>
           ))}
         </div>
-      </section>
-      <ThemeEditor page={page} onChange={onChange} />
+      )}
     </div>
   )
 }
@@ -967,7 +1211,7 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
     // a press anywhere outside closes it; edits are already in the draft, so nothing is lost
     const down = (e: PointerEvent) => {
       const t = e.target as HTMLElement
-      if (ref.current?.contains(t) || t.closest('.sp-pick, .sb-title, .sb-menu, .et-main, .et-tile')) return
+      if (ref.current?.contains(t) || t.closest('.sp-pick, .sb-title, .sb-menu, .et-main, .et-tile, .bl-main, .bl-menu')) return
       onClose()
     }
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -1067,6 +1311,7 @@ function summary(b: Block, products: DraftProduct[]) {
     case 'faq': return `${(d.items ?? []).length} question(s)`
     case 'tiktok': return `${(d.videos ?? []).length} video(s)`
     case 'email': return d.email || 'No email yet'
+    case 'divider': return d.style === 'dots' ? 'Dots' : d.style === 'space' ? 'Space' : 'Line'
     case 'footer': return d.text || 'Footer'
   }
 }
@@ -1107,6 +1352,14 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
         </div>
       )
     }
+    case 'divider':
+      return (
+        <div className="sb-edit">
+          <div className="fe-seg" role="group" aria-label="Divider style">
+            {(['line', 'dots', 'space'] as const).map((st) => <button key={st} type="button" aria-pressed={(d.style ?? 'line') === st} onClick={() => update({ style: st })}>{st}</button>)}
+          </div>
+        </div>
+      )
     case 'email':
       return (
         <div className="sb-edit">

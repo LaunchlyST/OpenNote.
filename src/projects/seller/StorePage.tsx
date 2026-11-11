@@ -73,7 +73,7 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
     </div>
   )
 }
-const PICK_LABEL: Record<string, string> = { header: 'Profile', hero: 'Welcome intro', text: 'Text', image: 'Image', links: 'Links', featured: 'Featured product', grid: 'Products', faq: 'FAQ', tiktok: 'TikTok videos', email: 'Email support', footer: 'Footer' }
+const PICK_LABEL: Record<string, string> = { header: 'Profile', hero: 'Welcome intro', text: 'Text', image: 'Image', links: 'Links', featured: 'Digital product', grid: 'Product collection', faq: 'FAQ', tiktok: 'TikTok videos', email: 'Email support', divider: 'Divider', footer: 'Footer' }
 
 /**
  * A store left on the default black accent gets its own colour, picked from
@@ -108,8 +108,7 @@ export function StorePage(props: StorePageProps) {
           <ProductDetail p={only} {...props} />
         </>
       ) : (
-        // product grid / featured product sections are no longer shown on the store page
-        page.blocks.filter((b) => !b.hidden && b.type !== 'footer' && b.type !== 'grid' && b.type !== 'featured').map((b) => (
+        page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => (
           <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
         ))
       )}
@@ -197,6 +196,8 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
         </section>
       )
     }
+    case 'divider':
+      return <div className={`sp-block sp-divider sp-divider-${d.style || 'line'}`} role="separator" />
     case 'tiktok': {
       const vids: string[] = (d.videos ?? []).filter(Boolean)
       return (

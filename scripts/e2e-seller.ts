@@ -139,17 +139,16 @@ try {
 
   // 3. Editor tools: drag a Text section from the panel into the phone, above the product grid
   await page.getByRole('tab', { name: 'Page' }).click()
-  await page.getByRole('heading', { name: 'Editor tools' }).waitFor()
+  await page.getByRole('button', { name: 'Add block' }).waitFor()
   await page.addStyleTag({ content: '.ss-device{animation:none!important}' })
-  await page.getByRole('button', { name: 'Add Text' }).evaluate((e) => e.scrollIntoView({ block: 'center' }))
-  await page.waitForTimeout(300)
-  const tile = await page.getByRole('button', { name: 'Add Text' }).boundingBox()
+  await page.getByRole('button', { name: 'Add block' }).click()
+  const tile = await page.getByRole('dialog', { name: 'Add a block' }).locator('.ab-q', { hasText: 'Text' }).boundingBox()
   const gridBox = await page.locator('.ss-slide .sp-head').boundingBox().then((r) => ({ x: r!.x, y: r!.y + r!.height + 20 }))
   const sx = tile!.x + tile!.width / 2, sy = tile!.y + tile!.height / 2
   await page.mouse.move(sx, sy)
   await page.mouse.down()
-  for (let i = 1; i <= 12; i++) await page.mouse.move(sx + (gridBox!.x + 40 - sx) * i / 12, sy + (gridBox!.y + 6 - sy) * i / 12)
-  check('dragging a tile into the phone shows where it will land', (await page.locator('.ss-dropline').count()) === 1)
+  for (let i = 1; i <= 14; i++) await page.mouse.move(sx + (gridBox!.x + 40 - sx) * i / 14, sy + (gridBox!.y + 6 - sy) * i / 14)
+  check('dragging a block from Add block onto the phone shows where it will land', (await page.locator('.ss-dropline').count()) === 1)
   await page.mouse.up()
   const textEditor = page.getByRole('dialog', { name: 'Edit Text' })
   await textEditor.waitFor()

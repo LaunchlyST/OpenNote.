@@ -314,7 +314,7 @@ const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.
 
 /* ------------------------------------------------------- page schema --- */
 
-export const BLOCK_TYPES = ['header', 'hero', 'text', 'image', 'links', 'featured', 'grid', 'faq', 'tiktok', 'email', 'footer'] as const
+export const BLOCK_TYPES = ['header', 'hero', 'text', 'image', 'links', 'featured', 'grid', 'faq', 'tiktok', 'email', 'divider', 'footer'] as const
 type BlockType = (typeof BLOCK_TYPES)[number]
 interface Block {
   id: string
@@ -420,6 +420,9 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
         data = { heading: str(d.heading, 120), note: str(d.note, 300), email: /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) ? email : '', button: str(d.button, 40) }
         break
       }
+      case 'divider':
+        data = { style: ['line', 'dots', 'space'].includes(String(d.style)) ? String(d.style) : 'line' }
+        break
       case 'footer':
         data = { text: str(d.text, 200) }
         break
