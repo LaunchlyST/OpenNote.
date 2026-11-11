@@ -90,6 +90,7 @@ export interface PublicOrder {
   id: string
   status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'disputed'
   product: string
+  productId?: string
   amountMinor: number
   currency: string
   email: string | null

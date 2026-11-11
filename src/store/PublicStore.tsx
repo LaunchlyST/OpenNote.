@@ -38,6 +38,23 @@ export default function PublicStore({ path }: { path: string }) {
   }, [store])
 
   // Buy now always opens the checkout sheet (email, payment method, summary, Pay).
+  // Products this browser has bought: each remembered order is re-checked with the server,
+  // and only a confirmed payment turns Buy now into Download.
+  const [owned, setOwned] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (kind === 'thanks' || kind === 'order') return
+    let alive = true
+    const ids = new Set((store?.products ?? []).map((p) => p.id))
+    const saved = Object.entries(readOwned()).filter(([pid]) => ids.has(pid))
+    void Promise.all(saved.map(async ([productId, url]) => {
+      const m = url.match(/\/order\/([^/?#]+)\?(?:.*&)?k=([^&#]+)/)
+      if (!m) return null
+      const r = await storeApi.order(handle, m[1], decodeURIComponent(m[2])).catch(() => null)
+      return r?.order.status === 'paid' ? ([productId, url] as const) : null
+    })).then((list) => alive && setOwned(Object.fromEntries(list.filter((x): x is readonly [string, string] => Boolean(x)))))
+    return () => { alive = false }
+  }, [handle, kind, store])
+
   const buy = async (p: ShopProduct) => {
     setBuyErr(null)
     setChoosing(p)
@@ -73,7 +90,7 @@ export default function PublicStore({ path }: { path: string }) {
   if (err) return <Shell><Message title="Store not found" text={err} /></Shell>
   if (!store) return <Shell><Message title="Loading…" text="" /></Shell>
 
-  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying }
+  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned }
   const chooser = choosing && (
     <PayChooser
       product={choosing}
@@ -270,6 +287,16 @@ function Message({ title, text, back }: { title: string; text: string; back?: st
 }
 
 /** Waits for Stripe's confirmation, then shows the download. */
+// One list per browser, by product id (ids are unique across stores; the thank-you page
+// and the store page can name the store differently).
+const OWNED = 'desknoty.owned'
+function readOwned(_handle?: string): Record<string, string> {
+  try { const j = JSON.parse(localStorage.getItem(OWNED) ?? '{}'); return j && typeof j === 'object' ? j : {} } catch { return {} }
+}
+function rememberOwned(_handle: string, productId: string, url: string) {
+  try { localStorage.setItem(OWNED, JSON.stringify({ ...readOwned(), [productId]: url })) } catch { /* private mode: the receipt email link still works */ }
+}
+
 function OrderStatus({ handle, load, claim }: { handle: string; load: () => Promise<{ order: PublicOrder }>; claim?: () => Promise<{ order: PublicOrder }> }) {
   const [order, setOrder] = useState<PublicOrder | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -285,6 +312,12 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tries])
   // Card payments usually confirm within seconds; keep checking for a while. Bank transfers wait for the seller.
+  // remember this purchase in this browser, so the store shows Download for it later
+  useEffect(() => {
+    if (!order?.productId) return
+    if (order.status === 'paid' && order.retrievalUrl) rememberOwned(handle, order.productId, order.retrievalUrl)
+    else if (order.status === 'pending' && /\/order\//.test(window.location.pathname)) rememberOwned(handle, order.productId, window.location.pathname + window.location.search)
+  }, [order, handle])
   useEffect(() => {
     if (order?.status !== 'pending' || order.method === 'bank' || tries > 40) return
     const t = window.setTimeout(() => setTries((n) => n + 1), tries < 10 ? 1500 : 5000)

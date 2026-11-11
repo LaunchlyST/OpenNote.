@@ -227,6 +227,19 @@ try {
   const dl = await m.request.get(dlHref)
   check('the download is the seller’s file', dl.status() === 200 && (await dl.text()) === 'E2E-PLANNER-FILE')
 
+  // Back on the store, this buyer sees Download instead of Buy now (checked with the server)
+  await m.goto(productUrl)
+  await m.getByRole('link', { name: 'Download' }).first().waitFor({ timeout: 10000 })
+  check('after buying, the product shows Download instead of Buy now', (await m.getByRole('button', { name: 'Buy now' }).count()) === 0)
+  await m.getByRole('link', { name: 'Download' }).first().click()
+  await m.getByRole('link', { name: /Download planner\.pdf/ }).waitFor()
+  check('the Download button opens the paid order with the file', true)
+  const other = await (await browser.newContext()).newPage()
+  await other.goto(productUrl)
+  await other.getByRole('button', { name: 'Buy now' }).first().waitFor()
+  check('another browser still sees Buy now', (await other.getByRole('link', { name: 'Download' }).count()) === 0)
+  await other.close()
+
   // Duplicate webhook delivery
   const again = await sendWebhook(HOOK, sent.at(-1)!)
   check('a duplicate webhook is acknowledged', again.status === 200)

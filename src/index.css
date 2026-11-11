@@ -7976,3 +7976,4 @@ select.ss-input option {
 .co2-pay:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 520px) { .co2 { width: 100%; max-height: 94dvh; border-radius: 28px 28px 0 0; } }
 @media (prefers-reduced-motion: reduce) { .co2 { animation: none; } }
+.sp-owned { color: #16a34a !important; } .s2p-dl { display: grid; place-items: center; text-decoration: none; background: #16a34a !important; }

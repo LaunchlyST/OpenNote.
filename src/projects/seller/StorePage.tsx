@@ -25,6 +25,8 @@ export interface StorePageProps {
   picked?: string | null
   /** Editor preview: pressing the grip starts dragging that section. */
   onGrab?: (blockId: string, e: ReactPointerEvent) => void
+  /** Live store: products this browser has paid for (product id → order page with the download). */
+  owned?: Record<string, string>
 }
 
 /** The per-element look as inline style: alignment, size, colour, spacing, font. */
@@ -287,8 +289,16 @@ function Cover({ p, big = false }: { p: ShopProduct; big?: boolean }) {
 }
 const cn = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ')
 
-function BuyRow({ prod, live, checkoutReady, onBuy, buying, small }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
+function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id
+  // Already bought in this browser (the server confirmed the payment): Download instead of Buy now.
+  if (live && owned?.[prod.id])
+    return (
+      <div className="sp-buyrow">
+        <span className="sp-price sp-owned">Purchased</span>
+        <a className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} href={owned[prod.id]}>Download</a>
+      </div>
+    )
   return (
     <div className="sp-buyrow">
       <span className="sp-price">{formatPrice(prod.priceMinor, prod.currency)}</span>

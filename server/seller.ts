@@ -1454,6 +1454,7 @@ export function sellerRouter() {
       id: o.id,
       status: o.status,
       product: o.productTitle,
+      productId: o.productId,
       amountMinor: o.amountMinor,
       currency: o.currency,
       email: o.buyerEmail,
