@@ -139,7 +139,8 @@ export function ComingSoon() {
           // counter, so show whichever is higher: nobody who joined disappears.
           const n = await readCounter()
           const api = typeof d?.count === 'number' ? d.count : null
-          if (api !== null || n !== null) setCount(Math.max(api ?? 0, n ?? 0))
+          // never below COUNTER_BASE: the sign-ups made before there was any counter
+          setCount(Math.max(api ?? 0, n ?? 0, COUNTER_BASE))
         })
     void load()
     const id = window.setInterval(load, 15000)
