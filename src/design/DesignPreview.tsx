@@ -3,6 +3,7 @@ import { DesignIndex } from './DesignIndex'
 import { DesignA } from './DesignA'
 import { DesignB } from './DesignB'
 import { DesignC } from './DesignC'
+import { CreatorStore } from './CreatorStore'
 
 /**
  * Isolated entry point for the Coming Soon design exploration.
@@ -16,5 +17,6 @@ export default function DesignPreview() {
   if (path === '/design/a') return <DesignA />
   if (path === '/design/b') return <DesignB />
   if (path === '/design/c') return <DesignC />
+  if (path === '/design/creator-store') return <CreatorStore />
   return <DesignIndex />
 }
