@@ -320,10 +320,20 @@ interface Page {
   theme: { preset: string; accent: string; font: string; button: string; background: string }
   socials: { instagram: string; youtube: string; x: string; website: string }
   blocks: Block[]
+  /** Editor only: a second design the seller can try, and which one Publish puts live. */
+  style2?: Page | null
+  use?: 1 | 2
+}
+
+/** The page that goes live: the style the seller picked, without the editor-only fields. */
+export function liveOf(draftJson: string): string {
+  const d = JSON.parse(draftJson) as Page
+  const { style2, use, ...one } = d
+  return JSON.stringify(use === 2 && style2 ? { ...style2, style2: undefined, use: undefined } : one)
 }
 
 /** Accepts a page from the editor, keeping only known fields and products this store owns. */
-function cleanPage(input: unknown, productIds: Set<string>): Page | string {
+function cleanPage(input: unknown, productIds: Set<string>, nested = false): Page | string {
   if (!input || typeof input !== 'object') return 'Missing page.'
   const p = input as Record<string, unknown>
   const t = (p.theme ?? {}) as Record<string, unknown>
@@ -406,7 +416,15 @@ function cleanPage(input: unknown, productIds: Set<string>): Page | string {
     },
     socials: { instagram: safeUrl(socials.instagram), youtube: safeUrl(socials.youtube), x: safeUrl(socials.x), website: safeUrl(socials.website) },
     blocks,
+    ...(nested ? {} : cleanStyle2(p, productIds)),
   }
+}
+
+function cleanStyle2(p: Record<string, unknown>, productIds: Set<string>): { style2?: Page; use?: 1 | 2 } {
+  if (!p.style2 || typeof p.style2 !== 'object') return {}
+  const two = cleanPage(p.style2, productIds, true)
+  if (typeof two === 'string') return {}
+  return { style2: two, use: p.use === 2 ? 2 : 1 }
 }
 
 export function defaultPage(name: string): Page {
@@ -418,7 +436,6 @@ export function defaultPage(name: string): Page {
     theme: { preset: 'clean', accent: '#111114', font: 'geist', button: 'rounded', background: 'solid' },
     blocks: [
       { id: id(), type: 'header', hidden: false, data: { showSocials: true } },
-      { id: id(), type: 'hero', hidden: false, data: { eyebrow: 'Welcome to my store 👋', title: '', body: '', media: null, button: 'Shop now' } },
       { id: id(), type: 'grid', hidden: false, data: { heading: 'Shop', productIds: [] } },
       { id: id(), type: 'footer', hidden: false, data: { text: '' } },
     ],
@@ -736,7 +753,7 @@ async function storeView(s: StoreRow) {
     draft: JSON.parse(s.draft) as Page,
     published: s.published ? (JSON.parse(s.published) as Page) : null,
     publishedAt: s.publishedAt,
-    unpublishedChanges: s.published !== s.draft || products.some((p) => productDraftView(p).changed || (Boolean(p.listed) !== Boolean(p.pubAt) && !productProblem(p))),
+    unpublishedChanges: s.published !== liveOf(s.draft) || products.some((p) => productDraftView(p).changed || (Boolean(p.listed) !== Boolean(p.pubAt) && !productProblem(p))),
     tiktok: s.tiktok ? (JSON.parse(s.tiktok) as { username: string; displayName: string; avatarUrl: string }) : null,
     payouts: payoutView(s),
     products: products.map(productDraftView),
@@ -877,7 +894,7 @@ export function sellerRouter() {
           await tx.run(`UPDATE seller_product SET "pubAt" = NULL WHERE id = ?`, p.id)
         }
       }
-      await tx.run(`UPDATE seller_store SET published = draft, "publishedAt" = ?, "updatedAt" = ? WHERE id = ?`, t, t, s.id)
+      await tx.run(`UPDATE seller_store SET published = ?, "publishedAt" = ?, "updatedAt" = ? WHERE id = ?`, liveOf((await q.storeById(s.id, tx))?.draft ?? s.draft), t, t, s.id)
     })
     res.json({ store: await storeView((await q.storeById(s.id))!) })
   })

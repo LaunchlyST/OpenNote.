@@ -139,7 +139,7 @@ try {
 
   // 3. Featured product between the header and the grid; pick it in the grid too
   await page.getByRole('tab', { name: 'Page' }).click()
-  await page.getByRole('button', { name: 'Add a block between Welcome intro and Product grid' }).click()
+  await page.getByRole('button', { name: 'Add a block between Profile header and Product grid' }).click()
   await page.getByRole('menuitem', { name: /Featured product/ }).click()
   await page.locator('.sb-edit select').first().selectOption({ label: 'Content planner' })
   await page.getByRole('button', { name: /^Product grid \d+ product/ }).click()
@@ -149,7 +149,7 @@ try {
   await page.getByRole('button', { name: 'Move Product grid down' }).click()
   await page.waitForTimeout(1200)
   const order = await page.locator('.ss-screen .sp > *').evaluateAll((els) => els.map((e) => (e.firstElementChild && e.classList.contains('sp-pick') ? e.firstElementChild : e).className.split(' ').filter((c) => c.startsWith('sp-')).pop()))
-  check('preview order: header, intro, featured, grid, footer', JSON.stringify(order.slice(0, 5)) === JSON.stringify(['sp-head', 'sp-hero', 'sp-featured', 'sp-grid-wrap', 'sp-end']), order.join(','))
+  check('preview order: header, featured, grid, footer', JSON.stringify(order.slice(0, 4)) === JSON.stringify(['sp-head', 'sp-featured', 'sp-grid-wrap', 'sp-end']), order.join(','))
   await page.screenshot({ path: join(SHOTS, 'studio-page.png') })
 
   // 4. Publish
@@ -192,7 +192,7 @@ try {
   await m.goto(bio)
   await m.getByRole('heading', { name: 'Ava Makes' }).waitFor()
   const live = await m.locator('.ps .sp > *').evaluateAll((els) => els.map((e) => e.className))
-  check('live page: intro, then featured product, then grid', live[0].includes('sp-head') && live[1].includes('sp-hero') && live[2].includes('sp-featured') && live[3].includes('sp-grid-wrap'), live.join(','))
+  check('live page: featured product sits between header and grid', live[0].includes('sp-head') && live[1].includes('sp-featured') && live[2].includes('sp-grid-wrap'), live.join(','))
   await m.screenshot({ path: join(SHOTS, 'mobile-store.png') })
 
   await m.locator('.sp-card-link').first().click()

@@ -458,8 +458,22 @@ function Studio({
     setStore(r.store)
     return r.store.revision
   })
-  const page = pageSave.value
-  const edit = pageSave.edit
+  const full = pageSave.value
+  // Style 1 is the original design; Style 2 is a second design to try. Publish puts the chosen one live.
+  const [styleNo, setStyleNo] = useState<1 | 2>(full.use === 2 && full.style2 ? 2 : 1)
+  const page: Page = styleNo === 2 && full.style2 ? full.style2 : full
+  const edit = (p: Page) => pageSave.edit(styleNo === 2 ? { ...full, style2: { ...p, style2: undefined, use: undefined } } : { ...p, style2: full.style2, use: full.use })
+  const pickStyle = (n: 1 | 2) => {
+    if (n === 2 && !full.style2) {
+      const { style2: _s, use: _u, ...one } = full
+      const blocks = [...one.blocks]
+      if (!blocks.some((b) => b.type === 'hero')) blocks.splice(1, 0, newBlock('hero'))
+      pageSave.edit({ ...full, style2: structuredClone({ ...one, blocks }), use: full.use ?? 1 })
+    }
+    setPicked(null)
+    setStyleNo(n)
+  }
+  const liveStyle = full.use === 2 && full.style2 ? 2 : 1
   const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
     try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
@@ -526,7 +540,22 @@ function Studio({
 
         {pageSave.state !== 'Saved' && <p role="status">{pageSave.state} <button type="button" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
-        {tab === 'page' && <><PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={setPicked} /><DesignChat /></>}
+        {tab === 'page' && <>
+          <div className="ss-styles" role="group" aria-label="Design style">
+            <div className="ss-seg">
+              {([1, 2] as const).map((n) => (
+                <button key={n} type="button" aria-pressed={styleNo === n} aria-selected={styleNo === n} onClick={() => pickStyle(n)}>Style {n}{liveStyle === n && <em className="ss-livetag">Live pick</em>}</button>
+              ))}
+            </div>
+            {liveStyle !== styleNo ? (
+              <button type="button" className="ss-usestyle" onClick={() => pageSave.edit({ ...full, use: styleNo })}>Publish with Style {styleNo}</button>
+            ) : (
+              <span className="ss-muted">Publish puts Style {styleNo} live</span>
+            )}
+          </div>
+          <PageEditor key={styleNo} page={page} onChange={edit} products={store.products} open={picked} setOpen={setPicked} intro={styleNo === 2} />
+          <DesignChat />
+        </>}
         {tab === 'products' && <ProductsEditor store={store} setStore={setStore} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
@@ -615,38 +644,20 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
   )
 }
 
-/** Design assistant chat. The AI itself is coming soon; messages show in the thread. */
+/** Design assistant: just the message box for now, blurred with a Coming soon label. */
 function DesignChat() {
-  const [msgs, setMsgs] = useState<Array<{ me: boolean; text: string }>>([
-    { me: false, text: 'Hi! Tell me how you want your store to look. The AI designer is coming soon.' },
-  ])
-  const [text, setText] = useState('')
-  const list = useRef<HTMLDivElement>(null)
-  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }) }, [msgs])
   return (
-    <section className="ss-chat" aria-label="Design assistant">
-      <header><span className="ss-chat-dot" /> Design assistant <em>Coming soon</em></header>
-      <div className="ss-chat-list" ref={list} aria-live="polite">
-        {msgs.map((m, i) => <p key={i} className={m.me ? 'me' : 'ai'}>{m.text}</p>)}
+    <section className="ss-chatsoon" aria-label="Design assistant, coming soon">
+      <div className="ss-chatsoon-box" aria-hidden="true">
+        <input tabIndex={-1} readOnly placeholder="Describe what you want to create or change…" />
+        <button type="button" tabIndex={-1}>↑</button>
       </div>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          const t = text.trim()
-          if (!t) return
-          setText('')
-          setMsgs((m) => [...m, { me: true, text: t }])
-          window.setTimeout(() => setMsgs((m) => [...m, { me: false, text: 'Got it. I’ll be able to make changes like that soon. For now, click any part of the preview to edit it.' }]), 500)
-        }}
-      >
-        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Describe a change… e.g. make it blue" aria-label="Message the design assistant" maxLength={500} />
-        <button type="submit" disabled={!text.trim()} aria-label="Send">↑</button>
-      </form>
+      <span className="ss-chatsoon-tag">✦ AI design assistant · Coming soon</span>
     </section>
   )
 }
 
-function PageEditor({ page, onChange, products, open, setOpen }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null) => void }) {
+function PageEditor({ page, onChange, products, open, setOpen, intro }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null) => void; intro: boolean }) {
   const [inserting, setInserting] = useState<number | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<number | null>(null)
@@ -730,7 +741,7 @@ function PageEditor({ page, onChange, products, open, setOpen }: { page: Page; o
   return (
     <div className="ss-stack">
       <ThemeEditor page={page} onChange={onChange} />
-      {!blocks.some((b) => b.type === 'hero') && (
+      {intro && !blocks.some((b) => b.type === 'hero') && (
         <button type="button" className="sb-addhero" onClick={() => insert(1, 'hero')}>
           <b>✦ Add a welcome intro</b>
           <small>“Welcome to my store”, your username and what you sell, with a square image</small>
@@ -738,19 +749,20 @@ function PageEditor({ page, onChange, products, open, setOpen }: { page: Page; o
       )}
       <div className="sb-list" aria-label="Page sections">
         {blocks.map((b, i) => (
-          b.type === 'footer' || b.type === 'header' ? (
+          b.type === 'header' ? (
+            <Inserter key={b.id} at={1} />
+          ) : b.type === 'footer' ? (
             <div key={b.id}>
             <div className={cn('sb-block sb-pinned', open === b.id && 'sb-open')} data-pinned={b.id}>
               <div className="sb-row">
                 <span className="sb-grip" aria-hidden="true" />
                 <button type="button" className="sb-title" aria-expanded={open === b.id} onClick={() => setOpen(open === b.id ? null : b.id)}>
                   <b>{blockLabel(b.type)}</b>
-                  <small>{b.type === 'header' ? 'Always at the top' : 'Always at the bottom, centred'} · {summary(b, products)}</small>
+                  <small>Always at the bottom, centred · {summary(b, products)}</small>
                 </button>
               </div>
               {open === b.id && <BlockEditor block={b} products={products} update={(d) => update(b.id, d)} />}
             </div>
-            {b.type === 'header' && <Inserter at={1} />}
             </div>
           ) : (
           <div key={b.id}>
@@ -932,15 +944,13 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
     <div className="sb-block">
       <div className="sb-row">
         <button type="button" className="sb-title" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <b>Profile &amp; theme</b>
-          <small>{page.name || 'Name'} · {PRESETS.find((p) => p.id === theme.preset)?.label}</small>
+          <b>Theme</b>
+          <small>Colours, font and buttons · {PRESETS.find((p) => p.id === theme.preset)?.label}</small>
         </button>
       </div>
       {open && (
         <div className="sb-edit">
-          <ImagePicker value={page.avatar} onChange={(avatar) => onChange({ ...page, avatar })} label="Profile photo" />
-          <Field label="Display name"><input className="ss-input" maxLength={60} value={page.name} onChange={(e) => onChange({ ...page, name: e.target.value })} /></Field>
-          <Field label="Bio" hint={`${page.bio.length}/160`}><textarea className="ss-input" rows={2} maxLength={160} value={page.bio} onChange={(e) => onChange({ ...page, bio: e.target.value })} placeholder="What you make, in one line" /></Field>
+          <p className="ss-muted">Your photo, name and username come from your TikTok account. Change them on TikTok.</p>
           <div>
             <span className="ss-label">Theme</span>
             <div className="ss-presets">

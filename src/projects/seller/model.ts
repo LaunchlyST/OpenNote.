@@ -20,6 +20,9 @@ export interface Page {
   theme: { preset: string; accent: string; font: string; button: 'rounded' | 'pill' | 'sharp'; background: 'solid' | 'gradient' }
   socials: { instagram: string; youtube: string; x: string; website: string }
   blocks: Block[]
+  /** A second design to try; `use` picks which one Publish puts live. */
+  style2?: Page | null
+  use?: 1 | 2
 }
 
 /** What the storefront renderer needs to know about a product. */
