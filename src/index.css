@@ -5566,8 +5566,10 @@ select.ss-input option {
 }
 .pp-edge {
   position: fixed;
-  left: 0;
-  right: 0;
+  /* only the middle of the bottom edge: never over the sidebar's account row or other controls */
+  left: 50%;
+  width: min(280px, 60vw);
+  transform: translateX(-50%);
   bottom: 0;
   /* a comfortable grab area, kept above the phone's home-bar gesture zone */
   height: calc(36px + env(safe-area-inset-bottom, 0px));

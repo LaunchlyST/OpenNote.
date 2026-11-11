@@ -75,7 +75,7 @@ export function PagePeel({
         return
       }
       if (mode === 'finish' || mode === 'settle') return
-      const near = e.clientY > window.innerHeight - ZONE
+      const near = e.clientY > window.innerHeight - ZONE && Math.abs(e.clientX - window.innerWidth / 2) < 200
       if (near && mode === 'idle') setMode('hint')
       if (!near && mode === 'hint') setMode('idle')
     }
