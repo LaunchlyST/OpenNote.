@@ -148,7 +148,7 @@ try {
   await page.getByRole('button', { name: 'Move Product grid up' }).click()
   await page.getByRole('button', { name: 'Move Product grid down' }).click()
   await page.waitForTimeout(1200)
-  const order = await page.locator('.ss-screen .sp > *').evaluateAll((els) => els.map((e) => (e.firstElementChild && e.classList.contains('sp-pick') ? e.firstElementChild : e).className.split(' ').filter((c) => c.startsWith('sp-')).pop()))
+  const order = await page.locator('.ss-slide .sp > *').evaluateAll((els) => els.map((e) => (e.classList.contains('sp-pick') ? e.querySelector(':scope > :not(.sp-grip)')! : e).className.split(' ').filter((c) => c.startsWith('sp-')).pop()))
   check('preview order: header, featured, grid, footer', JSON.stringify(order.slice(0, 4)) === JSON.stringify(['sp-head', 'sp-featured', 'sp-grid-wrap', 'sp-end']), order.join(','))
   await page.screenshot({ path: join(SHOTS, 'studio-page.png') })
 

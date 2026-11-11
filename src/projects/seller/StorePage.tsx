@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, formatPrice, mediaUrl } from './model'
 import type { Block, Page, ShopProduct } from './model'
@@ -21,20 +21,49 @@ export interface StorePageProps {
   /** Only one product (the product page). */
   only?: ShopProduct
   /** Editor preview: clicking a section selects it for editing. */
-  onPick?: (blockId: string) => void
+  onPick?: (blockId: string, el: HTMLElement) => void
   picked?: string | null
+  /** Editor preview: pressing the grip starts dragging that section. */
+  onGrab?: (blockId: string, e: ReactPointerEvent) => void
+}
+
+/** The per-element look as inline style: alignment, size, colour, spacing, font. */
+export function lookStyle(look: Block['look']): CSSProperties | undefined {
+  if (!look) return undefined
+  const size = { s: 0.88, m: 1, l: 1.15, xl: 1.32 }[look.size ?? 'm']
+  const space = { tight: '2px', normal: '', roomy: '22px' }[look.space ?? 'normal']
+  return {
+    ...(look.align ? { textAlign: look.align } : {}),
+    ...(size !== 1 ? { fontSize: `${size}em`, ['--sz' as string]: size } : {}),
+    ...(look.color ? { color: look.color } : {}),
+    ...(space ? { paddingBlock: space } : {}),
+    ...(look.font ? { fontFamily: FONTS.find((f) => f.id === look.font)?.css } : {}),
+  } as CSSProperties
 }
 
 /** In the editor preview, each section is clickable and shows an outline with its name. */
-function Pickable({ block, onPick, picked, children }: { block: Block; onPick?: (id: string) => void; picked?: string | null; children: ReactNode }) {
+function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; onPick?: StorePageProps['onPick']; picked?: string | null; onGrab?: StorePageProps['onGrab']; children: ReactNode }) {
+  const style = lookStyle(block.look)
   // the profile header (photo, name, @username) comes from TikTok and isn't editable here
-  if (!onPick || block.type === 'header') return <>{children}</>
+  if (!onPick || block.type === 'header') return style ? <div className="sp-look" style={style}>{children}</div> : <>{children}</>
   return (
     <div
       className={picked === block.id ? 'sp-pick on' : 'sp-pick'}
+      data-id={block.id}
       data-label={PICK_LABEL[block.type] ?? block.type}
-      onClickCapture={(e) => (e.preventDefault(), e.stopPropagation(), onPick(block.id))}
+      style={style}
+      onClickCapture={(e) => {
+        if ((e.target as HTMLElement).closest('.sp-grip')) return
+        e.preventDefault()
+        e.stopPropagation()
+        onPick(block.id, e.currentTarget)
+      }}
     >
+      {onGrab && (
+        <button type="button" className="sp-grip" aria-label={`Drag ${PICK_LABEL[block.type] ?? block.type} to move it`} onPointerDown={(e) => (e.stopPropagation(), onGrab(block.id, e))}>
+          ⋮⋮
+        </button>
+      )}
       {children}
     </div>
   )
@@ -75,7 +104,7 @@ export function StorePage(props: StorePageProps) {
         </>
       ) : (
         page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => (
-          <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked}><BlockView block={b} {...props} /></Pickable>
+          <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
         ))
       )}
       {/* Pinned to the bottom, centred: the store's footer line, then desknoty.com */}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
   ArrowDown,
   ArrowUp,
@@ -459,10 +459,109 @@ function Studio({
     return r.store.revision
   })
   const full = pageSave.value
-  // The editor works on the first page; swiping the preview shows a second, empty page (coming soon).
+  // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
   const page: Page = full
-  const edit = (p: Page) => pageSave.edit({ ...p, style2: full.style2, use: full.use })
-  const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' ? 'saving' : 'error'
+  const [slide, setSlide] = useState<0 | 1>(0)
+  const [anchor, setAnchor] = useState<DOMRect | null>(null)
+  const [toast, setToast] = useState(false)
+  // Undo / redo over the draft (every change still autosaves as the draft only).
+  const hist = useRef<{ past: Page[]; future: Page[] }>({ past: [], future: [] })
+  const [, rerender] = useState(0)
+  const edit = (p: Page) => {
+    hist.current.past.push(full)
+    if (hist.current.past.length > 60) hist.current.past.shift()
+    hist.current.future = []
+    rerender((n) => n + 1)
+    pageSave.edit({ ...p, style2: full.style2, use: full.use })
+  }
+  const undo = () => {
+    const prev = hist.current.past.pop()
+    if (!prev) return
+    hist.current.future.push(full)
+    rerender((n) => n + 1)
+    pageSave.edit(prev)
+  }
+  const redo = () => {
+    const next = hist.current.future.pop()
+    if (!next) return
+    hist.current.past.push(full)
+    rerender((n) => n + 1)
+    pageSave.edit(next)
+  }
+  const undoRef = useRef({ undo, redo })
+  undoRef.current = { undo, redo }
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return
+      if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable]')) return
+      e.preventDefault()
+      if (e.shiftKey) undoRef.current.redo()
+      else undoRef.current.undo()
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  }, [])
+  const openEditor = useCallback((id: string | null, el?: HTMLElement) => {
+    setPicked(id)
+    setAnchor(id && el ? el.getBoundingClientRect() : null)
+  }, [])
+  const closeEditor = useCallback(() => openEditor(null), [openEditor])
+
+  // Drag a section inside the phone preview: a drop line shows where it will land.
+  const slideRef = useRef<HTMLDivElement>(null)
+  const [dropAt, setDropAt] = useState<number | null>(null)
+  const grab = (id: string, e: ReactPointerEvent) => {
+    const scroller = slideRef.current
+    const el = scroller?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`)
+    if (!scroller || !el) return
+    e.preventDefault()
+    closeEditor()
+    const startY = e.clientY
+    const startScroll = scroller.scrollTop
+    const others = [...scroller.querySelectorAll<HTMLElement>('.sp-pick[data-id]')].filter((x) => x !== el)
+    let target = -1
+    el.classList.add('sp-dragging')
+    const moveAt = (y: number) => {
+      const box = scroller.getBoundingClientRect()
+      if (y < box.top + 40) scroller.scrollTop -= 8
+      if (y > box.bottom - 40) scroller.scrollTop += 8
+      el.style.transform = `translateY(${y - startY + scroller.scrollTop - startScroll}px)`
+      let idx = others.findIndex((o) => { const r = o.getBoundingClientRect(); return y < r.top + r.height / 2 })
+      if (idx < 0) idx = others.length
+      target = idx
+      const ref = others[idx] ?? others[others.length - 1]
+      if (!ref) return setDropAt(null)
+      const r = ref.getBoundingClientRect()
+      setDropAt((idx < others.length ? r.top - 6 : r.bottom + 6) - box.top + scroller.scrollTop)
+    }
+    const move = (ev: PointerEvent) => moveAt(ev.clientY)
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      el.classList.remove('sp-dragging')
+      el.style.transform = ''
+      setDropAt(null)
+      if (target < 0) return
+      const order = others.map((o) => o.dataset.id!)
+      order.splice(target, 0, id)
+      // put the shown sections in their new order; hidden ones and the pinned ends stay where they are
+      const shown = new Set(order)
+      const queue = [...order]
+      const byId = new Map(page.blocks.map((b) => [b.id, b]))
+      const next = pinEnds(page.blocks).map((b) => (shown.has(b.id) ? byId.get(queue.shift()!)! : b))
+      if (next.map((b) => b.id).join() !== pinEnds(page.blocks).map((b) => b.id).join()) edit({ ...page, blocks: next })
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
+  // Swipe inside the phone: left for Style 2, right back to Style 1.
+  const swipe = useRef<{ x: number; y: number; dx: number; on: boolean } | null>(null)
+  const [dx, setDx] = useState(0)
+  const swiped = useRef(false)
+  const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' || pageSave.state === 'Unsaved changes' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
     try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
   }
@@ -471,9 +570,12 @@ function Studio({
     setPublishing(true)
     setErr(null)
     try {
+      if (slide !== 0) throw new Error('Style 2 is coming soon and can’t be published.')
       await flushSellerEdits()
       const r = await sellerApi.publish()
       setStore(r.store)
+      setToast(true)
+      window.setTimeout(() => setToast(false), 2600)
     } catch (e) {
       setErr((e as Error).message)
     }
@@ -510,13 +612,14 @@ function Studio({
               <h1>{page.name || store.handle}</h1>
               <span className={cn('ss-live', status === 'Live' && 'on')} aria-live="polite">
                 ● {status}
-                {saving === 'saving' ? ' · saving…' : saving === 'error' ? ' · not saved' : ''}
               </span>
+              <span className="ss-draftstate" aria-live="polite">{saving === 'saving' || pageSave.dirty ? 'Saving draft…' : saving === 'error' ? 'Draft not saved' : 'Draft saved'}</span>
             </div>
-            <button type="button" className="ss-primary ss-primary-sm" onClick={() => void publish()} disabled={publishing}>
-              {publishing ? 'Publishing…' : store.publishedAt ? 'Publish changes' : 'Publish'}
+            <button type="button" className="ss-primary ss-primary-sm" onClick={() => void publish()} disabled={publishing || slide !== 0} title={slide !== 0 ? 'Style 2 is coming soon: publishing is off' : undefined}>
+              {slide !== 0 ? 'Style 2 · Coming soon' : publishing ? 'Publishing…' : store.publishedAt ? 'Publish changes' : 'Publish'}
             </button>
           </div>
+          {slide !== 0 && <p className="ss-s2note">You’re looking at Style 2, which is coming soon. It can’t be edited or published yet. Swipe right in the phone to go back to Style 1.</p>}
           <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
           {(notice || err) && (
             <div className="ss-note" role="status">
@@ -526,10 +629,16 @@ function Studio({
           )}
         </header>
 
-        {pageSave.state !== 'Saved' && <p role="status">{pageSave.state} <button type="button" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
+        {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
         {tab === 'page' && <>
-          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={setPicked} intro={false} />
+          <div className="ss-undo">
+            <button type="button" onClick={undo} disabled={!hist.current.past.length} aria-label="Undo"><span aria-hidden="true">↶</span> Undo</button>
+            <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
+            <span>Changes save as a draft. Visitors see them only after you publish.</span>
+          </div>
+          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} />
+          {picked && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {tab === 'products' && <ProductsEditor store={store} setStore={setStore} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -555,23 +664,55 @@ function Studio({
             </div>
           )}
         </div>
-        <PhoneSwipe>
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
-          {/* the whole phone screen takes the store's colours, top strip included */}
-          <div className="ss-screen" style={storeStyle(page)}>
-            <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-            <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onPick={(id) => (setTab('page'), setPicked(id), window.setTimeout(() => document.querySelector(`[data-block="${id}"], [data-pinned="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60))} />
+          <div
+            className="ss-screen ss-slides"
+            onPointerDown={(e) => {
+              if ((e.target as HTMLElement).closest('.sp-grip, .ss-pills')) return
+              swipe.current = { x: e.clientX, y: e.clientY, dx: 0, on: false }
+              swiped.current = false
+            }}
+            onPointerMove={(e) => {
+              const sw = swipe.current
+              if (!sw) return
+              const ddx = e.clientX - sw.x
+              if (!sw.on && Math.abs(ddx) > 12 && Math.abs(ddx) > Math.abs(e.clientY - sw.y) * 1.3) sw.on = true
+              if (sw.on) (sw.dx = ddx, setDx(ddx))
+            }}
+            onPointerUp={() => {
+              const sw = swipe.current
+              swipe.current = null
+              if (!sw?.on) return
+              swiped.current = true
+              if (sw.dx < -50 && slide === 0) (setSlide(1), closeEditor())
+              if (sw.dx > 50 && slide === 1) setSlide(0)
+              setDx(0)
+            }}
+            onPointerCancel={() => ((swipe.current = null), setDx(0))}
+            onClickCapture={(e) => { if (swiped.current) (e.stopPropagation(), e.preventDefault(), (swiped.current = false)) }}
+          >
+            <div className={cn('ss-track', dx !== 0 && 'ss-track-drag')} style={{ transform: `translateX(calc(${slide * -50}% + ${slide === 0 ? Math.min(0, dx) : Math.max(0, dx)}px))` }}>
+              {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
+              <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
+                <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onPick={(id, el) => (setTab('page'), openEditor(id, el))} />
+                {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
+              </div>
+              <div className="ss-slide" aria-hidden={slide !== 1}><Style2Soon /></div>
+            </div>
+            <div className="ss-pills" role="tablist" aria-label="Store style">
+              <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
+              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2</button>
+            </div>
           </div>
         </div>
-        <div className="ss-page2">
-          <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
-            {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
-            <div className="ss-screen ss-screen-empty" aria-label="Page 2 (empty)" />
+        <DesignChat />
+        {toast && (
+          <div className="ss-toast" role="status">
+            <span><Check className="h-4 w-4" /></span> Published successfully · your store is live
           </div>
-          <DesignChat />
-        </div>
-        </PhoneSwipe>
+        )}
       </aside>
     </div>
   )
@@ -628,56 +769,52 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
   )
 }
 
-/** The preview phone; swipe left (or use the arrows) for a second, empty phone. */
-function PhoneSwipe({ children }: { children: ReactNode }) {
-  const track = useRef<HTMLDivElement>(null)
-  const [at, setAt] = useState(0)
-  const go = (i: number) => track.current?.scrollTo({ left: i * track.current.clientWidth, behavior: 'smooth' })
+/** Design assistant: a quiet, disabled message box until the AI is ready. */
+function DesignChat() {
   return (
-    <div className="ss-swipe">
-      <div className="ss-swipe-track" ref={track} onScroll={(e) => setAt(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
-        {children}
+    <section className="ss-chatsoon" aria-label="AI design assistant (coming soon)">
+      <input disabled placeholder="Describe a change to your store…" aria-label="Message the design assistant (coming soon)" />
+      <span className="ss-chatsoon-tag">AI · Coming soon</span>
+    </section>
+  )
+}
+
+/** Style 2 inside the phone: a premium "coming soon" preview. Not editable or publishable. */
+function Style2Soon() {
+  return (
+    <div className="s2" aria-label="Style 2, coming soon">
+      <div className="s2-orb s2-orb1" /><div className="s2-orb s2-orb2" /><div className="s2-orb s2-orb3" />
+      <div className="s2-ghost" aria-hidden="true">
+        <i className="s2-g-head" /><i className="s2-g-line" /><i className="s2-g-line s2-short" />
+        <div className="s2-g-row"><i /><i /></div>
+        <div className="s2-g-row"><i /><i /></div>
+        <i className="s2-g-btn" />
       </div>
-      <div className="ss-swipe-nav">
-        <button type="button" aria-label="Previous page" disabled={at === 0} onClick={() => go(0)}>‹</button>
-        {[0, 1].map((i) => <button key={i} type="button" className={cn('ss-dot', at === i && 'on')} aria-label={`Page ${i + 1}`} aria-current={at === i} onClick={() => go(i)} />)}
-        <button type="button" aria-label="Next page" disabled={at === 1} onClick={() => go(1)}>›</button>
+      <div className="s2-glass">
+        <span className="s2-badge">STYLE 2 · COMING SOON</span>
+        <h3>Something beautiful is coming.</h3>
+        <p>We’re creating a whole new way to design your digital storefront.</p>
+        <div className="s2-bar"><i /></div>
       </div>
     </div>
   )
 }
 
-/** Design assistant: just the message box for now, blurred with a Coming soon label. */
-function DesignChat() {
-  return (
-    <section className="ss-chatsoon" aria-label="Design assistant, coming soon">
-      <div className="ss-chatsoon-box" aria-hidden="true">
-        <input tabIndex={-1} readOnly placeholder="Describe what you want to create or change…" />
-        <button type="button" tabIndex={-1}>↑</button>
-      </div>
-      <span className="ss-chatsoon-tag">✦ AI design assistant · Coming soon</span>
-    </section>
-  )
-}
+const BLOCK_ICON: Record<BlockType, string> = { header: '◉', hero: '✦', text: 'T', image: '▣', links: '↗', featured: '★', grid: '▦', faq: '?', footer: '▁' }
 
-function PageEditor({ page, onChange, products, open, setOpen, intro }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null) => void; intro: boolean }) {
+function PageEditor({ page, onChange, products, open, setOpen }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void }) {
   const [inserting, setInserting] = useState<number | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [over, setOver] = useState<number | null>(null)
-  // The footer is pinned: always last, can't be moved, hidden or deleted (its text can still be edited).
   const blocks = pinEnds(page.blocks)
   const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
-  const update = (id: string, data: Record<string, unknown>) => setBlocks(blocks.map((b) => (b.id === id ? { ...b, data: { ...b.data, ...data } } : b)))
-  // the section that just moved flashes briefly, so it's clear where it landed
   const [landed, setLanded] = useState<string | null>(null)
   useEffect(() => {
     if (!landed) return
-    document.querySelector(`[data-block="${landed}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     const t = window.setTimeout(() => setLanded(null), 1300)
     return () => window.clearTimeout(t)
   }, [landed])
   const move = (from: number, to: number) => {
-    // the pinned footer stays last: nothing moves below it
     // the profile header stays first and the footer last: sections move between them
     const last = blocks.length - 2
     if (to < 1 || to > last || from === to) return
@@ -693,20 +830,16 @@ function PageEditor({ page, onChange, products, open, setOpen, intro }: { page: 
     next.splice(at, 0, b)
     setBlocks(next)
     setInserting(null)
-    setOpen(b.id)
+    window.setTimeout(() => setOpen(b.id, document.querySelector<HTMLElement>(`[data-block="${b.id}"]`) ?? undefined), 30)
   }
 
   const dragFrom = dragId ? blocks.findIndex((b) => b.id === dragId) : -1
-  const where = (at: number) =>
-    at <= 1 ? 'at the top (under the profile header)' : at >= blocks.length - 1 ? `after ${blockLabel(blocks[blocks.length - 2]?.type ?? 'header')} (just above the footer)` : `between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`
   const Inserter = ({ at }: { at: number }) => {
-    // While dragging, every place the section can go becomes a labelled slot; no-op slots disappear.
     if (dragId) {
       if (at === dragFrom || at === dragFrom + 1) return <div className="sb-ins" aria-hidden="true" />
-      const on = over === at
       return (
         <div
-          className={cn('sb-ins sb-slot', on && 'sb-slot-on')}
+          className={cn('sb-ins sb-slot', over === at && 'sb-slot-on')}
           onDragOver={(e) => (e.preventDefault(), setOver(at))}
           onDragLeave={() => setOver((o) => (o === at ? null : o))}
           onDrop={(e) => {
@@ -716,94 +849,160 @@ function PageEditor({ page, onChange, products, open, setOpen, intro }: { page: 
             setOver(null)
           }}
         >
-          {on ? `Drop here: ${where(at)}` : 'Move here'}
+          {over === at ? 'Drop here' : 'Move here'}
         </div>
       )
     }
     return (
-    <div className="sb-ins">
-      {inserting === at ? (
-        <div className="sb-menu" role="menu" aria-label="Add a block">
-          {BLOCKS.filter((t) => t.type !== 'footer' && t.type !== 'header').map((t) => (
-            <button key={t.type} type="button" role="menuitem" onClick={() => insert(at, t.type)}>
-              <b>{t.label}</b>
-              <small>{t.hint}</small>
-            </button>
-          ))}
-          <button type="button" className="sb-menu-x" onClick={() => setInserting(null)}>Cancel</button>
-        </div>
-      ) : (
-        <button type="button" className="sb-ins-btn" aria-label={at === 0 ? 'Add a block at the top' : at === blocks.length ? 'Add a block at the bottom' : `Add a block between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`} onClick={() => setInserting(at)}>
-          <Plus className="h-3.5 w-3.5" /> Add block
-        </button>
-      )}
-    </div>
+      <div className="sb-ins">
+        {inserting === at ? (
+          <div className="sb-menu" role="menu" aria-label="Add a block">
+            {BLOCKS.filter((t) => t.type !== 'footer' && t.type !== 'header' && t.type !== 'hero').map((t) => (
+              <button key={t.type} type="button" role="menuitem" onClick={() => insert(at, t.type)}>
+                <span className="sb-ico" aria-hidden="true">{BLOCK_ICON[t.type]}</span>
+                <span><b>{t.label}</b><small>{t.hint}</small></span>
+              </button>
+            ))}
+            <button type="button" className="sb-menu-x" onClick={() => setInserting(null)}>Cancel</button>
+          </div>
+        ) : (
+          <button type="button" className="sb-ins-btn" aria-label={at >= blocks.length - 1 ? 'Add a block at the bottom' : `Add a block between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`} onClick={() => setInserting(at)}>
+            <Plus className="h-3.5 w-3.5" /> Add block
+          </button>
+        )}
+      </div>
     )
   }
 
   return (
     <div className="ss-stack">
       <ThemeEditor page={page} onChange={onChange} />
-      {intro && !blocks.some((b) => b.type === 'hero') && (
-        <button type="button" className="sb-addhero" onClick={() => insert(1, 'hero')}>
-          <b>✦ Add a welcome intro</b>
-          <small>“Welcome to my store”, your username and what you sell, with a square image</small>
-        </button>
-      )}
       <div className="sb-list" aria-label="Page sections">
-        {blocks.map((b, i) => (
+        {blocks.map((b, i) =>
           b.type === 'header' ? (
             <Inserter key={b.id} at={1} />
           ) : b.type === 'footer' ? (
-            <div key={b.id}>
-            <div className={cn('sb-block sb-pinned', open === b.id && 'sb-open')} data-pinned={b.id}>
+            <div key={b.id} className={cn('sb-block sb-pinned', open === b.id && 'sb-open')} data-pinned={b.id} data-block={b.id}>
               <div className="sb-row">
-                <span className="sb-grip" aria-hidden="true" />
-                <button type="button" className="sb-title" aria-expanded={open === b.id} onClick={() => setOpen(open === b.id ? null : b.id)}>
+                <span className="sb-ico" aria-hidden="true">{BLOCK_ICON.footer}</span>
+                <button type="button" className="sb-title" onClick={(e) => setOpen(b.id, e.currentTarget.closest('.sb-block') as HTMLElement)}>
                   <b>{blockLabel(b.type)}</b>
-                  <small>Always at the bottom, centred · {summary(b, products)}</small>
+                  <small>Always at the bottom · {summary(b, products)}</small>
                 </button>
               </div>
-              {open === b.id && <BlockEditor block={b} products={products} update={(d) => update(b.id, d)} />}
-            </div>
             </div>
           ) : (
-          <div key={b.id}>
-            <div
-              data-block={b.id}
-              className={cn('sb-block', open === b.id && 'sb-open', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging', landed === b.id && 'sb-landed')}
-              draggable
-              onDragStart={(e) => (setDragId(b.id), e.dataTransfer.setData('text/plain', b.id), (e.dataTransfer.effectAllowed = 'move'))}
-              onDragEnd={() => (setDragId(null), setOver(null))}
-            >
-              <div className="sb-row">
-                <span className="sb-grip" aria-hidden="true" title="Drag to move"><GripVertical className="h-4 w-4" /></span>
-                <button type="button" className="sb-title" aria-expanded={open === b.id} onClick={() => setOpen(open === b.id ? null : b.id)}>
-                  <b>{blockLabel(b.type)}</b>
-                  <small>{summary(b, products)}</small>
-                </button>
-                <div className="sb-tools">
-                  <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
-                  <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
-                  <button type="button" aria-label={`Duplicate ${blockLabel(b.type)}`} onClick={() => {
-                    const copy = { ...newBlock(b.type), data: structuredClone(b.data), hidden: b.hidden }
-                    const next = [...blocks]
-                    next.splice(i + 1, 0, copy)
-                    setBlocks(next)
-                  }}><Copy className="h-3.5 w-3.5" /></button>
-                  <button type="button" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
-                    {b.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+            <div key={b.id}>
+              <div
+                data-block={b.id}
+                className={cn('sb-block', open === b.id && 'sb-open', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging', landed === b.id && 'sb-landed')}
+                draggable
+                onDragStart={(e) => (setDragId(b.id), e.dataTransfer.setData('text/plain', b.id), (e.dataTransfer.effectAllowed = 'move'))}
+                onDragEnd={() => (setDragId(null), setOver(null))}
+              >
+                <div className="sb-row">
+                  <span className="sb-grip" aria-hidden="true" title="Drag to move"><GripVertical className="h-4 w-4" /></span>
+                  <span className="sb-ico" aria-hidden="true">{BLOCK_ICON[b.type]}</span>
+                  <button type="button" className="sb-title" onClick={(e) => setOpen(b.id, e.currentTarget.closest('.sb-block') as HTMLElement)}>
+                    <b>{blockLabel(b.type)}</b>
+                    <small>{summary(b, products)}</small>
                   </button>
-                  <button type="button" aria-label={`Delete ${blockLabel(b.type)}`} onClick={() => setBlocks(blocks.filter((x) => x.id !== b.id))}><Trash2 className="h-3.5 w-3.5" /></button>
+                  <div className="sb-tools">
+                    <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
+                    <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
+                    <button type="button" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
+                      {b.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
                 </div>
               </div>
-              {open === b.id && <BlockEditor block={b} products={products} update={(d) => update(b.id, d)} />}
+              <Inserter at={i + 1} />
             </div>
-            <Inserter at={i + 1} />
-          </div>
-          )
-        ))}
+          ),
+        )}
       </div>
+    </div>
+  )
+}
+
+/** The editing panel for one section: floats above everything, never moves the layout. */
+function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; id: string; anchor: DOMRect | null; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const blocks = pinEnds(page.blocks)
+  const i = blocks.findIndex((b) => b.id === id)
+  const b = blocks[i]
+  useEffect(() => {
+    // a press anywhere outside closes it; edits are already in the draft, so nothing is lost
+    const down = (e: PointerEvent) => {
+      const t = e.target as HTMLElement
+      if (ref.current?.contains(t) || t.closest('.sp-pick, .sb-title, .sb-menu')) return
+      onClose()
+    }
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('pointerdown', down)
+    document.addEventListener('keydown', key)
+    return () => (document.removeEventListener('pointerdown', down), document.removeEventListener('keydown', key))
+  }, [onClose])
+  if (!b) return null
+  const pinned = b.type === 'footer'
+  const setBlocks = (next: Block[]) => onChange({ ...page, blocks: pinEnds(next) })
+  const update = (d: Record<string, unknown>) => setBlocks(blocks.map((x) => (x.id === id ? { ...x, data: { ...x.data, ...d } } : x)))
+  const look = b.look ?? {}
+  const setLook = (l: Partial<NonNullable<Block['look']>>) => {
+    const next = { ...look, ...l }
+    for (const k of Object.keys(next) as Array<keyof typeof next>) if (!next[k]) delete next[k]
+    setBlocks(blocks.map((x) => (x.id === id ? { ...x, look: Object.keys(next).length ? next : undefined } : x)))
+  }
+  // place it beside the clicked element, inside the window; on phones it's a bottom sheet
+  const W = 340
+  const phone = window.innerWidth < 760
+  const style: CSSProperties = phone || !anchor
+    ? {}
+    : {
+        left: Math.max(12, anchor.left - W - 18 < 12 ? Math.min(anchor.right + 18, window.innerWidth - W - 12) : anchor.left - W - 18),
+        top: Math.min(Math.max(12, anchor.top - 10), window.innerHeight - 420),
+      }
+  return (
+    <div ref={ref} className={cn('fe', phone && 'fe-sheet')} style={style} role="dialog" aria-label={`Edit ${blockLabel(b.type)}`}>
+      <header className="fe-head">
+        <span className="sb-ico" aria-hidden="true">{BLOCK_ICON[b.type]}</span>
+        <b>{blockLabel(b.type)}</b>
+        <button type="button" className="fe-x" aria-label="Close" onClick={onClose}>✕</button>
+      </header>
+      <div className="fe-body">
+        <BlockEditor block={b} products={products} update={update} />
+        <div className="fe-look">
+          <span className="ss-label">Style</span>
+          <div className="fe-seg" role="group" aria-label="Alignment">
+            {(['left', 'center', 'right'] as const).map((a) => <button key={a} type="button" aria-pressed={(look.align ?? '') === a} onClick={() => setLook({ align: look.align === a ? undefined : a })}>{a === 'left' ? '⟸' : a === 'center' ? '≡' : '⟹'}</button>)}
+          </div>
+          <div className="fe-seg" role="group" aria-label="Size">
+            {(['s', 'm', 'l', 'xl'] as const).map((z) => <button key={z} type="button" aria-pressed={(look.size ?? 'm') === z} onClick={() => setLook({ size: z === 'm' ? undefined : z })}>{z.toUpperCase()}</button>)}
+          </div>
+          <div className="fe-seg" role="group" aria-label="Spacing">
+            {(['tight', 'normal', 'roomy'] as const).map((z) => <button key={z} type="button" aria-pressed={(look.space ?? 'normal') === z} onClick={() => setLook({ space: z === 'normal' ? undefined : z })}>{z}</button>)}
+          </div>
+          <div className="fe-row">
+            <label className="fe-color">Text colour <input type="color" value={look.color ?? '#111114'} onChange={(e) => setLook({ color: e.target.value })} aria-label="Text colour" /></label>
+            {look.color && <button type="button" className="fe-link" onClick={() => setLook({ color: undefined })}>Reset</button>}
+            <select className="ss-input fe-font" aria-label="Font" value={look.font ?? ''} onChange={(e) => setLook({ font: (e.target.value || undefined) as NonNullable<Block['look']>['font'] })}>
+              <option value="">Theme font</option>
+              {FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
+            </select>
+          </div>
+        </div>
+      </div>
+      {!pinned && (
+        <footer className="fe-foot">
+          <button type="button" onClick={() => {
+            const copy = { ...newBlock(b.type), data: structuredClone(b.data), hidden: b.hidden, look: b.look }
+            const next = [...blocks]
+            next.splice(i + 1, 0, copy)
+            setBlocks(next)
+          }}><Copy className="h-3.5 w-3.5" /> Duplicate</button>
+          <button type="button" className="fe-del" onClick={() => (setBlocks(blocks.filter((x) => x.id !== id)), onClose())}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+        </footer>
+      )}
     </div>
   )
 }
@@ -910,6 +1109,18 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
               </label>
             ))}
           </fieldset>
+          {ids.length > 1 && (
+            <div className="sb-order" aria-label="Order of product cards">
+              <span className="ss-label">Card order</span>
+              {ids.map((id, k) => (
+                <div key={id} className="sb-order-row">
+                  <span>{products.find((p) => p.id === id)?.title || 'Untitled product'}</span>
+                  <button type="button" aria-label="Move card up" disabled={k === 0} onClick={() => { const n = [...ids]; [n[k - 1], n[k]] = [n[k], n[k - 1]]; update({ productIds: n }) }}><ArrowUp className="h-3.5 w-3.5" /></button>
+                  <button type="button" aria-label="Move card down" disabled={k === ids.length - 1} onClick={() => { const n = [...ids]; [n[k + 1], n[k]] = [n[k], n[k + 1]]; update({ productIds: n }) }}><ArrowDown className="h-3.5 w-3.5" /></button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )
     }

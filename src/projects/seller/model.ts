@@ -11,6 +11,16 @@ export interface Block {
   type: BlockType
   hidden: boolean
   data: Record<string, any>
+  /** Per-element look set in the floating editor. */
+  look?: Look
+}
+
+export interface Look {
+  align?: 'left' | 'center' | 'right'
+  size?: 's' | 'm' | 'l' | 'xl'
+  color?: string
+  space?: 'tight' | 'normal' | 'roomy'
+  font?: 'geist' | 'grotesque' | 'serif'
 }
 
 export interface Page {

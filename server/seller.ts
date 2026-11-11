@@ -312,6 +312,7 @@ interface Block {
   type: BlockType
   hidden: boolean
   data: Record<string, unknown>
+  look?: Record<string, string>
 }
 interface Page {
   name: string
@@ -329,7 +330,10 @@ interface Page {
 export function liveOf(draftJson: string): string {
   const d = JSON.parse(draftJson) as Page
   const { style2, use, ...one } = d
-  return JSON.stringify(use === 2 && style2 ? { ...style2, style2: undefined, use: undefined } : one)
+  // Style 2 is "coming soon": it is never published. Publish always puts Style 1 live.
+  void style2
+  void use
+  return JSON.stringify(one)
 }
 
 /** Accepts a page from the editor, keeping only known fields and products this store owns. */
@@ -394,7 +398,8 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
         data = { text: str(d.text, 200) }
         break
     }
-    blocks.push({ id, type, hidden: b.hidden === true, data })
+    const look = cleanLook(b.look)
+    blocks.push({ id, type, hidden: b.hidden === true, data, ...(look ? { look } : {}) })
   }
   // Pinned: exactly one profile header, always first, and one footer, always last; both shown.
   const head = blocks.find((b) => b.type === 'header') ?? { id: `blk_${randomBytes(6).toString('hex')}`, type: 'header' as BlockType, hidden: false, data: { showSocials: true } }
@@ -418,6 +423,19 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
     blocks,
     ...(nested ? {} : cleanStyle2(p, productIds)),
   }
+}
+
+/** Per-element look from the floating editor: alignment, size, colour, spacing and font. */
+function cleanLook(input: unknown): Record<string, string> | null {
+  if (!input || typeof input !== 'object') return null
+  const l = input as Record<string, unknown>
+  const out: Record<string, string> = {}
+  if (['left', 'center', 'right'].includes(String(l.align))) out.align = String(l.align)
+  if (['s', 'm', 'l', 'xl'].includes(String(l.size))) out.size = String(l.size)
+  if (/^#[0-9a-f]{6}$/i.test(String(l.color))) out.color = String(l.color)
+  if (['tight', 'normal', 'roomy'].includes(String(l.space))) out.space = String(l.space)
+  if (['geist', 'grotesque', 'serif'].includes(String(l.font))) out.font = String(l.font)
+  return Object.keys(out).length ? out : null
 }
 
 function cleanStyle2(p: Record<string, unknown>, productIds: Set<string>): { style2?: Page; use?: 1 | 2 } {
