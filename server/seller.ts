@@ -1427,7 +1427,11 @@ export function sellerRouter() {
       // back to the product being bought, at the store's public address (not its internal id)
       cancel_url: `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`,
       metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
-      payment_intent_data: { metadata: { desknotyOrderId: order.id } },
+      // Direct charge on the seller's connected account; Desknoty's fee (if any) comes off through Stripe.
+      payment_intent_data: {
+        metadata: { desknotyOrderId: order.id },
+        ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
+      },
     }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}` })
     await sql.run('UPDATE seller_order SET "sessionId" = ?, "checkoutUrl" = ? WHERE id = ?', session.id, session.url, order.id)
     res.json({ url: session.url })
@@ -1535,8 +1539,10 @@ export function sellerRouter() {
     const purchaseStore = o ? await q.storeById(o.storeId) : undefined
     if (!purchaseStore || !o || (s && o.storeId !== s.id)) return void res.status(404).json({ error: 'Order not found.' })
     const st = stripe()
-    // SELLER_CONFIRM_FALLBACK=off: only the signed webhook may fulfil (used to prove webhook delivery).
-    if (o.status === 'pending' && st && process.env.SELLER_CONFIRM_FALLBACK !== 'off') {
+    // When the Stripe webhook is set up, only the signed webhook unlocks a purchase. Without one
+    // (or with SELLER_CONFIRM_FALLBACK=on) the server asks Stripe directly, never trusting the browser.
+    const fallback = process.env.SELLER_CONFIRM_FALLBACK === 'on' || (process.env.SELLER_CONFIRM_FALLBACK !== 'off' && !seller.webhookSecret)
+    if (o.status === 'pending' && st && fallback) {
       const session = await st.checkout.sessions.retrieve(o.sessionId!, { stripeAccount: o.accountId }).catch(() => null)
       if (session) {
         o = await fulfil(o, session)

@@ -56,6 +56,25 @@ export default function PublicStore({ path }: { path: string }) {
     return () => { alive = false }
   }, [handle, kind, store])
 
+  // Download a bought product right here: fetch a fresh signed link (the server checks the payment again), then start it.
+  const [downloading, setDownloading] = useState<string | null>(null)
+  const [celebrate, setCelebrate] = useState<string | null>(null)
+  const download = async (p: ShopProduct) => {
+    const url = readOwned()[p.id]
+    const m = url?.match(/\/order\/([^/?#]+)\?(?:.*&)?k=([^&#]+)/)
+    if (!m) return
+    setDownloading(p.id)
+    setBuyErr(null)
+    try {
+      const r = await storeApi.order(handle, m[1], decodeURIComponent(m[2]))
+      if (r.order.status !== 'paid' || !r.order.downloadUrl) throw new Error('This purchase isn’t confirmed yet.')
+      startDownload(r.order.downloadUrl, r.order.fileName)
+    } catch (e) {
+      setBuyErr((e as Error).message)
+    }
+    setDownloading(null)
+  }
+
   const buy = async (p: ShopProduct) => {
     setBuyErr(null)
     // free: no checkout, straight to the download
@@ -73,6 +92,18 @@ export default function PublicStore({ path }: { path: string }) {
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
       const r = await storeApi.checkout(handle, p.id, key, method, email, payer)
+      // Free (or otherwise already confirmed): download right here, no page change
+      if (r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
+        rememberOwned(handle, p.id, r.orderUrl)
+        setOwned((o) => ({ ...o, [p.id]: r.orderUrl! }))
+        setChoosing(null)
+        setCelebrate(p.title)
+        window.setTimeout(() => setCelebrate(null), 2600)
+        startDownload(r.order.downloadUrl, r.order.fileName)
+        setBuying(null)
+        checkoutBusy.current = false
+        return
+      }
       window.location.assign(r.url ?? r.orderUrl!)
     } catch (e) {
       setBuyErr((e as Error).message)
@@ -93,7 +124,14 @@ export default function PublicStore({ path }: { path: string }) {
   if (err) return <Shell><Message title="Store not found" text={err} /></Shell>
   if (!store) return <Shell><Message title="Loading…" text="" /></Shell>
 
-  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned }
+  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading }
+  const party = celebrate && (
+    <div className="ps-party" role="status">
+      <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
+      <b>It’s yours!</b>
+      <span>{celebrate} is downloading.</span>
+    </div>
+  )
   const chooser = choosing && (
     <PayChooser
       product={choosing}
@@ -116,6 +154,7 @@ export default function PublicStore({ path }: { path: string }) {
         {buyErr && <Banner>{buyErr}</Banner>}
         {!store.checkoutReady && product.priceMinor > 0 && <Banner>This seller hasn’t added a bank account in Payouts yet, so you can’t buy right now.</Banner>}
         {chooser}
+        {party}
         {store.page.layout === 'style2' ? <Style2Page {...base} only={product} /> : <StorePage {...base} only={product} />}
         <p className="ps-back"><a href={`/${store.handle}`}>← All products</a></p>
       </Shell>
@@ -125,6 +164,7 @@ export default function PublicStore({ path }: { path: string }) {
     <Shell store={store}>
       {buyErr && <Banner>{buyErr}</Banner>}
       {chooser}
+      {party}
       {store.page.layout === 'style2' ? <Style2Page {...base} /> : <StorePage {...base} />}
     </Shell>
   )
@@ -133,6 +173,8 @@ export default function PublicStore({ path }: { path: string }) {
 
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
 type Choice = 'card' | 'paypal' | 'bank'
+type Wallet = 'card' | 'apple' | 'google'
+const WALLET_LABEL: Record<Wallet, string> = { card: 'Debit or credit card', apple: 'Apple Pay', google: 'Google Pay' }
 const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', paypal: 'paypal', bank: 'bank' }
 
 /** A bank's app icon when we have its logo; otherwise a neat initial. */
@@ -163,6 +205,9 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
   ]
   const [choice, setChoice] = useState<Choice>(choices[0] ?? 'card')
   const [email, setEmail] = useState('')
+  // Card, Apple Pay (Apple devices that support it) and Google Pay; Stripe shows them on its secure page
+  const wallets: Wallet[] = ['card', ...(typeof window !== 'undefined' && 'ApplePaySession' in window ? (['apple'] as Wallet[]) : []), 'google']
+  const [wallet, setWallet] = useState<Wallet>('card')
   const [payTo, setPayTo] = useState<number>(() => (banks.find((b) => b.inUse) ?? banks[0])?.index ?? -1)
   const [remember, setRemember] = useState(() => { try { return Boolean(localStorage.getItem('desknoty.payer')) } catch { return false } })
   useEffect(() => {
@@ -238,10 +283,22 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
             ) : (
               <>
                 <label className="co3-field"><span>Email for your receipt</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" /></label>
-                <div className="co3-cardnote">
-                  <span className="co3-cardlogos" aria-hidden="true"><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i></span>
-                  <p>{method === 'paypal' ? 'You’ll finish paying on PayPal.' : 'You’ll enter your card on Stripe’s secure page. Desknoty never sees your card.'}</p>
-                </div>
+                {method === 'paypal' ? (
+                  <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
+                ) : (
+                  <>
+                    <div className="co3-wallets" role="radiogroup" aria-label="Pay with">
+                      {wallets.map((w) => (
+                        <label key={w} className={wallet === w ? 'on' : undefined}>
+                          <input type="radio" name="wallet" checked={wallet === w} onChange={() => setWallet(w)} aria-label={WALLET_LABEL[w]} />
+                          <span className="co3-wlogo" aria-hidden="true">{w === 'card' ? <><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i></> : w === 'apple' ? <b className="co3-apple">Pay</b> : <b className="co3-gpay"><span>G</span> Pay</b>}</span>
+                          <span>{WALLET_LABEL[w]}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <p className="co3-hint">{wallet === 'card' ? 'You’ll type your card on Stripe’s secure page. Desknoty never sees your card.' : `On Stripe’s secure page, tap ${WALLET_LABEL[wallet]}. Want to use a different card? You can type one there instead.`}</p>
+                  </>
+                )}
               </>
             )}
             <label className="co3-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Save my details on this device</label>
@@ -337,6 +394,18 @@ function Message({ title, text, back }: { title: string; text: string; back?: st
 /** Waits for Stripe's confirmation, then shows the download. */
 // One list per browser, by product id (ids are unique across stores; the thank-you page
 // and the store page can name the store differently).
+/** Start a file download without leaving the page (the server sends it as an attachment). */
+function startDownload(url: string, fileName?: string) {
+  const a = document.createElement('a')
+  a.href = url
+  if (fileName) a.download = fileName
+  a.rel = 'noopener'
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 const OWNED = 'desknoty.owned'
 function readOwned(_handle?: string): Record<string, string> {
   try { const j = JSON.parse(localStorage.getItem(OWNED) ?? '{}'); return j && typeof j === 'object' ? j : {} } catch { return {} }
@@ -363,6 +432,11 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
   // remember this purchase in this browser, so the store shows Download for it later
   useEffect(() => {
     if (!order?.productId) return
+    // just paid: start the file straight away (once per order)
+    if (order.status === 'paid' && order.downloadUrl) {
+      const k = `desknoty.autodl.${order.id}`
+      try { if (!sessionStorage.getItem(k) && !localStorage.getItem(k)) { localStorage.setItem(k, '1'); startDownload(order.downloadUrl, order.fileName) } } catch { /* storage blocked: the Download button still works */ }
+    }
     if (order.status === 'paid' && order.retrievalUrl) rememberOwned(handle, order.productId, order.retrievalUrl)
     else if (order.status === 'pending' && /\/order\//.test(window.location.pathname)) rememberOwned(handle, order.productId, window.location.pathname + window.location.search)
   }, [order, handle])
@@ -378,6 +452,7 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
   if (order.status === 'paid')
     return (
       <div className="ps-msg ps-paid">
+        <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
         <p className="ps-kicker">Payment confirmed</p>
         <h1>Thanks for your order</h1>
         <p>

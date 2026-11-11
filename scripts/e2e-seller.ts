@@ -244,15 +244,16 @@ try {
 
   // Back on the store, this buyer sees Download instead of Buy now (checked with the server)
   await m.goto(productUrl)
-  await m.getByRole('link', { name: 'Download' }).first().waitFor({ timeout: 10000 })
+  await m.getByRole('button', { name: 'Download' }).first().waitFor({ timeout: 10000 })
   check('after buying, the product shows Download instead of Buy now', (await m.getByRole('button', { name: 'Buy now' }).count()) === 0)
-  await m.getByRole('link', { name: 'Download' }).first().click()
-  await m.getByRole('link', { name: /Download planner\.pdf/ }).waitFor()
-  check('the Download button opens the paid order with the file', true)
+  const before = m.url()
+  const [bought] = await Promise.all([m.waitForEvent('download', { timeout: 10000 }), m.getByRole('button', { name: 'Download' }).first().click()])
+  const savedPath = await bought.path()
+  check('Download saves the bought file straight away, on the same page', readFileSync(savedPath!, 'utf8') === 'E2E-PLANNER-FILE' && m.url() === before && bought.suggestedFilename() === 'planner.pdf')
   const other = await (await browser.newContext()).newPage()
   await other.goto(productUrl)
   await other.getByRole('button', { name: 'Buy now' }).first().waitFor()
-  check('another browser still sees Buy now', (await other.getByRole('link', { name: 'Download' }).count()) === 0)
+  check('another browser still sees Buy now', (await other.getByRole('button', { name: 'Download' }).count()) === 0)
   await other.close()
 
   // Duplicate webhook delivery

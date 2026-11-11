@@ -82,7 +82,11 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
         {props.live && props.owned?.[p.id] ? (
           <>
             <span className="s2p-price">Purchased</span>
-            <a className="s2p-buy s2p-dl" href={props.owned[p.id]}>Download</a>
+            {props.onDownload ? (
+              <button type="button" className="s2p-buy s2p-dl" onClick={() => props.onDownload!(p)} disabled={props.downloading === p.id}>{props.downloading === p.id ? 'Starting…' : 'Download'}</button>
+            ) : (
+              <a className="s2p-buy s2p-dl" href={props.owned[p.id]}>Download</a>
+            )}
           </>
         ) : (
           <>
