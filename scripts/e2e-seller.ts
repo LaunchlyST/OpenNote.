@@ -2,7 +2,7 @@
  * Seller Studio in a real browser, end to end, against the real API server,
  * the built frontend (vite preview) and a local Stripe stand-in:
  *
- *   seller signs in → Start your store → Continue without TikTok → adds a
+ *   seller signs in → Start your store → Connect TikTok (required) → adds a
  *   product with a private file → inserts a Featured product block between
  *   the header and the product grid → publishes → Stripe onboarding left
  *   incomplete, then resumed and finished → copies the bio link →
@@ -101,15 +101,21 @@ try {
   await page.waitForURL(/\/app\/project\//)
   await page.getByRole('button', { name: 'Seller', exact: true }).click()
 
-  // 1. Start your store: Connect TikTok is optional; without credentials it says so
+  // 1. Start your store: TikTok is required, there is no way to skip it
   await page.getByRole('heading', { name: 'Start your store' }).waitFor()
+  check('no “Continue without TikTok” on the start card', (await page.getByText('Continue without TikTok').count()) === 0)
   await page.getByRole('button', { name: 'Connect TikTok' }).click()
-  check('TikTok is optional and says it isn’t switched on', await page.getByText('TikTok login isn’t switched on').isVisible())
-  await page.getByRole('button', { name: 'Continue without TikTok' }).click()
   await page.getByLabel('Store name').fill('Ava Makes')
   await page.getByLabel('Store handle').fill('ava-makes')
   await page.getByText('● Available').waitFor()
-  await page.getByRole('button', { name: 'Start your store' }).click()
+  await page.getByRole('button', { name: /Continue to TikTok/ }).click()
+  await page.getByRole('heading', { name: 'Connect your TikTok' }).waitFor()
+  check('TikTok step is required: no skip button', (await page.getByRole('button', { name: /without TikTok|Skip/ }).count()) === 0)
+  // the bio-code check needs real TikTok, so the test marks the step done the way the 502 fallback does
+  const sid = (await (await page.request.get(`${SITE}/api/seller/store`)).json()).store.id
+  await page.evaluate((k) => sessionStorage.setItem(k, '1'), `desknoty.seller.tiktok-step.${sid}`)
+  await page.reload()
+  await page.getByRole('button', { name: 'Seller', exact: true }).click().catch(() => {})
   await page.getByRole('tab', { name: 'Page' }).waitFor()
   check('studio opens on the Page tab', true)
 

@@ -138,9 +138,9 @@ export function SellerStudio() {
     )
   if (error && !setup)
     return <StartCard setup={null} problem={error} retrying={retrying} onRetry={() => (setRetrying(true), void load().finally(() => setRetrying(false)))} onCreated={() => {}} />
-  if (!store) return <StartCard setup={setup} onCreated={(s, skipTikTok) => (skipTikTok && skipTT.set(s.id), setStore(s))} />
-  if (!skipTT.get(store.id) && !store.tiktok) {
-    return <TikTokStep store={store} setup={setup!} notice={notice} onDone={() => (skipTT.set(store.id), setStore({ ...store }))} />
+  if (!store) return <StartCard setup={setup} onCreated={(s) => setStore(s)} />
+  if (!store.tiktok && !skipTT.get(store.id)) {
+    return <TikTokStep store={store} setup={setup!} notice={notice} onSkip={() => (skipTT.set(store.id), setStore({ ...store }))} />
   }
   return <Studio store={store} setStore={setStore} setup={setup!} notice={notice} clearNotice={() => setNotice(null)} reload={load} />
 }
@@ -192,7 +192,6 @@ function StartCard({
 }) {
   const [legacy] = useState(readLegacyDraft)
   const [mode, setMode] = useState<null | 'tiktok' | 'manual'>(null)
-  const [ttOff, setTtOff] = useState(false)
   const [name, setName] = useState(legacy?.name ?? '')
   const [handle, setHandle] = useState(legacy?.handle ? toHandle(legacy.handle) : '')
   const [busy, setBusy] = useState(false)
@@ -221,8 +220,7 @@ function StartCard({
   }
   const connect = () => {
     if (problem) return
-    if (setup?.tiktok) setMode('tiktok')
-    else setTtOff(true)
+    setMode(setup?.tiktok ? 'tiktok' : 'manual')
   }
 
   return (
@@ -256,19 +254,11 @@ function StartCard({
                     <button type="button" onClick={onRetry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
                   )}
                 </div>
-              ) : ttOff ? (
-                <div className="ss-start-err" role="alert">
-                  TikTok connection isn’t available.
-                  <small>TikTok login isn’t switched on for Desknoty yet.</small>
-                  <button type="button" onClick={() => setMode('manual')}>Continue without TikTok</button>
-                </div>
-              ) : (
-                <button type="button" className="ss-start-skip" onClick={() => setMode('manual')}>Continue without TikTok</button>
-              )}
+              ) : null}
             </>
           ) : (
             <>
-              <p>{mode === 'tiktok' ? 'Pick your link, then connect TikTok.' : 'Pick your link. You can connect TikTok later.'}</p>
+              <p>{mode === 'tiktok' ? 'Pick your link, then connect TikTok.' : 'Pick your link. Next, you’ll connect your TikTok account.'}</p>
               <form
                 className="ss-start-manual"
                 onSubmit={(e) => {
@@ -283,7 +273,7 @@ function StartCard({
                 </div>
                 <span className={cn('ss-start-check', check?.ok ? 'ok' : 'no')} aria-live="polite">{check ? `● ${check.msg}` : 'Checking…'}</span>
                 <button type="submit" className="ss-tt" disabled={!check?.ok || !name.trim() || busy}>
-                  {busy ? 'Creating…' : mode === 'tiktok' ? <><TikTokMark /> Continue to TikTok</> : 'Start your store'}
+                  {busy ? 'Creating…' : <><TikTokMark /> Continue to TikTok</>}
                 </button>
               </form>
               {legacy && <p className="ss-start-note">We found a store draft saved in this browser. It will be imported into your new store.</p>}
@@ -342,36 +332,36 @@ async function importLegacy(store: StoreView): Promise<StoreView> {
   return saved.store
 }
 
-function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup: SellerSetup; notice: string | null; onDone: () => void }) {
+function TikTokStep({ store, setup, notice, onSkip }: { store: StoreView; setup: SellerSetup; notice: string | null; onSkip: () => void }) {
   const [err, setErr] = useState<string | null>(notice)
+  const [unreachable, setUnreachable] = useState(false)
   return (
     <Solo>
       <div className="ss-start">
-        <div className="ss-start-card">
-          <span className="ss-start-icon"><TikTokMark /></span>
-          <h2>Connect TikTok</h2>
-          <p>Optional. Connecting puts your TikTok name, photo and username on your store. You can build and publish without it.</p>
-          <TikTokBioConnect />
+        <div className="ss-start-card ss-ttcard">
+          <span className="ss-ttcard-icon"><TikTokMark /></span>
+          <h2>Connect your TikTok</h2>
+          <p>Your store uses your TikTok name, photo and username, so buyers know it’s really you.</p>
+          <TikTokBioConnect onUnreachable={() => setUnreachable(true)} />
           {setup.tiktok && (
-          <button
-            type="button"
-            className="ss-tt"
-            disabled={!setup.tiktok}
-            onClick={() =>
-              void sellerApi
-                .tiktok(returnPath())
-                .then((r) => (window.location.href = r.url))
-                .catch((e: Error) => setErr(e.message))
-            }
-          >
-            <TikTokMark /> Log in with TikTok instead
-          </button>
+            <button
+              type="button"
+              className="ss-start-skip"
+              onClick={() =>
+                void sellerApi
+                  .tiktok(returnPath())
+                  .then((r) => (window.location.href = r.url))
+                  .catch((e: Error) => setErr(e.message))
+              }
+            >
+              Log in with TikTok instead
+            </button>
           )}
           {err && <div className="ss-start-err" role="alert">{err}</div>}
-          <button type="button" className="ss-start-skip" onClick={onDone}>
-            Continue without TikTok
-          </button>
-          <p className="ss-start-note">Your store: <b>{store.url}</b></p>
+          {unreachable && (
+            <button type="button" className="ss-start-skip" onClick={onSkip}>TikTok isn’t responding. Skip for now</button>
+          )}
+          <p className="ss-start-note">Your store: <b>{store.url.replace(/^https?:\/\//, '')}</b></p>
         </div>
       </div>
     </Solo>
@@ -383,7 +373,7 @@ function TikTokStep({ store, setup, notice, onDone }: { store: StoreView; setup:
  * TikTok bio, 3) verify. Desknoty then copies your TikTok name, photo and
  * username onto your store. You can remove the code from your bio afterwards.
  */
-function TikTokBioConnect() {
+function TikTokBioConnect({ onUnreachable }: { onUnreachable: () => void }) {
   const [step, setStep] = useState<'name' | 'code' | 'done'>('name')
   const [username, setUsername] = useState('')
   const [code, setCode] = useState('')
@@ -397,17 +387,27 @@ function TikTokBioConnect() {
       await fn()
     } catch (e) {
       setErr((e as Error).message)
+      if ((e as { status?: number }).status === 502) onUnreachable()
     }
     setBusy(false)
   }
+  const stepNo = step === 'name' ? 0 : step === 'code' ? 1 : 2
+  const steps = (
+    <ol className="ss-ttsteps" aria-label="Steps">
+      {['Username', 'Bio code', 'Verify'].map((t, i) => (
+        <li key={t} className={cn(i < stepNo && 'done', i === stepNo && 'on')}><b>{i < stepNo ? '✓' : i + 1}</b>{t}</li>
+      ))}
+    </ol>
+  )
   if (step === 'done') return <div className="ss-tt-ok" role="status">TikTok connected. Opening your studio…</div>
   return (
     <div className="ss-ttflow">
+      {steps}
       {step === 'name' ? (
         <form className="ss-ttflow-row" onSubmit={(e) => (e.preventDefault(), void run(async () => { const r = await sellerApi.tiktokCode(username); setUsername(r.username); setCode(r.code); setStep('code') }))}>
-          <label className="ss-mfield">
+          <label className="ss-ttfield">
             <span>Your TikTok username</span>
-            <div className="ss-affix"><span>@</span><input className="ss-input" value={username} onChange={(e) => setUsername(e.target.value.replace(/^@/, ''))} autoComplete="off" placeholder="yourname" /></div>
+            <div className="ss-ttinput"><span>@</span><input value={username} onChange={(e) => setUsername(e.target.value.replace(/^@/, ''))} autoComplete="off" placeholder="yourname" /></div>
           </label>
           <button type="submit" className="ss-tt" disabled={busy || username.trim().length < 2}><TikTokMark /> {busy ? 'Getting your code…' : 'Connect TikTok'}</button>
         </form>
