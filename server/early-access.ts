@@ -88,9 +88,11 @@ earlyAccessRouter.post('/api/early-access', (req: Request, res: Response) => {
 })
 
 /** Whether this browser already holds a valid access cookie. */
-earlyAccessRouter.get('/api/early-access/status', (req: Request, res: Response) => {
+earlyAccessRouter.get('/api/early-access/status', async (req: Request, res: Response) => {
   res.set('Cache-Control', 'no-store')
-  res.json({ unlocked: hasAccess(req) })
+  // After the public launch everyone is let in.
+  const { getLaunchMode } = await import('./launch.ts')
+  res.json({ unlocked: hasAccess(req) || (await getLaunchMode()) === 'launched' })
 })
 
 /** The public site (differs from the API origin when they are hosted apart). */
@@ -100,6 +102,11 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
 /** Join the launch waitlist. Signing up twice is fine and says the same thing. */
 earlyAccessRouter.post('/api/waitlist', async (req: Request, res: Response) => {
+  // Spam trap: a hidden "website" field people never see. Bots that fill it get a polite no.
+  if (typeof req.body?.website === 'string' && req.body.website.trim()) {
+    res.status(400).json({ ok: false, error: 'Please enter a valid email address.' })
+    return
+  }
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   if (!email || email.length > 254 || !EMAIL.test(email)) {
     res.status(400).json({ ok: false, error: 'Please enter a valid email address.' })

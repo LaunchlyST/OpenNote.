@@ -459,21 +459,9 @@ function Studio({
     return r.store.revision
   })
   const full = pageSave.value
-  // Style 1 is the original design; Style 2 is a second design to try. Publish puts the chosen one live.
-  const [styleNo, setStyleNo] = useState<1 | 2>(full.use === 2 && full.style2 ? 2 : 1)
-  const page: Page = styleNo === 2 && full.style2 ? full.style2 : full
-  const edit = (p: Page) => pageSave.edit(styleNo === 2 ? { ...full, style2: { ...p, style2: undefined, use: undefined } } : { ...p, style2: full.style2, use: full.use })
-  const pickStyle = (n: 1 | 2) => {
-    if (n === 2 && !full.style2) {
-      const { style2: _s, use: _u, ...one } = full
-      const blocks = [...one.blocks]
-      if (!blocks.some((b) => b.type === 'hero')) blocks.splice(1, 0, newBlock('hero'))
-      pageSave.edit({ ...full, style2: structuredClone({ ...one, blocks }), use: full.use ?? 1 })
-    }
-    setPicked(null)
-    setStyleNo(n)
-  }
-  const liveStyle = full.use === 2 && full.style2 ? 2 : 1
+  // The editor works on the first page; swiping the preview shows a second, empty page (coming soon).
+  const page: Page = full
+  const edit = (p: Page) => pageSave.edit({ ...p, style2: full.style2, use: full.use })
   const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
     try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
@@ -541,20 +529,7 @@ function Studio({
         {pageSave.state !== 'Saved' && <p role="status">{pageSave.state} <button type="button" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
         {tab === 'page' && <>
-          <div className="ss-styles" role="group" aria-label="Design style">
-            <div className="ss-seg">
-              {([1, 2] as const).map((n) => (
-                <button key={n} type="button" aria-pressed={styleNo === n} aria-selected={styleNo === n} onClick={() => pickStyle(n)}>Style {n}{liveStyle === n && <em className="ss-livetag">Live pick</em>}</button>
-              ))}
-            </div>
-            {liveStyle !== styleNo ? (
-              <button type="button" className="ss-usestyle" onClick={() => pageSave.edit({ ...full, use: styleNo })}>Publish with Style {styleNo}</button>
-            ) : (
-              <span className="ss-muted">Publish puts Style {styleNo} live</span>
-            )}
-          </div>
-          <PageEditor key={styleNo} page={page} onChange={edit} products={store.products} open={picked} setOpen={setPicked} intro={styleNo === 2} />
-          <DesignChat />
+          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={setPicked} intro={false} />
         </>}
         {tab === 'products' && <ProductsEditor store={store} setStore={setStore} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -580,6 +555,7 @@ function Studio({
             </div>
           )}
         </div>
+        <PhoneSwipe>
         <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
           {/* the whole phone screen takes the store's colours, top strip included */}
@@ -588,6 +564,14 @@ function Studio({
             <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onPick={(id) => (setTab('page'), setPicked(id), window.setTimeout(() => document.querySelector(`[data-block="${id}"], [data-pinned="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }), 60))} />
           </div>
         </div>
+        <div className="ss-page2">
+          <div className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}>
+            {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
+            <div className="ss-screen ss-screen-empty" aria-label="Page 2 (empty)" />
+          </div>
+          <DesignChat />
+        </div>
+        </PhoneSwipe>
       </aside>
     </div>
   )
@@ -640,6 +624,25 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
         </button>
       )}
       {up.err && <span className="ss-hint text-[#b42318]">{up.err}</span>}
+    </div>
+  )
+}
+
+/** The preview phone; swipe left (or use the arrows) for a second, empty phone. */
+function PhoneSwipe({ children }: { children: ReactNode }) {
+  const track = useRef<HTMLDivElement>(null)
+  const [at, setAt] = useState(0)
+  const go = (i: number) => track.current?.scrollTo({ left: i * track.current.clientWidth, behavior: 'smooth' })
+  return (
+    <div className="ss-swipe">
+      <div className="ss-swipe-track" ref={track} onScroll={(e) => setAt(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}>
+        {children}
+      </div>
+      <div className="ss-swipe-nav">
+        <button type="button" aria-label="Previous page" disabled={at === 0} onClick={() => go(0)}>‹</button>
+        {[0, 1].map((i) => <button key={i} type="button" className={cn('ss-dot', at === i && 'on')} aria-label={`Page ${i + 1}`} aria-current={at === i} onClick={() => go(i)} />)}
+        <button type="button" aria-label="Next page" disabled={at === 1} onClick={() => go(1)}>›</button>
+      </div>
     </div>
   )
 }

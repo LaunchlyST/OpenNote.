@@ -1267,7 +1267,7 @@ function DeploySection() {
 }
 
 function LaunchSection() {
-  const [mode, setMode] = useState<'waitlist' | 'beta' | 'launched' | null>(null)
+  const [mode, setMode] = useState<'construction' | 'waitlist' | 'beta' | 'launched' | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1307,6 +1307,24 @@ function LaunchSection() {
     }
   }
 
+  const switchTo = async (next: 'construction' | 'waitlist' | 'launched') => {
+    if (next === 'launched' && !window.confirm('Public launch: everyone can open Desknoty and sign up. Continue?')) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const res = await fetch(apiUrl('/api/admin/launch/mode'), { method: 'POST', credentials: 'include', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode: next }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error ?? 'Could not change the launch mode.')
+      setMode(data.mode)
+      setMessage(next === 'launched' ? 'Public launch is on. Everyone can now use Desknoty.' : next === 'construction' ? 'The Under construction page is now showing.' : 'The waitlist page is now showing.')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not change the launch mode.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const endBeta = async () => {
     setBusy(true)
     setError(null)
@@ -1330,7 +1348,7 @@ function LaunchSection() {
       description="Move Desknoty from the waitlist page to beta, then to a full launch."
     >
       <SettingsCard title="Status" icon={<Megaphone className="h-3.5 w-3.5" />}>
-        <SettingsRow label="Current mode" hint="waitlist → beta → launched">
+        <SettingsRow label="Current mode" hint="Only administrators can change this">
           <span className="text-[12px] font-medium text-[#191919]">{mode ?? '…'}</span>
         </SettingsRow>
       </SettingsCard>
@@ -1344,6 +1362,28 @@ function LaunchSection() {
           {message}
         </p>
       )}
+      <SettingsCard title="Launch mode" icon={<Megaphone className="h-3.5 w-3.5" />}>
+        <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3 sm:grid-cols-3">
+          {([
+            ['construction', '🚧 Under construction', 'Building page with Notify me'],
+            ['waitlist', '✉️ Waitlist open', 'Visitors join the waitlist'],
+            ['launched', '🚀 Public launch', 'Everyone can use Desknoty'],
+          ] as const).map(([id, label, hint]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={mode === id}
+              disabled={busy || mode === id}
+              onClick={() => void switchTo(id)}
+              className={`rounded-xl px-3 py-2.5 text-left text-[12px] transition ${mode === id ? 'bg-[#191919] text-white' : 'bg-[#f7f7f5] text-[#191919] hover:bg-[#efefec]'}`}
+            >
+              <b className="block text-[12.5px]">{label}</b>
+              <span className={mode === id ? 'text-white/70' : 'text-[#7a7975]'}>{mode === id ? 'Active now' : hint}</span>
+            </button>
+          ))}
+        </div>
+      </SettingsCard>
       <div className="flex flex-wrap gap-2">
         <Button
           variant="primary"

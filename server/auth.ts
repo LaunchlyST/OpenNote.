@@ -126,7 +126,9 @@ export const auth = betterAuth({
         // SIGNUP_ALLOWLIST closes sign-up to everyone else, for every sign-up
         // route (email and Google alike). Existing accounts are unaffected.
         before: async (user) => {
-          if (env.signupAllowlist.length && !env.signupAllowlist.includes(String(user.email).toLowerCase())) {
+          // Until the public launch (an admin switches it in Settings → Launch), sign-up stays limited.
+          const { getLaunchMode } = await import('./launch.ts')
+          if (env.signupAllowlist.length && !env.signupAllowlist.includes(String(user.email).toLowerCase()) && (await getLaunchMode()) !== 'launched') {
             throw new APIError('FORBIDDEN', { message: 'Sign-up is invite only for now. Join the waitlist instead.', code: 'SIGNUP_CLOSED' })
           }
         },

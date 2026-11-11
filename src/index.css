@@ -7647,13 +7647,23 @@ select.ss-input option {
 .sb-addhero small { opacity: .85; font-size: 12.5px; }
 
 /* Design assistant: blurred, coming soon */
-.ss-chatsoon { position: relative; margin-top: 14px; }
+.ss-chatsoon { position: relative; width: min(330px, 100%); margin: 14px auto 0; }
 .ss-chatsoon-box { display: flex; gap: 8px; padding: 8px; border-radius: 16px; background: var(--sf); box-shadow: inset 0 0 0 1px var(--bd), 0 8px 24px rgba(0,0,0,.06); filter: blur(3px); opacity: .7; pointer-events: none; user-select: none; }
 .ss-chatsoon-box input { flex: 1; min-width: 0; height: 42px; padding: 0 12px; border: 0; border-radius: 10px; font-size: 14px; background: color-mix(in srgb, var(--tx) 5%, transparent); }
 .ss-chatsoon-box button { width: 42px; height: 42px; border-radius: 10px; color: #fff; background: #2563eb; font-weight: 700; }
 .ss-chatsoon-tag { position: absolute; inset: 0; margin: auto; width: max-content; height: max-content; padding: 6px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: #fff; background: #111; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
-/* Style 1 / Style 2 */
-.ss-styles { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.ss-styles .ss-seg button { gap: 6px; }
-.ss-livetag { font-style: normal; font-size: 10.5px; font-weight: 700; padding: 1px 6px; border-radius: 999px; color: #fff; background: #16a34a; }
-.ss-usestyle { height: 34px; padding: 0 14px; border-radius: 10px; font-size: 12.5px; font-weight: 600; color: #fff; background: #2563eb; }
+/* Preview: swipe left for a second, empty phone */
+.ss-swipe { width: 100%; }
+.ss-swipe-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; }
+.ss-swipe-track::-webkit-scrollbar { display: none; }
+.ss-swipe-track > * { flex: 0 0 100%; scroll-snap-align: center; min-width: 0; }
+.ss-page2 { display: flex; flex-direction: column; align-items: center; }
+.ss-screen-empty { background: #fff; }
+.ss-swipe-nav { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 12px; }
+.ss-swipe-nav > button:not(.ss-dot) { width: 30px; height: 30px; border-radius: 50%; color: #fff; background: rgba(255,255,255,.1); font-size: 18px; line-height: 1; }
+.ss-swipe-nav > button:disabled { opacity: .3; }
+.ss-dot { width: 8px; height: 8px; border-radius: 999px; background: rgba(255,255,255,.3); transition: width .2s, background .2s; }
+.ss-dot.on { width: 20px; background: #fff; }
+.ss-preview { min-width: 0; }
+.ss-swipe { min-width: 0; max-width: 100%; overflow: hidden; }
+.ss-swipe-track > * { display: flex; flex-direction: column; align-items: center; }

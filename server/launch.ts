@@ -27,10 +27,19 @@ async function setSetting(key: string, value: string) {
   )
 }
 
-export async function getLaunchMode(): Promise<'waitlist' | 'beta' | 'launched'> {
+/**
+ * construction: "Under construction" page, Notify me joins the waitlist.
+ * waitlist:     waitlist signup page (the default).
+ * beta:         waitlist members with a launch link get in.
+ * launched:     public launch; the pre-launch page and sign-up limits are gone.
+ * Only an administrator changes it; nothing changes it automatically.
+ */
+export type LaunchMode = 'construction' | 'waitlist' | 'beta' | 'launched'
+export const LAUNCH_MODES: LaunchMode[] = ['construction', 'waitlist', 'beta', 'launched']
+
+export async function getLaunchMode(): Promise<LaunchMode> {
   const v = await getSetting(MODE_KEY)
-  if (v === 'beta' || v === 'launched') return v
-  return 'waitlist'
+  return (LAUNCH_MODES as string[]).includes(v ?? '') ? (v as LaunchMode) : 'waitlist'
 }
 
 function makeToken(email: string, launchId: string): string {
@@ -151,4 +160,21 @@ launchRouter.post('/api/admin/launch/end', async (req: Request, res: Response) =
   if (res.headersSent) return
   await setSetting(MODE_KEY, 'launched')
   res.json({ mode: 'launched' })
+})
+
+// Admin: switch between Under construction, Waitlist and Public launch at any time.
+// (Beta, with launch emails, still goes through POST /api/admin/launch.)
+launchRouter.post('/api/admin/launch/mode', async (req: Request, res: Response) => {
+  await new Promise<void>((resolve, reject) => {
+    requireAdmin(req, res, (err) => (err ? reject(err) : resolve()))
+  }).catch(() => {})
+  if (res.headersSent) return
+  const mode = typeof req.body?.mode === 'string' ? req.body.mode : ''
+  if (mode !== 'construction' && mode !== 'waitlist' && mode !== 'launched') {
+    res.status(400).json({ error: 'Choose construction, waitlist or launched.' })
+    return
+  }
+  await setSetting(MODE_KEY, mode)
+  if (mode === 'launched' && !(await getSetting(LAUNCHED_AT_KEY))) await setSetting(LAUNCHED_AT_KEY, new Date().toISOString())
+  res.json({ mode })
 })

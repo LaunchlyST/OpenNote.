@@ -1,40 +1,40 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { apiUrl } from '../lib/api-base'
 import { useRouter } from '../router'
-import { ComingSoon } from './ComingSoon'
+import { LaunchPage } from './LaunchPage'
+import type { PreMode } from './LaunchPage'
 
 /**
- * Gate for `/`.
+ * Gate for `/`. The launch mode is set by an administrator (Settings → Launch)
+ * and read from the server:
  *
- * The Coming Soon (waitlist) page is the default. Once the site moves into
- * beta, waitlist members who redeemed their launch link skip it and go
- * straight to the landing page; everyone else still sees it. Once beta ends
- * (fully launched), the waitlist page is gone for everyone.
+ * - construction → the Under construction page (Notify me joins the waitlist)
+ * - waitlist     → the waitlist page
+ * - beta         → waitlist page, but people with a redeemed launch link go in
+ * - launched     → everyone goes straight to the landing page
  */
 export function HomeGate() {
   const { navigate } = useRouter()
+  const [mode, setMode] = useState<PreMode | null>(null)
 
   useEffect(() => {
     let alive = true
     Promise.allSettled([
       fetch(apiUrl('/api/launch/status')).then((r) => (r.ok ? r.json() : { mode: 'waitlist' })),
-      fetch(apiUrl('/api/early-access/status'), { credentials: 'include' }).then((r) =>
-        r.ok ? r.json() : { unlocked: false },
-      ),
+      fetch(apiUrl('/api/early-access/status'), { credentials: 'include' }).then((r) => (r.ok ? r.json() : { unlocked: false })),
     ]).then((results) => {
       if (!alive) return
       const launch = results[0].status === 'fulfilled' ? results[0].value : { mode: 'waitlist' }
       const access = results[1].status === 'fulfilled' ? results[1].value : { unlocked: false }
-      const mode = launch?.mode
-      const unlocked = Boolean(access?.unlocked)
-      if (mode === 'launched' || (mode === 'beta' && unlocked)) {
-        navigate('/landing', { replace: true })
-      }
+      const m = launch?.mode
+      if (m === 'launched' || (m === 'beta' && access?.unlocked)) return navigate('/landing', { replace: true })
+      setMode(m === 'construction' ? 'construction' : 'waitlist')
     })
     return () => {
       alive = false
     }
   }, [navigate])
 
-  return <ComingSoon />
+  if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
+  return <LaunchPage mode={mode} />
 }
