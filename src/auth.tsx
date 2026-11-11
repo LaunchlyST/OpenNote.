@@ -6,13 +6,25 @@ import { apiUrl } from './lib/api-base'
 import { blockCacheWrites, clearAllUserCaches, clearOtherUserCaches } from './lib/local-cache'
 import { flushPendingSave, stopSync } from './sync'
 
+/** `AbortSignal.timeout` is missing in older browsers; never let that skip the request. */
+function timeoutSignal(ms: number): AbortSignal | undefined {
+  try {
+    if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+      return AbortSignal.timeout(ms)
+    }
+  } catch {
+    /* fall through */
+  }
+  return undefined
+}
+
 /** Retry revocation without allowing a network failure to restore the UI session. */
 async function revokeSession(token = tokenToRevoke()) {
   const expected = authGeneration()
   const response = await fetch(apiUrl('/api/auth/sign-out'), {
     method: 'POST', credentials: token ? 'omit' : 'include', keepalive: true,
     headers: token ? { Authorization: `Bearer ${token}` } : {},
-    signal: AbortSignal.timeout(5000),
+    signal: timeoutSignal(5000),
   })
   if (!response.ok) throw new Error('Could not finish signing out. Please try again.')
   confirmRevocation(expected)
@@ -221,15 +233,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * 5. leave for the sign-in page straight away — no network call can stall it.
    */
   const signOut = useCallback(async () => {
-    // Set the guard before removing the token: late responses cannot restore it.
-    const token = beginSignOut()
-    setSignedOutHere(true)
     try {
+      // Set the guard before removing the token: late responses cannot restore it.
+      const token = beginSignOut()
+      setSignedOutHere(true)
       stopSync()
       blockCacheWrites()
       clearAllUserCaches()
       void flushPendingSave().catch(() => {})
       void revokeSession(token).catch(() => {})
+    } catch {
+      /* even if a helper fails, the click must still leave the page */
     } finally {
       window.location.replace('/app/signin')
     }
