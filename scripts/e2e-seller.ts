@@ -137,19 +137,34 @@ try {
   await page.getByText('Ready · publish to put it on sale').waitFor()
   check('product is complete and ready to publish', true)
 
-  // 3. Featured product between the header and the grid; pick it in the grid too
+  // 3. Editor tools: drag a Text section from the panel into the phone, above the product grid
   await page.getByRole('tab', { name: 'Page' }).click()
-  await page.getByRole('button', { name: 'Add a block between Profile header and Product grid' }).click()
-  await page.getByRole('menuitem', { name: /Featured product/ }).click()
-  await page.locator('.sb-edit select').first().selectOption({ label: 'Content planner' })
-  await page.getByRole('button', { name: /^Product grid \d+ product/ }).click()
+  await page.getByRole('heading', { name: 'Editor tools' }).waitFor()
+  await page.addStyleTag({ content: '.ss-device{animation:none!important}' })
+  await page.getByRole('button', { name: 'Add Text' }).evaluate((e) => e.scrollIntoView({ block: 'center' }))
+  await page.waitForTimeout(300)
+  const tile = await page.getByRole('button', { name: 'Add Text' }).boundingBox()
+  const gridBox = await page.locator('.ss-slide .sp-pick:has(.sp-grid-wrap), .ss-slide .sp-pick:has(.sp-empty)').first().boundingBox()
+  const sx = tile!.x + tile!.width / 2, sy = tile!.y + tile!.height / 2
+  await page.mouse.move(sx, sy)
+  await page.mouse.down()
+  for (let i = 1; i <= 12; i++) await page.mouse.move(sx + (gridBox!.x + 40 - sx) * i / 12, sy + (gridBox!.y + 6 - sy) * i / 12)
+  check('dragging a tile into the phone shows where it will land', (await page.locator('.ss-dropline').count()) === 1)
+  await page.mouse.up()
+  const textEditor = page.getByRole('dialog', { name: 'Edit Text' })
+  await textEditor.waitFor()
+  await textEditor.getByLabel('Heading').fill('Welcome to my shop')
+  await textEditor.getByRole('button', { name: 'Close' }).click()
+  // pick the product in the grid from its row in Your sections
+  await page.getByRole('button', { name: /^Product grid/ }).click()
   await page.getByRole('checkbox', { name: /Content planner/ }).check()
+  await page.keyboard.press('Escape')
   // Move-up / move-down controls (keyboard & touch): grid up then back down (header and footer are pinned)
   await page.getByRole('button', { name: 'Move Product grid up' }).click()
   await page.getByRole('button', { name: 'Move Product grid down' }).click()
   await page.waitForTimeout(1200)
   const order = await page.locator('.ss-slide .sp > *').evaluateAll((els) => els.map((e) => (e.classList.contains('sp-pick') ? e.querySelector(':scope > :not(.sp-grip)')! : e).className.split(' ').filter((c) => c.startsWith('sp-')).pop()))
-  check('preview order: header, featured, grid, footer', JSON.stringify(order.slice(0, 4)) === JSON.stringify(['sp-head', 'sp-featured', 'sp-grid-wrap', 'sp-end']), order.join(','))
+  check('preview order: header, text, grid, footer', JSON.stringify(order.slice(0, 4)) === JSON.stringify(['sp-head', 'sp-text', 'sp-grid-wrap', 'sp-end']), order.join(','))
   await page.screenshot({ path: join(SHOTS, 'studio-page.png') })
 
   // 4. Publish
@@ -192,7 +207,7 @@ try {
   await m.goto(bio)
   await m.getByRole('heading', { name: 'Ava Makes' }).waitFor()
   const live = await m.locator('.ps .sp > *').evaluateAll((els) => els.map((e) => e.className))
-  check('live page: featured product sits between header and grid', live[0].includes('sp-head') && live[1].includes('sp-featured') && live[2].includes('sp-grid-wrap'), live.join(','))
+  check('live page: the dragged-in text sits between header and grid', live[0].includes('sp-head') && live[1].includes('sp-text') && live[2].includes('sp-grid-wrap'), live.join(','))
   await m.screenshot({ path: join(SHOTS, 'mobile-store.png') })
 
   await m.locator('.sp-card-link').first().click()

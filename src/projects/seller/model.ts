@@ -4,7 +4,7 @@ import { apiUrl } from '../../lib/api-base'
 /** Desknoty's cut of each sale. Stripe's own processing fee is separate and charged by Stripe. */
 export const PLATFORM_FEE_PERCENT = 0
 
-export type BlockType = 'header' | 'hero' | 'text' | 'image' | 'links' | 'featured' | 'grid' | 'faq' | 'footer'
+export type BlockType = 'header' | 'hero' | 'text' | 'image' | 'links' | 'featured' | 'grid' | 'faq' | 'tiktok' | 'email' | 'footer'
 
 export interface Block {
   id: string
@@ -30,6 +30,8 @@ export interface Page {
   theme: { preset: string; accent: string; font: string; button: 'rounded' | 'pill' | 'sharp'; background: 'solid' | 'gradient' }
   socials: { instagram: string; youtube: string; x: string; website: string }
   blocks: Block[]
+  /** Banner behind the profile: an image or short video (plays when tapped). */
+  banner?: { media: string; kind: 'image' | 'video' } | null
   /** A second design to try; `use` picks which one Publish puts live. */
   style2?: Page | null
   use?: 1 | 2
@@ -110,6 +112,8 @@ export const BLOCKS: Array<{ type: BlockType; label: string; hint: string }> = [
   { type: 'featured', label: 'Featured product', hint: 'One product, big' },
   { type: 'grid', label: 'Product grid', hint: 'The products you pick' },
   { type: 'faq', label: 'FAQ', hint: 'Questions and answers' },
+  { type: 'tiktok', label: 'TikTok videos', hint: 'Your TikTok videos, tap to play' },
+  { type: 'email', label: 'Email support', hint: 'An email button for questions' },
   { type: 'footer', label: 'Footer', hint: 'A closing line' },
 ]
 export const blockLabel = (t: BlockType) => BLOCKS.find((b) => b.type === t)?.label ?? t
@@ -125,6 +129,8 @@ export function newBlock(type: BlockType): Block {
     featured: { productId: null, note: '' },
     grid: { heading: 'Shop', productIds: [] },
     faq: { heading: 'FAQ', items: [{ q: 'How do I get my download?', a: 'Right after paying, and by email.' }] },
+    tiktok: { heading: 'Latest on TikTok', videos: [] },
+    email: { heading: 'Questions?', note: 'Email me and I’ll get back to you.', email: '', button: 'Email support' },
     footer: { text: '' },
   }
   return { id, type, hidden: false, data: data[type] }

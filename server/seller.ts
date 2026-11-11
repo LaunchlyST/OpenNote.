@@ -314,7 +314,7 @@ const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.
 
 /* ------------------------------------------------------- page schema --- */
 
-export const BLOCK_TYPES = ['header', 'hero', 'text', 'image', 'links', 'featured', 'grid', 'faq', 'footer'] as const
+export const BLOCK_TYPES = ['header', 'hero', 'text', 'image', 'links', 'featured', 'grid', 'faq', 'tiktok', 'email', 'footer'] as const
 type BlockType = (typeof BLOCK_TYPES)[number]
 interface Block {
   id: string
@@ -330,6 +330,8 @@ interface Page {
   theme: { preset: string; accent: string; font: string; button: string; background: string }
   socials: { instagram: string; youtube: string; x: string; website: string }
   blocks: Block[]
+  /** Banner behind the profile (image or short video). */
+  banner?: { media: string; kind: 'image' | 'video' }
   /** Editor only: a second design the seller can try, and which one Publish puts live. */
   style2?: Page | null
   use?: 1 | 2
@@ -406,6 +408,18 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
           }),
         }
         break
+      case 'tiktok':
+        // TikTok video links only (shown as tap-to-play embeds)
+        data = {
+          heading: str(d.heading, 120),
+          videos: (Array.isArray(d.videos) ? d.videos : []).slice(0, 6).map((v) => safeUrl(v)).filter((u) => /^https:\/\/(www\.|vm\.|m\.)?tiktok\.com\//.test(u)),
+        }
+        break
+      case 'email': {
+        const email = str(d.email, 254).trim()
+        data = { heading: str(d.heading, 120), note: str(d.note, 300), email: /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) ? email : '', button: str(d.button, 40) }
+        break
+      }
       case 'footer':
         data = { text: str(d.text, 200) }
         break
@@ -432,6 +446,12 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
       background: t.background === 'gradient' ? 'gradient' : 'solid',
     },
     socials: { instagram: safeUrl(socials.instagram), youtube: safeUrl(socials.youtube), x: safeUrl(socials.x), website: safeUrl(socials.website) },
+    // banner behind the profile: an image or a short video the seller uploaded
+    ...(() => {
+      const b = (p.banner ?? null) as Record<string, unknown> | null
+      const media = b ? mediaRef(b.media) : null
+      return media ? { banner: { media, kind: b!.kind === 'video' ? 'video' : 'image' } } : {}
+    })(),
     blocks,
     ...(nested ? {} : cleanStyle2(p, productIds)),
   }
@@ -1007,13 +1027,15 @@ export function sellerRouter() {
   })
 
   /** Public images (avatar, covers, image blocks). */
-  me.post('/media', express.raw({ type: () => true, limit: 5 * 1024 * 1024 }), async (req: Authed, res) => {
+  me.post('/media', express.raw({ type: () => true, limit: 15 * 1024 * 1024 }), async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
     const type = String(req.headers['content-type'] ?? '')
-    if (!/^image\/(png|jpe?g|gif|webp)$/.test(type)) return void res.status(400).json({ error: 'Use a PNG, JPG, GIF or WebP image.' })
+    const video = /^video\/(mp4|webm|quicktime)$/.test(type)
+    if (!video && !/^image\/(png|jpe?g|gif|webp)$/.test(type)) return void res.status(400).json({ error: 'Use a PNG, JPG, GIF or WebP image, or an MP4/WebM/MOV video.' })
     const body = req.body as Buffer
-    if (!Buffer.isBuffer(body) || !body.length) return void res.status(400).json({ error: 'Empty image.' })
+    if (!Buffer.isBuffer(body) || !body.length) return void res.status(400).json({ error: 'Empty file.' })
+    if (!video && body.length > 5 * 1024 * 1024) return void res.status(413).json({ error: 'Images can be up to 5 MB.' })
     const id = `med_${randomBytes(12).toString('hex')}`
     await blobs().put('media', id, body, type)
     await sql.run(`INSERT INTO seller_media (id, "storeId", type, size, "createdAt") VALUES (?, ?, ?, ?, ?)`, id, s.id, type, body.length, now())

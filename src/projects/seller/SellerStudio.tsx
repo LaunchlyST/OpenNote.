@@ -8,7 +8,6 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
-  GripVertical,
   ImagePlus,
   Landmark,
   Package,
@@ -28,7 +27,6 @@ import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-s
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
 import type { Earnings } from './api'
 import {
-  BLOCKS,
   BUTTON_STYLES,
   CURRENCIES,
   FONTS,
@@ -511,6 +509,66 @@ function Studio({
   }, [])
   const closeEditor = useCallback(() => openEditor(null), [openEditor])
 
+  // Drag a new section from Editor tools into the phone; a click (no drag) adds it at the end.
+  const startInsert = (type: BlockType, e: ReactPointerEvent) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    closeEditor()
+    const x0 = e.clientX, y0 = e.clientY
+    let moved = false
+    let target: number | null = null
+    let others: HTMLElement[] = []
+    const ghost = document.createElement('div')
+    ghost.className = 'et-ghost'
+    ghost.textContent = blockLabel(type)
+    const place = (x: number, y: number) => {
+      ghost.style.transform = `translate(${x + 12}px, ${y + 12}px)`
+      const scroller = slideRef.current
+      if (!scroller) return
+      const box = scroller.getBoundingClientRect()
+      if (x < box.left || x > box.right || y < box.top || y > box.bottom) { target = null; setDropAt(null); return }
+      if (y < box.top + 40) scroller.scrollTop -= 8
+      if (y > box.bottom - 40) scroller.scrollTop += 8
+      others = [...scroller.querySelectorAll<HTMLElement>('.sp-pick[data-id]')]
+      let idx = others.findIndex((o) => { const r = o.getBoundingClientRect(); return y < r.top + r.height / 2 })
+      if (idx < 0) idx = others.length
+      target = idx
+      const ref = others[idx] ?? others[others.length - 1]
+      if (!ref) {
+        const head = scroller.querySelector('.sp-head')?.getBoundingClientRect()
+        setDropAt((head ? head.bottom + 6 : box.top + 120) - box.top + scroller.scrollTop)
+        return
+      }
+      const rr = ref.getBoundingClientRect()
+      setDropAt((idx < others.length ? rr.top - 6 : rr.bottom + 6) - box.top + scroller.scrollTop)
+    }
+    const move = (ev: PointerEvent) => {
+      if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return
+      if (!moved) { moved = true; document.body.appendChild(ghost) }
+      place(ev.clientX, ev.clientY)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', up)
+      ghost.remove()
+      setDropAt(null)
+      if (moved && target === null) return
+      const nb = newBlock(type)
+      const all = pinEnds(page.blocks)
+      let at = all.length - 1 // before the footer
+      if (moved && target !== null && others[target]) at = all.findIndex((b) => b.id === others[target!].dataset.id)
+      else if (moved && target !== null && others.length) at = all.findIndex((b) => b.id === others[others.length - 1].dataset.id) + 1
+      const next = [...all]
+      next.splice(Math.max(1, at), 0, nb)
+      edit({ ...page, blocks: next })
+      window.setTimeout(() => openEditor(nb.id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`) ?? undefined), 80)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+    window.addEventListener('pointercancel', up)
+  }
+
   // Drag a section inside the phone preview: a drop line shows where it will land.
   const slideRef = useRef<HTMLDivElement>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
@@ -654,7 +712,7 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
-          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} />
+          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} />
           {picked && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} />}
@@ -763,127 +821,120 @@ function ImagePicker({ value, onChange, label }: { value: string | null; onChang
   )
 }
 
-const BLOCK_ICON: Record<BlockType, string> = { header: '◉', hero: '✦', text: 'T', image: '▣', links: '↗', featured: '★', grid: '▦', faq: '?', footer: '▁' }
+const BLOCK_ICON: Record<BlockType, string> = { header: '◉', hero: '✦', text: 'T', image: '▣', links: '↗', featured: '★', grid: '▦', faq: '?', tiktok: '▶', email: '✉', footer: '▁' }
+/** Sections a seller can drag into the phone (Products sections stay for existing pages but aren't offered). */
+const ADDABLE: Array<{ type: BlockType; label: string }> = [
+  { type: 'tiktok', label: 'TikTok videos' },
+  { type: 'links', label: 'Links' },
+  { type: 'text', label: 'Text' },
+  { type: 'image', label: 'Images' },
+  { type: 'email', label: 'Email support' },
+]
+export const BANNER_ID = '__banner__'
 
-function PageEditor({ page, onChange, products, open, setOpen }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void }) {
-  const [inserting, setInserting] = useState<number | null>(null)
-  const [dragId, setDragId] = useState<string | null>(null)
-  const [over, setOver] = useState<number | null>(null)
+function PageEditor({ page, onChange, products, open, setOpen, onStartInsert }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent) => void }) {
   const blocks = pinEnds(page.blocks)
   const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
-  const [landed, setLanded] = useState<string | null>(null)
-  useEffect(() => {
-    if (!landed) return
-    const t = window.setTimeout(() => setLanded(null), 1300)
-    return () => window.clearTimeout(t)
-  }, [landed])
+  const middle = blocks.filter((b) => b.type !== 'header' && b.type !== 'footer')
   const move = (from: number, to: number) => {
-    // the profile header stays first and the footer last: sections move between them
     const last = blocks.length - 2
     if (to < 1 || to > last || from === to) return
     const next = [...blocks]
     const [b] = next.splice(from, 1)
     next.splice(to, 0, b)
     setBlocks(next)
-    setLanded(b.id)
   }
-  const insert = (at: number, type: BlockType) => {
-    const b = newBlock(type)
-    const next = [...blocks]
-    next.splice(at, 0, b)
-    setBlocks(next)
-    setInserting(null)
-    window.setTimeout(() => setOpen(b.id, document.querySelector<HTMLElement>(`[data-block="${b.id}"]`) ?? undefined), 30)
-  }
-
-  const dragFrom = dragId ? blocks.findIndex((b) => b.id === dragId) : -1
-  const Inserter = ({ at }: { at: number }) => {
-    if (dragId) {
-      if (at === dragFrom || at === dragFrom + 1) return <div className="sb-ins" aria-hidden="true" />
-      return (
-        <div
-          className={cn('sb-ins sb-slot', over === at && 'sb-slot-on')}
-          onDragOver={(e) => (e.preventDefault(), setOver(at))}
-          onDragLeave={() => setOver((o) => (o === at ? null : o))}
-          onDrop={(e) => {
-            e.preventDefault()
-            if (dragFrom >= 0) move(dragFrom, dragFrom < at ? at - 1 : at)
-            setDragId(null)
-            setOver(null)
-          }}
-        >
-          {over === at ? 'Drop here' : 'Move here'}
-        </div>
-      )
-    }
-    return (
-      <div className="sb-ins">
-        {inserting === at ? (
-          <div className="sb-menu" role="menu" aria-label="Add a block">
-            {BLOCKS.filter((t) => t.type !== 'footer' && t.type !== 'header' && t.type !== 'hero').map((t) => (
-              <button key={t.type} type="button" role="menuitem" onClick={() => insert(at, t.type)}>
-                <span className="sb-ico" aria-hidden="true">{BLOCK_ICON[t.type]}</span>
-                <span><b>{t.label}</b><small>{t.hint}</small></span>
-              </button>
-            ))}
-            <button type="button" className="sb-menu-x" onClick={() => setInserting(null)}>Cancel</button>
-          </div>
-        ) : (
-          <button type="button" className="sb-ins-btn" aria-label={at >= blocks.length - 1 ? 'Add a block at the bottom' : `Add a block between ${blockLabel(blocks[at - 1].type)} and ${blockLabel(blocks[at].type)}`} onClick={() => setInserting(at)}>
-            <Plus className="h-3.5 w-3.5" /> Add block
-          </button>
-        )}
-      </div>
-    )
-  }
-
+  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => setOpen(id, e.currentTarget.closest('.et-row') as HTMLElement)
   return (
     <div className="ss-stack">
-      <ThemeEditor page={page} onChange={onChange} />
-      <div className="sb-list" aria-label="Page sections">
-        {blocks.map((b, i) =>
-          b.type === 'header' ? (
-            <Inserter key={b.id} at={1} />
-          ) : b.type === 'footer' ? (
-            <div key={b.id} className={cn('sb-block sb-pinned', open === b.id && 'sb-open')} data-pinned={b.id} data-block={b.id}>
-              <div className="sb-row">
-                <span className="sb-ico" aria-hidden="true">{BLOCK_ICON.footer}</span>
-                <button type="button" className="sb-title" onClick={(e) => setOpen(b.id, e.currentTarget.closest('.sb-block') as HTMLElement)}>
+      <section className="et" aria-label="Editor tools">
+        <h3 className="et-h">Editor tools</h3>
+        <p className="et-hint">Click a section in the phone to edit it, or drag one from below into the phone to place it anywhere below your profile.</p>
+        <h4 className="et-sub">Your sections · {middle.length + 2}</h4>
+        <ul className="et-list" aria-label="Page sections">
+          <li className="et-row et-locked">
+            <span className="et-ico" aria-hidden="true">🔒</span><b>Profile</b><em className="et-badge">Locked</em>
+          </li>
+          <li className={cn('et-row', open === BANNER_ID && 'on')} data-pinned={BANNER_ID}>
+            <button type="button" className="et-main" onClick={openRow(BANNER_ID)}>
+              <span className="et-ico" aria-hidden="true">🎞</span><b>Banner</b>
+            </button>
+            <em className="et-badge">{page.banner ? (page.banner.kind === 'video' ? 'Video' : 'Image') : 'Add'}</em>
+          </li>
+          {blocks.map((b, i) =>
+            b.type === 'header' ? null : (
+              <li key={b.id} className={cn('et-row', open === b.id && 'on', b.hidden && 'et-hidden')} data-block={b.id} data-pinned={b.type === 'footer' ? b.id : undefined}>
+                <button type="button" className="et-main" onClick={openRow(b.id)}>
+                  <span className="et-ico" aria-hidden="true">{BLOCK_ICON[b.type]}</span>
                   <b>{blockLabel(b.type)}</b>
-                  <small>Always at the bottom · {summary(b, products)}</small>
+                  <small>{summary(b, products)}</small>
                 </button>
-              </div>
-            </div>
-          ) : (
-            <div key={b.id}>
-              <div
-                data-block={b.id}
-                className={cn('sb-block', open === b.id && 'sb-open', b.hidden && 'sb-hidden', dragId === b.id && 'sb-dragging', landed === b.id && 'sb-landed')}
-                draggable
-                onDragStart={(e) => (setDragId(b.id), e.dataTransfer.setData('text/plain', b.id), (e.dataTransfer.effectAllowed = 'move'))}
-                onDragEnd={() => (setDragId(null), setOver(null))}
-              >
-                <div className="sb-row">
-                  <span className="sb-grip" aria-hidden="true" title="Drag to move"><GripVertical className="h-4 w-4" /></span>
-                  <span className="sb-ico" aria-hidden="true">{BLOCK_ICON[b.type]}</span>
-                  <button type="button" className="sb-title" onClick={(e) => setOpen(b.id, e.currentTarget.closest('.sb-block') as HTMLElement)}>
-                    <b>{blockLabel(b.type)}</b>
-                    <small>{summary(b, products)}</small>
-                  </button>
-                  <div className="sb-tools">
+                {b.type === 'footer' ? (
+                  <em className="et-badge">Bottom</em>
+                ) : (
+                  <span className="et-tools">
                     <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)}><ArrowUp className="h-3.5 w-3.5" /></button>
                     <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)}><ArrowDown className="h-3.5 w-3.5" /></button>
                     <button type="button" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
                       {b.hidden ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                     </button>
-                  </div>
-                </div>
-              </div>
-              <Inserter at={i + 1} />
-            </div>
-          ),
-        )}
+                  </span>
+                )}
+              </li>
+            ),
+          )}
+        </ul>
+        <h4 className="et-sub">Add a section · drag into the phone</h4>
+        <div className="et-tiles">
+          {ADDABLE.map((t) => (
+            <button key={t.type} type="button" className="et-tile" onPointerDown={(e) => onStartInsert(t.type, e)} aria-label={`Add ${t.label}`}>
+              <span className="et-ico" aria-hidden="true">{BLOCK_ICON[t.type]}</span>
+              <b>{t.label}</b>
+              <small>Drag or click</small>
+            </button>
+          ))}
+        </div>
+      </section>
+      <ThemeEditor page={page} onChange={onChange} />
+    </div>
+  )
+}
+
+/** Banner behind the profile: upload an image or a short video (it plays once when tapped). */
+function BannerEditor({ page, onChange }: { page: Page; onChange: (p: Page) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const b = page.banner
+  const src = b ? mediaUrl(b.media) : null
+  const pick = async (file?: File) => {
+    if (!file) return
+    const video = file.type.startsWith('video/')
+    if (!video && !file.type.startsWith('image/')) return setErr('Choose an image or a video.')
+    if (file.size > (video ? 15 : 5) * 1024 * 1024) return setErr(video ? 'Videos can be up to 15 MB.' : 'Images can be up to 5 MB.')
+    setBusy(true)
+    setErr(null)
+    try {
+      const { id } = await sellerApi.uploadMedia(file)
+      onChange({ ...page, banner: { media: id, kind: video ? 'video' : 'image' } })
+    } catch (e) {
+      setErr((e as Error).message)
+    }
+    setBusy(false)
+  }
+  return (
+    <div className="sb-edit et-banner">
+      <div className="et-banner-preview">
+        {src ? (b!.kind === 'video' ? <video src={src} muted playsInline controls /> : <img src={src} alt="" />) : <span>No banner yet</span>}
       </div>
+      <p className="ss-muted">Shown behind your profile photo. When someone taps it, a video plays once and stops; an image does a short zoom.</p>
+      <div className="ss-row">
+        <label className="ss-ghost cursor-pointer">
+          <ImagePlus className="h-3.5 w-3.5" /> {busy ? 'Uploading…' : b ? 'Replace' : 'Upload image or video'}
+          <input type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} aria-label="Banner image or video" />
+        </label>
+        {b && <button type="button" className="ss-ghost" onClick={() => onChange({ ...page, banner: null })}>Remove</button>}
+      </div>
+      {err && <span className="ss-hint text-[#b42318]">{err}</span>}
     </div>
   )
 }
@@ -898,7 +949,7 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
     // a press anywhere outside closes it; edits are already in the draft, so nothing is lost
     const down = (e: PointerEvent) => {
       const t = e.target as HTMLElement
-      if (ref.current?.contains(t) || t.closest('.sp-pick, .sb-title, .sb-menu')) return
+      if (ref.current?.contains(t) || t.closest('.sp-pick, .sb-title, .sb-menu, .et-main, .et-tile')) return
       onClose()
     }
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -906,6 +957,22 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
     document.addEventListener('keydown', key)
     return () => (document.removeEventListener('pointerdown', down), document.removeEventListener('keydown', key))
   }, [onClose])
+  // place it beside the clicked element, inside the window; on phones it's a bottom sheet
+  const W = 340
+  const phone = window.innerWidth < 760
+  const style: CSSProperties = phone || !anchor
+    ? {}
+    : {
+        left: Math.max(12, anchor.left - W - 18 < 12 ? Math.min(anchor.right + 18, window.innerWidth - W - 12) : anchor.left - W - 18),
+        top: Math.min(Math.max(12, anchor.top - 10), window.innerHeight - 420),
+      }
+  if (id === BANNER_ID)
+    return (
+      <div ref={ref} className={cn('fe', phone && 'fe-sheet')} style={style} role="dialog" aria-label="Edit Banner">
+        <header className="fe-head"><span className="sb-ico" aria-hidden="true">🎞</span><b>Banner</b><button type="button" className="fe-x" aria-label="Close" onClick={onClose}>✕</button></header>
+        <div className="fe-body"><BannerEditor page={page} onChange={onChange} /></div>
+      </div>
+    )
   if (!b) return null
   const pinned = b.type === 'footer'
   const setBlocks = (next: Block[]) => onChange({ ...page, blocks: pinEnds(next) })
@@ -916,15 +983,6 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
     for (const k of Object.keys(next) as Array<keyof typeof next>) if (!next[k]) delete next[k]
     setBlocks(blocks.map((x) => (x.id === id ? { ...x, look: Object.keys(next).length ? next : undefined } : x)))
   }
-  // place it beside the clicked element, inside the window; on phones it's a bottom sheet
-  const W = 340
-  const phone = window.innerWidth < 760
-  const style: CSSProperties = phone || !anchor
-    ? {}
-    : {
-        left: Math.max(12, anchor.left - W - 18 < 12 ? Math.min(anchor.right + 18, window.innerWidth - W - 12) : anchor.left - W - 18),
-        top: Math.min(Math.max(12, anchor.top - 10), window.innerHeight - 420),
-      }
   return (
     <div ref={ref} className={cn('fe', phone && 'fe-sheet')} style={style} role="dialog" aria-label={`Edit ${blockLabel(b.type)}`}>
       <header className="fe-head">
@@ -989,6 +1047,8 @@ function summary(b: Block, products: DraftProduct[]) {
     case 'featured': return d.productId ? title(d.productId) : 'No product chosen'
     case 'grid': return `${(d.productIds ?? []).length} product(s)`
     case 'faq': return `${(d.items ?? []).length} question(s)`
+    case 'tiktok': return `${(d.videos ?? []).length} video(s)`
+    case 'email': return d.email || 'No email yet'
     case 'footer': return d.text || 'Footer'
   }
 }
@@ -1011,6 +1071,31 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
           <Field label="What you sell"><textarea className="ss-input" rows={3} maxLength={600} value={d.body ?? ''} onChange={(e) => update({ body: e.target.value })} placeholder="Discover digital products designed to help you create, learn, and grow." /></Field>
           <Field label="Button text" hint="Scrolls to your products. Empty hides it."><input className="ss-input" maxLength={40} value={d.button ?? ''} onChange={(e) => update({ button: e.target.value })} /></Field>
           <ImagePicker value={d.media ?? null} onChange={(media) => update({ media })} label="Square image on the right" />
+        </div>
+      )
+    case 'tiktok': {
+      const vids: string[] = d.videos ?? []
+      return (
+        <div className="sb-edit">
+          <Field label="Heading"><input className="ss-input" maxLength={120} value={d.heading ?? ''} onChange={(e) => update({ heading: e.target.value })} /></Field>
+          {vids.map((u, i) => (
+            <div key={i} className="sb-pair">
+              <input className="ss-input" aria-label={`TikTok video ${i + 1} link`} placeholder="https://www.tiktok.com/@you/video/…" value={u} onChange={(e) => update({ videos: vids.map((x, j) => (j === i ? e.target.value : x)) })} />
+              <button type="button" className="ss-ghost" aria-label={`Remove video ${i + 1}`} onClick={() => update({ videos: vids.filter((_, j) => j !== i) })}><Trash2 className="h-3.5 w-3.5" /></button>
+            </div>
+          ))}
+          {vids.length < 6 && <button type="button" className="ss-ghost self-start" onClick={() => update({ videos: [...vids, ''] })}><Plus className="h-3.5 w-3.5" /> Add a TikTok video link</button>}
+          <p className="ss-muted">Copy the link from TikTok (Share → Copy link). Up to 6 videos.</p>
+        </div>
+      )
+    }
+    case 'email':
+      return (
+        <div className="sb-edit">
+          <Field label="Heading"><input className="ss-input" maxLength={120} value={d.heading ?? ''} onChange={(e) => update({ heading: e.target.value })} /></Field>
+          <Field label="Your support email"><input className="ss-input" type="email" maxLength={254} value={d.email ?? ''} onChange={(e) => update({ email: e.target.value })} placeholder="you@example.com" /></Field>
+          <Field label="Short note"><input className="ss-input" maxLength={300} value={d.note ?? ''} onChange={(e) => update({ note: e.target.value })} /></Field>
+          <Field label="Button text"><input className="ss-input" maxLength={40} value={d.button ?? ''} onChange={(e) => update({ button: e.target.value })} /></Field>
         </div>
       )
     case 'text':

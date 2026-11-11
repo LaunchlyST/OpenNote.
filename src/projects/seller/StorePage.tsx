@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, formatPrice, mediaUrl } from './model'
@@ -70,7 +70,7 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
     </div>
   )
 }
-const PICK_LABEL: Record<string, string> = { header: 'Profile', hero: 'Welcome intro', text: 'Text', image: 'Image', links: 'Links', featured: 'Featured product', grid: 'Products', faq: 'FAQ', footer: 'Footer' }
+const PICK_LABEL: Record<string, string> = { header: 'Profile', hero: 'Welcome intro', text: 'Text', image: 'Image', links: 'Links', featured: 'Featured product', grid: 'Products', faq: 'FAQ', tiktok: 'TikTok videos', email: 'Email support', footer: 'Footer' }
 
 /**
  * A store left on the default black accent gets its own colour, picked from
@@ -118,6 +118,29 @@ export function StorePage(props: StorePageProps) {
   )
 }
 
+/** The banner behind the profile. Tap it: a video plays once and stops; an image does a short zoom and settles. */
+function Banner({ banner }: { banner: NonNullable<Page['banner']> }) {
+  const src = mediaUrl(banner.media)
+  const [play, setPlay] = useState(0)
+  const video = useRef<HTMLVideoElement>(null)
+  const go = () => {
+    if (banner.kind === 'video' && video.current) {
+      video.current.currentTime = 0
+      void video.current.play().catch(() => {})
+    } else setPlay((n) => n + 1)
+  }
+  return (
+    <button type="button" className="sp-banner" onClick={go} aria-label="Play the banner">
+      {banner.kind === 'video' ? (
+        <video ref={video} src={src ?? undefined} muted playsInline preload="metadata" onEnded={(e) => e.currentTarget.pause()} />
+      ) : (
+        <span key={play} className={play ? 'sp-banner-img sp-banner-go' : 'sp-banner-img'} style={{ backgroundImage: `url(${src})` }} />
+      )}
+      <span className="sp-banner-hint" aria-hidden="true">▶</span>
+    </button>
+  )
+}
+
 function Header({ page, handle, showSocials, compact = false }: { page: Page; handle: string; showSocials: boolean; compact?: boolean }) {
   const socials = [
     { k: 'instagram', label: 'Instagram', icon: <AtSign className="h-4 w-4" /> },
@@ -127,7 +150,8 @@ function Header({ page, handle, showSocials, compact = false }: { page: Page; ha
   ].filter((s) => page.socials[s.k as keyof Page['socials']]?.trim())
   const avatar = mediaUrl(page.avatar)
   return (
-    <header className={compact ? 'sp-head sp-head-compact' : 'sp-head'}>
+    <header className={compact ? 'sp-head sp-head-compact' : page.banner && !compact ? 'sp-head sp-head-banner' : 'sp-head'}>
+      {page.banner && !compact && <Banner banner={page.banner} />}
       <span className="sp-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : { background: 'var(--ac)', color: 'var(--on)' }}>
         {!avatar && (page.name.trim().charAt(0).toUpperCase() || handle.charAt(0).toUpperCase())}
       </span>
@@ -169,6 +193,28 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
         </section>
       )
     }
+    case 'tiktok': {
+      const vids: string[] = (d.videos ?? []).filter(Boolean)
+      return (
+        <section className="sp-block sp-tiktok">
+          {d.heading && <h2 className="sp-h2">{d.heading}</h2>}
+          {vids.length ? (
+            <div className="sp-tt-grid">{vids.map((u) => <TikTokCard key={u} url={u} live={p.live} />)}</div>
+          ) : p.live ? null : (
+            <div className="sp-empty">TikTok videos: paste a video link</div>
+          )}
+        </section>
+      )
+    }
+    case 'email':
+      return d.email || !p.live ? (
+        <section className="sp-block sp-email">
+          {d.heading && <h2>{d.heading}</h2>}
+          {d.note && <p>{d.note}</p>}
+          <a className="sp-btn" href={d.email ? `mailto:${d.email}` : undefined}>{d.button || 'Email support'}</a>
+          {!d.email && !p.live && <small className="sp-empty-note">Add your email address</small>}
+        </section>
+      ) : null
     case 'text':
       return (
         <section className="sp-block sp-text">
@@ -266,6 +312,19 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
     case 'footer':
       return <footer className="sp-block sp-foot">{d.text || `© ${p.page.name || p.handle}`}</footer>
   }
+}
+
+/** A TikTok video: a poster until tapped, then TikTok's own player (nothing loads from TikTok before that). */
+function TikTokCard({ url, live }: { url: string; live?: boolean }) {
+  const id = url.match(/\/video\/(\d+)/)?.[1]
+  const [on, setOn] = useState(false)
+  if (on && id && live) return <iframe className="sp-tt-frame" src={`https://www.tiktok.com/embed/v2/${id}`} title="TikTok video" allow="encrypted-media; fullscreen" allowFullScreen />
+  return (
+    <button type="button" className="sp-tt-card" onClick={() => (id && live ? setOn(true) : window.open(url, '_blank', 'noopener'))} aria-label="Play TikTok video">
+      <span className="sp-tt-play" aria-hidden="true">▶</span>
+      <span className="sp-tt-tag">TikTok</span>
+    </button>
+  )
 }
 
 function ProductLink({ prod, live, handle, children }: { prod: ShopProduct; live?: boolean; handle: string; children: ReactNode }) {
