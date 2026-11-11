@@ -505,7 +505,7 @@ function productPublicView(p: ProductRow) {
 function productProblem(p: ProductRow): string | null {
   if (!p.title.trim()) return 'Add a title.'
   if (!CURRENCIES.has(p.currency)) return 'Choose a currency.'
-  if (p.priceMinor < MIN_MINOR) return 'Set a price of at least 0.50.'
+  if (p.priceMinor < 0) return 'The price can’t be negative.'
   if (!p.fileId) return 'Upload the file buyers will download.'
   return null
 }
@@ -1364,10 +1364,27 @@ export function sellerRouter() {
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
     const p = await q.product(productId, s.id)
     if (!p || !p.pubAt || !p.pubFileId || p.pubPriceMinor == null || !p.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    // Free product: no payment, the order is complete straight away and the download is ready.
+    if (p.pubPriceMinor === 0) {
+      const key = String(req.body?.checkoutKey ?? randomUUID())
+      if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
+      const email = String(req.body?.email ?? '').trim().toLowerCase()
+      const order = await sql.tx(async (tx) => {
+        await tx.run(
+          `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
+          `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', 'free', 0, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode, 'free',
+        )
+        return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
+      })
+      if (order.productId !== p.id) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
+      const done = await completeOrder(order, /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) ? email : null)
+      return void res.json({ orderUrl: `/store/${s.handle}/order/${done.id}?k=${encodeURIComponent(done.accessKey)}`, order: await orderView(done, s) })
+    }
     const method = String(req.body?.method ?? 'stripe')
     if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method))
     if (method !== 'stripe') return void res.status(400).json({ error: 'Unknown payment method.' })
     if (!readPayments(s.payments).stripe.enabled) return void res.status(409).json({ error: 'This seller doesn’t take card payments.' })
+    if (p.pubPriceMinor < MIN_MINOR) return void res.status(409).json({ error: 'Card payments need a price of at least 0.50. Choose bank transfer instead.' })
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
     const fresh = await refreshAccount(s).catch(() => s)

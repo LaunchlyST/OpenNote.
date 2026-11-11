@@ -111,6 +111,20 @@ try {
   check('with nothing set up, the store shows no way to pay', pub.checkoutReady === false && pub.methods.length === 0)
   check('Stripe checkout is refused while Stripe isn’t connected', (await req('POST', '/api/store/ava-pay/checkout', { productId: pid, checkoutKey: key() })).status === 409)
 
+  console.log('\n  Free products')
+  const freeId = (await req('POST', '/api/seller/products', { title: 'Free sampler', priceMinor: 0, currency: 'gbp' }, A)).json.product.id
+  await req('PUT', `/api/seller/products/${freeId}/file`, Buffer.from('FREE-FILE'), A, { 'content-type': 'application/pdf', 'x-file-name': 'free.pdf' })
+  await req('POST', '/api/seller/store/publish', {}, A)
+  const freePub = (await req('GET', '/api/store/ava-pay')).json.products.find((x: { id: string }) => x.id === freeId)
+  check('a price of 0 is allowed and the free product goes on sale', freePub?.priceMinor === 0)
+  const fk = key()
+  const free1 = await req('POST', '/api/store/ava-pay/checkout', { productId: freeId, checkoutKey: fk })
+  const free2 = await req('POST', '/api/store/ava-pay/checkout', { productId: freeId, checkoutKey: fk })
+  check('getting a free product needs no payment and gives the download at once', free1.status === 200 && free1.json.order.status === 'paid' && String(free1.json.order.downloadUrl).includes('/api/store-download/'))
+  check('pressing it twice gives the same order', free2.json.order.id === free1.json.order.id)
+  const fdl = await fetch(free1.json.order.downloadUrl)
+  check('the free download is the seller’s file', fdl.status === 200 && (await fdl.text()) === 'FREE-FILE')
+
   console.log('\n  Payment settings stay private and per seller')
   check('turning bank transfer on without details is refused', (await req('PUT', '/api/seller/payments', { bank: { enabled: true } }, A)).status === 400)
   check('a malformed sort code is refused', (await req('PUT', '/api/seller/payments', { bank: { enabled: true, accountName: 'Ava', sortCode: '12-34', accountNumber: '12345678' } }, A)).status === 400)

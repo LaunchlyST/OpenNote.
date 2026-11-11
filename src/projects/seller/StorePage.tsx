@@ -299,6 +299,15 @@ function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned }: { pr
         <a className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} href={owned[prod.id]}>Download</a>
       </div>
     )
+  if (prod.priceMinor === 0)
+    return (
+      <div className="sp-buyrow">
+        <span className="sp-price">Free</span>
+        <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled={!live || buying === prod.id} onClick={() => onBuy?.(prod)}>
+          {buying === prod.id ? 'Getting it…' : 'Get it free'}
+        </button>
+      </div>
+    )
   return (
     <div className="sp-buyrow">
       <span className="sp-price">{formatPrice(prod.priceMinor, prod.currency)}</span>

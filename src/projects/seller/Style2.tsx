@@ -86,9 +86,9 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
           </>
         ) : (
           <>
-            <span className="s2p-price">{formatPrice(p.priceMinor, p.currency)}</span>
-            <button type="button" className="s2p-buy" disabled={disabled} onClick={() => props.onBuy?.(p)}>
-              {props.buying === p.id ? 'Opening checkout…' : 'Buy now'}
+            <span className="s2p-price">{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}</span>
+            <button type="button" className="s2p-buy" disabled={p.priceMinor === 0 ? !props.live || props.buying === p.id : disabled} onClick={() => props.onBuy?.(p)}>
+              {props.buying === p.id ? 'Opening checkout…' : p.priceMinor === 0 ? 'Get it free' : 'Buy now'}
             </button>
           </>
         )}

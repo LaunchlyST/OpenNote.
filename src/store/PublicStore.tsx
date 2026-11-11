@@ -58,6 +58,8 @@ export default function PublicStore({ path }: { path: string }) {
 
   const buy = async (p: ShopProduct) => {
     setBuyErr(null)
+    // free: no checkout, straight to the download
+    if (p.priceMinor === 0) return pay(p, 'stripe')
     setChoosing(p)
   }
   const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => {
@@ -112,7 +114,7 @@ export default function PublicStore({ path }: { path: string }) {
       <Shell store={store}>
         {params.get('checkout') === 'cancelled' && <Banner>Checkout cancelled. You weren’t charged.</Banner>}
         {buyErr && <Banner>{buyErr}</Banner>}
-        {!store.checkoutReady && <Banner>This seller hasn’t added a bank account in Payouts yet, so you can’t buy right now.</Banner>}
+        {!store.checkoutReady && product.priceMinor > 0 && <Banner>This seller hasn’t added a bank account in Payouts yet, so you can’t buy right now.</Banner>}
         {chooser}
         {store.page.layout === 'style2' ? <Style2Page {...base} only={product} /> : <StorePage {...base} only={product} />}
         <p className="ps-back"><a href={`/${store.handle}`}>← All products</a></p>

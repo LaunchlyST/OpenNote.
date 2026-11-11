@@ -1233,7 +1233,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
       <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
       <Field label="Description"><textarea className="ss-input" rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
       <div className="ss-grid2">
-        <Field label="Price" hint="At least 0.50">
+        <Field label="Price" hint="0 makes it free. Card payments need at least 0.50.">
           <div className="ss-affix ss-affix-l">
             <span>{sym}</span>
             <input className="ss-input" inputMode="decimal" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} />
