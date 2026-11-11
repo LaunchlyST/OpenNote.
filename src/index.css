@@ -7763,3 +7763,7 @@ select.ss-input option {
 .ss-soonwrap { display: flex; flex-direction: column; gap: inherit; transition: filter .35s ease, opacity .35s ease; }
 .ss-stylepick { width: max-content; align-self: flex-start; justify-self: start; }
 .ss-stylepick { display: flex; width: max-content; margin: 14px auto 0; align-self: center; justify-self: center; }
+.ss-stylebar { position: sticky; bottom: 16px; z-index: 20; display: flex; justify-content: center; margin-top: auto; padding-top: 20px; pointer-events: none; }
+.ss-stylebar .ss-stylepick { margin: 0; pointer-events: auto; background: #fff; box-shadow: 0 0 0 1px #e6e6ea, 0 10px 30px rgba(0,0,0,.14); }
+.ss-stylebar .ss-stylepick button[aria-selected='true'] { color: #fff; background: #111114; }
+.ss-toast { bottom: 96px; }

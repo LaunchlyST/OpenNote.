@@ -628,12 +628,6 @@ function Studio({
             </button>
           </div>
           <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
-          {tab === 'page' && (
-            <div className="ss-stylepick" role="tablist" aria-label="Store style">
-              <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
-              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2 <em>Soon</em></button>
-            </div>
-          )}
           {(notice || err) && (
             <div className="ss-note" role="status">
               {err ?? notice}{' '}
@@ -659,6 +653,15 @@ function Studio({
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
         </div>
+        {/* Style switch: pinned to the bottom middle of this panel */}
+        {tab === 'page' && (
+          <div className="ss-stylebar">
+            <div className="ss-stylepick" role="tablist" aria-label="Store style">
+              <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
+              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2 <em>Soon</em></button>
+            </div>
+          </div>
+        )}
       </section>
 
       <aside className="ss-preview" aria-label="Draft preview">
