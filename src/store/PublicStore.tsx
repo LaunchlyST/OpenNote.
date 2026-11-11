@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { StorePage, storeStyle } from '../projects/seller/StorePage'
 import { Style2Page } from '../projects/seller/Style2'
-import { formatPrice } from '../projects/seller/model'
+import { formatPrice, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import type { PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
@@ -37,9 +37,8 @@ export default function PublicStore({ path }: { path: string }) {
     if (store) document.title = `${store.page.name || store.handle} · Desknoty`
   }, [store])
 
+  // Buy now always opens the checkout sheet (email, payment method, summary, Pay).
   const buy = async (p: ShopProduct) => {
-    const methods = store?.methods ?? ['stripe']
-    if (methods.length === 1 && methods[0] !== 'bank') return pay(p, methods[0])
     setBuyErr(null)
     setChoosing(p)
   }
@@ -80,6 +79,8 @@ export default function PublicStore({ path }: { path: string }) {
       product={choosing}
       methods={store.methods ?? ['stripe']}
       busy={buying === choosing.id}
+      error={buyErr}
+      seller={store.page.name || store.handle}
       onPay={(m, email) => void pay(choosing, m, email)}
       onClose={() => setChoosing(null)}
     />
@@ -108,36 +109,104 @@ export default function PublicStore({ path }: { path: string }) {
   )
 }
 
-const METHOD_LABEL: Record<PayMethod, string> = { stripe: 'Card (Stripe)', paypal: 'PayPal', bank: 'Bank transfer' }
 
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
-function PayChooser({ product, methods, busy, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; busy: boolean; onPay: (m: PayMethod, email?: string) => void; onClose: () => void }) {
-  const [bank, setBank] = useState(false)
+const METHOD_INFO: Record<PayMethod, { title: string; text: string }> = {
+  stripe: { title: 'Credit or debit card', text: 'You’ll enter your card on Stripe’s secure page. Desknoty never sees your card.' },
+  paypal: { title: 'PayPal', text: 'You’ll finish paying on PayPal.' },
+  bank: { title: 'Bank transfer', text: 'Pay from your bank app. Your download unlocks when the seller confirms the money arrived.' },
+}
+
+/** The checkout sheet: who you are, how you pay, what it costs, then one Pay button. */
+function PayChooser({ product, methods, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string) => void; onClose: () => void }) {
+  const [method, setMethod] = useState<PayMethod>(methods[0] ?? 'stripe')
   const [email, setEmail] = useState('')
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
+  const needEmail = method === 'bank'
+  const canPay = !busy && (valid || (!needEmail && !email.trim()))
+  const price = formatPrice(product.priceMinor, product.currency)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.removeEventListener('keydown', k); document.body.style.overflow = prev }
+  }, [onClose])
+  const cover = product.cover ? mediaUrl(product.cover) : null
+  const step = !valid && needEmail ? 0 : 1
   return (
-    <div className="ps-pay" role="dialog" aria-label={`Pay for ${product.title}`}>
-      <p className="ps-kicker">How would you like to pay?</p>
-      <h2>{product.title} · {formatPrice(product.priceMinor, product.currency)}</h2>
-      {!bank ? (
-        <div className="ps-pay-list">
-          {methods.map((m) => (
-            <button key={m} type="button" className="sp-btn" disabled={busy} onClick={() => (m === 'bank' ? setBank(true) : onPay(m))}>
-              {busy ? 'Opening…' : METHOD_LABEL[m]}
-            </button>
+    <div className="co-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="co" role="dialog" aria-modal="true" aria-label={`Pay for ${product.title}`} onSubmit={(e) => (e.preventDefault(), canPay && onPay(method, email.trim() || undefined))}>
+        <header className="co-head">
+          <button type="button" className="co-x" onClick={onClose} aria-label="Close checkout">✕</button>
+          <b>Checkout</b>
+          <span className="co-lock" aria-hidden="true">🔒</span>
+        </header>
+
+        <ol className="co-steps" aria-label="Checkout steps">
+          {['Details', 'Payment', 'Done'].map((t, i) => (
+            <li key={t} className={i < step ? 'done' : i === step ? 'on' : undefined} aria-current={i === step ? 'step' : undefined}>
+              <span>{i < step ? '✓' : ''}</span>{t}
+            </li>
           ))}
+        </ol>
+
+        <div className="co-body">
+          <section className="co-item">
+            <span className="co-thumb" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && (product.title.charAt(0).toUpperCase() || '✦')}</span>
+            <div><b>{product.title}</b><small>Digital download from {seller}</small></div>
+            <strong>{price}</strong>
+          </section>
+
+          <section className="co-card">
+            <h3>Your details</h3>
+            <label className="co-field">
+              <span>Email {needEmail ? '' : <em>(optional)</em>}</span>
+              <input type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={needEmail} />
+              <small>{needEmail ? 'The seller sends your download here once your transfer arrives.' : 'Your receipt and download link are sent here.'}</small>
+            </label>
+          </section>
+
+          <section className="co-card">
+            <h3>Payment</h3>
+            <p className="co-safe">🔒 All payments are secure and encrypted.</p>
+            <div className="co-methods" role="radiogroup" aria-label="Payment method">
+              {methods.map((m) => (
+                <label key={m} className={method === m ? 'co-method on' : 'co-method'}>
+                  <input type="radio" name="method" value={m} checked={method === m} onChange={() => setMethod(m)} aria-label={METHOD_INFO[m].title} />
+                  <span className="co-method-main">
+                    <b>{METHOD_INFO[m].title}</b>
+                    {method === m && <small>{METHOD_INFO[m].text}</small>}
+                  </span>
+                  <span className="co-badges" aria-hidden="true">
+                    {m === 'stripe' && <><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i></>}
+                    {m === 'paypal' && <i className="co-pp">PayPal</i>}
+                    {m === 'bank' && <i className="co-bank">🏦</i>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="co-card co-sum">
+            <h3>Order summary</h3>
+            <dl>
+              <dt>Subtotal</dt><dd>{price}</dd>
+              <dt>Delivery</dt><dd className={method === 'bank' ? undefined : 'co-free'}>{method === 'bank' ? 'Download after the seller confirms' : 'Instant download'}</dd>
+              <dt className="co-total">Total</dt><dd className="co-total">{price}</dd>
+            </dl>
+          </section>
+          {error && <p className="co-err" role="alert">{error}</p>}
         </div>
-      ) : (
-        <form className="ps-pay-list" onSubmit={(e) => (e.preventDefault(), valid && onPay('bank', email.trim()))}>
-          <label>
-            Your email (the download is sent here once the seller confirms your transfer)
-            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
-          </label>
-          <button type="submit" className="sp-btn" disabled={busy || !valid}>{busy ? 'Creating order…' : 'Show bank details'}</button>
-          <button type="button" className="ps-link" onClick={() => setBank(false)}>Back</button>
-        </form>
-      )}
-      <button type="button" className="ps-link" onClick={onClose}>Cancel</button>
+
+        <footer className="co-foot">
+          <button type="submit" className="co-pay" disabled={!canPay}>
+            {busy ? 'Opening secure checkout…' : method === 'bank' ? 'Show bank details' : method === 'paypal' ? `Continue to PayPal · ${price}` : `Pay ${price}`}
+            <span aria-hidden="true">🔒</span>
+          </button>
+          <small>{method === 'stripe' ? 'Card payments are handled by Stripe.' : method === 'paypal' ? 'Payments are handled by PayPal.' : 'You pay the seller directly from your bank.'}</small>
+        </footer>
+      </form>
     </div>
   )
 }

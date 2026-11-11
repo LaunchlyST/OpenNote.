@@ -1,11 +1,17 @@
 {
-  "version": 1,
+  "version": 2,
   "skills": {
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/frontend-design/SKILL.md",
+      "computedHash": "83485963700bcf11d5bf78118facb301676b69d918fee2e45a95e7f1a2840f6c"
+    },
     "oil-ui": {
       "source": "oil-oil/oil-ui",
       "sourceType": "github",
       "skillPath": "SKILL.md",
-      "computedHash": "e3f8dda94fcae08fe16ad200ac47aba72dab4dcaae30d7d1e93b1ce095aab4f8"
+      "computedHash": ""
     }
   }
 }

@@ -11,7 +11,6 @@ import {
   GripVertical,
   ImagePlus,
   Landmark,
-  Monitor,
   Package,
   Plus,
   Smartphone,
@@ -452,7 +451,10 @@ function Studio({
 }) {
   const [tab, setTab] = useState<Tab>('page')
   const [picked, setPicked] = useState<string | null>(null)
-  const [view, setView] = useState<'mobile' | 'desktop'>('mobile')
+  const view = 'mobile' as 'mobile' | 'desktop'
+  // the phone preview can sit on the left or the right of the editor (remembered per browser)
+  const [side, setSide] = useState<'right' | 'left'>(() => { try { return localStorage.getItem('desknoty.seller.previewSide') === 'left' ? 'left' : 'right' } catch { return 'right' } })
+  const flipSide = () => setSide((v) => { const n = v === 'right' ? 'left' : 'right'; try { localStorage.setItem('desknoty.seller.previewSide', n) } catch { /* fine */ } return n })
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const pageSave = useSellerSave(`desknoty.seller.recovery.${store.id}.page`, store.draft, store.revision, async (value, revision) => {
@@ -588,7 +590,7 @@ function Studio({
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
-    <div className="ss">
+    <div className={cn('ss', side === 'left' && 'ss-previewleft')}>
       <section className="ss-editor" aria-label="Store builder">
         {/* One navbar at the very top; scrolls sideways in one row on phones */}
         <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
@@ -667,14 +669,9 @@ function Studio({
 
       <aside className="ss-preview" aria-label="Draft preview">
         <div className="ss-preview-bar">
-          <div className="ss-seg" role="tablist" aria-label="Preview size">
-            <button type="button" role="tab" aria-selected={view === 'mobile'} onClick={() => setView('mobile')}>
-              <Smartphone className="h-3.5 w-3.5" /> Mobile
-            </button>
-            <button type="button" role="tab" aria-selected={view === 'desktop'} onClick={() => setView('desktop')}>
-              <Monitor className="h-3.5 w-3.5" /> Desktop
-            </button>
-          </div>
+          <button type="button" className="ss-sidebtn" onClick={flipSide} aria-label={`Move the preview to the ${side === 'right' ? 'left' : 'right'} side`} title={`Move to the ${side === 'right' ? 'left' : 'right'}`}>
+            <span aria-hidden="true">{side === 'right' ? '⇠' : '⇢'}</span> Move {side === 'right' ? 'left' : 'right'}
+          </button>
           {store.publishedAt && (
             <div className="ss-livebox">
               <a href={`/${store.handle}`} target="_blank" rel="noreferrer">
