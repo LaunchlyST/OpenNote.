@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react'
 import { apiUrl } from '../lib/api-base'
 import { useRouter } from '../router'
+import { ComingSoon } from './ComingSoon'
 import { LaunchPage } from './LaunchPage'
-import type { PreMode } from './LaunchPage'
 
 /**
  * Gate for `/`. The launch mode is set by an administrator (Settings → Launch)
  * and read from the server:
  *
- * - construction → the Under construction page (Notify me joins the waitlist)
- * - waitlist     → the waitlist page
+ * - construction → the animated Coming soon / Under construction page
+ * - waitlist     → the original waitlist page (unchanged)
  * - beta         → waitlist page, but people with a redeemed launch link go in
  * - launched     → everyone goes straight to the landing page
  */
 export function HomeGate() {
   const { navigate } = useRouter()
-  const [mode, setMode] = useState<PreMode | null>(null)
+  const [mode, setMode] = useState<'construction' | 'waitlist' | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -36,5 +36,5 @@ export function HomeGate() {
   }, [navigate])
 
   if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
-  return <LaunchPage mode={mode} />
+  return mode === 'construction' ? <LaunchPage mode="construction" /> : <ComingSoon />
 }
