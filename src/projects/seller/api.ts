@@ -66,7 +66,7 @@ export const sellerApi = {
   tiktokVerify: () => call<{ store: StoreView }>('POST', '/api/seller/tiktok/verify', {}),
   tiktok: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/tiktok/start', { returnTo }),
   earnings: () => call<Earnings>('GET', '/api/seller/earnings'),
-  withdraw: (currency: string) => call<{ payout: { id: string; amountMinor: number; currency: string; status: string; arrival: string } }>('POST', '/api/seller/payouts', { currency }),
+  withdraw: (currency: string, bankId?: string) => call<{ payout: { id: string; amountMinor: number; currency: string; status: string; arrival: string } }>('POST', '/api/seller/payouts', { currency, bankId }),
   orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null }> }>('GET', `/api/seller/orders?offset=${offset}`),
   savePayments: (p: Partial<{ [K in keyof PaymentSettings]: Partial<PaymentSettings[K]> }>) => call<{ store: StoreView }>('PUT', '/api/seller/payments', p),
   /** Bank transfer arrived: unlocks the order and sends the receipt. */
@@ -129,7 +129,8 @@ export interface Earnings {
   balance: {
     available: Array<{ amountMinor: number; currency: string }>
     pending: Array<{ amountMinor: number; currency: string }>
-    payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string }>
+    payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string; bank: string | null }>
   } | null
+  banks: Array<{ id: string; bankName: string; holder: string; last4: string; sortCode: string; currency: string; isDefault: boolean }>
   withdrawals: boolean
 }

@@ -329,7 +329,10 @@ try {
   const earn = (await req('GET', '/api/seller/earnings', undefined, A)).json
   check('earnings add up the paid orders', earn.totals[0]?.totalMinor === paidMinor && earn.totals[0]?.sales === ords.filter((o: { status: string }) => o.status === 'paid').length, JSON.stringify(earn.totals))
   check('the Stripe balance is shown and withdrawals are on in Sandbox', earn.withdrawals === true && earn.balance?.available[0]?.amountMinor === paidMinor, JSON.stringify(earn.balance))
-  const w = await req('POST', '/api/seller/payouts', { currency: earn.totals[0].currency }, A)
+  check('the seller’s Stripe bank accounts are listed (last 4 only, one default)', earn.banks.length === 2 && earn.banks.filter((b: { isDefault: boolean }) => b.isDefault).length === 1 && !JSON.stringify(earn.banks).match(/\d{8}/))
+  check('a bank that isn’t theirs is refused', (await req('POST', '/api/seller/payouts', { currency: earn.totals[0].currency, bankId: 'ba_someone_else' }, A)).status === 400)
+  const w = await req('POST', '/api/seller/payouts', { currency: earn.totals[0].currency, bankId: 'ba_test_monzo' }, A)
+  check('withdraw goes to the chosen bank', w.status === 200 && fake.calls.some((c) => c.path === '/v1/payouts' && c.method === 'POST' && c.body.destination === 'ba_test_monzo'))
   check('withdraw sends the whole available balance to the bank', w.status === 200 && w.json.payout.amountMinor === paidMinor, JSON.stringify(w.json))
   const twice = await req('POST', '/api/seller/payouts', { currency: earn.totals[0].currency }, A)
   check('nothing left to withdraw afterwards', twice.status === 409)

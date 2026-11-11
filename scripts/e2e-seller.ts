@@ -233,6 +233,23 @@ try {
   const all = db.prepare("SELECT COUNT(*) AS n, SUM(status = 'pending') AS p FROM seller_order").get() as { n: number; p: number }
   check('cancel then buy again makes one order, not a duplicate', all.n === 1 && !all.p, `${all.n} orders, ${all.p} pending`)
 
+  // The seller's wallet: balance from the paid order, withdraw to a chosen bank
+  await page.reload()
+  await page.getByRole('tab', { name: 'Payouts' }).click()
+  await page.getByRole('heading', { name: 'Your Wallet' }).waitFor()
+  await page.locator('.wl-table td', { hasText: 'Content planner' }).first().waitFor()
+  check('wallet shows the balance and the sale in Transaction History', (await page.locator('.wl-big').innerText()).includes('12') && (await page.locator('.wl-status-paid').count()) === 1)
+  await page.getByRole('button', { name: /^Withdraw/ }).click()
+  const wd = page.getByRole('dialog', { name: 'Withdraw to bank' })
+  await wd.waitFor()
+  check('withdraw asks which bank account, default preselected', (await wd.locator('.wl-pickrow').count()) === 2 && (await wd.getByRole('radio', { checked: true }).getAttribute('value')) === 'ba_test_revolut')
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: join(process.env.E2E_SHOTS, 'withdraw.png') })
+  await wd.getByText('Monzo').click()
+  await wd.getByRole('button', { name: /^Send/ }).click()
+  await page.locator('.wl-ok').waitFor()
+  check('the money is sent to the chosen bank', (await page.locator('.wl-ok').innerText()).includes('Monzo ••1234') && fake.calls.some((c) => c.path === '/v1/payouts' && c.body.destination === 'ba_test_monzo'))
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: join(process.env.E2E_SHOTS, 'wallet.png'), fullPage: true })
+
   // The receipt email link
   // The mail worker sends every few seconds; wait for the receipt to land in the dev inbox.
   const { existsSync, readdirSync } = await import('node:fs')

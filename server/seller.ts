@@ -1077,7 +1077,8 @@ export function sellerRouter() {
       t.byMethod[o.method] = (t.byMethod[o.method] ?? 0) + net
       totals.set(o.currency, t)
     }
-    let balance: { available: Array<{ amountMinor: number; currency: string }>; pending: Array<{ amountMinor: number; currency: string }>; payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string }> } | null = null
+    let balance: { available: Array<{ amountMinor: number; currency: string }>; pending: Array<{ amountMinor: number; currency: string }>; payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string; bank: string | null }> } | null = null
+    let banks: Array<{ id: string; bankName: string; holder: string; last4: string; sortCode: string; currency: string; isDefault: boolean }> = []
     const st = stripe()
     if (st && s.stripeAccountId && s.chargesReady) {
       try {
@@ -1086,8 +1087,19 @@ export function sellerRouter() {
         balance = {
           available: b.available.map((x) => ({ amountMinor: x.amount, currency: x.currency })),
           pending: b.pending.map((x) => ({ amountMinor: x.amount, currency: x.currency })),
-          payouts: list.data.map((p) => ({ id: p.id, amountMinor: p.amount, currency: p.currency, status: p.status, arrival: new Date(p.arrival_date * 1000).toISOString() })),
+          payouts: list.data.map((p) => ({ id: p.id, amountMinor: p.amount, currency: p.currency, status: p.status, arrival: new Date(p.arrival_date * 1000).toISOString(), bank: typeof p.destination === 'string' ? p.destination : null })),
         }
+        // the bank accounts the seller added in Stripe: where withdrawals can go (never full numbers)
+        const ext = await st.accounts.listExternalAccounts(s.stripeAccountId, { object: 'bank_account', limit: 10 }).catch(() => ({ data: [] as Stripe.BankAccount[] }))
+        banks = (ext.data as Stripe.BankAccount[]).map((b) => ({
+          id: b.id,
+          bankName: b.bank_name ?? 'Bank account',
+          holder: b.account_holder_name ?? '',
+          last4: b.last4,
+          sortCode: b.routing_number ? b.routing_number.replace(/^(\d{2})(\d{2})(\d{2})$/, '$1-$2-$3') : '',
+          currency: b.currency,
+          isDefault: Boolean(b.default_for_currency),
+        }))
       } catch (err) {
         console.error('[seller] could not read the Stripe balance:', (err as Error).message)
       }
@@ -1096,7 +1108,7 @@ export function sellerRouter() {
     const days: string[] = []
     for (let i = 29; i >= 0; i--) days.push(dayKey(new Date(Date.now() - i * 86400000)))
     const out = [...totals.values()].map(({ daily, ...t }) => ({ ...t, days: days.map((date) => ({ date, amountMinor: daily[date] ?? 0 })) }))
-    res.set('Cache-Control', 'no-store').json({ totals: out, balance, withdrawals: payoutsAllowed() })
+    res.set('Cache-Control', 'no-store').json({ totals: out, balance, banks, withdrawals: payoutsAllowed() })
   })
 
   /** Send the available Stripe balance to the seller's bank. Sandbox only unless SELLER_LIVE_PAYOUTS=true. */
@@ -1108,14 +1120,21 @@ export function sellerRouter() {
     if (!st || !s.stripeAccountId || !s.chargesReady) return void res.status(409).json({ error: 'Finish setting up Stripe first.' })
     const currency = String((req.body as { currency?: unknown })?.currency ?? '').toLowerCase()
     if (!/^[a-z]{3}$/.test(currency)) return void res.status(400).json({ error: 'Choose a currency.' })
+    // optional: which of the seller's own Stripe bank accounts to send to
+    const destination = String((req.body as { bankId?: unknown })?.bankId ?? '')
+    if (destination) {
+      if (!/^ba_\w+$/.test(destination)) return void res.status(400).json({ error: 'Choose one of your bank accounts.' })
+      const mineBank = await st.accounts.retrieveExternalAccount(s.stripeAccountId, destination).catch(() => null)
+      if (!mineBank) return void res.status(400).json({ error: 'That bank account isn’t on your Stripe account.' })
+    }
     try {
       const b = await st.balance.retrieve({}, { stripeAccount: s.stripeAccountId })
       const amount = b.available.find((x) => x.currency === currency)?.amount ?? 0
       if (amount <= 0) return void res.status(409).json({ error: 'There is nothing available to withdraw yet. New sales become available after a few days.' })
       // one withdrawal of the same amount per minute, even if the button is pressed twice
       const payout = await st.payouts.create(
-        { amount, currency, description: 'Desknoty withdrawal' },
-        { stripeAccount: s.stripeAccountId, idempotencyKey: `payout_${s.id}_${currency}_${amount}_${Math.floor(Date.now() / 60000)}` },
+        { amount, currency, description: 'Desknoty withdrawal', ...(destination ? { destination } : {}) },
+        { stripeAccount: s.stripeAccountId, idempotencyKey: `payout_${s.id}_${currency}_${amount}_${destination || 'default'}_${Math.floor(Date.now() / 60000)}` },
       )
       res.json({ payout: { id: payout.id, amountMinor: payout.amount, currency: payout.currency, status: payout.status, arrival: new Date(payout.arrival_date * 1000).toISOString() } })
     } catch (err) {

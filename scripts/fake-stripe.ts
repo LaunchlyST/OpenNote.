@@ -157,6 +157,16 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
       return json(res, 200, s)
     }
 
+    // Two bank accounts on every connected account, for payout destinations.
+    m = p.match(/^\/v1\/accounts\/(acct_\w+)\/external_accounts(?:\/(ba_\w+))?$/)
+    if (req.method === 'GET' && m) {
+      const banks = [
+        { id: 'ba_test_revolut', object: 'bank_account', bank_name: 'Revolut', account_holder_name: 'Ava Makes', last4: '4877', routing_number: '040075', currency: 'gbp', default_for_currency: true },
+        { id: 'ba_test_monzo', object: 'bank_account', bank_name: 'Monzo', account_holder_name: 'Ava Makes', last4: '1234', routing_number: '040004', currency: 'gbp', default_for_currency: false },
+      ]
+      if (m[2]) { const b = banks.find((x) => x.id === m![2]); return b ? json(res, 200, b) : json(res, 404, { error: { message: 'No such external account' } }) }
+      return json(res, 200, { object: 'list', data: banks, has_more: false })
+    }
     // Balance = paid checkouts on that account minus payouts already sent (all "available").
     if (req.method === 'GET' && p === '/v1/balance') {
       const by = new Map<string, number>()
@@ -166,7 +176,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     }
     if (p === '/v1/payouts') {
       if (req.method === 'GET') return json(res, 200, { object: 'list', data: payouts.filter((x) => x._account === account), has_more: false })
-      const po: Obj = { id: `po_test_${++n}`, object: 'payout', amount: Number(form.amount), currency: form.currency, status: 'pending', arrival_date: Math.floor(Date.now() / 1000) + 2 * 86400, _account: account }
+      const po: Obj = { id: `po_test_${++n}`, object: 'payout', amount: Number(form.amount), currency: form.currency, destination: form.destination ?? 'ba_test_revolut', status: 'pending', arrival_date: Math.floor(Date.now() / 1000) + 2 * 86400, _account: account }
       payouts.unshift(po)
       if (idem) idempotent.set(idem, po)
       return json(res, 200, po)

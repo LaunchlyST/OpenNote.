@@ -20,11 +20,11 @@ import {
   AtSign,
   Globe,
   Upload,
-  Banknote,
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { StorePage, storeStyle } from './StorePage'
 import { Style2Page } from './Style2'
+import { bankIcon } from './bank-icons'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
 import type { Earnings } from './api'
@@ -1337,163 +1337,72 @@ const PAYOUT_COPY: Record<StoreView['payouts']['status'], { label: string; text:
   ready: { label: 'Ready for payouts', text: 'Buyers can pay, and Stripe pays out to your bank on its usual schedule.', action: 'Manage payouts on Stripe' },
 }
 
-/** Animated number: counts up to the value once, quickly (instant with reduced motion). */
-function useCountUp(target: number) {
-  const [v, setV] = useState(0)
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return setV(target)
-    let raf = 0
-    const start = performance.now()
-    const tick = (t: number) => {
-      const k = Math.min(1, (t - start) / 900)
-      setV(Math.round(target * (1 - Math.pow(1 - k, 3))))
-      if (k < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target])
-  return v
-}
+type Bank = Earnings['banks'][number]
 
-/**
- * Payouts hero: total earned (animated), this month vs last, a 30-day chart,
- * a monthly goal ring the seller sets, the money journey from sale to bank,
- * and Withdraw to bank.
- */
-function EarningsCard({ ready, storeId }: { ready: boolean; storeId: string }) {
-  const [data, setData] = useState<Earnings | null>(null)
-  const [err, setErr] = useState<string | null>(null)
+/** Send the Stripe balance to one of the seller's own bank accounts (chosen here). */
+function WithdrawDialog({ amount, currency, banks, onClose, onSent }: { amount: number; currency: string; banks: Bank[]; onClose: () => void; onSent: (msg: string) => void }) {
+  const [pick, setPick] = useState(() => banks.find((b) => b.isDefault)?.id ?? banks[0]?.id ?? '')
   const [busy, setBusy] = useState(false)
-  const [sent, setSent] = useState<string | null>(null)
-  const [hover, setHover] = useState<number | null>(null)
-  const goalKey = `desknoty.seller.goal.${storeId}`
-  const [goal, setGoal] = useState<number>(() => { try { return Number(localStorage.getItem(goalKey)) || 0 } catch { return 0 } })
-  const [editingGoal, setEditingGoal] = useState(false)
-  const [goalText, setGoalText] = useState('')
-  const load = useCallback(() => sellerApi.earnings().then(setData).catch((e: Error) => setErr(e.message)), [])
-  useEffect(() => { void load() }, [load])
-  const main = data?.totals[0]
-  const cur = main?.currency ?? data?.balance?.available[0]?.currency ?? 'gbp'
-  const avail = data?.balance?.available.find((x) => x.currency === cur)?.amountMinor ?? 0
-  const pending = data?.balance?.pending.find((x) => x.currency === cur)?.amountMinor ?? 0
-  const paidOut = (data?.balance?.payouts ?? []).filter((p) => p.currency === cur && p.status === 'paid').reduce((n, p) => n + p.amountMinor, 0)
-  const total = useCountUp(main?.totalMinor ?? 0)
-  const month = main?.monthMinor ?? 0
-  const last = main?.lastMonthMinor ?? 0
-  const change = last > 0 ? Math.round(((month - last) / last) * 100) : null
-  const days = main?.days ?? Array.from({ length: 30 }, (_, i) => ({ date: new Date(Date.now() - (29 - i) * 86400000).toISOString().slice(0, 10), amountMinor: 0 }))
-  const peak = Math.max(1, ...days.map((d) => d.amountMinor))
-  const pct = goal > 0 ? Math.min(1, month / goal) : 0
-  const R = 30
-  const C = 2 * Math.PI * R
-  const sym = formatPrice(0, cur).replace(/[0-9.,\s]/g, '')
-
-  const saveGoal = () => {
-    const n = Math.round(Number(goalText.replace(/[^0-9.]/g, '')) * 100)
-    const v = Number.isFinite(n) && n > 0 ? n : 0
-    setGoal(v)
-    try { if (v) localStorage.setItem(goalKey, String(v)); else localStorage.removeItem(goalKey) } catch { /* fine */ }
-    setEditingGoal(false)
-  }
-  const withdraw = async () => {
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    return () => document.removeEventListener('keydown', k)
+  }, [onClose])
+  const chosen = banks.find((b) => b.id === pick)
+  const send = async () => {
     setBusy(true)
     setErr(null)
     try {
-      const { payout } = await sellerApi.withdraw(cur)
-      setSent(`${formatPrice(payout.amountMinor, payout.currency)} is on its way to your bank · arrives ${new Date(payout.arrival).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`)
-      await load()
+      const { payout } = await sellerApi.withdraw(currency, pick || undefined)
+      onSent(`${formatPrice(payout.amountMinor, payout.currency)} is on its way to ${chosen ? `${chosen.bankName} ••${chosen.last4}` : 'your bank'} · arrives ${new Date(payout.arrival).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`)
     } catch (e) {
       setErr((e as Error).message)
+      setBusy(false)
     }
-    setBusy(false)
   }
-  const fmtDay = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-
   return (
-    <section className="ss-earn" aria-label="Earnings">
-      <div className="ss-earn-head">
-        <div className="ss-earn-top">
-          <span className="ss-earn-label">Total earned</span>
-          <b className="ss-earn-big" aria-live="polite">{data ? formatPrice(total, cur) : '…'}</b>
-          <span className="ss-earn-sub">
-            {main ? <>{main.sales} sale{main.sales === 1 ? '' : 's'} · {formatPrice(month, cur)} this month</> : 'No sales yet. Your first one will show here.'}
-            {change !== null && <em className={change >= 0 ? 'up' : 'down'}>{change >= 0 ? '▲' : '▼'} {Math.abs(change)}% vs this time last month</em>}
-          </span>
+    <div className="ss-modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="ss-modal wl-modal" role="dialog" aria-modal="true" aria-labelledby="wd-title" onSubmit={(e) => (e.preventDefault(), void send())}>
+        <div className="ss-modal-body">
+          <h2 id="wd-title">Withdraw to bank</h2>
+          <p className="wl-modal-amount">{formatPrice(amount, currency)}</p>
+          <p className="ss-muted">Choose the bank account to send it to.</p>
+          <div className="wl-pick" role="radiogroup" aria-label="Bank account">
+            {banks.map((b) => (
+              <label key={b.id} className={cn('wl-pickrow', pick === b.id && 'on')}>
+                <input type="radio" name="bank" value={b.id} checked={pick === b.id} onChange={() => setPick(b.id)} />
+                <BankMark name={b.bankName} />
+                <span className="wl-pickinfo"><b>{b.bankName}</b><small>Account ending in {b.last4}{b.sortCode ? ` · ${b.sortCode}` : ''}</small></span>
+                {b.isDefault && <em className="wl-tag">Default</em>}
+              </label>
+            ))}
+          </div>
+          {err && <div className="ss-note" role="alert">{err}</div>}
         </div>
-        {/* Monthly goal ring: set your own target, watch it fill */}
-        <div className="ss-goal">
-          <button type="button" className="ss-goal-ring" onClick={() => (setGoalText(goal ? String(goal / 100) : ''), setEditingGoal(true))} aria-label={goal ? `Monthly goal ${formatPrice(goal, cur)}, ${Math.round(pct * 100)}% reached. Change goal` : 'Set a monthly goal'}>
-            <svg viewBox="0 0 76 76" aria-hidden="true">
-              <circle cx="38" cy="38" r={R} className="ss-goal-track" />
-              <circle cx="38" cy="38" r={R} className={cn('ss-goal-fill', pct >= 1 && 'done')} strokeDasharray={C} strokeDashoffset={C * (1 - pct)} />
-            </svg>
-            <span>{goal ? (pct >= 1 ? '🎉' : `${Math.round(pct * 100)}%`) : '+'}</span>
-          </button>
-          <small>{goal ? (pct >= 1 ? 'Goal reached!' : `of ${formatPrice(goal, cur)} goal`) : 'Set a goal'}</small>
+        <div className="ss-modal-foot">
+          <button type="button" className="ss-ghost" onClick={onClose}>Cancel</button>
+          <button type="submit" className="ss-primary" disabled={busy || !pick}>{busy ? 'Sending…' : `Send ${formatPrice(amount, currency)}`}</button>
         </div>
-      </div>
-      {editingGoal && (
-        <form className="ss-goal-form" onSubmit={(e) => (e.preventDefault(), saveGoal())}>
-          <label>Monthly goal <span>{sym}</span><input autoFocus inputMode="decimal" value={goalText} onChange={(e) => setGoalText(e.target.value)} placeholder="500" aria-label="Monthly goal amount" /></label>
-          <button type="submit">Save</button>
-          <button type="button" className="ghost" onClick={() => setEditingGoal(false)}>Cancel</button>
-        </form>
-      )}
-
-      {/* last 30 days, one bar per day */}
-      <div className="ss-chart" aria-label="Sales in the last 30 days" onMouseLeave={() => setHover(null)}>
-        <div className="ss-chart-bars">
-          {days.map((d, i) => (
-            <button
-              type="button"
-              key={d.date}
-              className={cn('ss-bar', hover === i && 'on', d.amountMinor === 0 && 'zero')}
-              style={{ ['--h' as string]: `${Math.max(d.amountMinor ? 8 : 3, (d.amountMinor / peak) * 100)}%`, animationDelay: `${i * 14}ms` }}
-              onMouseEnter={() => setHover(i)}
-              onFocus={() => setHover(i)}
-              aria-label={`${fmtDay(d.date)}: ${formatPrice(d.amountMinor, cur)}`}
-            />
-          ))}
-        </div>
-        <div className="ss-chart-foot">
-          {hover !== null ? (
-            <span className="ss-chart-tip"><b>{formatPrice(days[hover].amountMinor, cur)}</b> on {fmtDay(days[hover].date)}</span>
-          ) : (
-            <><span>{fmtDay(days[0].date)}</span><span>Last 30 days</span><span>Today</span></>
-          )}
-        </div>
-      </div>
-
-      {/* where the money is right now, from sale to your bank */}
-      <ol className="ss-journey" aria-label="Where your money is">
-        <li><span>Clearing</span><b>{data?.balance ? formatPrice(pending, cur) : '—'}</b><small>Stripe holds new sales for a few days</small></li>
-        <li className={avail > 0 ? 'hot' : undefined}><span>Ready</span><b>{data?.balance ? formatPrice(avail, cur) : '—'}</b><small>Can go to your bank now</small></li>
-        <li><span>In your bank</span><b>{formatPrice(paidOut + (main?.byMethod.bank ?? 0), cur)}</b><small>Withdrawn + bank transfers</small></li>
-      </ol>
-
-      {ready ? (
-        <div className="ss-earn-act">
-          <button type="button" className="ss-withdraw" disabled={busy || !data?.withdrawals || avail <= 0} onClick={() => void withdraw()}>
-            {busy ? 'Sending…' : <>Withdraw {data?.balance && avail > 0 ? formatPrice(avail, cur) + ' ' : ''}to bank <span aria-hidden="true">→</span></>}
-          </button>
-          <small>{!data?.withdrawals ? 'Stripe pays your balance out to your bank automatically.' : avail > 0 ? 'Goes to the bank account you added in Stripe. Usually 1–3 working days.' : 'New card sales become ready to withdraw after a few days.'}</small>
-        </div>
-      ) : (
-        <p className="ss-earn-note">Finish Stripe setup below to withdraw card earnings to your bank.</p>
-      )}
-      {sent && <p className="ss-earn-ok" role="status">✓ {sent}</p>}
-      {err && <p className="ss-earn-err" role="alert">{err}</p>}
-      {data?.balance?.payouts.length ? (
-        <ul className="ss-earn-list" aria-label="Recent withdrawals">
-          {data.balance.payouts.map((p) => (
-            <li key={p.id}><span>{new Date(p.arrival).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}</span><b>{formatPrice(p.amountMinor, p.currency)}</b><em>{p.status === 'paid' ? 'Arrived' : p.status === 'failed' ? 'Failed' : 'On the way'}</em></li>
-          ))}
-        </ul>
-      ) : null}
-      <p className="ss-earn-fee">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
-    </section>
+      </form>
+    </div>
   )
 }
+
+/** The bank's app icon (logo on its brand colour); banks without one get a coloured initial. */
+function BankMark({ name }: { name: string }) {
+  const icon = bankIcon(name)
+  if (icon)
+    return (
+      <span className="wl-mark wl-mark-app" style={{ background: icon.bg, color: icon.fg }} aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d={icon.path} /></svg>
+      </span>
+    )
+  const t = bankTheme(BANKS.some((b) => b.name === name) ? name : name ? 'x' : '')
+  return <span className="wl-mark" style={{ background: t.bg, color: t.fg }} aria-hidden="true">{(name || '?').charAt(0).toUpperCase()}</span>
+}
+
+type OrderRow = Awaited<ReturnType<typeof sellerApi.orders>>['orders'][number]
 
 function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: SellerSetup; reload: (refresh?: boolean) => Promise<void> }) {
   const [busy, setBusy] = useState(false)
@@ -1501,8 +1410,17 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const [payments, setPayments] = useState<PaymentSettings>(() => store.payouts.payments ?? EMPTY_PAYMENTS)
   const [methods, setMethods] = useState<PayMethod[]>(() => store.payouts.methods ?? [])
   const [bankOpen, setBankOpen] = useState(false)
+  const [data, setData] = useState<Earnings | null>(null)
+  const [orders, setOrders] = useState<OrderRow[] | null>(null)
+  const [withdrawing, setWithdrawing] = useState(false)
+  const [sent, setSent] = useState<string | null>(null)
   const s = store.payouts.status
   const copy = PAYOUT_COPY[s]
+  const load = useCallback(() => sellerApi.earnings().then(setData).catch((e: Error) => setErr(e.message)), [])
+  useEffect(() => {
+    void load()
+    sellerApi.orders().then((r) => setOrders(r.orders)).catch(() => setOrders([]))
+  }, [load])
   const go = async () => {
     setBusy(true)
     setErr(null)
@@ -1520,12 +1438,84 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   }
   const bank = payments.bank
   const bankSet = bankComplete(payments)
+  const main = data?.totals[0]
+  const cur = main?.currency ?? data?.balance?.available[0]?.currency ?? 'gbp'
+  const avail = data?.balance?.available.find((x) => x.currency === cur)?.amountMinor ?? 0
+  const pending = data?.balance?.pending.find((x) => x.currency === cur)?.amountMinor ?? 0
+  const banks = data?.banks ?? []
+  const canWithdraw = s === 'ready' && Boolean(data?.withdrawals) && avail > 0 && banks.length > 0
+  const STATUS: Record<string, string> = { paid: 'Paid', pending: 'Pending', failed: 'Failed', cancelled: 'Cancelled', refunded: 'Refunded', disputed: 'Disputed' }
+
   return (
-    <div className="ss-stack">
-      <EarningsCard ready={s === 'ready'} storeId={store.id} />
-      <h3 className="ss-getpaid">Get paid</h3>
+    <div className="ss-stack wl">
+      <h2 className="wl-h">Your Wallet</h2>
+      <div className="wl-top">
+        <div className="wl-balance">
+          <span className="wl-label">Wallet balance</span>
+          <b className="wl-big">{data?.balance ? formatPrice(avail, cur) : formatPrice(0, cur)}</b>
+          <small className="wl-sub">{data?.balance ? (pending > 0 ? `${formatPrice(pending, cur)} on the way from Stripe` : 'Ready to withdraw') : s === 'ready' ? 'Loading…' : 'Card sales land here once Stripe is set up'}</small>
+          <div className="wl-balance-foot">
+            <button type="button" className="wl-link" disabled={!canWithdraw} onClick={() => (setSent(null), setWithdrawing(true))} title={!canWithdraw ? (s !== 'ready' ? 'Finish Stripe setup first' : avail <= 0 ? 'Nothing ready to withdraw yet' : 'Add a bank account in Stripe first') : undefined}>
+              Withdraw <span aria-hidden="true">→</span>
+            </button>
+            {s === 'ready' && <button type="button" className="wl-link" onClick={() => void go()}>Stripe dashboard <ExternalLink className="h-3 w-3" /></button>}
+          </div>
+        </div>
+        <div className="wl-stats">
+          <div><span>Total earned</span><b>{formatPrice(main?.totalMinor ?? 0, cur)}</b>{main && main.monthMinor > 0 && <em>+{formatPrice(main.monthMinor, cur)}</em>}</div>
+          <div><span>This month</span><b>{formatPrice(main?.monthMinor ?? 0, cur)}</b></div>
+          <div><span>Paid by bank transfer</span><b>{formatPrice(main?.byMethod.bank ?? 0, cur)}</b></div>
+        </div>
+      </div>
+      {sent && <p className="wl-ok" role="status">✓ {sent}</p>}
+
+      <div className="wl-row">
+        <h2 className="wl-h">Your Bank Accounts</h2>
+        {setup.stripe && <button type="button" className="wl-add" onClick={() => void go()} disabled={busy}>+ Add bank account</button>}
+      </div>
+      <div className="wl-banks">
+        {banks.map((b) => (
+          <article key={b.id} className="wl-bank">
+            <header><BankMark name={b.bankName} /><b>{b.bankName}</b>{b.isDefault && <em className="wl-tag">Default</em>}</header>
+            <dl>
+              {b.holder && <><dt>Name</dt><dd>{b.holder}</dd></>}
+              <dt>Account number</dt><dd>•••• {b.last4}</dd>
+              {b.sortCode && <><dt>Sort code</dt><dd>{b.sortCode}</dd></>}
+            </dl>
+            <footer><small>For withdrawals</small></footer>
+          </article>
+        ))}
+        {/* the account buyers pay into for bank-transfer sales */}
+        <article className={cn('wl-bank', !bankSet && 'wl-bank-empty')} aria-label="Bank transfer">
+          <header>
+            <BankMark name={bank.bankName} />
+            <b>{bankSet ? bank.bankName || 'Bank account' : 'Bank transfer'}</b>
+            <em className={cn('wl-tag', methods.includes('bank') ? 'on' : 'off')}>{methods.includes('bank') ? 'On' : bankSet ? 'Off' : 'Not set up'}</em>
+          </header>
+          {bankSet ? (
+            <dl>
+              <dt>Name</dt><dd>{bank.accountName}</dd>
+              <dt>Account number</dt><dd>•••• {last4(payments)}</dd>
+              {bank.sortCode && <><dt>Sort code</dt><dd>{formatSort(bank.sortCode)}</dd></>}
+            </dl>
+          ) : (
+            <p className="ss-muted">Buyers pay straight into your bank. You confirm each payment in Orders.</p>
+          )}
+          <footer>
+            <small>{bankSet ? 'Buyers pay here' : ''}</small>
+            <button type="button" className={bankSet ? 'wl-btn' : 'wl-btn wl-btn-main'} onClick={() => setBankOpen(true)}>{bankSet ? 'Edit bank details' : 'Connect bank account'}</button>
+          </footer>
+        </article>
+        {s === 'ready' && data && banks.length === 0 && (
+          <article className="wl-bank wl-bank-empty">
+            <header><b>No payout account yet</b></header>
+            <p className="ss-muted">Add a bank account in Stripe to withdraw card earnings.</p>
+          </article>
+        )}
+      </div>
+
       {/* Stripe: status, refresh and the one action, together */}
-      <section className="ss-paycard" aria-label="Card payments with Stripe">
+      <section className="ss-paycard wl-stripe" aria-label="Card payments with Stripe">
         <div className="ss-paycard-head">
           <span className="ss-paycard-icon"><Landmark className="h-4 w-4" /></span>
           <div className="min-w-0">
@@ -1547,28 +1537,30 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         {err && <div className="ss-note" role="alert">{err}</div>}
       </section>
 
-      {/* Bank transfer: fields stay in the dialog until the seller asks for them */}
-      <section className="ss-paycard" aria-label="Bank transfer">
-        <div className="ss-paycard-head">
-          <span className="ss-paycard-icon"><Banknote className="h-4 w-4" /></span>
-          <div className="min-w-0">
-            <h3>Bank transfer</h3>
-            <p className="ss-muted">
-              {bankSet
-                ? `${bank.bankName || bank.accountName} · Account ending in ${last4(payments)}`
-                : 'Buyers pay straight into your bank. You confirm each payment in Orders.'}
-            </p>
-          </div>
-          <b className={cn('ss-pay', methods.includes('bank') ? 'ss-pay-ready' : 'ss-pay-not_connected')}>{methods.includes('bank') ? 'On' : bankSet ? 'Off' : 'Not set up'}</b>
-        </div>
-        <div className="ss-paycard-actions">
-          <button type="button" className={bankSet ? 'ss-ghost' : 'ss-primary'} onClick={() => setBankOpen(true)}>
-            {bankSet ? 'Edit bank details' : 'Connect bank account'}
-          </button>
-        </div>
-      </section>
+      <h2 className="wl-h">Transaction History</h2>
+      <div className="wl-table-wrap">
+        <table className="wl-table">
+          <thead><tr><th>Order</th><th>Product</th><th>Date</th><th>Method</th><th className="r">Amount</th><th>Status</th></tr></thead>
+          <tbody>
+            {orders === null && <tr><td colSpan={6} className="wl-empty">Loading…</td></tr>}
+            {orders?.length === 0 && <tr><td colSpan={6} className="wl-empty">No sales yet. They’ll show here.</td></tr>}
+            {orders?.map((o) => (
+              <tr key={o.id}>
+                <td className="wl-id">{o.id.slice(-6).toUpperCase()}</td>
+                <td>{o.product}</td>
+                <td>{new Date(o.createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                <td>{o.method === 'bank' ? 'Bank transfer' : o.method === 'paypal' ? 'PayPal' : 'Card'}</td>
+                <td className="r">{formatPrice(o.amountMinor, o.currency)}</td>
+                <td><span className={cn('wl-status', `wl-status-${o.status}`)}>{STATUS[o.status] ?? o.status}</span></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="ss-muted wl-fee">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
 
       {bankOpen && <BankDialog payments={payments} onClose={() => setBankOpen(false)} onSaved={(v) => (saved(v), setBankOpen(false))} />}
+      {withdrawing && <WithdrawDialog amount={avail} currency={cur} banks={banks} onClose={() => setWithdrawing(false)} onSent={(m) => (setSent(m), setWithdrawing(false), void load())} />}
     </div>
   )
 }
