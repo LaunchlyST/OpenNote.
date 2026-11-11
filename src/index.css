@@ -7755,3 +7755,10 @@ select.ss-input option {
 .ss-editor-soon { filter: blur(22px); opacity: .5; pointer-events: none; user-select: none; }
 .ss-slide-empty { background: #fff; }
 .ss-earn-fee { margin: 0; font-size: 11.5px; color: rgba(255,255,255,.5); }
+/* Style switch inside the store box */
+.ss-stylepick { display: inline-flex; gap: 2px; margin-top: 12px; padding: 3px; border-radius: 11px; background: #ebebe7; }
+.ss-stylepick button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 14px; border-radius: 8px; font-size: 13px; font-weight: 600; color: #5f5e5b; transition: background .2s, color .2s; }
+.ss-stylepick button[aria-selected='true'] { color: #111114; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.ss-stylepick em { font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; color: #4338ca; background: #e0e7ff; }
+.ss-soonwrap { display: flex; flex-direction: column; gap: inherit; transition: filter .35s ease, opacity .35s ease; }
+.ss-stylepick { width: max-content; align-self: flex-start; justify-self: start; }

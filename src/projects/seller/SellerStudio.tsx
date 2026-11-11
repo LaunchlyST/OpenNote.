@@ -564,7 +564,7 @@ function Studio({
   const swiped = useRef(false)
   const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' || pageSave.state === 'Unsaved changes' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
-    try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
+    try { await flushSellerEdits(); setTab(id); if (id !== 'page') setSlide(0) } catch (e) { setErr((e as Error).message) }
   }
 
   const publish = async () => {
@@ -588,7 +588,7 @@ function Studio({
 
   return (
     <div className="ss">
-      <section className={cn('ss-editor', slide !== 0 && 'ss-editor-soon')} aria-label="Store builder" inert={slide !== 0 ? true : undefined}>
+      <section className="ss-editor" aria-label="Store builder">
         {/* One navbar at the very top; scrolls sideways in one row on phones */}
         <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
           {(
@@ -628,6 +628,12 @@ function Studio({
             </button>
           </div>
           <p className="ss-lede">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
+          {tab === 'page' && (
+            <div className="ss-stylepick" role="tablist" aria-label="Store style">
+              <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
+              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2 <em>Soon</em></button>
+            </div>
+          )}
           {(notice || err) && (
             <div className="ss-note" role="status">
               {err ?? notice}{' '}
@@ -636,6 +642,7 @@ function Studio({
           )}
         </header>}
 
+        <div className={cn('ss-soonwrap', slide !== 0 && 'ss-editor-soon')} inert={slide !== 0 ? true : undefined}>
         {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
         {tab === 'page' && <>
@@ -651,6 +658,7 @@ function Studio({
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
+        </div>
       </section>
 
       <aside className="ss-preview" aria-label="Draft preview">
@@ -707,10 +715,6 @@ function Studio({
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
               </div>
               <div className="ss-slide ss-slide-empty" aria-label="Style 2 (empty, coming soon)" aria-hidden={slide !== 1} />
-            </div>
-            <div className="ss-pills" role="tablist" aria-label="Store style">
-              <button type="button" role="tab" aria-selected={slide === 0} onClick={() => setSlide(0)}>Style 1</button>
-              <button type="button" role="tab" aria-selected={slide === 1} onClick={() => (setSlide(1), closeEditor())}>Style 2</button>
             </div>
           </div>
         </div>
