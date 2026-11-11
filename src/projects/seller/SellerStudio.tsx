@@ -1382,6 +1382,7 @@ function EarningsCard({ ready }: { ready: boolean }) {
       )}
       {sent && <p className="ss-earn-ok" role="status">✓ {sent}</p>}
       {err && <p className="ss-earn-err" role="alert">{err}</p>}
+      <p className="ss-earn-fee">Desknoty platform fee: {PLATFORM_FEE_PERCENT}%. Payment providers may charge their own fees.</p>
       {data?.balance?.payouts.length ? (
         <ul className="ss-earn-list" aria-label="Recent withdrawals">
           {data.balance.payouts.map((p) => (

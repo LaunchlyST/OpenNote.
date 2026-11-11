@@ -7754,3 +7754,4 @@ select.ss-input option {
 /* Style 2 selected in the phone: the editor is blurred and empty for now */
 .ss-editor-soon { filter: blur(22px); opacity: .5; pointer-events: none; user-select: none; }
 .ss-slide-empty { background: #fff; }
+.ss-earn-fee { margin: 0; font-size: 11.5px; color: rgba(255,255,255,.5); }
