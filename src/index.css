@@ -7814,3 +7814,6 @@ select.ss-input option {
 @media (max-width: 520px) { .wl-top { grid-template-columns: 1fr; } }
 .wl-mark-app { width: 32px; height: 32px; border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 2px 6px rgba(0,0,0,.12); }
 .wl-mark-app svg { width: 60%; height: 60%; }
+.wl-btn { white-space: nowrap; flex: none; }
+.wl-direct { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #111114; }
+.wl-direct .wl-mark { width: 24px; height: 24px; border-radius: 7px; }

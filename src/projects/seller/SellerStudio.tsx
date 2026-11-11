@@ -1451,6 +1451,18 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       <h2 className="wl-h">Your Wallet</h2>
       <div className="wl-top">
         <div className="wl-balance">
+          {s !== 'ready' && bankSet ? (
+            <>
+              {/* bank transfer only: buyers pay straight into the seller's bank, nothing to withdraw */}
+              <span className="wl-label">Paid straight to your bank</span>
+              <b className="wl-big">{formatPrice(main?.byMethod.bank ?? 0, cur)}</b>
+              <small className="wl-sub">Bank transfer sales go directly to {bank.bankName || 'your bank'} ••{last4(payments)}. Nothing to withdraw: the money is already yours.</small>
+              <div className="wl-balance-foot">
+                <span className="wl-direct"><BankMark name={bank.bankName} /> {bank.bankName || 'Bank'} ••{last4(payments)}</span>
+              </div>
+            </>
+          ) : (
+          <>
           <span className="wl-label">Wallet balance</span>
           <b className="wl-big">{data?.balance ? formatPrice(avail, cur) : formatPrice(0, cur)}</b>
           <small className="wl-sub">{data?.balance ? (pending > 0 ? `${formatPrice(pending, cur)} on the way from Stripe` : 'Ready to withdraw') : s === 'ready' ? 'Loading…' : 'Card sales land here once Stripe is set up'}</small>
@@ -1460,6 +1472,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             </button>
             {s === 'ready' && <button type="button" className="wl-link" onClick={() => void go()}>Stripe dashboard <ExternalLink className="h-3 w-3" /></button>}
           </div>
+          </>
+          )}
         </div>
         <div className="wl-stats">
           <div><span>Total earned</span><b>{formatPrice(main?.totalMinor ?? 0, cur)}</b>{main && main.monthMinor > 0 && <em>+{formatPrice(main.monthMinor, cur)}</em>}</div>
