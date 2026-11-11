@@ -7762,3 +7762,4 @@ select.ss-input option {
 .ss-stylepick em { font-style: normal; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; color: #4338ca; background: #e0e7ff; }
 .ss-soonwrap { display: flex; flex-direction: column; gap: inherit; transition: filter .35s ease, opacity .35s ease; }
 .ss-stylepick { width: max-content; align-self: flex-start; justify-self: start; }
+.ss-stylepick { display: flex; width: max-content; margin: 14px auto 0; align-self: center; justify-self: center; }
