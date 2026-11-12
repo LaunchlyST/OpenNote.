@@ -1317,7 +1317,7 @@ function LaunchSection() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not change the launch mode.')
       setMode(data.mode)
-      setMessage(next === 'launched' ? 'Public launch is on. Everyone can create an account.' : next === 'soon' ? 'Coming soon is on: visitors see the new homepage and can join the waitlist. Sign-ups stay closed.' : next === 'construction' ? 'The Under construction page is now showing.' : 'The old waitlist page is now showing.')
+      setMessage(next === 'launched' ? 'Public launch is on. Everyone can create an account.' : next === 'soon' ? 'Coming soon is on: visitors see the Under construction page and can join the waitlist. Sign-ups stay closed.' : next === 'construction' ? 'The Under construction page is now showing.' : 'The old waitlist page is now showing.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change the launch mode.')
     } finally {
@@ -1363,13 +1363,11 @@ function LaunchSection() {
         </p>
       )}
       <SettingsCard title="Launch mode" icon={<Megaphone className="h-3.5 w-3.5" />}>
-        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview the new homepage before switching: <a className="font-medium text-[#191919] underline" href="/home-preview" target="_blank" rel="noreferrer">desknoty.com/home-preview</a> (only you can open it). Add ?mode=open to see the Public launch version.</p>
-        <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3 sm:grid-cols-2">
+        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview it first: <a className="font-medium text-[#191919] underline" href="/?preview=soon" target="_blank" rel="noreferrer">Under construction page</a></p>
+        <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3">
           {([
-            ['soon', '✨ Coming soon', 'New homepage with Join the waitlist. Sign-ups closed'],
-            ['launched', '🚀 Public launch', 'New homepage, everyone can create an account'],
-            ['waitlist', '✉️ Old waitlist', 'The original waitlist page'],
-            ['construction', '🚧 Under construction', 'Building page with Notify me'],
+            ['construction', '🚧 Under construction', 'Visitors see the Under construction page and can join the waitlist. Sign-ups closed'],
+            ['waitlist', '✉️ Waitlist', 'The original waitlist page. Sign-ups closed'],
           ] as const).map(([id, label, hint]) => (
             <button
               key={id}

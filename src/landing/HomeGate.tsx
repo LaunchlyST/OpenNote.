@@ -5,6 +5,7 @@ import { ComingSoon } from './ComingSoon'
 import { LaunchPage } from './LaunchPage'
 
 const NewHome = lazy(() => import('./NewHome'))
+const SoonPage = lazy(() => import('./SoonPage'))
 
 /**
  * Gate for `/`. The launch mode is set by an administrator (Settings → Launch)
@@ -13,7 +14,7 @@ const NewHome = lazy(() => import('./NewHome'))
  * - construction → the animated Coming soon / Under construction page
  * - waitlist     → the original waitlist page (unchanged)
  * - beta         → waitlist page, but people with a redeemed launch link go in
- * - soon         → the new homepage with Join the waitlist (sign-ups stay closed)
+ * - soon         → the Coming soon / Under construction page with Join the waitlist (sign-ups stay closed)
  * - launched     → the new homepage with Start free (sign-ups open)
  */
 export function HomeGate() {
@@ -42,7 +43,12 @@ export function HomeGate() {
 
   // desknoty.com/?preview=coming-soon shows the Coming soon page whatever the mode (view only)
   if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'coming-soon') return <LaunchPage mode="construction" />
+  // desknoty.com/?preview=soon shows the new Coming soon page whatever the mode (view only)
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#131209' }} />}><SoonPage /></Suspense>
   if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
-  if (mode === 'home' || mode === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome mode={mode === 'home' ? 'open' : 'soon'} /></Suspense>
-  return mode === 'construction' ? <LaunchPage mode="construction" /> : <ComingSoon />
+  if (mode === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#131209' }} />}><SoonPage /></Suspense>
+  if (mode === 'home') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome mode="open" /></Suspense>
+  // Under construction now shows the new Under construction page (the old one stays at ?preview=coming-soon)
+  if (mode === 'construction') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#131209' }} />}><SoonPage /></Suspense>
+  return <ComingSoon />
 }
