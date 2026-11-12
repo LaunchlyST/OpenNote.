@@ -59,6 +59,7 @@ export default function PublicStore({ path }: { path: string }) {
   // Download a bought product right here: fetch a fresh signed link (the server checks the payment again), then start it.
   const [downloading, setDownloading] = useState<string | null>(null)
   const [celebrate, setCelebrate] = useState<string | null>(null)
+  const [emailedTo, setEmailedTo] = useState<string | null>(null)
   const download = async (p: ShopProduct) => {
     const url = readOwned()[p.id]
     const m = url?.match(/\/order\/([^/?#]+)\?(?:.*&)?k=([^&#]+)/)
@@ -91,6 +92,14 @@ export default function PublicStore({ path }: { path: string }) {
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
       const r = await storeApi.checkout(handle, p.id, key, method, email, payer)
+      // Free: the download link was sent to the buyer's email
+      if (r.emailed) {
+        sessionStorage.removeItem(keyName)
+        setEmailedTo(r.email ?? email ?? '')
+        setBuying(null)
+        checkoutBusy.current = false
+        return
+      }
       // Free (or otherwise already confirmed): download right here, no page change
       if (r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
         rememberOwned(handle, p.id, r.orderUrl)
@@ -140,7 +149,8 @@ export default function PublicStore({ path }: { path: string }) {
       error={buyErr}
       seller={store.page.name || store.handle}
       onPay={(m, email, payer) => void pay(choosing, m, email, payer)}
-      onClose={() => setChoosing(null)}
+      emailedTo={emailedTo}
+      onClose={() => (setChoosing(null), setEmailedTo(null))}
     />
   )
 
@@ -196,7 +206,7 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose }: { product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => void; onClose: () => void }) {
+function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, emailedTo }: { emailedTo?: string | null; product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => void; onClose: () => void }) {
   const free = product.priceMinor === 0
   const choices: Choice[] = free ? ['card'] : [
     ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
@@ -218,7 +228,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
   const isBank = method === 'bank'
   const noBank = isBank && banks.length === 0
-  const ready = isBank ? valid && !noBank && payTo >= 0 : valid || !email.trim()
+  const ready = isBank || free ? valid && (free || (!noBank && payTo >= 0)) : valid || !email.trim()
   const canPay = !busy && ready
   const price = formatPrice(product.priceMinor, product.currency)
   useEffect(() => {
@@ -248,6 +258,14 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
           <button type="button" className="co3-x" onClick={onClose} aria-label="Close checkout">✕</button>
         </nav>
 
+        {emailedTo ? (
+          <div className="co3-sent" role="status">
+            <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
+            <h2>Check your email</h2>
+            <p>We sent the download link for <b>{product.title}</b> to <b>{emailedTo}</b>. It can take a minute; check your spam folder too.</p>
+            <button type="button" className="co3-pay-btn" onClick={onClose}>Done</button>
+          </div>
+        ) : (
         <div className="co3-grid">
           <section className="co3-pay" aria-label="Payment details">
             <h2>Payment Details</h2>
@@ -282,9 +300,9 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
               </>
             ) : (
               <>
-                <label className="co3-field"><span>Email for your receipt</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" /></label>
+                <label className="co3-field"><span>{free ? 'Your email (we send the download here)' : 'Email for your receipt'}</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={free} aria-label="Email" /></label>
                 {free ? (
-                  <p className="co3-hint">This product is free. Enter your email (optional) and press Get it free to download.</p>
+                  <p className="co3-hint">This product is free. Enter your email and we’ll send you the download link.</p>
                 ) : method === 'paypal' ? (
                   <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
                 ) : (
@@ -322,10 +340,11 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
             </dl>
             <div className="co3-total"><span>Total</span><b>{price}</b></div>
             {error && <p className="co-err" role="alert">{error}</p>}
-            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy ? 'Opening…' : free ? 'Get it free' : 'Pay Now'}</button>
+            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy ? (free ? 'Sending…' : 'Opening…') : free ? 'Send digital product' : 'Pay Now'}</button>
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>
           </section>
         </div>
+        )}
       </form>
     </div>
   )

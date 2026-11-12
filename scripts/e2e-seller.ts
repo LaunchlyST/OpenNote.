@@ -121,7 +121,7 @@ try {
 
   // 2. Product with a private file and a cover
   await page.getByRole('tab', { name: /Products/ }).click()
-  await page.getByRole('button', { name: 'Add your first digital product' }).click()
+  await page.locator('.pg-add').click()
   await page.getByPlaceholder('e.g. Content planner template').fill('Content planner')
   await page.getByPlaceholder('What buyers get, in a few lines').fill('A Notion template for planning a month of videos.')
   const price = page.locator('.ss-affix-l input')

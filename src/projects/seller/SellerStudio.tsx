@@ -470,6 +470,7 @@ function Studio({
 }) {
   const [tab, setTab] = useState<Tab>('page')
   const [picked, setPicked] = useState<string | null>(null)
+  const [openProduct, setOpenProduct] = useState<string | null>(null)
   const view = 'mobile' as 'mobile' | 'desktop'
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
   const [publishing, setPublishing] = useState(false)
@@ -712,7 +713,7 @@ function Studio({
               ['orders', 'Orders'],
             ] as Array<[Tab, string]>
           ).map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => void navigate(id)}>
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => (id === 'products' && setOpenProduct(null), void navigate(id))}>
               {label}
             </button>
           ))}
@@ -766,7 +767,7 @@ function Studio({
           <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} onAdd={addBlock} createProduct={createProduct} />
           {picked && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
-        {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} />}
+        {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
@@ -838,7 +839,13 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onPick={(id, el) => (setTab('page'), openEditor(id, el))} />
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onPick={(id, el) => {
+                  // a Digital product in the phone opens that product's editor in the Products tab
+                  const blk = page.blocks.find((x) => x.id === id)
+                  const pid = blk?.type === 'featured' ? (blk.data.productId as string | undefined) : undefined
+                  if (pid && store.products.some((x) => x.id === pid)) { closeEditor(); setOpenProduct(pid); setTab('products'); return }
+                  setTab('page'); openEditor(id, el)
+                }} />
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
               </div>
               <div className="ss-slide" aria-label="Style 2 preview" aria-hidden={slide !== 1}>
@@ -1605,41 +1612,50 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore }: { store: StoreView; setStore: (s: StoreView) => void }) {
-  const [editing, setEditing] = useState<string | null>(store.products[0]?.id ?? null)
+function ProductsEditor({ store, setStore, open, setOpen }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void }) {
   const [err, setErr] = useState<string | null>(null)
-  const product = store.products.find((p) => p.id === editing)
+  const panel = useRef<HTMLDivElement>(null)
+  // the opened card scrolls into view (e.g. after clicking it in the phone)
+  useEffect(() => { if (open) window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60) }, [open])
 
   const add = async () => {
     try {
       await flushSellerEdits()
       const r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
       setStore(r.store)
-      setEditing(r.product.id)
+      setOpen(r.product.id)
     } catch (e) {
       setErr((e as Error).message)
     }
   }
+  // only one panel open at a time; save what's typed before switching
+  const choose = (id: string | null) => void flushSellerEdits().then(() => setOpen(id)).catch((e: Error) => setErr(e.message))
 
   return (
     <div className="ss-stack">
-      <div className="ss-chips">
-        {store.products.map((p) => (
-          <button key={p.id} type="button" aria-pressed={p.id === editing} onClick={() => void flushSellerEdits().then(() => setEditing(p.id)).catch((e: Error) => setErr(e.message))}>
-            {p.title.trim() || 'Untitled product'}
-            {p.published && <span className="ss-chip-live"> · live</span>}
-          </button>
-        ))}
-        <button type="button" className="ss-chip-add" onClick={() => void add()}>+ New product</button>
-      </div>
       {err && <div className="ss-note" role="alert">{err}</div>}
-      {!product ? (
-        <button type="button" className="ss-blank" onClick={() => void add()}>
-          <Package className="h-5 w-5" /> Add your first digital product
+      <div className="pg-grid">
+        {store.products.map((p) => {
+          const cover = mediaUrl(p.cover)
+          return p.id === open ? (
+            <div key={p.id} ref={panel} className="pg-panel" role="region" aria-label={`Edit ${p.title.trim() || 'product'}`}>
+              <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
+              <ProductForm product={p} store={store} setStore={setStore} onDeleted={() => setOpen(null)} />
+            </div>
+          ) : (
+            <button key={p.id} type="button" className="pg-card" onClick={() => choose(p.id)} aria-label={`Edit ${p.title.trim() || 'Untitled product'}`}>
+              <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-6 w-6" />}</span>
+              <span className="pg-name">{p.title.trim() || 'Untitled product'}</span>
+              <span className="pg-meta">{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}{p.published ? ' · Live' : ' · Draft'}</span>
+              <span className="pg-hint">Tap to edit</span>
+            </button>
+          )
+        })}
+        <button type="button" className="pg-card pg-add" onClick={() => void add()}>
+          <span className="pg-plus" aria-hidden="true">+</span>
+          <span className="pg-name">New product</span>
         </button>
-      ) : (
-        <ProductForm key={product.id} product={product} store={store} setStore={setStore} onDeleted={() => setEditing(null)} />
-      )}
+      </div>
     </div>
   )
 }

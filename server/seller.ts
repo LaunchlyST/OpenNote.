@@ -1402,6 +1402,8 @@ export function sellerRouter() {
       const key = String(req.body?.checkoutKey ?? randomUUID())
       if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
       const email = String(req.body?.email ?? '').trim().toLowerCase()
+      // free products are sent to the buyer's email: the download link only arrives there
+      if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) || email.length > 254) return void res.status(400).json({ error: 'Enter your email address so we can send you the download.' })
       const order = await sql.tx(async (tx) => {
         await tx.run(
           `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
@@ -1410,8 +1412,8 @@ export function sellerRouter() {
         return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
       })
       if (order.productId !== p.id) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
-      const done = await completeOrder(order, /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) ? email : null)
-      return void res.json({ orderUrl: `/store/${s.handle}/order/${done.id}?k=${encodeURIComponent(done.accessKey)}`, order: await orderView(done, s) })
+      await completeOrder(order, email)
+      return void res.json({ emailed: true, email })
     }
     const method = String(req.body?.method ?? 'stripe')
     if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method))
