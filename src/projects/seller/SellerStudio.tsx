@@ -765,7 +765,7 @@ function Studio({
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
           <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} onAdd={addBlock} createProduct={createProduct} />
-          {picked && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
+          {picked && page.blocks.find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -1039,7 +1039,11 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
     next.splice(i + 1, 0, copy)
     setBlocks(next)
   }
-  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => setOpen(id, e.currentTarget.closest('.bl-card') as HTMLElement)
+  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => {
+    // a Digital product opens right under its row (click again to close); other blocks use the pop-up editor
+    if (blocks.find((x) => x.id === id)?.type === 'featured' && open === id) return setOpen(null)
+    setOpen(id, e.currentTarget.closest('.bl-card') as HTMLElement)
+  }
   return (
     <div className="ss-stack">
       <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
@@ -1087,6 +1091,11 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
                   <button type="button" className="bl-eye" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
                     {b.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
+                  {open === b.id && b.type === 'featured' && (
+                    <div className="bl-inline" role="region" aria-label="Edit Digital product">
+                      <BlockEditor block={b} products={products} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} />
+                    </div>
+                  )}
                   {menu === b.id && (
                     <div className="bl-menu" role="menu">
                       <button type="button" role="menuitem" onClick={(e) => (setMenu(null), openRow(b.id)(e))}>Edit</button>

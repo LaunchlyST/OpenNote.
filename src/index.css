@@ -8350,3 +8350,8 @@ select.ss-input option {
 .pp-pick .pp-tile { width: 88px; cursor: pointer; touch-action: auto; }
 .pp-pick .pp-tile.on { box-shadow: 0 0 0 2px #111114; background: #fff; }
 .pp-pick { padding: 3px; }
+
+/* Digital product: edits open right under its row in the list */
+.bl-card:has(.bl-inline) { flex-wrap: wrap; padding-bottom: 12px; }
+.bl-inline { flex: 1 0 100%; margin: 4px 0 0 26px; padding-top: 4px; color: #111114; animation: bl-open .25s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes bl-open { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
