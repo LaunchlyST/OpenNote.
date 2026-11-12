@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef } from 'react'
-import { AuthProvider } from './auth'
+import { AuthProvider, useAuth } from './auth'
 import { RouterProvider, useRouter } from './router'
 import type { Screen } from './screens'
 import { SITE, useDocumentMeta } from './landing/seo'
@@ -29,6 +29,18 @@ const DesignPreview = lazy(() => import('./design/DesignPreview'))
 
 // Public seller storefronts at /store/<handle>. No account needed; never gated.
 const PublicStore = lazy(() => import('./store/PublicStore'))
+const NewHome = lazy(() => import('./landing/NewHome'))
+
+/** desknoty.com/home-preview: the new homepage, for signed-in admins only. */
+function HomePreview() {
+  const { user, loading } = useAuth()
+  const { navigate } = useRouter()
+  useEffect(() => {
+    if (!loading && user?.role !== 'admin') navigate(user ? '/' : '/app/signin', { replace: true })
+  }, [loading, user, navigate])
+  if (loading || user?.role !== 'admin') return <div style={{ minHeight: '100vh', background: '#000' }} />
+  return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome /></Suspense>
+}
 
 function screenForPath(path: string): Screen | undefined {
   if (path === '/app/signin' || path === '/signin') return 'signin'
@@ -140,6 +152,8 @@ function Routes() {
   }
   if (path === '/') return <HomeGate />
   if (path === '/landing') return <LandingGate />
+  // The new homepage before launch: admins only (everyone else goes back to the waitlist)
+  if (path === '/home-preview') return <HomePreview />
   if (isAppRoute(path)) {
     // The key remounts the calendar when the path changes, so a different
     // `initialScreen` (e.g. /app → /app/signup) is honoured immediately

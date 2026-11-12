@@ -1363,11 +1363,12 @@ function LaunchSection() {
         </p>
       )}
       <SettingsCard title="Launch mode" icon={<Megaphone className="h-3.5 w-3.5" />}>
+        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview the new homepage before switching: <a className="font-medium text-[#191919] underline" href="/home-preview" target="_blank" rel="noreferrer">desknoty.com/home-preview</a> (only you can open it).</p>
         <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3 sm:grid-cols-3">
           {([
             ['construction', '🚧 Under construction', 'Building page with Notify me'],
             ['waitlist', '✉️ Waitlist open', 'Visitors join the waitlist'],
-            ['launched', '🚀 Public launch', 'Everyone can use Desknoty'],
+            ['launched', '🚀 New homepage', 'Waitlist off: everyone sees the new homepage'],
           ] as const).map(([id, label, hint]) => (
             <button
               key={id}
