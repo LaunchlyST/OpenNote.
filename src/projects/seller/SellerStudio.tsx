@@ -1512,7 +1512,6 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
               </div>
             )}
           </Field>
-          <Field label="Small label above the title"><input className="ss-input" maxLength={200} value={d.note ?? ''} onChange={(e) => update({ note: e.target.value })} placeholder="New this week" /></Field>
           {!products.length && <p className="ss-muted">Add a product in the Products tab first.</p>}
         </div>
       )

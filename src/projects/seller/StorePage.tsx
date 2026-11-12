@@ -265,7 +265,6 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
         <section className="sp-block sp-featured">
           <Cover p={prod} big />
           <div className="sp-feat-body">
-            {d.note && <p className="sp-kicker">{d.note}</p>}
             <ProductLink prod={prod} live={p.live} handle={p.handle}>
               <h2>{prod.title}</h2>
             </ProductLink>
