@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import './soon.css'
 
 /**
@@ -12,7 +12,7 @@ const reduced = () => typeof window !== 'undefined' && window.matchMedia('(prefe
 
 export function SoonPage() {
   const world = useRef<HTMLDivElement>(null)
-  const [letter, setLetter] = useState(false)
+  const [letter, setLetter] = useState<HTMLElement | null>(null)
   useEffect(() => {
     const prev = document.title
     document.title = 'Desknoty is still being made ♡'
@@ -57,7 +57,7 @@ export function SoonPage() {
           <Notebook />
           <Plane />
           <Butterfly />
-          <Envelope onOpen={() => setLetter(true)} />
+          <Envelope onOpen={(el) => setLetter((cur) => cur ?? el)} />
         </div>
 
       </main>
@@ -66,7 +66,7 @@ export function SoonPage() {
         <span>© {new Date().getFullYear()} Desknoty · made slowly, with care</span>
       </footer>
 
-      {letter && <Letter onClose={() => setLetter(false)} />}
+      {letter && <Letter from={letter} onClosed={() => setLetter(null)} />}
     </div>
   )
 }
@@ -315,10 +315,10 @@ function EnvelopeArt({ open = false }: { open?: boolean }) {
   )
 }
 
-function Envelope({ onOpen }: { onOpen: () => void }) {
+function Envelope({ onOpen }: { onOpen: (el: HTMLElement) => void }) {
   return (
     <div className="lw-env-spot">
-      <button type="button" className="lw-env" onClick={onOpen} aria-haspopup="dialog" aria-label="A little letter for you. Open it">
+      <button type="button" className="lw-env" onClick={(e) => onOpen(e.currentTarget)} aria-haspopup="dialog" aria-label="A little letter for you. Open it">
         <EnvelopeArt />
       </button>
       <span className="lw-env-label" aria-hidden="true">A little letter for you ♡</span>
@@ -341,62 +341,165 @@ const LETTER = [
   'We can’t wait to show you what we’ve been making.',
 ]
 
-type Phase = 'arrive' | 'flap' | 'slide' | 'unfold' | 'read' | 'closing'
+/**
+ * The greeting-card sequence, one coordinated timeline (Web Animations API):
+ *  1 lift + fly from the envelope's real spot to the centre, background dims
+ *  2 flap opens in 3D (and drops behind the letter once it passes upright)
+ *  3 the folded letter slides up out of the pocket
+ *  4 the envelope drops away while the letter moves to the centre at full size
+ *  5 top third unfolds, then the bottom third (real tri-fold, back faces visible)
+ *  6 handwriting appears line by line; the letter scrolls
+ * Closing plays the same steps backwards, faster, and returns to the hill.
+ * Clicks during a step are ignored; Esc during opening closes when it finishes.
+ */
+const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
+const SWAY = 'cubic-bezier(0.65, 0, 0.35, 1)'
 
-function Letter({ onClose }: { onClose: () => void }) {
-  const [phase, setPhase] = useState<Phase>(reduced() ? 'read' : 'arrive')
+function Letter({ from, onClosed }: { from: HTMLElement; onClosed: () => void }) {
+  const root = useRef<HTMLDivElement>(null)
+  const dim = useRef<HTMLDivElement>(null)
+  const card = useRef<HTMLDivElement>(null)
+  const back = useRef<HTMLDivElement>(null)
+  const front = useRef<HTMLDivElement>(null)
+  const flapHold = useRef<HTMLDivElement>(null)
+  const flap = useRef<HTMLDivElement>(null)
+  const paper = useRef<HTMLDivElement>(null)
+  const top = useRef<HTMLDivElement>(null)
+  const bot = useRef<HTMLDivElement>(null)
   const closeBtn = useRef<HTMLButtonElement>(null)
-  const timers = useRef<number[]>([])
-  const at = (ms: number, p: Phase) => timers.current.push(window.setTimeout(() => setPhase(p), ms))
-  useEffect(() => {
-    if (!reduced()) { at(450, 'flap'); at(1000, 'slide'); at(1750, 'unfold'); at(2500, 'read') }
-    const prev = document.body.style.overflow
+  const steps = useRef<Animation[][]>([])
+  const busy = useRef(true)
+  const wantClose = useRef(false)
+  const [reading, setReading] = useState(false)
+
+  const flyFrames = () => {
+    const a = from.getBoundingClientRect(), b = card.current!.getBoundingClientRect()
+    const dx = a.left + a.width / 2 - (b.left + b.width / 2), dy = a.top + a.height / 2 - (b.top + b.height / 2), s = a.width / b.width
+    return [
+      { transform: `translate(${dx}px, ${dy}px) scale(${s}) rotate(-3deg)` },
+      { transform: `translate(${dx}px, ${dy - 18}px) scale(${s * 1.06}) rotate(-5deg)`, offset: 0.22 },
+      { transform: 'translate(0, 0) scale(1) rotate(0deg)' },
+    ]
+  }
+
+  const run = (list: Animation[]) => Promise.all(list.map((a) => a.finished)).then(() => undefined)
+
+  useLayoutEffect(() => {
+    const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    return () => { timers.current.forEach(clearTimeout); document.body.style.overflow = prev }
+    from.style.visibility = 'hidden'
+    if (reduced()) {
+      busy.current = false
+      setReading(true)
+      return () => { document.body.style.overflow = prevOverflow; from.style.visibility = '' }
+    }
+    const env = card.current!.getBoundingClientRect()
+    const pw = paper.current!.offsetWidth, ph = paper.current!.offsetHeight
+    const s0 = (env.width * 0.84) / pw                      // folded letter fits the pocket
+    const foldedH = (ph / 3) * s0
+    const yIn = env.height * 0.06                             // resting inside the pocket
+    const yOut = -(env.height / 2 + foldedH / 2) + 2           // fully clear of the pocket
+    const P = (y: number, sc: number) => `translate(-50%, -50%) translateY(${y}px) scale(${sc})`
+    const o = (ms: number, extra: KeyframeAnimationOptions = {}): KeyframeAnimationOptions => ({ duration: ms, fill: 'both', easing: EASE, ...extra })
+
+    const make = (): Animation[][] => [
+      [
+        dim.current!.animate([{ opacity: 0 }, { opacity: 1 }], o(500)),
+        card.current!.animate(flyFrames(), o(760)),
+      ],
+      [
+        flap.current!.animate([{ transform: 'rotateX(0deg)' }, { transform: 'rotateX(180deg)' }], o(540, { easing: SWAY })),
+        flapHold.current!.animate([{ zIndex: 4 }, { zIndex: 0 }], o(540, { easing: 'linear' })),
+      ],
+      [
+        // one track for the paper: slide out of the pocket (under the front), then come forward and grow
+        paper.current!.animate([
+          { transform: P(yIn, s0), zIndex: 2, easing: SWAY, offset: 0 },
+          { transform: P(yOut, s0), zIndex: 2, offset: 0.53 },
+          { transform: P(yOut, s0), zIndex: 6, easing: EASE, offset: 0.531 },
+          { transform: P(0, 1), zIndex: 6, offset: 1 },
+        ], { duration: 1400, fill: 'both' }),
+        ...[back, front, flapHold].map((r) => r.current!.animate([{ transform: 'translateY(0)', opacity: 1 }, { transform: 'translateY(46vh)', opacity: 0 }], o(560, { delay: 760, easing: 'cubic-bezier(0.55, 0, 0.75, 0.2)' }))),
+      ],
+      [
+        top.current!.animate([{ transform: 'rotateX(180deg)' }, { transform: 'rotateX(0deg)' }], o(580, { easing: SWAY })),
+        bot.current!.animate([{ transform: 'rotateX(-180deg)' }, { transform: 'rotateX(0deg)' }], o(580, { easing: SWAY, delay: 240 })),
+      ],
+    ]
+    steps.current = make()
+    steps.current.flat().forEach((a) => a.pause())
+    let alive = true
+    ;(async () => {
+      for (const group of steps.current) {
+        if (!alive) return
+        group.forEach((a) => a.play())
+        await run(group)
+      }
+      if (!alive) return
+      setReading(true)
+      busy.current = false
+      if (wantClose.current) close()
+    })()
+    return () => { alive = false; document.body.style.overflow = prevOverflow; from.style.visibility = '' }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-  useEffect(() => { if (phase === 'read') closeBtn.current?.focus() }, [phase])
-  const close = useCallback(() => {
-    if (reduced()) return onClose()
-    timers.current.forEach(clearTimeout)
-    setPhase('closing')
-    window.setTimeout(onClose, 900)
-  }, [onClose])
+
+  useEffect(() => { if (reading) closeBtn.current?.focus({ preventScroll: true }) }, [reading])
+
+  const close = async () => {
+    if (busy.current) { wantClose.current = true; return }
+    busy.current = true
+    const done = () => { from.style.visibility = ''; onClosed(); from.focus({ preventScroll: true }) }
+    if (reduced()) return done()
+    setReading(false)
+    paper.current!.querySelector('.gc-read')?.scrollTo({ top: 0 })
+    await new Promise((r) => setTimeout(r, 160))
+    const groups = steps.current
+    // the envelope's spot may have moved (resize/scroll): aim the flight back at it
+    groups[0][1].effect && (groups[0][1].effect as KeyframeEffect).setKeyframes(flyFrames())
+    for (let i = groups.length - 1; i >= 0; i--) {
+      const g = groups[i]
+      g.forEach((a) => { a.updatePlaybackRate(-1.6); a.play() })
+      await run(g)
+    }
+    done()
+  }
+
   useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') void close() }
     document.addEventListener('keydown', k)
     return () => document.removeEventListener('keydown', k)
-  }, [close])
+  })
 
   return (
-    <div className={`lt ph-${phase}`} role="dialog" aria-modal="true" aria-label="A little note from Desknoty">
-      <div className="lt-dim" onClick={close} />
-      <div className="lt-stage">
-        <div className="lt-env lt-e-back"><div className="lt-back"><EnvelopeArt open /></div></div>
-        <div className="lt-env lt-e-front" aria-hidden="true">
-          <div className="lt-front">
-            <svg viewBox="0 0 240 160" className="lw-r"><path d="M8 24 L104 92 Q 120 102 136 92 L232 22 L234 146 Q 232 152 224 152 L16 154 Q 8 152 8 144z" fill="#fbf3e2" stroke="#2b2a22" strokeWidth="3" strokeLinejoin="round" /><path d="M120 128 c -8 -10 -22 -2 -14 8 l 14 12 l 14 -12 c 8 -10 -6 -18 -14 -8z" fill="#f28ca5" stroke="#2b2a22" strokeWidth="2.4" strokeLinejoin="round" /></svg>
-          </div>
-        </div>
-        <div className="lt-env lt-e-flap" aria-hidden="true">
-          <div className="lt-flap">
-            <svg viewBox="0 0 240 100" className="lw-r" aria-hidden="true"><path d="M10 6 L106 84 Q 120 94 134 84 L230 4" fill="#f3e8d2" stroke="#2b2a22" strokeWidth="3" strokeLinejoin="round" /></svg>
-          </div>
-        </div>
-        <article className="lt-paper">
-          <div className="lt-fold lt-fold-top" aria-hidden="true" />
-          <div className="lt-fold lt-fold-bot" aria-hidden="true" />
-          <div className="lt-body">
-            <button ref={closeBtn} type="button" className="lt-x" onClick={close} aria-label="Fold the letter away">
-              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" /></svg>
+    <div ref={root} className={`gc ${reading ? 'reading' : ''}`} role="dialog" aria-modal="true" aria-label="A little note from Desknoty">
+      <div ref={dim} className="gc-dim" onClick={() => void close()} />
+      <div ref={card} className="gc-card">
+        <div ref={back} className="gc-back"><EnvelopeArt open /></div>
+        <div ref={paper} className="gc-paper">
+          <div className="gc-panel p-mid"><div className="gc-face f-front" /></div>
+          <div ref={bot} className="gc-panel p-bot"><div className="gc-face f-front" /><div className="gc-face f-back" /></div>
+          <div ref={top} className="gc-panel p-top"><div className="gc-face f-front" /><div className="gc-face f-back"><span className="gc-foryou">for you ♡</span></div></div>
+          <div className="gc-read">
+            <button ref={closeBtn} type="button" className="gc-x" onClick={() => void close()} aria-label="Fold the letter back into the envelope">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" /></svg>
             </button>
-            <h2 className="lt-title">A little note from Desknoty ♡</h2>
-            {LETTER.map((p, i) => <p key={i} className="lt-p" style={{ ['--d' as string]: `${i * 120}ms` }}>{p}</p>)}
-            <p className="lt-sign" style={{ ['--d' as string]: `${LETTER.length * 120}ms` }}>With love,<br />The Desknoty Team ♡</p>
-            <p className="lt-ps" style={{ ['--d' as string]: `${(LETTER.length + 1) * 120}ms` }}>P.S. The best things are worth waiting for.</p>
+            <h2 className="gc-title">A little note from Desknoty ♡</h2>
+            {LETTER.map((p, i) => <p key={i} className="gc-line" style={{ ['--d' as string]: `${i * 110}ms` }}>{p}</p>)}
+            <p className="gc-line gc-sign" style={{ ['--d' as string]: `${LETTER.length * 110}ms` }}>With love,<br />The Desknoty Team ♡</p>
+            <p className="gc-line gc-ps" style={{ ['--d' as string]: `${(LETTER.length + 1) * 110}ms` }}>P.S. The best things are worth waiting for.</p>
           </div>
-        </article>
-        <div className="lt-hearts" aria-hidden="true">{['♡', '✦', '♡', '✧', '♡', '✦'].map((h, i) => <span key={i} className={`h${i}`}>{h}</span>)}</div>
+        </div>
+        <div ref={front} className="gc-front" aria-hidden="true">
+          <svg viewBox="0 0 240 160" className="lw-r"><path d="M8 24 L104 92 Q 120 102 136 92 L232 22 L234 146 Q 232 152 224 152 L16 154 Q 8 152 8 144z" fill="#fbf3e2" stroke="#2b2a22" strokeWidth="3" strokeLinejoin="round" /><path d="M120 128 c -8 -10 -22 -2 -14 8 l 14 12 l 14 -12 c 8 -10 -6 -18 -14 -8z" fill="#f28ca5" stroke="#2b2a22" strokeWidth="2.4" strokeLinejoin="round" /></svg>
+        </div>
+        <div ref={flapHold} className="gc-flaphold" aria-hidden="true">
+          <div ref={flap} className="gc-flap">
+            <svg viewBox="0 0 240 100" className="lw-r"><path d="M8 4 L106 82 Q 120 92 134 82 L232 4z" fill="#f3e8d2" stroke="#2b2a22" strokeWidth="3" strokeLinejoin="round" /></svg>
+          </div>
+        </div>
       </div>
+      <div className={`gc-hearts ${reading ? 'on' : ''}`} aria-hidden="true">{['♡', '✦', '♡', '✧', '♡', '✦'].map((h, i) => <span key={i} className={`h${i}`}>{h}</span>)}</div>
     </div>
   )
 }
