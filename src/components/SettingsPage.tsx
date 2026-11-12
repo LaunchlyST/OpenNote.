@@ -1286,26 +1286,6 @@ function LaunchSection() {
     void refresh()
   }, [refresh])
 
-  const launch = async () => {
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const res = await fetch(apiUrl('/api/admin/launch'), { method: 'POST', credentials: 'include' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error ?? 'Launch failed.')
-      setMode(data.mode ?? 'beta')
-      setMessage(
-        typeof data.total === 'number'
-          ? `Sent ${data.queued ?? 0} of ${data.total} launch emails. Site is now in beta.`
-          : data.message ?? 'Site is now in beta.',
-      )
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Launch failed.')
-    } finally {
-      setBusy(false)
-    }
-  }
 
   const switchTo = async (next: 'construction' | 'soon' | 'waitlist' | 'launched') => {
     if (next === 'launched' && !window.confirm('Public launch: everyone can open Desknoty and sign up. Continue?')) return
@@ -1325,27 +1305,11 @@ function LaunchSection() {
     }
   }
 
-  const endBeta = async () => {
-    setBusy(true)
-    setError(null)
-    setMessage(null)
-    try {
-      const res = await fetch(apiUrl('/api/admin/launch/end'), { method: 'POST', credentials: 'include' })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error ?? 'Could not end beta.')
-      setMode('launched')
-      setMessage('Beta ended. The waitlist page is now gone for everyone.')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not end beta.')
-    } finally {
-      setBusy(false)
-    }
-  }
 
   return (
     <SectionShell
       title="Launch"
-      description="Move Desknoty from the waitlist page to beta, then to a full launch."
+      description="Choose what visitors see at desknoty.com. Sign-ups stay closed."
     >
       <SettingsCard title="Status" icon={<Megaphone className="h-3.5 w-3.5" />}>
         <SettingsRow label="Current mode" hint="Only administrators can change this">
@@ -1384,24 +1348,6 @@ function LaunchSection() {
           ))}
         </div>
       </SettingsCard>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="primary"
-          onClick={() => void launch()}
-          disabled={busy || mode !== 'waitlist'}
-        >
-          {busy && mode === 'waitlist' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Megaphone className="h-3.5 w-3.5" />}
-          Send launch emails & start beta
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={() => void endBeta()}
-          disabled={busy || mode !== 'beta'}
-        >
-          {busy && mode === 'beta' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          End beta (remove waitlist page)
-        </Button>
-      </div>
     </SectionShell>
   )
 }
