@@ -8326,3 +8326,7 @@ select.ss-input option {
 @keyframes pg-open { from { opacity: 0; transform: scale(.94); clip-path: inset(0 55% 55% 0 round 16px); } to { opacity: 1; transform: none; clip-path: inset(0 0 0 0 round 18px); } }
 @keyframes pg-in { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .pg-card, .pg-panel { animation: none; transition: none; } }
+
+/* Preview popup: the store's colours fill the whole phone, top to bottom */
+.pvm-frame { display: flex; flex-direction: column; }
+.pvm-frame > .pv-page, .pvm-frame > * { flex: 1 0 auto; }
