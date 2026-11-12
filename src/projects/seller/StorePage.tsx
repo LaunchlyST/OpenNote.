@@ -274,7 +274,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           </div>
         </section>
       ) : p.live ? null : (
-        <div className="sp-block sp-empty">Featured product: choose a product</div>
+        <div className="sp-block sp-empty sp-feat-empty">Digital product: drag one of your products here</div>
       )
     }
     case 'grid': {
