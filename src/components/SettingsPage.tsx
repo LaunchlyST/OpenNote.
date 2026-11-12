@@ -1327,7 +1327,7 @@ function LaunchSection() {
         </p>
       )}
       <SettingsCard title="Launch mode" icon={<Megaphone className="h-3.5 w-3.5" />}>
-        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview it first: <a className="font-medium text-[#191919] underline" href="/?preview=soon" target="_blank" rel="noreferrer">Under construction page</a></p>
+        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview it first: <a className="font-medium text-[#191919] underline" href="/?preview=aero" target="_blank" rel="noreferrer">Under construction page</a></p>
         <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3">
           {([
             ['construction', '🚧 Under construction', 'Visitors see the Under construction page and can join the waitlist. Sign-ups closed'],

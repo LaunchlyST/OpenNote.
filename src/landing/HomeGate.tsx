@@ -6,6 +6,7 @@ import { LaunchPage } from './LaunchPage'
 
 const NewHome = lazy(() => import('./NewHome'))
 const SoonPage = lazy(() => import('./SoonPage'))
+const AeroPage = lazy(() => import('./AeroPage'))
 
 /**
  * Gate for `/`. The launch mode is set by an administrator (Settings → Launch)
@@ -43,12 +44,14 @@ export function HomeGate() {
 
   // desknoty.com/?preview=coming-soon shows the Coming soon page whatever the mode (view only)
   if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'coming-soon') return <LaunchPage mode="construction" />
+  // ?preview=aero: the Frutiger Aero under construction page, preview only until approved
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'aero') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0a84c9' }} />}><AeroPage /></Suspense>
   // desknoty.com/?preview=soon shows the new Coming soon page whatever the mode (view only)
   if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#131209' }} />}><SoonPage /></Suspense>
   if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
-  if (mode === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#131209' }} />}><SoonPage /></Suspense>
+  if (mode === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0a84c9' }} />}><AeroPage /></Suspense>
   if (mode === 'home') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome mode="open" /></Suspense>
   // Under construction now shows the new Under construction page (the old one stays at ?preview=coming-soon)
-  if (mode === 'construction') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#131209' }} />}><SoonPage /></Suspense>
+  if (mode === 'construction') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0a84c9' }} />}><AeroPage /></Suspense>
   return <ComingSoon />
 }
