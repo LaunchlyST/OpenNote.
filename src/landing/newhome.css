@@ -232,3 +232,20 @@ html.nh-smooth { scroll-behavior: smooth; }
 .nh a.nh-btn, .nh .nh-btn { color: var(--ink); }
 .nh-proof { text-wrap: pretty; max-width: 680px; }
 @media (max-width: 420px) { .nh-h1 { font-size: 2.25rem; line-height: 2.5rem; } }
+
+/* waitlist signup */
+.nh-wl { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; max-width: 480px; padding: 4px; border-radius: 9999px; background: var(--s1); box-shadow: 0 0 0 1px var(--line); }
+.nh-wl input[type='email'] { flex: 1 1 200px; min-width: 0; padding: 8px 16px; border: 0; border-radius: 9999px; font: inherit; font-size: 1rem; line-height: 1.5rem; color: var(--tx); background: transparent; outline: none; }
+.nh-wl input::placeholder { color: var(--dim); }
+.nh-wl:focus-within { box-shadow: 0 0 0 1px var(--lime); }
+.nh-wl .nh-btn:disabled { opacity: 0.7; cursor: progress; }
+.nh-wl-err { flex-basis: 100%; margin: 4px 0 8px; font-size: 0.875rem; line-height: 1.25rem; color: #fca5a5; text-align: center; }
+.nh-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+@media (max-width: 480px) { .nh-wl { border-radius: 24px; } .nh-wl .nh-btn { flex: 1 1 100%; justify-content: center; } .nh-wl-err { margin-top: 0; } }
+.nh-wl-done { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 16px; text-align: left; background: var(--s1); box-shadow: 0 0 0 1px var(--lime); animation: nh-pop 0.5s var(--ease) both; }
+.nh-wl-done b { font-size: 1rem; line-height: 1.5rem; font-weight: 600; }
+.nh-wl-done p { margin: 0; font-size: 0.875rem; line-height: 1.25rem; color: var(--mu); }
+.nh-wl-tick { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 9999px; color: var(--ink); background: var(--lime); }
+.nh-final .nh-pill { margin-bottom: -8px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.nh .nh-btn { background: var(--lime); color: var(--ink); }

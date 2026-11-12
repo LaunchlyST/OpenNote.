@@ -1267,7 +1267,7 @@ function DeploySection() {
 }
 
 function LaunchSection() {
-  const [mode, setMode] = useState<'construction' | 'waitlist' | 'beta' | 'launched' | null>(null)
+  const [mode, setMode] = useState<'construction' | 'soon' | 'waitlist' | 'beta' | 'launched' | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -1307,7 +1307,7 @@ function LaunchSection() {
     }
   }
 
-  const switchTo = async (next: 'construction' | 'waitlist' | 'launched') => {
+  const switchTo = async (next: 'construction' | 'soon' | 'waitlist' | 'launched') => {
     if (next === 'launched' && !window.confirm('Public launch: everyone can open Desknoty and sign up. Continue?')) return
     setBusy(true)
     setError(null)
@@ -1317,7 +1317,7 @@ function LaunchSection() {
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data?.error ?? 'Could not change the launch mode.')
       setMode(data.mode)
-      setMessage(next === 'launched' ? 'Public launch is on. Everyone can now use Desknoty.' : next === 'construction' ? 'The Under construction page is now showing.' : 'The waitlist page is now showing.')
+      setMessage(next === 'launched' ? 'Public launch is on. Everyone can create an account.' : next === 'soon' ? 'Coming soon is on: visitors see the new homepage and can join the waitlist. Sign-ups stay closed.' : next === 'construction' ? 'The Under construction page is now showing.' : 'The old waitlist page is now showing.')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not change the launch mode.')
     } finally {
@@ -1363,12 +1363,13 @@ function LaunchSection() {
         </p>
       )}
       <SettingsCard title="Launch mode" icon={<Megaphone className="h-3.5 w-3.5" />}>
-        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview the new homepage before switching: <a className="font-medium text-[#191919] underline" href="/home-preview" target="_blank" rel="noreferrer">desknoty.com/home-preview</a> (only you can open it).</p>
-        <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3 sm:grid-cols-3">
+        <p className="px-3 pt-3 text-[12px] text-[#5f5e5b]">Preview the new homepage before switching: <a className="font-medium text-[#191919] underline" href="/home-preview" target="_blank" rel="noreferrer">desknoty.com/home-preview</a> (only you can open it). Add ?mode=open to see the Public launch version.</p>
+        <div role="radiogroup" aria-label="Launch mode" className="grid gap-2 p-3 sm:grid-cols-2">
           {([
+            ['soon', '✨ Coming soon', 'New homepage with Join the waitlist. Sign-ups closed'],
+            ['launched', '🚀 Public launch', 'New homepage, everyone can create an account'],
+            ['waitlist', '✉️ Old waitlist', 'The original waitlist page'],
             ['construction', '🚧 Under construction', 'Building page with Notify me'],
-            ['waitlist', '✉️ Waitlist open', 'Visitors join the waitlist'],
-            ['launched', '🚀 New homepage', 'Waitlist off: everyone sees the new homepage'],
           ] as const).map(([id, label, hint]) => (
             <button
               key={id}

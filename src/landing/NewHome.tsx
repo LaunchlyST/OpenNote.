@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { ArrowRight, Calendar, Check, CheckSquare, ChevronDown, NotebookPen, ShoppingBag, Sparkles } from 'lucide-react'
 import { Logo } from './components/primitives'
+import { apiUrl } from '../lib/api-base'
 import './newhome.css'
 
 /**
@@ -13,6 +14,55 @@ import './newhome.css'
 
 const SIGNUP = '/app/signup'
 const SIGNIN = '/app/signin'
+
+/** 'soon': Coming Soon mode, everything points at the waitlist (sign-ups closed). 'open': public launch. */
+export type HomeMode = 'soon' | 'open'
+
+/** Join the waitlist: the same server endpoint and list as the original waitlist page. */
+function WaitlistForm({ id, compact }: { id?: string; compact?: boolean }) {
+  const [email, setEmail] = useState('')
+  const [trap, setTrap] = useState('')
+  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'again'>('idle')
+  const [err, setErr] = useState<string | null>(null)
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (state === 'busy') return
+    setErr(null)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return setErr('Enter a valid email address, like jane@example.com.')
+    setState('busy')
+    try {
+      const res = await fetch(apiUrl('/api/waitlist'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email.trim(), website: trap }) })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data.error ?? 'We couldn’t save your email. Try again in a minute.')
+      setState(data.alreadyJoined ? 'again' : 'done')
+    } catch (e2) {
+      setErr(e2 instanceof TypeError ? 'We can’t reach the server right now. Try again in a moment.' : (e2 as Error).message)
+      setState('idle')
+    }
+  }
+  if (state === 'done' || state === 'again')
+    return (
+      <div className="nh-wl-done" role="status">
+        <span className="nh-wl-tick"><Check className="h-4 w-4" /></span>
+        <div><b>{state === 'done' ? 'You’re on the list' : 'You’re already on the list'}</b><p>We’ll email {email.trim()} when Desknoty opens.</p></div>
+      </div>
+    )
+  return (
+    <form id={id} className={`nh-wl ${compact ? 'nh-wl-sm' : ''}`} onSubmit={submit} noValidate>
+      <label className="sr-only" htmlFor={`${id ?? 'wl'}-email`}>Email address</label>
+      <input id={`${id ?? 'wl'}-email`} type="email" inputMode="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={Boolean(err)} required />
+      <input className="nh-trap" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
+      <button type="submit" className="nh-btn" disabled={state === 'busy'}>{state === 'busy' ? 'Joining…' : 'Join the waitlist'}</button>
+      {err && <p className="nh-wl-err" role="alert">{err}</p>}
+    </form>
+  )
+}
+
+function useWaitlistCount() {
+  const [n, setN] = useState<number | null>(null)
+  useEffect(() => { fetch(apiUrl('/api/waitlist/count')).then((r) => r.json()).then((d) => setN(typeof d.count === 'number' ? d.count : null)).catch(() => {}) }, [])
+  return n
+}
 
 /* ---------- small helpers ---------- */
 
@@ -46,7 +96,7 @@ const LINKS = [
   ['FAQ', '#faq'],
 ] as const
 
-function Nav() {
+function Nav({ mode }: { mode: HomeMode }) {
   const [open, setOpen] = useState(false)
   const [active, setActive] = useState('')
   useEffect(() => {
@@ -68,7 +118,7 @@ function Nav() {
           {LINKS.map(([t, h]) => <li key={h}><a href={h} aria-current={active === h ? 'true' : undefined}>{t}</a></li>)}
         </ul>
         <a href={SIGNIN} className="nh-signin">Sign in</a>
-        <a href={SIGNUP} className="nh-btn nh-btn-sm">Start free</a>
+        <a href={mode === 'soon' ? '#waitlist' : SIGNUP} className="nh-btn nh-btn-sm">{mode === 'soon' ? 'Join waitlist' : 'Start free'}</a>
         <button type="button" className={`nh-burger ${open ? 'on' : ''}`} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open} onClick={() => setOpen(!open)}><i /><i /></button>
       </nav>
       <div className={`nh-menu ${open ? 'on' : ''}`} aria-hidden={!open}>
@@ -77,7 +127,7 @@ function Nav() {
             <li key={h} style={{ transitionDelay: open ? `${Math.min(i * 60, 340)}ms` : '0ms' }}><a href={h} tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>{t}</a></li>
           ))}
         </ul>
-        <a href={SIGNUP} className="nh-btn" tabIndex={open ? 0 : -1}>Start free <ArrowRight className="h-4 w-4" /></a>
+        <a href={mode === 'soon' ? '#waitlist' : SIGNUP} className="nh-btn" tabIndex={open ? 0 : -1} onClick={() => setOpen(false)}>{mode === 'soon' ? 'Join the waitlist' : 'Start free'} <ArrowRight className="h-4 w-4" /></a>
       </div>
     </>
   )
@@ -359,7 +409,8 @@ function Faq() {
 
 /* ---------- page ---------- */
 
-export function NewHome() {
+export function NewHome({ mode = 'soon' }: { mode?: HomeMode }) {
+  const count = useWaitlistCount()
   const heroRef = useReveal<HTMLElement>()
   useEffect(() => {
     const prev = document.title
@@ -369,16 +420,16 @@ export function NewHome() {
   }, [])
   return (
     <div className="nh" id="top">
-      <Nav />
+      <Nav mode={mode} />
       <main id="main">
         <section ref={heroRef} className="nh-hero" aria-label="Introduction">
-          <p className="nh-pill nh-rv"><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> Notes · Calendar · Tasks · Creator store</p>
+          <p className="nh-pill nh-rv"><Sparkles className="h-3.5 w-3.5" aria-hidden="true" /> {mode === 'soon' ? 'Coming soon · Join the waitlist' : 'Notes · Calendar · Tasks · Creator store'}</p>
           <h1 className="nh-h1 nh-rv">Plan your days,<br />write it down,<br />sell what you make.</h1>
           <p className="nh-sub nh-rv">Desknoty puts your notebook, calendar and to do list next to a store for your digital products. One login, one tidy desk.</p>
           <div className="nh-ctas nh-rv">
-            <a href={SIGNUP} className="nh-btn">Start free <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
+            {mode === 'soon' ? <WaitlistForm id="hero-wl" compact /> : <a href={SIGNUP} className="nh-btn">Start free <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>}
           </div>
-          <p className="nh-proof nh-rv">Works in your browser and on your phone. Nothing to install.</p>
+          <p className="nh-proof nh-rv">{mode === 'soon' ? (count && count > 0 ? `${count.toLocaleString()} ${count === 1 ? 'person has' : 'people have'} joined. We’ll email you when it opens.` : 'Be first in line. We’ll email you when it opens.') : 'Works in your browser and on your phone. Nothing to install.'}</p>
           <div className="nh-rv nh-hero-vis"><HeroPreview /></div>
         </section>
 
@@ -404,7 +455,7 @@ export function NewHome() {
           <h2 className="nh-h3 nh-rv">Set up in three steps</h2>
           <ol className="nh-steps">
             {[
-              ['01', 'Create your account', 'Sign up with your email and open your desk.'],
+              ['01', mode === 'soon' ? 'Join the waitlist' : 'Create your account', mode === 'soon' ? 'Leave your email and we’ll invite you when it opens.' : 'Sign up with your email and open your desk.'],
               ['02', 'Plan and write', 'Add notes, events and tasks for the week ahead.'],
               ['03', 'Open your store', 'Add a product, set a price and press Publish.'],
             ].map(([n, t, d]) => (
@@ -415,11 +466,22 @@ export function NewHome() {
 
         <Faq />
 
-        <Section className="nh-final" label="Get started">
+        <Section id="waitlist" className="nh-final" label={mode === 'soon' ? 'Join the waitlist' : 'Get started'}>
           <div className="nh-final-card nh-rv">
-            <h2 className="nh-h2">Your desk is ready<br />when you are.</h2>
-            <p className="nh-sub">Bring your notes, days and products together today.</p>
-            <a href={SIGNUP} className="nh-btn">Start free <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
+            {mode === 'soon' ? (
+              <>
+                <p className="nh-pill">Coming soon</p>
+                <h2 className="nh-h2">Get early access<br />to Desknoty.</h2>
+                <p className="nh-sub">Join the waitlist and we’ll email you the moment your desk is ready. No spam, one email when it opens.</p>
+                <WaitlistForm id="waitlist-form" />
+              </>
+            ) : (
+              <>
+                <h2 className="nh-h2">Your desk is ready<br />when you are.</h2>
+                <p className="nh-sub">Bring your notes, days and products together today.</p>
+                <a href={SIGNUP} className="nh-btn">Start free <ArrowRight className="h-4 w-4" aria-hidden="true" /></a>
+              </>
+            )}
           </div>
         </Section>
       </main>
@@ -431,7 +493,7 @@ export function NewHome() {
             <p>Notes, calendar, tasks and a creator store in one place.</p>
           </div>
           <nav aria-label="Product"><b>Product</b><a href="#notes">Notes</a><a href="#calendar">Calendar</a><a href="#tasks">Tasks</a><a href="#store">Creator store</a></nav>
-          <nav aria-label="Account"><b>Account</b><a href={SIGNUP}>Create account</a><a href={SIGNIN}>Sign in</a><a href="#faq">FAQ</a></nav>
+          <nav aria-label="Account"><b>Account</b>{mode === 'soon' ? <a href="#waitlist">Join the waitlist</a> : <a href={SIGNUP}>Create account</a>}<a href={SIGNIN}>Sign in</a><a href="#faq">FAQ</a></nav>
           <nav aria-label="Legal"><b>Legal</b><span className="nh-soon">Privacy policy · coming soon</span><span className="nh-soon">Terms · coming soon</span></nav>
         </div>
         <p className="nh-copy">© {new Date().getFullYear()} Desknoty</p>

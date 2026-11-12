@@ -39,7 +39,7 @@ function HomePreview() {
     if (!loading && user?.role !== 'admin') navigate(user ? '/' : '/app/signin', { replace: true })
   }, [loading, user, navigate])
   if (loading || user?.role !== 'admin') return <div style={{ minHeight: '100vh', background: '#000' }} />
-  return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome /></Suspense>
+  return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome mode={new URLSearchParams(window.location.search).get('mode') === 'open' ? 'open' : 'soon'} /></Suspense>
 }
 
 function screenForPath(path: string): Screen | undefined {

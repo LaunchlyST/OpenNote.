@@ -119,6 +119,10 @@ try {
   check('anonymous visitors cannot change the mode', (await req('POST', '/api/admin/launch/mode', { mode: 'launched' })).status === 401)
   check('ordinary users cannot change the mode', (await req('POST', '/api/admin/launch/mode', { mode: 'launched' }, member.cookies)).status === 403)
   check('still waitlist after refused attempts', (await req('GET', '/api/launch/status')).json?.mode === 'waitlist')
+  const soon = await req('POST', '/api/admin/launch/mode', { mode: 'soon' }, admin.cookies)
+  check('the admin can switch to Coming soon', soon.status === 200 && (await req('GET', '/api/launch/status')).json?.mode === 'soon')
+  check('Coming soon keeps sign-ups closed to strangers', (await signUp('soon-stranger@example.com')).status !== 200)
+  await req('POST', '/api/admin/launch/mode', { mode: 'waitlist' }, admin.cookies)
   check('unknown modes are refused', (await req('POST', '/api/admin/launch/mode', { mode: 'party' }, admin.cookies)).status === 400)
 
   const c = await req('POST', '/api/admin/launch/mode', { mode: 'construction' }, admin.cookies)

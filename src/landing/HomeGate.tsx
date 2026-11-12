@@ -13,11 +13,12 @@ const NewHome = lazy(() => import('./NewHome'))
  * - construction → the animated Coming soon / Under construction page
  * - waitlist     → the original waitlist page (unchanged)
  * - beta         → waitlist page, but people with a redeemed launch link go in
- * - launched     → everyone sees the new homepage (src/landing/NewHome.tsx)
+ * - soon         → the new homepage with Join the waitlist (sign-ups stay closed)
+ * - launched     → the new homepage with Start free (sign-ups open)
  */
 export function HomeGate() {
   const { navigate } = useRouter()
-  const [mode, setMode] = useState<'construction' | 'waitlist' | 'home' | null>(null)
+  const [mode, setMode] = useState<'construction' | 'waitlist' | 'soon' | 'home' | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -30,6 +31,7 @@ export function HomeGate() {
       const access = results[1].status === 'fulfilled' ? results[1].value : { unlocked: false }
       const m = launch?.mode
       if (m === 'launched') return setMode('home')
+      if (m === 'soon') return setMode('soon')
       if (m === 'beta' && access?.unlocked) return navigate('/landing', { replace: true })
       setMode(m === 'construction' ? 'construction' : 'waitlist')
     })
@@ -41,6 +43,6 @@ export function HomeGate() {
   // desknoty.com/?preview=coming-soon shows the Coming soon page whatever the mode (view only)
   if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('preview') === 'coming-soon') return <LaunchPage mode="construction" />
   if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
-  if (mode === 'home') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome /></Suspense>
+  if (mode === 'home' || mode === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome mode={mode === 'home' ? 'open' : 'soon'} /></Suspense>
   return mode === 'construction' ? <LaunchPage mode="construction" /> : <ComingSoon />
 }

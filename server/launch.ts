@@ -29,13 +29,14 @@ async function setSetting(key: string, value: string) {
 
 /**
  * construction: "Under construction" page, Notify me joins the waitlist.
+ * soon:         the new homepage with a Join the waitlist section; sign-ups stay closed.
  * waitlist:     waitlist signup page (the default).
  * beta:         waitlist members with a launch link get in.
  * launched:     public launch; the pre-launch page and sign-up limits are gone.
  * Only an administrator changes it; nothing changes it automatically.
  */
-export type LaunchMode = 'construction' | 'waitlist' | 'beta' | 'launched'
-export const LAUNCH_MODES: LaunchMode[] = ['construction', 'waitlist', 'beta', 'launched']
+export type LaunchMode = 'construction' | 'soon' | 'waitlist' | 'beta' | 'launched'
+export const LAUNCH_MODES: LaunchMode[] = ['construction', 'soon', 'waitlist', 'beta', 'launched']
 
 export async function getLaunchMode(): Promise<LaunchMode> {
   const v = await getSetting(MODE_KEY)
@@ -170,8 +171,8 @@ launchRouter.post('/api/admin/launch/mode', async (req: Request, res: Response) 
   }).catch(() => {})
   if (res.headersSent) return
   const mode = typeof req.body?.mode === 'string' ? req.body.mode : ''
-  if (mode !== 'construction' && mode !== 'waitlist' && mode !== 'launched') {
-    res.status(400).json({ error: 'Choose construction, waitlist or launched.' })
+  if (mode !== 'construction' && mode !== 'soon' && mode !== 'waitlist' && mode !== 'launched') {
+    res.status(400).json({ error: 'Choose construction, soon, waitlist or launched.' })
     return
   }
   await setSetting(MODE_KEY, mode)
