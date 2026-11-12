@@ -764,7 +764,7 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
-          <PageEditor page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} onAdd={addBlock} createProduct={createProduct} />
+          <PageEditor onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }} page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} onAdd={addBlock} createProduct={createProduct} />
           {picked && page.blocks.find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} />}
@@ -1012,7 +1012,7 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, onAdd, createProduct }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
+function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, onAdd, createProduct, onOpenProduct }: { onOpenProduct?: (id: string) => void; page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
   const blocks = pinEnds(page.blocks)
   const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
   const [adding, setAdding] = useState(false)
@@ -1093,7 +1093,7 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
                   </button>
                   {open === b.id && b.type === 'featured' && (
                     <div className="bl-inline" role="region" aria-label="Edit Digital product">
-                      <BlockEditor block={b} products={products} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} />
+                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} />
                     </div>
                   )}
                   {menu === b.id && (
@@ -1408,7 +1408,7 @@ function summary(b: Block, products: DraftProduct[]) {
   }
 }
 
-function BlockEditor({ block, products, update }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void }) {
+function BlockEditor({ block, products, update, onOpenProduct }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void }) {
   const d = block.data
   switch (block.type) {
     case 'header':
@@ -1503,7 +1503,7 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
                 {products.map((p) => {
                   const cover = mediaUrl(p.cover)
                   return (
-                    <button key={p.id} type="button" role="radio" aria-checked={d.productId === p.id} className={cn('pp-tile', d.productId === p.id && 'on')} onClick={() => update({ productId: p.id })}>
+                    <button key={p.id} type="button" role="radio" aria-checked={d.productId === p.id} className={cn('pp-tile', d.productId === p.id && 'on')} onClick={() => { update({ productId: p.id }); onOpenProduct?.(p.id) }}>
                       <span className="pp-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-5 w-5" />}</span>
                       <span className="pp-name">{p.title.trim() || 'Untitled'}</span>
                     </button>
