@@ -233,7 +233,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
   const noBank = isBank && banks.length === 0
   const ready = isBank || free ? valid && (free || (!noBank && payTo >= 0 && payerBank !== '' && payerName.trim().length >= 2)) : valid || !email.trim()
   const canPay = !busy && ready
-  const price = formatPrice(product.priceMinor, product.currency)
+  const price = formatPrice(product.offer?.priceMinor ?? product.priceMinor, product.currency)
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', k)

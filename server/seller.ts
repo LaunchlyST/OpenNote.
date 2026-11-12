@@ -234,6 +234,9 @@ interface ProductRow {
   pubDescription: string | null
   pubCover: string | null
   pubPriceMinor: number | null
+  extras?: string | null
+  pubExtras?: string | null
+  archived?: number
   pubCurrency: string | null
   pubFileId: string | null
   pubFileName: string | null
@@ -510,10 +513,51 @@ function productDraftView(p: ProductRow) {
     file: p.fileId ? { name: p.fileName, size: p.fileSize, type: p.fileType } : null,
     listed: Boolean(p.listed),
     published: Boolean(p.pubAt),
-    changed: Boolean(p.pubAt) && (p.title !== p.pubTitle || p.description !== p.pubDescription || p.cover !== p.pubCover || p.priceMinor !== p.pubPriceMinor || p.currency !== p.pubCurrency || p.fileId !== p.pubFileId),
+    extras: readExtras(p.extras),
+    archived: Boolean(p.archived),
+    offer: offerView(p.priceMinor, readExtras(p.extras)),
+    changed: Boolean(p.pubAt) && ((p.extras ?? null) !== (p.pubExtras ?? null) || p.title !== p.pubTitle || p.description !== p.pubDescription || p.cover !== p.pubCover || p.priceMinor !== p.pubPriceMinor || p.currency !== p.pubCurrency || p.fileId !== p.pubFileId),
     problem: productProblem(p),
   }
 }
+/* ---- product extras: discount, buy button, visibility (stored as JSON beside the product) ---- */
+export type ProductOffer = { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string }
+export type ProductExtras = { offer: ProductOffer; cta: { text: string; color: string }; hidden: boolean }
+const BADGES = ['SALE', 'PERCENT', 'Limited Offer', 'Launch Special']
+const HEX = /^#[0-9a-f]{6}$/i
+const isoDay = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null)
+export function cleanExtras(v: unknown): ProductExtras {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, any>
+  const f = (o.offer ?? {}) as Record<string, unknown>
+  const kind = f.kind === 'amount' ? 'amount' : 'percent'
+  let value = Math.round(Number(f.value) || 0)
+  value = kind === 'percent' ? Math.min(95, Math.max(0, value)) : Math.max(0, Math.min(99_999_99, value))
+  const cta = (o.cta ?? {}) as Record<string, unknown>
+  return {
+    offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48' },
+    cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
+    hidden: Boolean(o.hidden),
+  }
+}
+const readExtras = (raw: string | null | undefined) => { try { return cleanExtras(raw ? JSON.parse(raw) : {}) } catch { return cleanExtras({}) } }
+/** The price a buyer pays right now: the discount applies only while switched on and inside its dates. */
+export function salePrice(priceMinor: number, x: ProductExtras, at = new Date()): number | null {
+  const o = x.offer
+  if (!o.on || o.value <= 0 || priceMinor <= 0) return null
+  const day = at.toISOString().slice(0, 10)
+  if (o.starts && day < o.starts) return null
+  if (o.ends && day > o.ends) return null
+  const off = o.kind === 'percent' ? Math.round(priceMinor * o.value / 100) : o.value
+  const price = Math.max(0, priceMinor - off)
+  return price < priceMinor ? price : null
+}
+function offerView(priceMinor: number, x: ProductExtras) {
+  const sale = salePrice(priceMinor, x)
+  if (sale == null) return null
+  const pct = Math.round((1 - sale / priceMinor) * 100)
+  return { priceMinor: sale, percent: pct, badge: x.offer.badge === 'PERCENT' ? `${pct}% OFF` : x.offer.badge, badgeColor: x.offer.badgeColor, ends: x.offer.ends }
+}
+
 function productPublicView(p: ProductRow) {
   return {
     id: p.id,
@@ -522,6 +566,7 @@ function productPublicView(p: ProductRow) {
     cover: p.pubCover,
     priceMinor: p.pubPriceMinor ?? 0,
     currency: p.pubCurrency ?? 'gbp',
+    ...(() => { const x = readExtras(p.pubExtras); return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden } })(),
   }
 }
 function productProblem(p: ProductRow): string | null {
@@ -941,8 +986,8 @@ export function sellerRouter() {
     const t = now()
     await sql.tx(async (tx) => {
       for (const p of await q.products(s.id, tx)) {
-        if (p.listed && !productProblem(p)) {
-          await tx.run(`UPDATE seller_product SET "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = "priceMinor", "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubAt" = ? WHERE id = ?`, t, p.id)
+        if (p.listed && !p.archived && !productProblem(p)) {
+          await tx.run(`UPDATE seller_product SET "pubExtras" = extras, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = "priceMinor", "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubAt" = ? WHERE id = ?`, t, p.id)
         } else {
           await tx.run(`UPDATE seller_product SET "pubAt" = NULL WHERE id = ?`, p.id)
         }
@@ -969,6 +1014,8 @@ export function sellerRouter() {
       out.currency = c
     }
     if ('listed' in b) out.listed = b.listed ? 1 : 0
+    if ('extras' in b) out.extras = JSON.stringify(cleanExtras(b.extras))
+    if ('archived' in b) out.archived = b.archived ? 1 : 0
     return out
   }
 
@@ -994,9 +1041,23 @@ export function sellerRouter() {
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
     const next = { ...p, ...fields, updatedAt: now() }
-    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.updatedAt, next.id, p.revision)
+    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, next.id, p.revision)
     if (!saved.changes) return void res.status(409).json({ error: 'Product changed elsewhere. Your edits are kept locally.' })
     res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
+  })
+
+  /** Copy a product (details, price, offer and file); the copy starts as a draft. */
+  me.post('/products/:id/duplicate', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const p = await q.product(String(req.params.id), s.id)
+    if (!p) return void res.status(404).json({ error: 'Product not found.' })
+    const count = (await q.products(s.id)).length
+    if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
+    const t = now()
+    const id = `prd_${randomBytes(10).toString('hex')}`
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, t, t)
+    res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
   me.delete('/products/:id', async (req: Authed, res) => {
@@ -1395,8 +1456,10 @@ export function sellerRouter() {
     const s = await liveStore(req, res)
     if (!s) return
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
-    const p = await q.product(productId, s.id)
-    if (!p || !p.pubAt || !p.pubFileId || p.pubPriceMinor == null || !p.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    const found = await q.product(productId, s.id)
+    if (!found || !found.pubAt || !found.pubFileId || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    // the buyer pays the live discounted price when an offer is running (worked out here, never sent by the browser)
+    const p = { ...found, pubPriceMinor: salePrice(found.pubPriceMinor, readExtras(found.pubExtras)) ?? found.pubPriceMinor }
     // Free product: no payment, the order is complete straight away and the download is ready.
     if (p.pubPriceMinor === 0) {
       const key = String(req.body?.checkoutKey ?? randomUUID())

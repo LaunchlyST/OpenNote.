@@ -47,10 +47,23 @@ export interface ShopProduct {
   cover: string | null
   priceMinor: number
   currency: string
+  /** A running discount, worked out by the server (null when none is live). */
+  offer?: { priceMinor: number; percent: number; badge: string; badgeColor: string; ends: string | null } | null
+  cta?: { text: string; color: string }
+  hidden?: boolean
 }
+
+export type ProductExtras = {
+  offer: { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string }
+  cta: { text: string; color: string }
+  hidden: boolean
+}
+export const DEFAULT_EXTRAS: ProductExtras = { offer: { on: false, kind: 'percent', value: 20, starts: null, ends: null, badge: 'PERCENT', badgeColor: '#e11d48' }, cta: { text: '', color: '' }, hidden: false }
 
 /** The seller's own (draft) view of a product. */
 export interface DraftProduct extends ShopProduct {
+  extras?: ProductExtras
+  archived?: boolean
   revision: number
   file: { name: string; size: number; type: string } | null
   listed: boolean

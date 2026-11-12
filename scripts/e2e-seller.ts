@@ -121,10 +121,10 @@ try {
 
   // 2. Product with a private file and a cover
   await page.getByRole('tab', { name: /Products/ }).click()
-  await page.locator('.pg-add').click()
+  await page.getByRole('button', { name: 'Add Product' }).click()
   await page.getByPlaceholder('e.g. Content planner template').fill('Content planner')
   await page.getByPlaceholder('What buyers get, in a few lines').fill('A Notion template for planning a month of videos.')
-  const price = page.locator('.ss-affix-l input')
+  const price = page.getByLabel('Price', { exact: true })
   await price.fill('12.00')
   const file = join(tmp, 'planner.pdf')
   writeFileSync(file, 'E2E-PLANNER-FILE')
@@ -134,7 +134,7 @@ try {
   writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
   await page.locator('input[type=file][accept^="image"]').setInputFiles(png)
   await page.waitForTimeout(1200)
-  await page.getByText('Ready · publish to put it on sale').waitFor()
+  await page.locator('.pe-pill', { hasText: 'Ready to publish' }).waitFor()
   check('product is complete and ready to publish', true)
 
   // 3. Editor tools: drag a Text section from the panel into the phone, above the product grid

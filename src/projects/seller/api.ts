@@ -52,8 +52,9 @@ export const sellerApi = {
   saveDraft: (page: Page, revision: number) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision }),
   publish: () => call<{ store: StoreView }>('POST', '/api/seller/store/publish'),
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
-  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed'>>, revision: number) =>
+  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number) =>
     call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision }),
+  duplicateProduct: (id: string) => call<{ product: DraftProduct; store: StoreView }>('POST', `/api/seller/products/${id}/duplicate`),
   deleteProduct: (id: string) => call<{ store: StoreView }>('DELETE', `/api/seller/products/${id}`),
   uploadFile: (id: string, file: File) =>
     call<{ product: DraftProduct }>('PUT', `/api/seller/products/${id}/file`, file, { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) }),

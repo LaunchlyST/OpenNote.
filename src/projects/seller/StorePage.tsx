@@ -280,7 +280,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       const ids: string[] = d.productIds ?? []
       const picked = ids.map((id) => p.products.find((x) => x.id === id)).filter((x): x is ShopProduct => Boolean(x))
       // Nothing picked yet: show every product on sale rather than an empty shop.
-      const list = picked.length ? picked : p.products
+      const list = picked.length ? picked : p.products.filter((x) => !x.hidden)
       if (list.length === 0)
         return p.live ? (
           <section className="sp-block sp-soon">
@@ -354,6 +354,19 @@ function Cover({ p, big = false }: { p: ShopProduct; big?: boolean }) {
 }
 const cn = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ')
 
+/** Price with a running offer: old price struck through, sale price and badge. */
+export function PriceTag({ prod }: { prod: ShopProduct }) {
+  if (!prod.offer) return <span className="sp-price">{formatPrice(prod.priceMinor, prod.currency)}</span>
+  return (
+    <span className="sp-price sp-price-sale">
+      <s>{formatPrice(prod.priceMinor, prod.currency)}</s>
+      <b>{formatPrice(prod.offer.priceMinor, prod.currency)}</b>
+      <em className="sp-badge" style={{ background: prod.offer.badgeColor }}>{prod.offer.badge}</em>
+    </span>
+  )
+}
+export const ctaStyle = (prod: ShopProduct): CSSProperties | undefined => (prod.cta?.color ? { background: prod.cta.color, borderColor: prod.cta.color, color: '#fff' } : undefined)
+
 function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id
   // Already bought in this browser (the server confirmed the payment): Download instead of Buy now.
@@ -374,16 +387,16 @@ function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, onDown
     return (
       <div className="sp-buyrow">
         <span className="sp-price">Free</span>
-        <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled={!live || buying === prod.id} onClick={() => onBuy?.(prod)}>
-          {buying === prod.id ? 'Getting it…' : 'Get it free'}
+        <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={!live || buying === prod.id} onClick={() => onBuy?.(prod)}>
+          {buying === prod.id ? 'Getting it…' : prod.cta?.text || 'Get it free'}
         </button>
       </div>
     )
   return (
     <div className="sp-buyrow">
-      <span className="sp-price">{formatPrice(prod.priceMinor, prod.currency)}</span>
-      <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled={disabled} onClick={() => onBuy?.(prod)} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
-        {buying === prod.id ? 'Opening checkout…' : 'Buy now'}
+      <PriceTag prod={prod} />
+      <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={disabled} onClick={() => onBuy?.(prod)} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
+        {buying === prod.id ? 'Opening checkout…' : prod.cta?.text || 'Buy now'}
       </button>
     </div>
   )

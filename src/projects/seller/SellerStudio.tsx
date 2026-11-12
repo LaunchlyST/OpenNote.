@@ -36,6 +36,9 @@ import {
   Smartphone,
   Store,
   Trash2,
+  Tag,
+  MousePointerClick,
+  ChevronDown,
   AtSign,
   Globe,
   Upload,
@@ -50,6 +53,7 @@ import type { Earnings } from './api'
 import {
   BUTTON_STYLES,
   CURRENCIES,
+  DEFAULT_EXTRAS,
   FONTS,
   PLATFORM_FEE_PERCENT,
   PRESETS,
@@ -65,7 +69,7 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, DraftProduct, Page, PayMethod, PaymentSettings, SavedBank, SellerSetup, StoreView } from './model'
+import type { Block, BlockType, DraftProduct, ProductExtras, Page, PayMethod, PaymentSettings, SavedBank, SellerSetup, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -696,7 +700,7 @@ function Studio({
     setPublishing(false)
   }
 
-  const productsForPreview = store.products.filter((p) => p.title.trim())
+  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => ({ ...p, cta: p.extras?.cta, hidden: p.extras?.hidden }))
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
@@ -1652,9 +1656,14 @@ function ProductsEditor({ store, setStore, open, setOpen }: { store: StoreView; 
 
   return (
     <div className="ss-stack">
+      <div className="pg-bar">
+        <h2>Products <small>{store.products.filter((p) => !p.archived).length}</small></h2>
+        <button type="button" className="pg-addbtn" onClick={() => void add()}><Plus className="h-4 w-4" /> Add Product</button>
+      </div>
       {err && <div className="ss-note" role="alert">{err}</div>}
+      {store.products.filter((p) => !p.archived).length === 0 && <p className="ss-muted pg-empty">No products yet. Press <b>Add Product</b> to create your first one.</p>}
       <div className="pg-grid">
-        {store.products.map((p) => {
+        {store.products.filter((p) => !p.archived || p.id === open).map((p) => {
           const cover = mediaUrl(p.cover)
           return p.id === open ? (
             <div key={p.id} ref={panel} className="pg-panel" role="region" aria-label={`Edit ${p.title.trim() || 'product'}`}>
@@ -1665,107 +1674,250 @@ function ProductsEditor({ store, setStore, open, setOpen }: { store: StoreView; 
             <button key={p.id} type="button" className="pg-card" onClick={() => choose(p.id)} aria-label={`Edit ${p.title.trim() || 'Untitled product'}`}>
               <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-6 w-6" />}</span>
               <span className="pg-name">{p.title.trim() || 'Untitled product'}</span>
-              <span className="pg-meta">{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}{p.published ? ' · Live' : ' · Draft'}</span>
+              <span className="pg-meta">{p.priceMinor === 0 ? 'Free' : p.offer ? <><s>{formatPrice(p.priceMinor, p.currency)}</s> {formatPrice(p.offer.priceMinor, p.currency)}</> : formatPrice(p.priceMinor, p.currency)}{p.published ? ' · Live' : ' · Draft'}</span>
+              {p.offer && <span className="pg-badge" style={{ background: p.offer.badgeColor }}>{p.offer.badge}</span>}
               <span className="pg-hint">Tap to edit</span>
             </button>
           )
         })}
-        <button type="button" className="pg-card pg-add" onClick={() => void add()}>
-          <span className="pg-plus" aria-hidden="true">+</span>
-          <span className="pg-name">New product</span>
-        </button>
       </div>
+      {store.products.some((p) => p.archived && p.id !== open) && (
+        <details className="pg-archived">
+          <summary>Archived ({store.products.filter((p) => p.archived).length})</summary>
+          <div className="pg-grid">
+            {store.products.filter((p) => p.archived && p.id !== open).map((p) => (
+              <button key={p.id} type="button" className="pg-card pg-card-arch" onClick={() => choose(p.id)}>
+                <span className="pg-img" style={mediaUrl(p.cover) ? { backgroundImage: `url(${mediaUrl(p.cover)})` } : undefined}>{!p.cover && <Package className="h-6 w-6" />}</span>
+                <span className="pg-name">{p.title.trim() || 'Untitled product'}</span>
+                <span className="pg-meta">Archived</span>
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   )
 }
+
+function PSection({ icon, title, sub, children, open: start = false }: { icon: ReactNode; title: string; sub?: string; children: ReactNode; open?: boolean }) {
+  const [open, setOpen] = useState(start)
+  return (
+    <section className={cn('pe-sec', open && 'on')}>
+      <button type="button" className="pe-head" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="pe-ico" aria-hidden="true">{icon}</span>
+        <span className="pe-title"><b>{title}</b>{sub && <small>{sub}</small>}</span>
+        <ChevronDown className="pe-chev h-4 w-4" aria-hidden="true" />
+      </button>
+      <div className="pe-body"><div className="pe-inner">{children}</div></div>
+    </section>
+  )
+}
+
+function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} aria-label={label} className={cn('pe-switch', on && 'on')} onClick={() => onChange(!on)}><i /></button>
+  )
+}
+
+const BADGE_COLOURS = ['#e11d48', '#f97316', '#16a34a', '#2563eb', '#7c3aed', '#111114']
+const CTA_TEXTS = ['Buy now', 'Get Instant Access', 'Download Now']
 
 function ProductForm({ product, store, setStore, onDeleted }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void }) {
   const [state, setState] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, { title: product.title, description: product.description, price: (product.priceMinor / 100).toFixed(2), currency: product.currency, cover: product.cover, listed: product.listed }, product.revision, async (value, revision) => {
+  const [busy, setBusy] = useState(false)
+  const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, { title: product.title, description: product.description, price: (product.priceMinor / 100).toFixed(2), currency: product.currency, cover: product.cover, listed: product.listed, extras: product.extras ?? DEFAULT_EXTRAS }, product.revision, async (value, revision) => {
     const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price || 0) * 100) }, revision)
     setStore(r.store)
     return r.product.revision
   })
   const form = saved.value
   const setForm = saved.edit
-  const patch = (p: Partial<Pick<DraftProduct, 'cover' | 'listed'>>) => saved.edit({ ...form, ...p })
+  const x: ProductExtras = { ...DEFAULT_EXTRAS, ...form.extras, offer: { ...DEFAULT_EXTRAS.offer, ...form.extras?.offer }, cta: { ...DEFAULT_EXTRAS.cta, ...form.extras?.cta } }
+  const setX = (n: Partial<ProductExtras>) => setForm({ ...form, extras: { ...x, ...n } })
+  const setOffer = (n: Partial<ProductExtras['offer']>) => setX({ offer: { ...x.offer, ...n } })
 
   const sym = CURRENCIES.find((c) => c.code === form.currency)?.symbol ?? '£'
   const shareUrl = `${store.url}/p/${product.id}`
+  const price = Math.round(Number(form.price || 0) * 100)
+  const free = price === 0
+  // live preview of the offer (the server works out the real price at checkout)
+  const off = x.offer.kind === 'percent' ? Math.round(price * Math.min(95, x.offer.value) / 100) : x.offer.value
+  const sale = Math.max(0, price - off)
+  const pct = price > 0 ? Math.round((1 - sale / price) * 100) : 0
+  const offerLive = x.offer.on && !free && sale < price
+  const badgeText = x.offer.badge === 'PERCENT' ? `${pct}% OFF` : x.offer.badge
+  const vis: 'draft' | 'published' | 'hidden' = !form.listed ? 'draft' : x.hidden ? 'hidden' : 'published'
+  const setVis = (v: typeof vis) => setForm({ ...form, listed: v !== 'draft', extras: { ...x, hidden: v === 'hidden' } })
+  const fmt = (m: number) => formatPrice(m, form.currency)
+
+  const run = async (fn: () => Promise<void>) => { setBusy(true); try { await flushSellerEdits(); await fn() } catch (e) { setState((e as Error).message) } setBusy(false) }
 
   return (
-    <>
-      <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
-      <Field label="Description"><textarea className="ss-input" rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
-      <div className="ss-grid2">
-        <Field label="Price" hint="0 makes it free. Card payments need at least 0.50.">
-          <div className="ss-affix ss-affix-l">
-            <span>{sym}</span>
-            <input className="ss-input" inputMode="decimal" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} />
-          </div>
-        </Field>
-        <Field label="Currency">
-          <select className="ss-input" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
-            {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
-          </select>
-        </Field>
-      </div>
-      <ImagePicker value={form.cover} onChange={(cover) => patch({ cover })} label="Cover image" />
-      <div className="ss-field">
-        <span className="ss-label">File buyers download</span>
-        <div className="ss-row">
-          <span className="ss-file">{product.file ? `${product.file.name} · ${(product.file.size / 1024 / 1024).toFixed(2)} MB` : 'No file yet'}</span>
-          <label className="ss-ghost cursor-pointer">
-            <Upload className="h-3.5 w-3.5" /> {uploading ? 'Uploading…' : product.file ? 'Replace file' : 'Upload file'}
-            <input
-              type="file"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (!f) return
-                if (f.size > MAX_PRODUCT_FILE_MB * 1024 * 1024) return setState(`Files can be up to ${MAX_PRODUCT_FILE_MB} MB.`)
-                setUploading(true)
-                trackSellerWork(sellerApi
-                  .uploadFile(product.id, f)
-                  .then(() => sellerApi.store())
-                  .then((r) => r.store && setStore(r.store)))
-                  .catch((er: SellerError) => setState(er.status === 413 ? `That file is too big. Files can be up to ${MAX_PRODUCT_FILE_MB} MB.` : er.message))
-                  .finally(() => setUploading(false))
-              }}
-            />
-          </label>
+    <div className="pe">
+      <div className="pe-top">
+        <span className="pe-thumb" style={mediaUrl(form.cover) ? { backgroundImage: `url(${mediaUrl(form.cover)})` } : undefined}>{!form.cover && <Package className="h-5 w-5" />}</span>
+        <div className="pe-topname">
+          <b>{form.title.trim() || 'Untitled product'}</b>
+          <span className={cn('pe-pill', `pe-pill-${product.problem ? 'warn' : vis}`)}>{product.problem ? 'Needs attention' : vis === 'draft' ? 'Draft' : vis === 'hidden' ? 'Hidden' : product.published ? (product.changed ? 'Live · unpublished changes' : 'Published') : 'Ready to publish'}</span>
         </div>
-        <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after payment.</span>
+        <span className="pe-saved" aria-live="polite">{state ?? saved.state}</span>
       </div>
-      <label className="ss-check">
-        <input type="checkbox" checked={form.listed} onChange={(e) => patch({ listed: e.target.checked })} /> Put this product on sale when I publish
-      </label>
-      <div className="ss-status">
-        <span>Status</span>
-        <b>{product.problem ? `Draft · ${product.problem}` : product.published ? (product.changed ? 'Live · changes not published' : 'Live') : 'Ready · publish to put it on sale'}</b>
-      </div>
-      {product.published && (
-        <div className="ss-row">
-          <code className="ss-code">{shareUrl.replace(/^https?:\/\//, '')}</code>
-          <button type="button" className="ss-ghost" onClick={() => void navigator.clipboard?.writeText(shareUrl).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)))}>
-            <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy product link'}
+
+      <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub="Title, description, cover and file" open>
+        <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
+        <Field label="Description"><textarea className="ss-input" rows={3} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
+        <ImagePicker value={form.cover} onChange={(cover) => setForm({ ...form, cover })} label="Cover image" />
+        <div className="ss-field">
+          <span className="ss-label">File buyers download</span>
+          <div className="pe-file">
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            <span className="ss-file">{product.file ? `${product.file.name} · ${(product.file.size / 1024 / 1024).toFixed(2)} MB` : 'No file yet'}</span>
+            <label className="ss-ghost cursor-pointer">
+              {uploading ? 'Uploading…' : product.file ? 'Replace' : 'Upload'}
+              <input
+                type="file"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0]
+                  if (!f) return
+                  if (f.size > MAX_PRODUCT_FILE_MB * 1024 * 1024) return setState(`Files can be up to ${MAX_PRODUCT_FILE_MB} MB.`)
+                  setUploading(true)
+                  trackSellerWork(sellerApi
+                    .uploadFile(product.id, f)
+                    .then(() => sellerApi.store())
+                    .then((r) => r.store && setStore(r.store)))
+                    .catch((er: SellerError) => setState(er.status === 413 ? `That file is too big. Files can be up to ${MAX_PRODUCT_FILE_MB} MB.` : er.message))
+                    .finally(() => setUploading(false))
+                }}
+              />
+            </label>
+          </div>
+          <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after paying.</span>
+        </div>
+      </PSection>
+
+      <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(price)} open>
+        <div className="pe-row">
+          <span className="pe-lbl">Free product</span>
+          <Switch label="Free product" on={free} onChange={(v) => setForm({ ...form, price: v ? '0.00' : '9.00' })} />
+        </div>
+        {!free && (
+          <div className="ss-grid2">
+            <Field label="Regular price">
+              <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} /></div>
+            </Field>
+            <Field label="Currency">
+              <select className="ss-input" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
+                {CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
+              </select>
+            </Field>
+          </div>
+        )}
+        {!free && (
+          <div className={cn('pe-offer', x.offer.on && 'on')}>
+            <div className="pe-row">
+              <span className="pe-lbl"><Sparkles className="h-4 w-4" aria-hidden="true" /> Discount</span>
+              <Switch label="Enable discount" on={x.offer.on} onChange={(on) => setOffer({ on })} />
+            </div>
+            {x.offer.on && (
+              <>
+                <div className="pe-seg" role="radiogroup" aria-label="Discount type">
+                  <button type="button" role="radio" aria-checked={x.offer.kind === 'percent'} onClick={() => setOffer({ kind: 'percent', value: 20 })}>% off</button>
+                  <button type="button" role="radio" aria-checked={x.offer.kind === 'amount'} onClick={() => setOffer({ kind: 'amount', value: Math.round(price / 4) })}>{sym} off</button>
+                </div>
+                <div className="ss-grid2">
+                  <Field label={x.offer.kind === 'percent' ? 'Percent off' : 'Amount off'}>
+                    <div className={cn('ss-affix', x.offer.kind === 'percent' ? 'ss-affix-r' : 'ss-affix-l')}>
+                      {x.offer.kind === 'amount' && <span>{sym}</span>}
+                      <input className="ss-input" inputMode="decimal" aria-label="Discount amount" value={x.offer.kind === 'percent' ? String(x.offer.value) : (x.offer.value / 100).toFixed(2)} onChange={(e) => { const v = Number(e.target.value.replace(/[^0-9.]/g, '')) || 0; setOffer({ value: x.offer.kind === 'percent' ? Math.min(95, Math.round(v)) : Math.min(price, Math.round(v * 100)) }) }} />
+                      {x.offer.kind === 'percent' && <span>%</span>}
+                    </div>
+                  </Field>
+                  <Field label="Sale price">
+                    <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Sale price" value={(sale / 100).toFixed(2)} onChange={(e) => { const v = Math.round((Number(e.target.value.replace(/[^0-9.]/g, '')) || 0) * 100); setOffer({ kind: 'amount', value: Math.max(0, Math.min(price, price - v)) }) }} /></div>
+                  </Field>
+                </div>
+                <div className="ss-grid2">
+                  <Field label="Starts (optional)"><input type="date" className="ss-input" value={x.offer.starts ?? ''} onChange={(e) => setOffer({ starts: e.target.value || null })} /></Field>
+                  <Field label="Ends (optional)"><input type="date" className="ss-input" value={x.offer.ends ?? ''} onChange={(e) => setOffer({ ends: e.target.value || null })} /></Field>
+                </div>
+                <div className="ss-field">
+                  <span className="ss-label">Badge</span>
+                  <div className="pe-chips">
+                    {['PERCENT', 'SALE', 'Limited Offer', 'Launch Special'].map((b) => (
+                      <button key={b} type="button" aria-pressed={x.offer.badge === b} onClick={() => setOffer({ badge: b })}>{b === 'PERCENT' ? `${pct}% OFF` : b}</button>
+                    ))}
+                  </div>
+                  <div className="pe-colours" role="radiogroup" aria-label="Badge colour">
+                    {BADGE_COLOURS.map((c) => <button key={c} type="button" role="radio" aria-checked={x.offer.badgeColor === c} aria-label={`Badge colour ${c}`} style={{ background: c }} onClick={() => setOffer({ badgeColor: c })} />)}
+                  </div>
+                </div>
+              </>
+            )}
+            <div className="pe-preview" aria-label="How the price looks on your store">
+              <span className="pe-prev-lbl">Storefront preview</span>
+              <div className="pe-prev-row">
+                {offerLive ? (
+                  <>
+                    <s>{fmt(price)}</s>
+                    <b key={sale}>{fmt(sale)}</b>
+                    <em key={badgeText + x.offer.badgeColor} style={{ background: x.offer.badgeColor }}>{badgeText}</em>
+                  </>
+                ) : <b>{fmt(price)}</b>}
+              </div>
+              {offerLive && (x.offer.starts || x.offer.ends) && <small>{x.offer.starts ? `From ${x.offer.starts}` : ''}{x.offer.starts && x.offer.ends ? ' · ' : ''}{x.offer.ends ? `Until ${x.offer.ends}` : ''}</small>}
+            </div>
+          </div>
+        )}
+      </PSection>
+
+      <PSection icon={<MousePointerClick className="h-4 w-4" />} title="Buy button" sub={x.cta.text || (free ? 'Get it free' : 'Buy now')}>
+        <div className="pe-chips">
+          {CTA_TEXTS.map((t) => <button key={t} type="button" aria-pressed={(x.cta.text || 'Buy now') === t} onClick={() => setX({ cta: { ...x.cta, text: t === 'Buy now' ? '' : t } })}>{t}</button>)}
+        </div>
+        <Field label="Or your own text"><input className="ss-input" maxLength={30} value={x.cta.text} placeholder={free ? 'Get it free' : 'Buy now'} onChange={(e) => setX({ cta: { ...x.cta, text: e.target.value } })} /></Field>
+        <div className="pe-colours" role="radiogroup" aria-label="Button colour">
+          <button type="button" role="radio" aria-checked={!x.cta.color} aria-label="Theme colour" className="pe-theme" onClick={() => setX({ cta: { ...x.cta, color: '' } })}>A</button>
+          {BADGE_COLOURS.map((c) => <button key={c} type="button" role="radio" aria-checked={x.cta.color === c} aria-label={`Button colour ${c}`} style={{ background: c }} onClick={() => setX({ cta: { ...x.cta, color: c } })} />)}
+        </div>
+      </PSection>
+
+      <PSection icon={<Globe className="h-4 w-4" />} title="Publishing" sub={vis === 'draft' ? 'Draft' : vis === 'hidden' ? 'Hidden · link only' : 'Published'} open>
+        <div className="pe-seg pe-seg3" role="radiogroup" aria-label="Visibility">
+          <button type="button" role="radio" aria-checked={vis === 'draft'} onClick={() => setVis('draft')}>Draft</button>
+          <button type="button" role="radio" aria-checked={vis === 'published'} onClick={() => setVis('published')}>Published</button>
+          <button type="button" role="radio" aria-checked={vis === 'hidden'} onClick={() => setVis('hidden')}>Hidden</button>
+        </div>
+        <p className="ss-hint">{vis === 'draft' ? 'Not on sale. Publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by its own link only; not listed on your page.' : 'On sale once you press Publish on your page.'}{product.problem ? ` To sell it: ${product.problem}` : ''}</p>
+        {product.published && (
+          <div className="ss-row">
+            <code className="ss-code">{shareUrl.replace(/^https?:\/\//, '')}</code>
+            <a className="ss-ghost" href={shareUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" /> Preview</a>
+            <button type="button" className="ss-ghost" onClick={() => void navigator.clipboard?.writeText(shareUrl).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)))}>
+              <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy link'}
+            </button>
+          </div>
+        )}
+        <div className="pe-actions">
+          <button type="button" className="ss-ghost" disabled={busy} onClick={() => void saved.flush().then(() => setState('Saved ✓')).catch((e: Error) => setState(e.message))}>Save changes</button>
+          <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.duplicateProduct(product.id); setStore(r.store) })}>Duplicate</button>
+          <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.updateProduct(product.id, { archived: !product.archived, listed: false }, product.revision); setStore(r.store); if (!product.archived) onDeleted() })}>{product.archived ? 'Unarchive' : 'Archive'}</button>
+          <button
+            type="button"
+            className="ss-danger"
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm(`Delete “${product.title || 'Untitled product'}”? This can’t be undone. Buyers who already paid keep their downloads.`)) return
+              void run(async () => { const r = await sellerApi.deleteProduct(product.id); setStore(r.store); onDeleted() })
+            }}
+          >
+            Delete
           </button>
         </div>
-      )}
-      <p className="ss-muted" aria-live="polite">{state ?? saved.state} <button type="button" onClick={() => void saved.flush().catch(() => {})}>Retry save</button></p>
-      <button
-        type="button"
-        className="ss-danger self-start"
-        onClick={() => {
-          if (!window.confirm(`Delete “${product.title || 'Untitled product'}”? Buyers who already paid keep their downloads.`)) return
-          void flushSellerEdits().then(() => sellerApi.deleteProduct(product.id)).then((r) => (setStore(r.store), onDeleted()))
-        }}
-      >
-        Delete product
-      </button>
-    </>
+      </PSection>
+    </div>
   )
 }
 

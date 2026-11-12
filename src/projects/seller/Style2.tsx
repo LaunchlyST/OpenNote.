@@ -1,6 +1,6 @@
-import { accentOf } from './StorePage'
+import { PriceTag, accentOf, ctaStyle } from './StorePage'
 import type { StorePageProps } from './StorePage'
-import { FONTS, formatPrice, mediaUrl } from './model'
+import { FONTS, mediaUrl } from './model'
 import type { ShopProduct } from './model'
 import './style2.css'
 
@@ -31,7 +31,7 @@ export function Style2Page(props: StorePageProps) {
   const font = FONTS.find((f) => f.id === page.theme.font)?.css ?? FONTS[0].css
   const accent = accentOf(page)
   const avatar = mediaUrl(page.avatar)
-  const list = only ? [only] : products
+  const list = only ? [only] : products.filter((p) => !p.hidden)
 
   return (
     <div className="s2p" style={{ fontFamily: font, ['--s2-ac' as string]: accent }}>
@@ -90,9 +90,9 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
           </>
         ) : (
           <>
-            <span className="s2p-price">{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}</span>
-            <button type="button" className="s2p-buy" disabled={p.priceMinor === 0 ? !props.live || props.buying === p.id : disabled} onClick={() => props.onBuy?.(p)}>
-              {props.buying === p.id ? 'Opening checkout…' : p.priceMinor === 0 ? 'Get it free' : 'Buy now'}
+            {p.priceMinor === 0 ? <span className="s2p-price">Free</span> : <PriceTag prod={p} />}
+            <button type="button" className="s2p-buy" style={ctaStyle(p)} disabled={p.priceMinor === 0 ? !props.live || props.buying === p.id : disabled} onClick={() => props.onBuy?.(p)}>
+              {props.buying === p.id ? 'Opening checkout…' : p.cta?.text || (p.priceMinor === 0 ? 'Get it free' : 'Buy now')}
             </button>
           </>
         )}
