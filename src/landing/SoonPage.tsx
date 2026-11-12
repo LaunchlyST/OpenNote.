@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiUrl } from '../lib/api-base'
 import './soon.css'
 
 /**
  * Coming soon: a little illustrated world under construction.
  * Shown at desknoty.com when Settings → Launch is "Under construction".
- * Uses the existing waitlist endpoint and list. Sign-ups stay closed.
+ * No sign-up and no way into the app from here.
  * Everything is hand-drawn inline SVG + CSS (no extra libraries).
  */
 
@@ -45,7 +44,6 @@ export function SoonPage() {
           </h1>
           <p className="lw-sub">Desknoty is a little world in the making. We’re putting the finishing touches on a better place to think, plan, create and share.</p>
           <p className="lw-note">Good things take a little time ♡</p>
-          <a href="#postcard" className="lw-jump">Save me a spot ♡</a>
         </section>
 
         <div className="lw-world" ref={world} onPointerMove={move} onPointerLeave={() => { world.current?.style.setProperty('--px', '0'); world.current?.style.setProperty('--py', '0') }}>
@@ -62,7 +60,6 @@ export function SoonPage() {
           <Envelope onOpen={() => setLetter(true)} />
         </div>
 
-        <Postcard />
       </main>
 
       <footer className="lw-foot">
@@ -369,10 +366,7 @@ function Letter({ onClose }: { onClose: () => void }) {
     document.addEventListener('keydown', k)
     return () => document.removeEventListener('keydown', k)
   }, [close])
-  const joinFromLetter = () => {
-    close()
-    window.setTimeout(() => { document.getElementById('postcard')?.scrollIntoView({ behavior: reduced() ? 'auto' : 'smooth', block: 'center' }); (document.getElementById('lw-email') as HTMLInputElement | null)?.focus({ preventScroll: true }) }, 950)
-  }
+
   return (
     <div className={`lt ph-${phase}`} role="dialog" aria-modal="true" aria-label="A little note from Desknoty">
       <div className="lt-dim" onClick={close} />
@@ -399,66 +393,11 @@ function Letter({ onClose }: { onClose: () => void }) {
             {LETTER.map((p, i) => <p key={i} className="lt-p" style={{ ['--d' as string]: `${i * 120}ms` }}>{p}</p>)}
             <p className="lt-sign" style={{ ['--d' as string]: `${LETTER.length * 120}ms` }}>With love,<br />The Desknoty Team ♡</p>
             <p className="lt-ps" style={{ ['--d' as string]: `${(LETTER.length + 1) * 120}ms` }}>P.S. The best things are worth waiting for.</p>
-            <button type="button" className="lw-btn lt-join" onClick={joinFromLetter}>Join the waitlist ♡</button>
           </div>
         </article>
         <div className="lt-hearts" aria-hidden="true">{['♡', '✦', '♡', '✧', '♡', '✦'].map((h, i) => <span key={i} className={`h${i}`}>{h}</span>)}</div>
       </div>
     </div>
-  )
-}
-
-/* ---------- postcard waitlist (existing endpoint and list) ---------- */
-
-function Postcard() {
-  const [email, setEmail] = useState('')
-  const [trap, setTrap] = useState('')
-  const [state, setState] = useState<'idle' | 'busy' | 'done' | 'again'>('idle')
-  const [err, setErr] = useState<string | null>(null)
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (state === 'busy') return
-    setErr(null)
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) return setErr('That email doesn’t look quite right. Try something like jane@example.com.')
-    setState('busy')
-    try {
-      const res = await fetch(apiUrl('/api/waitlist'), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: email.trim(), website: trap }) })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) throw new Error(data.error ?? 'We couldn’t save your email. Try again in a minute.')
-      setState(data.alreadyJoined ? 'again' : 'done')
-    } catch (e2) {
-      setErr(e2 instanceof TypeError ? 'We can’t reach our little server right now. Try again in a moment.' : (e2 as Error).message)
-      setState('idle')
-    }
-  }
-  return (
-    <section id="postcard" className="lw-post-wrap" aria-labelledby="lw-post-h">
-      <div className="lw-post">
-        <div className="lw-post-left">
-          <h2 id="lw-post-h" className="lw-post-h">Want a little note when we’re ready?</h2>
-          <p className="lw-post-sub">Leave your email and we’ll let you know when Desknoty opens its doors.</p>
-          {state === 'done' || state === 'again' ? (
-            <div className="lw-thanks" role="status">
-              <span className="lw-thanks-heart" aria-hidden="true">♡</span>
-              <p>{state === 'done' ? 'You’re on the list! A little piece of good news will find its way to you soon. ♡' : 'You’re already on the list! A little piece of good news will find its way to you soon. ♡'}</p>
-            </div>
-          ) : (
-            <form className="lw-form" onSubmit={submit} noValidate>
-              <label htmlFor="lw-email" className="lw-sr">Your email address</label>
-              <input id="lw-email" type="email" inputMode="email" autoComplete="email" placeholder="Your email address" value={email} onChange={(e) => setEmail(e.target.value)} aria-invalid={Boolean(err)} aria-describedby={err ? 'lw-err' : undefined} required />
-              <input className="lw-trap" tabIndex={-1} autoComplete="off" aria-hidden="true" value={trap} onChange={(e) => setTrap(e.target.value)} />
-              <button type="submit" className="lw-btn" disabled={state === 'busy'}>{state === 'busy' ? 'Saving…' : 'Save me a spot ♡'}</button>
-              {err && <p id="lw-err" className="lw-err" role="alert">{err}</p>}
-            </form>
-          )}
-        </div>
-        <div className="lw-post-right" aria-hidden="true">
-          <div className="lw-post-stamp"><Mark /><span>first class<br />♡ post</span></div>
-          <div className="lw-post-lines"><i /><i /><i /></div>
-          <span className="lw-post-to">to: someone lovely</span>
-        </div>
-      </div>
-    </section>
   )
 }
 

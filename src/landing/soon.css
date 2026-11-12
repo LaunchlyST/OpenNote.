@@ -319,3 +319,5 @@
 
 .ph-unfold .lt-paper, .ph-read .lt-paper { z-index: 5 !important; }
 .ph-arrive .lt-paper, .ph-flap .lt-paper, .ph-slide .lt-paper, .ph-closing .lt-paper { z-index: 2 !important; }
+/* no postcard: the hills meet the footer */
+.lw-foot { box-shadow: 0 -3px 0 var(--ink); }
