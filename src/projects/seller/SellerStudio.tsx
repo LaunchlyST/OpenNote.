@@ -1101,65 +1101,6 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
           )
         })}
       </ul>
-      {products.length > 0 && (
-        <section className="pp-strip" aria-label="Your products">
-          <h3>Your products <small>Drag one onto a Digital product section</small></h3>
-          <div className="pp-row">
-            {products.map((p) => {
-              const cover = mediaUrl(p.cover)
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="pp-tile"
-                  aria-label={`Drag ${p.title.trim() || 'product'} onto a Digital product section`}
-                  onPointerDown={(e) => {
-                    if (e.button !== 0) return
-                    e.preventDefault()
-                    const src = e.currentTarget
-                    const ghost = src.cloneNode(true) as HTMLElement
-                    ghost.className = 'pp-tile pp-ghost'
-                    document.body.appendChild(ghost)
-                    const place = (x: number, y: number) => { ghost.style.left = `${x - 34}px`; ghost.style.top = `${y - 34}px` }
-                    place(e.clientX, e.clientY)
-                    let over: HTMLElement | null = null
-                    // a Digital product section under the pointer, in the list or in the phone
-                    const target = (x: number, y: number) => {
-                      const el = document.elementFromPoint(x, y) as HTMLElement | null
-                      const t = el?.closest<HTMLElement>('[data-block], .sp-pick[data-id]')
-                      const id = t?.dataset.block ?? t?.dataset.id
-                      return id && blocks.find((k) => k.id === id)?.type === 'featured' ? { el: t!, id } : null
-                    }
-                    const mv = (ev: PointerEvent) => {
-                      place(ev.clientX, ev.clientY)
-                      const t = target(ev.clientX, ev.clientY)
-                      if (over !== (t?.el ?? null)) { over?.classList.remove('pp-drop'); over = t?.el ?? null; over?.classList.add('pp-drop') }
-                    }
-                    const up = (ev: PointerEvent) => {
-                      document.removeEventListener('pointermove', mv)
-                      document.removeEventListener('pointerup', up)
-                      over?.classList.remove('pp-drop')
-                      ghost.remove()
-                      const t = target(ev.clientX, ev.clientY)
-                      if (t) setBlocks(blocks.map((k) => (k.id === t.id ? { ...k, data: { ...k.data, productId: p.id } } : k)))
-                    }
-                    document.addEventListener('pointermove', mv)
-                    document.addEventListener('pointerup', up)
-                  }}
-                  onClick={() => {
-                    // keyboard / tap: fill the first empty Digital product section
-                    const empty = blocks.find((k) => k.type === 'featured' && !products.some((x) => x.id === k.data.productId))
-                    if (empty) setBlocks(blocks.map((k) => (k.id === empty.id ? { ...k, data: { ...k.data, productId: p.id } } : k)))
-                  }}
-                >
-                  <span className="pp-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-5 w-5" />}</span>
-                  <span className="pp-name">{p.title.trim() || 'Untitled'}</span>
-                </button>
-              )
-            })}
-          </div>
-        </section>
-      )}
       <ThemeEditor page={page} onChange={onChange} />
       {adding && <AddBlockDialog products={products} onClose={() => setAdding(false)} onAdd={(t, d) => (setAdding(false), t === 'banner' ? setOpen(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : onAdd(t, d))} onDragStart={(t, e, d) => { setAdding(false); onStartInsert(t, e, d) }} createProduct={createProduct} />}
     </div>
@@ -1546,10 +1487,21 @@ function BlockEditor({ block, products, update }: { block: Block; products: Draf
       return (
         <div className="sb-edit">
           <Field label="Product">
-            <select className="ss-input" value={d.productId ?? ''} onChange={(e) => update({ productId: e.target.value || null })}>
-              <option value="">Choose a product</option>
-              {products.map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled product'}</option>)}
-            </select>
+            {products.length === 0 ? (
+              <p className="ss-muted">Create a product in the Products tab first.</p>
+            ) : (
+              <div className="pp-row pp-pick" role="radiogroup" aria-label="Product">
+                {products.map((p) => {
+                  const cover = mediaUrl(p.cover)
+                  return (
+                    <button key={p.id} type="button" role="radio" aria-checked={d.productId === p.id} className={cn('pp-tile', d.productId === p.id && 'on')} onClick={() => update({ productId: p.id })}>
+                      <span className="pp-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-5 w-5" />}</span>
+                      <span className="pp-name">{p.title.trim() || 'Untitled'}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </Field>
           <Field label="Small label above the title"><input className="ss-input" maxLength={200} value={d.note ?? ''} onChange={(e) => update({ note: e.target.value })} placeholder="New this week" /></Field>
           {!products.length && <p className="ss-muted">Add a product in the Products tab first.</p>}
