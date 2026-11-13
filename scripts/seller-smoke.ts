@@ -373,7 +373,7 @@ try {
     const ordersNow = async () => (await dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "productId" = ? AND method = 'free'`, pid)).n
 
     check('the old instant free checkout is closed (email only)', (await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: 'freekey_1234567890abc', email: 'mia@buyer.test' })).json?.code === 'use_claim')
-    check('malformed address: the exact message, nothing sent', (await claim({ email: 'mia@@buyer', clientRef: ref(1) })).json?.error === 'We couldn’t verify this email address. Please check it and try again.')
+    check('malformed address: the exact message, nothing sent', (await claim({ email: 'mia@@buyer', clientRef: ref(1) })).json?.error === 'This email address couldn’t be verified. Please check it and try again.')
     check('a domain that doesn’t exist is refused', (await claim({ email: 'mia@no-such-place-zq9x.invalid', clientRef: ref(1) })).status === 422)
     check('a domain that accepts no mail (null MX) is refused', (await claim({ email: 'someone@example.com', clientRef: ref(1) })).status === 422)
     const sug = await claim({ email: 'mia@gmail.con', clientRef: ref(1) })

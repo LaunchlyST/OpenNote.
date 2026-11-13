@@ -207,7 +207,7 @@ try {
   await co.getByLabel('Name').fill('Fan')
   await co.getByLabel('Email').fill('someone@example.com')
   await send.click()
-  await co.getByText('We couldn’t verify this email address. Please check it and try again.').waitFor()
+  await co.getByText('This email address couldn’t be verified. Please check it and try again.').waitFor()
   check('free: an address that can’t receive mail gets the exact inline message', true)
   check('free: what was typed is kept for correcting', (await co.getByLabel('Email').inputValue()) === 'someone@example.com' && (await co.getByLabel('Name').inputValue()) === 'Fan')
   await co.getByLabel('Email').fill('fan@gmial.com')

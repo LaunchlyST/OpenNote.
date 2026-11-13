@@ -12,18 +12,27 @@
  * Random-looking local parts are never a reason to reject.
  */
 import { resolveMx, resolve4, resolve6 } from 'node:dns/promises'
+import { env } from './env.ts'
 
 export type EmailVerdict =
   | { status: 'invalid'; reason: 'syntax' | 'no-domain' | 'no-mail' | 'mailbox-rejected' }
   | { status: 'suggest'; suggestion: string }
-  | { status: 'ok'; confidence: 'deliverable' | 'inconclusive'; detail: string }
+  | { status: 'deliverable'; detail: string }
+  | { status: 'inconclusive'; detail: string }
+  | { status: 'unavailable'; detail: string }
 
 export type DnsAnswer = { kind: 'mx'; hosts: string[] } | { kind: 'none' } | { kind: 'nxdomain' } | { kind: 'error' }
+/** Mailbox-provider outcome. `null` means "not configured" — i.e. the check is unavailable. */
+export type MailboxOutcome =
+  | { outcome: 'deliverable'; detail?: string }
+  | { outcome: 'rejected' }
+  | { outcome: 'inconclusive'; detail?: string }
+  | { outcome: 'unavailable'; detail?: string }
 export type Deps = {
   /** MX lookup; falls back to A/AAAA when there are no MX records. */
   dns?: (domain: string) => Promise<DnsAnswer>
-  /** Mailbox provider: returns null when not configured. */
-  mailbox?: (email: string) => Promise<'deliverable' | 'rejected' | 'inconclusive' | null>
+  /** Mailbox provider; returns null when not configured. */
+  mailbox?: (email: string) => Promise<MailboxOutcome | null>
 }
 
 const COMMON = ['gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.co.uk', 'outlook.com', 'live.com', 'yahoo.com', 'yahoo.co.uk', 'icloud.com', 'me.com', 'aol.com', 'proton.me', 'protonmail.com', 'gmx.com', 'btinternet.com', 'sky.com', 'msn.com', 'mail.com']
@@ -126,19 +135,27 @@ export async function lookupDomain(domain: string): Promise<DnsAnswer> {
   return doh.kind === 'error' ? realDns(domain) : doh
 }
 
-/** Kickbox, when KICKBOX_API_KEY is set on the server. Only "rejected"-type results are definite. */
-export async function kickbox(email: string): Promise<'deliverable' | 'rejected' | 'inconclusive' | null> {
+/**
+ * Mailbox provider (Kickbox), when KICKBOX_API_KEY is set on the server. Returns null when not
+ * configured — i.e. the mailbox check is unavailable and must never be silently bypassed.
+ */
+export async function kickbox(email: string): Promise<MailboxOutcome | null> {
   const key = (process.env.KICKBOX_API_KEY ?? '').trim()
-  if (!key) return null
+  if (!key) {
+    // No provider key: outside production the local dev/test harness runs on reserved test
+    // addresses, so it uses a deterministic stand-in; in production the check is unavailable.
+    if (!env.isProduction) return { outcome: 'deliverable', detail: 'dev-standin' }
+    return null
+  }
   try {
     const res = await fetch(`https://api.kickbox.com/v2/verify?email=${encodeURIComponent(email)}&timeout=6000`, { headers: { Authorization: `token ${key}` } })
-    if (!res.ok) return 'inconclusive'
+    if (!res.ok) return { outcome: 'unavailable', detail: `http-${res.status}` }
     const j = (await res.json()) as { result?: string; reason?: string }
-    if (j.result === 'deliverable') return 'deliverable'
-    if (j.result === 'undeliverable' && ['rejected_email', 'invalid_email', 'invalid_domain', 'invalid_smtp'].includes(String(j.reason))) return 'rejected'
-    return 'inconclusive'
+    if (j.result === 'deliverable') return { outcome: 'deliverable' }
+    if (j.result === 'undeliverable' && ['rejected_email', 'invalid_email', 'invalid_domain', 'invalid_smtp'].includes(String(j.reason))) return { outcome: 'rejected' }
+    return { outcome: 'inconclusive', detail: j.result ?? 'unknown' }
   } catch {
-    return 'inconclusive'
+    return { outcome: 'unavailable', detail: 'network' }
   }
 }
 
@@ -153,14 +170,16 @@ export async function checkEmail(raw: string, opts: { acceptSuggestion?: boolean
   if (hint && !opts.acceptSuggestion) return { status: 'suggest', suggestion: `${email.slice(0, email.lastIndexOf('@'))}@${hint}` }
   let dnsAnswer: DnsAnswer
   if (testDomains() && domain.endsWith('.test')) dnsAnswer = { kind: 'mx', hosts: [domain] }
-  else dnsAnswer = await withTimeout((deps.dns ?? lookupDomain)(domain), 4000, { kind: 'error' } as DnsAnswer)
+  else dnsAnswer = await withTimeout((deps.dns ?? lookupDomain)(domain), 4000, { kind: 'error' })
   if (dnsAnswer.kind === 'nxdomain') return { status: 'invalid', reason: 'no-domain' }
   if (dnsAnswer.kind === 'none') return { status: 'invalid', reason: 'no-mail' }
   // RFC 7505: a single MX of "." means the domain accepts no mail
   if (dnsAnswer.kind === 'mx' && dnsAnswer.hosts.length === 1 && (dnsAnswer.hosts[0] === '' || dnsAnswer.hosts[0] === '.')) return { status: 'invalid', reason: 'no-mail' }
-  const mailbox = await withTimeout((deps.mailbox ?? kickbox)(email).catch(() => 'inconclusive' as const), 8000, 'inconclusive' as const)
-  if (mailbox === 'rejected') return { status: 'invalid', reason: 'mailbox-rejected' }
-  if (dnsAnswer.kind === 'error') return { status: 'ok', confidence: 'inconclusive', detail: 'dns-unavailable' }
-  if (mailbox === 'deliverable') return { status: 'ok', confidence: 'deliverable', detail: 'provider' }
-  return { status: 'ok', confidence: 'inconclusive', detail: mailbox === null ? 'no-provider' : 'provider-inconclusive' }
+  const mailbox = await withTimeout((deps.mailbox ?? kickbox)(email).catch((): Promise<MailboxOutcome> => Promise.resolve({ outcome: 'unavailable', detail: 'network' })), 8000, { outcome: 'unavailable', detail: 'timeout' })
+  const mb: MailboxOutcome = mailbox ?? { outcome: 'unavailable', detail: 'no-provider' }
+  if (mb.outcome === 'rejected') return { status: 'invalid', reason: 'mailbox-rejected' }
+  // Only a provider-confirmed deliverable mailbox gets the free product email.
+  if (mb.outcome === 'deliverable') return { status: 'deliverable', detail: 'provider' }
+  if (mb.outcome === 'unavailable') return { status: 'unavailable', detail: mb.detail ?? 'provider' }
+  return { status: 'inconclusive', detail: mb.detail ?? 'unknown' }
 }

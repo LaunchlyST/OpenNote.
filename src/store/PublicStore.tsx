@@ -471,9 +471,13 @@ function FreeClaim({ handle, product, coupon, onClose }: { handle: string; produ
       window.dispatchEvent(new CustomEvent(CLAIM_EVENT, { detail: { productId: product.id, claim: { claimId: r.claimId, email: addr, cooldownSeconds: cooldown } } }))
       if (r.status === 'queued') setError('We’re still sending your link. If it hasn’t arrived in a few minutes, use Send again.')
     } catch (e) {
-      const err = e as Error & { body?: { code?: string; suggestion?: string; cooldownSeconds?: number } }
-      const body = (err as unknown as { data?: { code?: string; suggestion?: string; cooldownSeconds?: number } }).data ?? err.body
+      const err = e as Error & { body?: { code?: string; error?: string; suggestion?: string; cooldownSeconds?: number } }
+      const body = (err as unknown as { data?: { code?: string; error?: string; suggestion?: string; cooldownSeconds?: number } }).data ?? err.body
       if (body?.code === 'suggest' && body.suggestion) { setSuggestion(body.suggestion); setBusy(false); return }
+      // mailbox validation outcomes from the server: blocked / inconclusive / provider unavailable
+      if (body?.code === 'invalid') { setError(body.error ?? 'This email address couldn’t be verified. Please check it and try again.'); setBusy(false); return }
+      if (body?.code === 'inconclusive') { setError(body.error ?? 'We couldn’t verify this email address yet. Please use another email address you check regularly and try again.'); setBusy(false); return }
+      if (body?.code === 'unavailable') { setError(body.error ?? 'Email verification is temporarily unavailable. Please try again.'); setBusy(false); return }
       if (typeof body?.cooldownSeconds === 'number') setWait(body.cooldownSeconds)
       setError(err.message)
     }

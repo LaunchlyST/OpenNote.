@@ -1925,8 +1925,10 @@ export function sellerRouter() {
   })
 
   /* ---- V3: free products by email ---- */
-  const CLAIM_INVALID = 'We couldn’t verify this email address. Please check it and try again.'
+  const CLAIM_INVALID = 'This email address couldn’t be verified. Please check it and try again.'
   const CLAIM_BOUNCED = 'We couldn’t deliver to this address. Please check your email.'
+  const CLAIM_INCONCLUSIVE = 'We couldn’t verify this email address yet. Please use another email address you check regularly and try again.'
+  const CLAIM_UNAVAILABLE = 'Email verification is temporarily unavailable. Please try again.'
   const sha = (v: string) => createHmac('sha256', env.secret).update(v).digest('base64url')
   const dayOf = (iso: string) => iso.slice(0, 10)
   const claimView = (c: { id: string; email: string; delivery: string | null; lastSentAt: string | null; sendCount: number; sendDay: string }) => {
@@ -1965,7 +1967,12 @@ export function sellerRouter() {
     if (await sql.get(`SELECT 1 FROM email_suppression WHERE email = ?`, email)) return void res.status(422).json({ code: 'undeliverable', error: CLAIM_BOUNCED })
     const verdict = await checkEmail(email, { acceptSuggestion: Boolean(b.acceptSuggestion) })
     if (verdict.status === 'suggest') return void res.status(409).json({ code: 'suggest', suggestion: verdict.suggestion })
-    if (verdict.status === 'invalid') return void res.status(422).json({ code: 'invalid', error: CLAIM_INVALID })
+    // mailbox-existence validation before anything is sent: only a provider-confirmed deliverable
+    // mailbox gets the private link. Inconclusive/unavailable outcomes stop the send.
+    if (verdict.status === 'invalid') return void res.status(422).json({ code: 'invalid', error: CLAIM_INVALID, reason: verdict.reason })
+    if (verdict.status === 'unavailable') return void res.status(503).json({ code: 'unavailable', error: CLAIM_UNAVAILABLE })
+    if (verdict.status === 'inconclusive') return void res.status(422).json({ code: 'inconclusive', error: CLAIM_INCONCLUSIVE })
+    // 'deliverable': the mailbox exists and accepts mail → continue with the claim + email.
     const perEmail = await sql.get<{ n: number }>(`SELECT CAST(COALESCE(SUM("sendCount"), 0) AS INTEGER) AS n FROM seller_claim WHERE email = ? AND "sendDay" = ?`, email, dayOf(t))
     if ((perEmail?.n ?? 0) >= 10) return void res.status(429).json({ error: 'We’ve sent a lot of links to this address today. Please check your inbox or try tomorrow.' })
 
