@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
-import { PaperField } from './PaperField'
+import { GlyphBackground } from '../components/ui/glyph-background'
+import { DotMatrixText } from '../components/ui/dot-matrix-text'
 import './aero.css'
 
 /**
@@ -107,7 +108,7 @@ export function AeroPage() {
 
   return (
     <div className="ae">
-      <PaperField reduced={rm} />
+      <GlyphBackground className="ae-glyphs" />
       <div className={`ae-scene ${open ? 'away' : ''}`}>
         <header className="ae-top">
           <span className="ae-brand"><Mark /> Desknoty</span>
@@ -152,37 +153,11 @@ export function AeroPage() {
           </nav>
           <span className="ae-motto" aria-live="polite">{heartLine ?? 'Between yesterday & tomorrow'}</span>
         </footer>
-        <div className="ae-word" aria-hidden="true">{'Desknoty'.split('').map((c, i) => <Letter key={i} c={c} i={i} />)}</div>
+        <div className="ae-word"><span className="ae-sr">Desknoty</span><DotMatrixText className="ae-dots" aria-hidden="true" text={['Desknoty', 'Soon', 'Worth the wait']} dotSize={typeof window !== 'undefined' && window.innerWidth < 700 ? 3 : 5} gap={typeof window !== 'undefined' && window.innerWidth < 700 ? 1 : 2} /></div>
       </div>
 
       {open && <Note from={open} onClosed={() => setOpen(null)} />}
     </div>
-  )
-}
-
-/** One letter of the big wordmark: hover lights it up in its own colour, pull it and it springs back. */
-function Letter({ c, i }: { c: string; i: number }) {
-  const el = useRef<HTMLSpanElement>(null)
-  const from = useRef<{ x: number; y: number } | null>(null)
-  const [held, setHeld] = useState(false)
-  const set = (x: number, y: number) => {
-    const e = el.current
-    if (!e) return
-    // rubber band: the further you pull, the harder it resists
-    const k = (v: number) => Math.sign(v) * 120 * (1 - Math.exp(-Math.abs(v) / 160))
-    const dx = k(x), dy = k(y)
-    const stretch = 1 + Math.min(0.25, Math.hypot(dx, dy) / 600)
-    e.style.setProperty('--dx', `${dx}px`); e.style.setProperty('--dy', `${dy}px`)
-    e.style.setProperty('--rot', `${dx / 8}deg`); e.style.setProperty('--sc', String(stretch))
-  }
-  const release = () => { from.current = null; setHeld(false); set(0, 0) }
-  return (
-    <span ref={el} className={`ae-l ${held ? 'held' : ''}`} style={{ ['--i' as string]: i }}
-      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); from.current = { x: e.clientX, y: e.clientY }; setHeld(true) }}
-      onPointerMove={(e) => { if (from.current) set(e.clientX - from.current.x, e.clientY - from.current.y) }}
-      onPointerUp={release} onPointerCancel={release}>
-      <span className="ae-l-in">{c}</span>
-    </span>
   )
 }
 
