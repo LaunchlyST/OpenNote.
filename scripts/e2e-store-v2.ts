@@ -11,6 +11,7 @@ import type { ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 
@@ -18,8 +19,10 @@ const require = createRequire(import.meta.url)
 const { chromium } = require('playwright') as typeof import('playwright')
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-e2e-v2-'))
-const API_PORT = 4300 + Math.floor(Math.random() * 50)
-const WEB_PORT = 4400 + Math.floor(Math.random() * 50)
+/** A port nothing else is using right now. */
+const freePort = () => new Promise<number>((resolve) => { const srv = createServer(); srv.listen(0, () => { const p = (srv.address() as { port: number }).port; srv.close(() => resolve(p)) }) })
+const API_PORT = await freePort()
+const WEB_PORT = await freePort()
 const SITE = `http://localhost:${WEB_PORT}`
 const DB = join(tmp, 'e2e.db')
 const SHOTS = process.env.SHOTS_DIR
@@ -31,7 +34,7 @@ const check = (label: string, ok: boolean, detail = '') => {
 }
 
 function run(cmd: string[], env: Record<string, string>, ready: string): Promise<ChildProcess> {
-  const child = spawn(cmd[0], cmd.slice(1), { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(cmd[0], cmd.slice(1), { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let log = ''
   child.stdout!.on('data', (d) => (log += d))
   child.stderr!.on('data', (d) => (log += d))
@@ -189,7 +192,8 @@ try {
   db.close()
 } finally {
   await browser.close()
-  web.kill('SIGTERM')
+  // stop vite too, not just the npx wrapper
+  try { process.kill(-web.pid!, 'SIGTERM') } catch { web.kill('SIGTERM') }
   await new Promise<void>((r) => (api.once('exit', () => r()), api.kill('SIGTERM')))
   if (!SHOTS) rmSync(tmp, { recursive: true, force: true })
 }
