@@ -1736,6 +1736,9 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   const form = saved.value
   const setForm = saved.edit
   const x: ProductExtras = withExtras(form.extras)
+  // The server returns the card settings it actually stored. An API without Store V2 drops them,
+  // so their absence means these controls can't save anything yet.
+  const v2 = Boolean(product.extras && 'layout' in product.extras)
   const setX = (n: Partial<ProductExtras>) => setForm({ ...form, extras: { ...x, ...n } })
   const setOffer = (n: Partial<ProductExtras['offer']>) => setX({ offer: { ...x.offer, ...n } })
 
@@ -1779,14 +1782,17 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
 
       <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub="Title, description, what’s included and file" open>
         <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
-        <Field label="Subtitle" hint="One short line on the card, about the benefit."><input className="ss-input" maxLength={100} value={x.subtitle} onChange={(e) => setX({ subtitle: e.target.value })} placeholder="e.g. Plan a month of posts in one afternoon" /></Field>
         <Field label="Description"><textarea className="ss-input" rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
+        <fieldset className="pe2-v2" disabled={!v2}>
+          {!v2 && <p className="pe2-unavail" role="status">Not available yet: the live Desknoty API hasn’t been updated for these settings, so they can’t be saved. They’ll switch on once the API is deployed.</p>}
+        <Field label="Subtitle" hint="One short line on the card, about the benefit."><input className="ss-input" maxLength={100} value={x.subtitle} onChange={(e) => setX({ subtitle: e.target.value })} placeholder="e.g. Plan a month of posts in one afternoon" /></Field>
         <div className="ss-grid2">
           <Field label="File format" hint={product.file ? `Detected: ${(product.file.name.split('.').pop() ?? '').toUpperCase()}` : undefined}><input className="ss-input" maxLength={40} value={x.format} onChange={(e) => setX({ format: e.target.value })} placeholder="e.g. PDF, Notion template" /></Field>
           <Field label="Access"><input className="ss-input" maxLength={100} value={x.access} onChange={(e) => setX({ access: e.target.value })} placeholder="e.g. Instant download, lifetime updates" /></Field>
         </div>
         <Field label="What’s included"><LinesEditor label="Included item" items={x.included} onChange={(included) => setX({ included })} placeholder="e.g. 30 caption templates" /></Field>
         <Field label="FAQ (optional)"><FaqEditor items={x.faq} onChange={(faq) => setX({ faq })} /></Field>
+        </fieldset>
         <div className="ss-field">
           <span className="ss-label">File buyers download</span>
           <div className="pe-file">
@@ -1817,8 +1823,17 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
       </PSection>
 
       <PSection icon={<ImageIcon className="h-4 w-4" />} title="Media & previews" sub={`${form.cover ? 'Cover' : 'No cover'}${x.gallery.length ? ` · ${x.gallery.length} image${x.gallery.length === 1 ? '' : 's'}` : ''}${x.video ? ' · video' : ''}`}>
-        <CoverEditor cover={form.cover} crop={x.crop} onCover={(cover) => setForm({ ...form, cover })} onCrop={(crop) => setX({ crop })} />
-        <GalleryEditor gallery={x.gallery} video={x.video} onGallery={(gallery) => setX({ gallery })} onVideo={(video) => setX({ video })} />
+        {v2 ? (
+          <>
+            <CoverEditor cover={form.cover} crop={x.crop} onCover={(cover) => setForm({ ...form, cover })} onCrop={(crop) => setX({ crop })} />
+            <GalleryEditor gallery={x.gallery} video={x.video} onGallery={(gallery) => setX({ gallery })} onVideo={(video) => setX({ video })} />
+          </>
+        ) : (
+          <>
+            <ImagePicker value={form.cover} onChange={(cover) => setForm({ ...form, cover })} label="Cover image" />
+            <p className="pe2-unavail" role="status">Not available yet: the live Desknoty API hasn’t been updated for these settings, so they can’t be saved. They’ll switch on once the API is deployed.</p>
+          </>
+        )}
       </PSection>
 
       <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(price)} open>
@@ -1896,8 +1911,8 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         )}
       </PSection>
 
-      <PSection icon={<LayoutGrid className="h-4 w-4" />} title="Card appearance" sub={`${x.layout.charAt(0).toUpperCase()}${x.layout.slice(1)} · ${x.cta.text || (free ? 'Get it free' : 'Buy now')}`}>
-        <CardAppearance x={x} setX={setX} store={store} preview={cardPreview} buy={<BuyRow prod={cardPreview} page={store.draft} products={[]} handle={store.handle} small={x.layout === 'compact'} />} />
+      <PSection icon={<LayoutGrid className="h-4 w-4" />} title="Card appearance" sub={`${v2 ? `${x.layout.charAt(0).toUpperCase()}${x.layout.slice(1)} · ` : ''}${x.cta.text || (free ? 'Get it free' : 'Buy now')}`}>
+        {v2 ? <CardAppearance x={x} setX={setX} store={store} preview={cardPreview} buy={<BuyRow prod={cardPreview} page={store.draft} products={[]} handle={store.handle} small={x.layout === 'compact'} />} /> : <p className="pe2-unavail" role="status">Not available yet: the live Desknoty API hasn’t been updated for these settings, so they can’t be saved. They’ll switch on once the API is deployed.</p>}
         <span className="ss-label">Buy button</span>
         <div className="pe-chips">
           {CTA_TEXTS.map((t) => <button key={t} type="button" aria-pressed={(x.cta.text || 'Buy now') === t} onClick={() => setX({ cta: { ...x.cta, text: t === 'Buy now' ? '' : t } })}>{t}</button>)}

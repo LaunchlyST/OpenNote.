@@ -188,6 +188,26 @@ try {
   await m.goto(`${SITE}/ava-makes`)
   if (SHOTS) await m.screenshot({ path: join(SHOTS, 'mobile-store.png'), fullPage: true })
 
+  // ---- Old API (V2 fields dropped by the server): the controls must say they can't save
+  const old = await ctx.newPage()
+  await old.route('**/api/seller/store', async (route) => {
+    const res = await route.fetch()
+    const body = await res.json()
+    for (const p of body.store?.products ?? []) if (p.extras) p.extras = { offer: p.extras.offer, cta: p.extras.cta, hidden: p.extras.hidden }
+    await route.fulfill({ response: res, json: body })
+  })
+  await old.goto(`${SITE}/app/pro`)
+  await old.waitForURL(/\/app\/project\//)
+  await old.evaluate((k) => sessionStorage.setItem(k, '1'), `desknoty.seller.tiktok-step.${st.id}`)
+  await old.getByRole('button', { name: 'Seller', exact: true }).click()
+  await old.getByRole('tab', { name: /Products/ }).click()
+  await old.getByText('Content planner').first().click()
+  await old.getByRole('button', { name: /Card appearance/ }).click()
+  check('old API: editor says the new settings are unavailable', (await old.getByText(/Not available yet/).count()) >= 2)
+  check('old API: no movable card or layout picker is offered', (await old.getByRole('slider', { name: 'Title position' }).count()) === 0 && (await old.getByRole('radio', { name: /Showcase/ }).count()) === 0)
+  check('old API: subtitle and included fields are disabled', await old.getByPlaceholder('e.g. Plan a month of posts in one afternoon').isDisabled())
+  check('old API: title and price still edit normally', await old.getByPlaceholder('e.g. Content planner template').isEditable())
+
   check('no page errors', errors.length === 0, errors.join(' | '))
   db.close()
 } finally {

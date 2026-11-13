@@ -8589,3 +8589,6 @@ select.ss-input option {
 .sp-card-showcase .sp-card-media, .sp-card-featured .sp-card-media { align-self: stretch; width: 100%; }
 .sp-card-showcase .sp-cover, .sp-card-featured .sp-cover { flex: none; }
 .sp-card-body { align-items: stretch; width: 100%; }
+.pe2-v2 { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.pe2-v2:disabled { opacity: 0.55; }
+.pe2-unavail { padding: 10px 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 13px; line-height: 1.4; opacity: 1; }
