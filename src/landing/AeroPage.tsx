@@ -195,7 +195,7 @@ export function AeroPage() {
             <div className="ae-orbit" aria-hidden="true">
               <svg className="ae-ring" viewBox="0 0 200 200">
                 <defs><path id="ae-circle" d="M100,100 m-88,0 a88,88 0 1,1 176,0 a88,88 0 1,1 -176,0" /></defs>
-                <text><textPath href="#ae-circle" textLength="548">Building · Fixing the little things · Polishing · Worth the wait ·</textPath></text>
+                <text><textPath href="#ae-circle" textLength="548" lengthAdjust="spacing">Building · Fixing the little things · Polishing · Worth the wait ·</textPath></text>
               </svg>
               <div className="ae-orb"><div className="ae-orb-in"><Mark size={92} /></div></div>
             </div>
