@@ -8592,3 +8592,35 @@ select.ss-input option {
 .pe2-v2 { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
 .pe2-v2:disabled { opacity: 0.55; }
 .pe2-unavail { padding: 10px 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 13px; line-height: 1.4; opacity: 1; }
+
+/* ===== Store V2 stage B: pricing ===== */
+.sp-save { font-size: 11.5px; font-weight: 650; color: #15803d; }
+.sp-countdown { display: inline-flex; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 650; font-variant-numeric: tabular-nums; background: color-mix(in srgb, var(--ac) 14%, transparent); }
+.sp-price-sale { flex-wrap: wrap; row-gap: 4px; }
+.pe2-sched { display: grid; gap: 8px; }
+.pe2-check { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.pe2-check.off { opacity: 0.55; }
+.pe2-coupons { display: grid; gap: 10px; }
+.pe2-clist { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.pe2-clist li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid #e3e5e9; }
+.pe2-clist li.off { opacity: 0.6; }
+.pe2-clist li > div:first-child { display: grid; gap: 2px; min-width: 0; }
+.pe2-clist b { font-family: ui-monospace, monospace; font-size: 13.5px; letter-spacing: 0.04em; }
+.pe2-clist span, .pe2-clist small { font-size: 12.5px; color: #5b616b; }
+.pe2-cacts { display: flex; gap: 4px; flex: none; }
+.pe2-cnew { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: #f6f7f9; }
+.pe2-cnew .ss-ghost { justify-self: start; }
+.pe2-cval { display: grid; grid-template-columns: 76px 1fr; gap: 6px; }
+.co3-code { display: grid; gap: 6px; margin: 4px 0 10px; }
+.co3-code label { font-size: 13px; font-weight: 600; }
+.co3-code-row { display: flex; gap: 6px; }
+.co3-code-row input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--bd, #dbe7f0); font: inherit; text-transform: uppercase; letter-spacing: 0.04em; background: #fff; }
+.co3-code-row input[aria-invalid='true'] { border-color: #dc2626; }
+.co3-code-row button, .co3-code-on button { padding: 0 14px; border-radius: 10px; font-weight: 650; font-size: 13.5px; background: #fff; border: 1px solid var(--bd, #dbe7f0); }
+.co3-code-row button:disabled { opacity: 0.5; }
+.co3-code-on { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-radius: 10px; background: #ecfdf5; color: #065f46; font-size: 13.5px; }
+.co3-code-on button { height: 30px; }
+.co3-code-err { font-size: 12.5px; color: #b91c1c; }
+.co3-minus { color: #15803d; }
+.co3-saved { margin-top: -4px; font-size: 13px; font-weight: 650; color: #15803d; }
+.co3-hint-line { font-size: 12.5px; color: var(--mut, #7a8794); }

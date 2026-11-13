@@ -390,6 +390,111 @@ try {
   const after = await req('GET', '/api/store/ava-makes')
   check('store is still published after a restart', after.status === 200 && after.json.products[0]?.id === pid)
   check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 6)
+  {
+    console.log('\n  Pricing, offers and discount codes (Stage B)')
+    const unit = (sid: string) => (fake.calls.filter((c) => c.path === '/v1/checkout/sessions').find((c) => String(c.body?.metadata?.desknotyOrderId ?? '') && fake.sessions.get(sid)?.metadata?.desknotyOrderId === c.body.metadata.desknotyOrderId)?.body as any)?.line_items?.[0]?.price_data?.unit_amount
+    const key = () => `k_${Math.random().toString(36).slice(2)}_${Date.now()}`
+    const buy = (body: Record<string, unknown>) => req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: key(), ...body })
+    const sidOf = (r: { json: any }) => String(r.json?.url ?? '').split('/pay/')[1]
+
+    // Ben can't touch Ava's codes
+    const c1 = await req('POST', '/api/seller/coupons', { code: 'save10', kind: 'percent', value: 10, maxRedemptions: 3, perCustomer: 1 }, A)
+    check('seller creates a code (stored in capitals)', c1.status === 201 && c1.json.coupon.code === 'SAVE10')
+    check('another seller can’t see it', (await req('GET', '/api/seller/coupons', undefined, B)).json.coupons.length === 0)
+    check('another seller can’t edit it', (await req('PATCH', `/api/seller/coupons/${c1.json.coupon.id}`, { active: false }, B)).status === 404)
+    check('duplicate codes are refused', (await req('POST', '/api/seller/coupons', { code: 'SAVE10', kind: 'percent', value: 5 }, A)).status === 400)
+    check('a percent above 100 is refused', (await req('POST', '/api/seller/coupons', { code: 'TOOMUCH', kind: 'percent', value: 150 }, A)).status === 400)
+    check('an amount off needs a currency', (await req('POST', '/api/seller/coupons', { code: 'NOCUR', kind: 'amount', value: 100 }, A)).status === 400)
+
+    // the quote is what checkout charges
+    const qt = (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'save10' })).json.quote
+    check('quote: 12.00 with SAVE10 is 10.80', qt.listMinor === 1200 && qt.coupon?.discountMinor === 120 && qt.totalMinor === 1080)
+    check('quote says the code needs an email (per-customer limit)', qt.needsEmail === true)
+    check('quote: unknown code gives a clear error and the full price', (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'NOPE' })).json.quote.couponError !== null)
+    check('checkout with a per-customer code needs an email', (await buy({ coupon: 'SAVE10' })).status === 400)
+    const r1 = await buy({ coupon: 'SAVE10', email: 'one@buyer.test' })
+    check('card checkout charges the quoted total', r1.status === 200 && unit(sidOf(r1)) === '1080', JSON.stringify(r1.json))
+    const o1 = await dbGet<any>('SELECT * FROM seller_order WHERE "sessionId" = ?', sidOf(r1))
+    check('the order records list price, discount and code', o1.amountMinor === 1080 && o1.listMinor === 1200 && o1.discountMinor === 120 && o1.couponCode === 'SAVE10')
+    check('the same customer can’t use it twice', (await buy({ coupon: 'SAVE10', email: 'ONE@buyer.test' })).status === 409)
+    const tampered = await buy({ coupon: 'SAVE10', email: 'two@buyer.test', amountMinor: 1, priceMinor: 1 })
+    check('a browser-sent price is ignored', unit(sidOf(tampered)) === '1080')
+
+    // limits hold under concurrent checkouts
+    await req('POST', '/api/seller/coupons', { code: 'ONLYONE', kind: 'percent', value: 50, maxRedemptions: 1 }, A)
+    const racers = await Promise.all(Array.from({ length: 6 }, (_, i) => buy({ coupon: 'ONLYONE', email: `racer${i}@buyer.test` })))
+    check('six buyers at once: exactly one gets a one-use code', racers.filter((r) => r.status === 200).length === 1 && racers.filter((r) => r.status === 409).length === 5, racers.map((r) => r.status).join(','))
+    const winner = racers.find((r) => r.status === 200)!
+    check('the counter shows one use', (await dbGet<any>(`SELECT used FROM seller_coupon WHERE code = 'ONLYONE'`)).used === 1)
+    // abandoning the checkout gives the use back
+    await sendWebhook(HOOK, fake.event('checkout.session.expired', { ...fake.sessions.get(sidOf(winner))!, status: 'expired' }, accountId))
+    check('an expired checkout releases the code', (await dbGet<any>(`SELECT used FROM seller_coupon WHERE code = 'ONLYONE'`)).used === 0)
+    const second = await buy({ coupon: 'ONLYONE', email: 'late@buyer.test' })
+    check('the released use can be taken by someone else', second.status === 200 && unit(sidOf(second)) === '600')
+    // paying confirms it
+    const sess = fake.sessions.get(sidOf(second))!
+    await sendWebhook(HOOK, fake.event('checkout.session.completed', { ...sess, status: 'complete', payment_status: 'paid', customer_details: { email: 'late@buyer.test' } }, accountId))
+    check('a paid order confirms the code', (await dbGet<any>(`SELECT u.status FROM seller_coupon_use u JOIN seller_order o ON o.id = u."orderId" WHERE o."sessionId" = ?`, sidOf(second))).status === 'confirmed')
+
+    // eligibility
+    await req('POST', '/api/seller/coupons', { code: 'OLD', kind: 'percent', value: 20, startsAt: '2020-01-01T00:00:00Z', endsAt: '2020-02-01T00:00:00Z' }, A)
+    check('an expired code is refused at checkout', (await buy({ coupon: 'OLD' })).status === 409)
+    const off = await req('POST', '/api/seller/coupons', { code: 'PAUSED', kind: 'percent', value: 20, active: false }, A)
+    check('a switched-off code is refused', off.status === 201 && (await buy({ coupon: 'PAUSED' })).status === 409)
+    const other = (await req('POST', '/api/seller/products', { title: 'Second product', priceMinor: 500, currency: 'gbp' }, A)).json.product.id
+    const scoped = await req('POST', '/api/seller/coupons', { code: 'OTHERONLY', kind: 'percent', value: 20, productIds: [other, 'prd_someone_else'] }, A)
+    check('a code can be limited to the seller’s own products only', JSON.stringify(scoped.json.coupon.productIds) === JSON.stringify([other]))
+    check('a code limited to other products doesn’t apply', (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'OTHERONLY' })).json.quote.coupon === null)
+    await req('POST', '/api/seller/coupons', { code: 'DOLLARS', kind: 'amount', value: 100, currency: 'usd' }, A)
+    check('an amount-off code in another currency is refused', (await buy({ coupon: 'DOLLARS' })).status === 409)
+    await req('POST', '/api/seller/coupons', { code: 'NEARLY', kind: 'amount', value: 1170, currency: 'gbp' }, A)
+    const tiny = await buy({ coupon: 'NEARLY' })
+    check('a code leaving 0.30 can’t go through card checkout (below the 0.50 minimum)', tiny.status === 409 && /0\.50/.test(tiny.json.error))
+
+    // a code that makes it free completes as a free order
+    await req('POST', '/api/seller/coupons', { code: 'GIFT', kind: 'percent', value: 100, maxRedemptions: 5 }, A)
+    const gift = await buy({ coupon: 'GIFT', email: 'gift@buyer.test' })
+    check('a 100% code completes as a free order, sent by email', gift.status === 200 && gift.json.emailed === true)
+    const go = await dbGet<any>(`SELECT * FROM seller_order WHERE "couponCode" = 'GIFT'`)
+    check('the free order keeps the full list price and the discount', go.amountMinor === 0 && go.listMinor === 1200 && go.discountMinor === 1200 && go.status === 'paid')
+    check('the free order used the code', (await dbGet<any>(`SELECT used FROM seller_coupon WHERE code = 'GIFT'`)).used === 1)
+
+    // scheduled offers with an explicit timezone, stacked with a code
+    const ex = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === pid).extras
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const local = (ms: number, tz: string) => { const d = new Date(new Date(ms).toLocaleString('en-US', { timeZone: tz })); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}` }
+    await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...ex, offer: { ...ex.offer, on: true, kind: 'percent', value: 25, tz: 'America/New_York', startsLocal: local(Date.now() - 3600e3, 'America/New_York'), endsLocal: local(Date.now() + 2 * 86400e3, 'America/New_York'), countdown: true } } }, A)
+    const saved = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === pid).extras.offer
+    check('offer window is stored in UTC with its timezone', saved.tz === 'America/New_York' && Boolean(saved.startsAt) && Boolean(saved.endsAt) && Math.abs(Date.parse(saved.endsAt) - (Date.now() + 2 * 86400e3)) < 120e3)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const card = (await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === pid)
+    check('the card shows the offer, savings and a real countdown', card.offer?.priceMinor === 900 && card.offer?.savedMinor === 300 && card.offer?.countdown === true && Boolean(card.offer?.endsAt))
+    const stacked = (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'SAVE10' })).json.quote
+    check('stacking: offer first, then the code (12.00 → 9.00 → 8.10)', stacked.offer?.priceMinor === 900 && stacked.coupon?.discountMinor === 90 && stacked.totalMinor === 810)
+    const r3 = await buy({ coupon: 'SAVE10', email: 'three@buyer.test' })
+    check('checkout charges the same stacked total as the card and quote', unit(sidOf(r3)) === '810')
+    // historical totals don't move
+    await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...ex, offer: { ...ex.offer, on: false } } }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    check('changing the offer later leaves past orders alone', (await dbGet<any>('SELECT "amountMinor" FROM seller_order WHERE id = ?', o1.id)).amountMinor === 1080)
+    // an offer that has ended is not applied
+    await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...ex, offer: { ...ex.offer, on: true, kind: 'percent', value: 25, tz: 'Europe/London', startsLocal: '2020-01-01T09:00', endsLocal: '2020-01-02T09:00', countdown: true } } }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const ended = (await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === pid)
+    check('an ended offer shows no discount and no countdown', ended.offer === null)
+    check('and checkout charges the full price', unit(sidOf(await buy({}))) === '1200')
+    await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...ex, offer: { ...ex.offer, on: false } } }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+
+    // used codes keep their terms; deleting a used code only switches it off
+    const used = (await req('GET', '/api/seller/coupons', undefined, A)).json.coupons.find((c: any) => c.code === 'SAVE10')
+    check('a used code can’t change its discount', (await req('PATCH', `/api/seller/coupons/${used.id}`, { value: 50 }, A)).status === 400)
+    check('the limit can’t drop below uses so far', (await req('PATCH', `/api/seller/coupons/${used.id}`, { maxRedemptions: 1 }, A)).status === 400)
+    const del = await req('DELETE', `/api/seller/coupons/${used.id}`, undefined, A)
+    check('deleting a used code switches it off instead', del.json?.deactivated === true && (await req('GET', '/api/seller/coupons', undefined, A)).json.coupons.some((c: any) => c.code === 'SAVE10' && !c.active))
+    const seller = (await req('GET', '/api/seller/orders', undefined, A)).json.orders.find((o: any) => o.id === o1.id)
+    check('the seller’s order list shows list price, discount and code', seller.listMinor === 1200 && seller.discountMinor === 120 && seller.couponCode === 'SAVE10')
+  }
   const re = await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)
   const reDl = await fetch(String(re.json?.order?.downloadUrl).replace(ORIGIN, BASE))
   check('the private file still downloads after a restart', reDl.status === 200 && (await reDl.text()) === 'SECRET-PLANNER-CONTENT')

@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ImagePlus, Monitor, Plus, RotateCcw, Smartphone, Trash2, Video } from 'lucide-react'
 import { sellerApi } from './api'
+import type { Coupon } from './api'
 import { trackSellerWork } from './use-seller-save'
-import { mediaUrl } from './model'
+import { formatPrice, mediaUrl } from './model'
 import type { CardLayout, ProductExtras, ShopProduct, StoreView } from './model'
 import { ProductCard } from './ProductCard'
 import { storeStyle } from './StorePage'
@@ -220,6 +221,127 @@ export function CardAppearance({ x, setX, preview, store, buy }: { x: ProductExt
         <span className="ss-hint">Drag the title or description sideways, or select one and use the arrow keys (C centres it).</span>
         <button type="button" className="ss-ghost" onClick={() => setX({ textPos: { title: 0, desc: 0 } })}><RotateCcw className="h-3.5 w-3.5" /> Reset position</button>
       </div>
+    </div>
+  )
+}
+
+/* ---------------------------------------------------- Stage B: offers --- */
+
+const BROWSER_TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' } catch { return 'UTC' } })()
+const ZONES: string[] = (() => {
+  try {
+    const all = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? []
+    return all.length ? [...new Set(['UTC', BROWSER_TZ, ...all])] : ['UTC', BROWSER_TZ, 'Europe/London', 'Europe/Paris', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo', 'Australia/Sydney']
+  } catch { return ['UTC', BROWSER_TZ] }
+})()
+
+type OfferCfg = ProductExtras['offer']
+
+/** Offer window as local times in an explicit timezone; the server converts and enforces it. */
+export function OfferSchedule({ offer, setOffer }: { offer: OfferCfg; setOffer: (n: Partial<OfferCfg>) => void }) {
+  // products saved before timezones: show their day dates as UTC midnight so nothing silently moves
+  const tz = offer.tz ?? (offer.starts || offer.ends ? 'UTC' : BROWSER_TZ)
+  const startsLocal = offer.startsLocal ?? (offer.starts ? `${offer.starts}T00:00` : '')
+  const endsLocal = offer.endsLocal ?? (offer.ends ? `${offer.ends}T23:59` : '')
+  const set = (n: Partial<OfferCfg>) => setOffer({ tz, startsLocal: startsLocal || null, endsLocal: endsLocal || null, starts: null, ends: null, ...n })
+  const badOrder = startsLocal && endsLocal && endsLocal <= startsLocal
+  return (
+    <div className="pe2-sched">
+      <div className="ss-grid2">
+        <label className="ss-field"><span className="ss-label">Starts (optional)</span><input type="datetime-local" className="ss-input" value={startsLocal} onChange={(e) => set({ startsLocal: e.target.value || null })} /></label>
+        <label className="ss-field"><span className="ss-label">Ends (optional)</span><input type="datetime-local" className="ss-input" value={endsLocal} aria-invalid={Boolean(badOrder)} onChange={(e) => set({ endsLocal: e.target.value || null, countdown: e.target.value ? offer.countdown : false })} /></label>
+      </div>
+      <label className="ss-field"><span className="ss-label">Timezone</span>
+        <select className="ss-input" value={tz} onChange={(e) => set({ tz: e.target.value })}>
+          {ZONES.map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}{z === BROWSER_TZ ? ' (yours)' : ''}</option>)}
+        </select>
+      </label>
+      {badOrder && <span className="ss-hint pe2-err">The end must be after the start, or the offer won’t run.</span>}
+      <label className={cn('pe2-check', !endsLocal && 'off')}>
+        <input type="checkbox" disabled={!endsLocal} checked={Boolean(offer.countdown && endsLocal)} onChange={(e) => set({ countdown: e.target.checked })} />
+        Show a countdown to the end
+      </label>
+      <span className="ss-hint">{endsLocal ? `Times are in ${tz.replace(/_/g, ' ')}. The discount stops automatically at the end, everywhere.` : 'A countdown needs an end time, so buyers only see one for a real deadline.'}</span>
+    </div>
+  )
+}
+
+/* --------------------------------------------------- Stage B: coupons --- */
+
+
+/** The store's discount codes. Limits and eligibility are enforced by the server at checkout. */
+export function CouponsPanel({ currency, products }: { currency: string; products: Array<{ id: string; title: string }> }) {
+  const [list, setList] = useState<Coupon[] | null>(null)
+  const [unavailable, setUnavailable] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [form, setForm] = useState({ code: '', kind: 'percent' as 'percent' | 'amount', value: '10', productId: '', endsLocal: '', max: '', per: '' })
+  const load = () => sellerApi.coupons().then((r) => setList(r.coupons)).catch((e: { status?: number; message: string }) => (e.status === 404 ? setUnavailable(true) : setErr(e.message)))
+  useEffect(() => { void load() }, [])
+  if (unavailable) return <p className="pe2-unavail" role="status">Discount codes aren’t available yet: the live Desknoty API hasn’t been updated. They’ll switch on once it is.</p>
+  const create = async () => {
+    setBusy(true); setErr(null)
+    try {
+      const v = form.kind === 'percent' ? Math.round(Number(form.value)) : Math.round(Number(form.value) * 100)
+      await sellerApi.createCoupon({ code: form.code, kind: form.kind, value: v, currency: form.kind === 'amount' ? currency : null, productIds: form.productId ? [form.productId] : [], endsAt: form.endsLocal || null, tz: BROWSER_TZ, maxRedemptions: form.max ? Number(form.max) : null, perCustomer: form.per ? Number(form.per) : null })
+      setForm({ ...form, code: '' })
+      await load()
+    } catch (e) { setErr((e as Error).message) }
+    setBusy(false)
+  }
+  const act = async (fn: () => Promise<unknown>) => { setErr(null); try { await fn(); await load() } catch (e) { setErr((e as Error).message) } }
+  return (
+    <div className="pe2-coupons">
+      {list && list.length > 0 && (
+        <ul className="pe2-clist">
+          {list.map((c) => (
+            <li key={c.id} className={cn(!c.active && 'off')}>
+              <div>
+                <b>{c.code}</b>
+                <span>{c.kind === 'percent' ? `${c.value}% off` : `${formatPrice(c.value, c.currency ?? currency)} off`}{c.productIds.length ? ` · ${c.productIds.map((id) => products.find((p) => p.id === id)?.title ?? 'a product').join(', ')}` : ' · all products'}</span>
+                <small>
+                  {c.maxRedemptions != null ? `${c.used} of ${c.maxRedemptions} used` : `${c.used} used`}
+                  {c.perCustomer != null ? ` · ${c.perCustomer} per customer` : ''}
+                  {c.endsAt ? ` · ${Date.parse(c.endsAt) < Date.now() ? 'expired' : `until ${new Date(c.endsAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}`}` : ''}
+                  {!c.active ? ' · off' : ''}
+                </small>
+              </div>
+              <div className="pe2-cacts">
+                <button type="button" className="ss-ghost" onClick={() => void act(() => sellerApi.updateCoupon(c.id, { active: !c.active }))}>{c.active ? 'Turn off' : 'Turn on'}</button>
+                <button type="button" className="ss-ghost" aria-label={`Delete ${c.code}`} onClick={() => { if (window.confirm(c.used ? `${c.code} has been used, so it will be switched off and kept for your order history.` : `Delete ${c.code}?`)) void act(() => sellerApi.deleteCoupon(c.id)) }}><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {list && list.length === 0 && <p className="ss-hint">No codes yet. Codes stack on top of a running offer; one code per order.</p>}
+      <div className="pe2-cnew">
+        <div className="ss-grid2">
+          <label className="ss-field"><span className="ss-label">New code</span><input className="ss-input" value={form.code} maxLength={24} placeholder="e.g. LAUNCH20" onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '') })} /></label>
+          <label className="ss-field"><span className="ss-label">{form.kind === 'percent' ? 'Percent off' : `Amount off (${currency.toUpperCase()})`}</span>
+            <div className="pe2-cval">
+              <select className="ss-input" value={form.kind} aria-label="Discount type" onChange={(e) => setForm({ ...form, kind: e.target.value as 'percent' | 'amount' })}><option value="percent">%</option><option value="amount">{currency.toUpperCase()}</option></select>
+              <input className="ss-input" inputMode="decimal" value={form.value} aria-label="Discount value" onChange={(e) => setForm({ ...form, value: e.target.value.replace(/[^0-9.]/g, '') })} />
+            </div>
+          </label>
+        </div>
+        <div className="ss-grid2">
+          <label className="ss-field"><span className="ss-label">Applies to</span>
+            <select className="ss-input" value={form.productId} onChange={(e) => setForm({ ...form, productId: e.target.value })}>
+              <option value="">All products</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.title || 'Untitled product'}</option>)}
+            </select>
+          </label>
+          <label className="ss-field"><span className="ss-label">Expires (optional, {BROWSER_TZ.replace(/_/g, ' ')})</span><input type="datetime-local" className="ss-input" value={form.endsLocal} onChange={(e) => setForm({ ...form, endsLocal: e.target.value })} /></label>
+        </div>
+        <div className="ss-grid2">
+          <label className="ss-field"><span className="ss-label">Total uses (optional)</span><input className="ss-input" inputMode="numeric" value={form.max} placeholder="Unlimited" onChange={(e) => setForm({ ...form, max: e.target.value.replace(/\D/g, '') })} /></label>
+          <label className="ss-field"><span className="ss-label">Per customer (optional)</span><input className="ss-input" inputMode="numeric" value={form.per} placeholder="Unlimited" onChange={(e) => setForm({ ...form, per: e.target.value.replace(/\D/g, '') })} /></label>
+        </div>
+        <span className="ss-hint">Per-customer limits go by the buyer’s email address, so buyers enter an email to use those codes.</span>
+        <button type="button" className="ss-ghost" disabled={busy || form.code.length < 3 || !Number(form.value)} onClick={() => void create()}><Plus className="h-3.5 w-3.5" /> {busy ? 'Adding…' : 'Add code'}</button>
+      </div>
+      {err && <p className="ss-hint pe2-err" role="alert">{err}</p>}
     </div>
   )
 }

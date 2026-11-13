@@ -54,6 +54,10 @@ export const sellerApi = {
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
   updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number) =>
     call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision }),
+  coupons: () => call<{ coupons: Coupon[] }>('GET', '/api/seller/coupons'),
+  createCoupon: (c: CouponInput) => call<{ coupon: Coupon }>('POST', '/api/seller/coupons', c),
+  updateCoupon: (id: string, c: Partial<CouponInput>) => call<{ coupon: Coupon }>('PATCH', `/api/seller/coupons/${id}`, c),
+  deleteCoupon: (id: string) => call<{ deleted: boolean; deactivated: boolean }>('DELETE', `/api/seller/coupons/${id}`),
   duplicateProduct: (id: string) => call<{ product: DraftProduct; store: StoreView }>('POST', `/api/seller/products/${id}/duplicate`),
   deleteProduct: (id: string) => call<{ store: StoreView }>('DELETE', `/api/seller/products/${id}`),
   uploadFile: (id: string, file: File) =>
@@ -112,10 +116,41 @@ export interface PublicOrder {
   payerBank?: string | null
 }
 
+export interface Coupon {
+  id: string
+  code: string
+  kind: 'percent' | 'amount'
+  value: number
+  currency: string | null
+  productIds: string[]
+  startsAt: string | null
+  endsAt: string | null
+  maxRedemptions: number | null
+  perCustomer: number | null
+  used: number
+  active: boolean
+  createdAt: string
+}
+export type CouponInput = { code: string; kind: 'percent' | 'amount'; value: number; currency?: string | null; productIds?: string[]; startsAt?: string | null; endsAt?: string | null; tz?: string; maxRedemptions?: number | null; perCustomer?: number | null; active?: boolean }
+
+export interface PriceQuote {
+  currency: string
+  listMinor: number
+  offer: { priceMinor: number; savedMinor: number; endsAt: string | null; countdown: boolean } | null
+  coupon: { code: string; discountMinor: number } | null
+  couponError: string | null
+  totalMinor: number
+  savedMinor: number
+  needsEmail: boolean
+  cardMinimum: number
+}
+
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) =>
-    call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, ...(payer ?? {}) }),
+  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) =>
+    call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}) }),
+  /** The authoritative price right now, optionally with a discount code. Nothing is reserved. */
+  quote: (handle: string, productId: string, coupon?: string) => call<{ quote: PriceQuote }>('POST', `/api/store/${encodeURIComponent(handle)}/quote`, { productId, coupon: coupon || undefined }),
   /** Bank transfer: "I've sent it" (never unlocks the download). */
   claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
   /** Back from PayPal: the server verifies the payment with PayPal. */

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, formatPrice, mediaUrl } from './model'
@@ -321,16 +321,34 @@ function TikTokCard({ url, live }: { url: string; live?: boolean }) {
 }
 
 
-/** Price with a running offer: old price struck through, sale price and badge. */
+/** Price with a running offer: old price struck through, sale price, savings and (for a real deadline) a countdown. */
 export function PriceTag({ prod }: { prod: ShopProduct }) {
   if (!prod.offer) return <span className="sp-price">{formatPrice(prod.priceMinor, prod.currency)}</span>
+  const saved = prod.offer.savedMinor ?? prod.priceMinor - prod.offer.priceMinor
   return (
     <span className="sp-price sp-price-sale">
-      <s>{formatPrice(prod.priceMinor, prod.currency)}</s>
+      <s aria-label={`Was ${formatPrice(prod.priceMinor, prod.currency)}`}>{formatPrice(prod.priceMinor, prod.currency)}</s>
       <b>{formatPrice(prod.offer.priceMinor, prod.currency)}</b>
       <em className="sp-badge" style={{ background: prod.offer.badgeColor }}>{prod.offer.badge}</em>
+      {saved > 0 && <small className="sp-save">Save {formatPrice(saved, prod.currency)}</small>}
+      {prod.offer.countdown && prod.offer.endsAt && <Countdown endsAt={prod.offer.endsAt} />}
     </span>
   )
+}
+
+/** Time left on a genuine scheduled offer. Hides itself when the offer ends (the server stops applying it then too). */
+function Countdown({ endsAt }: { endsAt: string }) {
+  const end = Date.parse(endsAt)
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(t)
+  }, [])
+  const left = end - now
+  if (!Number.isFinite(end) || left <= 0) return null
+  const d = Math.floor(left / 86400000), h = Math.floor(left / 3600000) % 24, m = Math.floor(left / 60000) % 60, sec = Math.floor(left / 1000) % 60
+  const text = d > 0 ? `${d}d ${h}h ${m}m` : `${h}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`
+  return <small className="sp-countdown" role="timer" aria-label={`Offer ends in ${text}`}>Ends in {text}</small>
 }
 export const ctaStyle = (prod: ShopProduct): CSSProperties | undefined => (prod.cta?.color ? { background: prod.cta.color, borderColor: prod.cta.color, color: '#fff' } : undefined)
 

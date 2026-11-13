@@ -13,6 +13,8 @@
  * payouts and paid checkout need setting up; without TikTok credentials the
  * TikTok step says so and "Continue without TikTok" works.
  */
+import { CARD_MINIMUM, isTimeZone, normaliseCode, offerPrice, offerWindow, quote as priceQuote, zonedToUtc } from './seller-pricing.ts'
+import type { CouponRow } from './seller-pricing.ts'
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { makeBlobs } from './blobs.ts'
 import type { Blobs } from './blobs.ts'
@@ -184,6 +186,39 @@ export async function ensureSellerTables() {
       "receivedAt" TEXT NOT NULL
     );
 
+    -- Stage B: discount codes. used counts live reservations (pending + paid orders).
+    CREATE TABLE IF NOT EXISTS seller_coupon (
+      id TEXT PRIMARY KEY,
+      "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
+      code TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      value INTEGER NOT NULL,
+      currency TEXT,
+      "productIds" TEXT,
+      "startsAt" TEXT,
+      "endsAt" TEXT,
+      "maxRedemptions" INTEGER,
+      "perCustomer" INTEGER,
+      used INTEGER NOT NULL DEFAULT 0,
+      active INTEGER NOT NULL DEFAULT 1,
+      "createdAt" TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS seller_coupon_code ON seller_coupon ("storeId", code);
+    CREATE TABLE IF NOT EXISTS seller_coupon_customer (
+      "couponId" TEXT NOT NULL REFERENCES seller_coupon(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY ("couponId", email)
+    );
+    -- One row per order that used a code: reserved at checkout, confirmed when paid, released if it fails.
+    CREATE TABLE IF NOT EXISTS seller_coupon_use (
+      "orderId" TEXT PRIMARY KEY,
+      "couponId" TEXT NOT NULL REFERENCES seller_coupon(id) ON DELETE CASCADE,
+      email TEXT,
+      status TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS oauth_state (
       state TEXT PRIMARY KEY,
       "userId" TEXT NOT NULL,
@@ -246,6 +281,10 @@ interface ProductRow {
   updatedAt: string
 }
 interface OrderRow {
+  listMinor?: number | null
+  discountMinor?: number
+  couponCode?: string | null
+  couponId?: string | null
   /** stripe | paypal | bank */
   method: string
   /** Bank transfer reference the buyer quotes. */
@@ -300,7 +339,6 @@ export function handleProblem(h: unknown): string | null {
 
 const CURRENCIES = new Set(['gbp', 'usd', 'eur'])
 /** Stripe's minimum charge is around 0.30–0.50 in these currencies. */
-const MIN_MINOR = 50
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.slice(0, max) : '')
 const safeUrl = (v: unknown) => {
@@ -521,7 +559,9 @@ function productDraftView(p: ProductRow) {
   }
 }
 /* ---- product extras: discount, buy button, visibility (stored as JSON beside the product) ---- */
-export type ProductOffer = { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string }
+export type ProductOffer = { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string
+  /** Stage B: exact window entered as local time in an explicit timezone, stored as UTC instants. */
+  tz: string; startsLocal: string | null; endsLocal: string | null; startsAt: string | null; endsAt: string | null; countdown: boolean }
 export type CardLayout = 'compact' | 'showcase' | 'featured'
 export type ProductExtras = {
   offer: ProductOffer
@@ -553,11 +593,23 @@ export function cleanExtras(v: unknown): ProductExtras {
   value = kind === 'percent' ? Math.min(95, Math.max(0, value)) : Math.max(0, Math.min(99_999_99, value))
   const cta = (o.cta ?? {}) as Record<string, unknown>
   return {
-    offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48' },
+    offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48', ...offerSchedule(f) },
     cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
     hidden: Boolean(o.hidden),
     ...cleanCard(o),
   }
+}
+const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+/** Offer window: local wall-clock times in an explicit IANA timezone, converted to UTC instants here. */
+function offerSchedule(f: Record<string, unknown>) {
+  const tz = isTimeZone(f.tz) ? String(f.tz) : 'UTC'
+  const startsLocal = typeof f.startsLocal === 'string' && LOCAL.test(f.startsLocal) ? f.startsLocal : null
+  const endsLocal = typeof f.endsLocal === 'string' && LOCAL.test(f.endsLocal) ? f.endsLocal : null
+  const startsAt = startsLocal ? zonedToUtc(startsLocal, tz) : null
+  let endsAt = endsLocal ? zonedToUtc(endsLocal, tz) : null
+  // an end before the start would make an offer that never runs: drop the end instead
+  if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) endsAt = null
+  return { tz, startsLocal, endsLocal: endsAt ? endsLocal : null, startsAt, endsAt, countdown: Boolean(f.countdown) && Boolean(endsAt) }
 }
 const line = (v: unknown, max: number) => String(v ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max)
 const unit = (v: unknown, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, Math.round(n * 1000) / 1000)) : d }
@@ -598,22 +650,25 @@ async function ownMediaOnly(storeId: string, extrasJson: string): Promise<string
   return JSON.stringify(x)
 }
 const readExtras = (raw: string | null | undefined) => { try { return cleanExtras(raw ? JSON.parse(raw) : {}) } catch { return cleanExtras({}) } }
-/** The price a buyer pays right now: the discount applies only while switched on and inside its dates. */
+/** The automatic offer price right now (null when none is running). Shared with checkout via seller-pricing. */
 export function salePrice(priceMinor: number, x: ProductExtras, at = new Date()): number | null {
-  const o = x.offer
-  if (!o.on || o.value <= 0 || priceMinor <= 0) return null
-  const day = at.toISOString().slice(0, 10)
-  if (o.starts && day < o.starts) return null
-  if (o.ends && day > o.ends) return null
-  const off = o.kind === 'percent' ? Math.round(priceMinor * o.value / 100) : o.value
-  const price = Math.max(0, priceMinor - off)
-  return price < priceMinor ? price : null
+  return offerPrice(priceMinor, x.offer, at.getTime())
 }
 function offerView(priceMinor: number, x: ProductExtras) {
   const sale = salePrice(priceMinor, x)
   if (sale == null) return null
   const pct = Math.round((1 - sale / priceMinor) * 100)
-  return { priceMinor: sale, percent: pct, badge: x.offer.badge === 'PERCENT' ? `${pct}% OFF` : x.offer.badge, badgeColor: x.offer.badgeColor, ends: x.offer.ends }
+  const end = offerWindow(x.offer).end
+  return {
+    priceMinor: sale,
+    percent: pct,
+    savedMinor: priceMinor - sale,
+    badge: x.offer.badge === 'PERCENT' ? `${pct}% OFF` : x.offer.badge,
+    badgeColor: x.offer.badgeColor,
+    ends: x.offer.ends,
+    endsAt: end != null ? new Date(end).toISOString() : null,
+    countdown: Boolean(x.offer.countdown && end != null),
+  }
 }
 
 /** A plain file-type label from the file name (PDF, ZIP, Notion …); never the protected file itself. */
@@ -680,6 +735,7 @@ const q = {
   product: (id: string, storeId: string, via: Sql = sql) => via.get<ProductRow>(`SELECT * FROM seller_product WHERE id = ? AND "storeId" = ?`, id, storeId),
   order: (id: string, via: Sql = sql) => via.get<OrderRow>(`SELECT * FROM seller_order WHERE id = ?`, id),
   orderBySession: (id: string, via: Sql = sql) => via.get<OrderRow>(`SELECT * FROM seller_order WHERE "sessionId" = ?`, id),
+  coupon: (storeId: string, code: string, via: Sql = sql) => via.get<CouponRow>(`SELECT * FROM seller_coupon WHERE "storeId" = ? AND code = ?`, storeId, code),
 }
 
 /* -------------------------------------------------------- auth guard --- */
@@ -798,6 +854,7 @@ export async function completeOrder(order: OrderRow, email: string | null, payme
       order.id,
     )
     if (paymentRef && order.method === 'stripe') await tx.run('UPDATE seller_order SET "paymentIntent" = ? WHERE id = ?', paymentRef, order.id)
+    await confirmCoupon(tx, order.id)
     // Claim the receipt atomically: only the call that sets emailedAt sends it.
     const claim = await tx.run(`UPDATE seller_order SET "emailedAt" = ? WHERE id = ? AND status = 'paid' AND "emailedAt" IS NULL AND "buyerEmail" IS NOT NULL`, now(), order.id)
     if (!claim.changes) return
@@ -818,7 +875,83 @@ export async function completeOrder(order: OrderRow, email: string | null, payme
 }
 
 async function markOrder(sessionId: string, status: 'failed' | 'cancelled') {
+  const o = await q.orderBySession(sessionId)
   await sql.run(`UPDATE seller_order SET status = ? WHERE "sessionId" = ? AND status = 'pending'`, status, sessionId)
+  if (o) await releaseCoupon(o.id)
+}
+
+/* ---------------------------------------------------------- coupons --- */
+
+class CouponRefused extends Error {}
+
+/**
+ * Take one use of a code for a new order, atomically. The guarded UPDATEs only
+ * succeed while a slot is free, so concurrent checkouts can't exceed the limits.
+ * Runs inside the transaction that creates the order: a refusal rolls both back.
+ */
+async function reserveCoupon(tx: Sql, c: CouponRow, orderId: string, email: string | null) {
+  const took = await tx.run(`UPDATE seller_coupon SET used = used + 1 WHERE id = ? AND active = 1 AND ("maxRedemptions" IS NULL OR used < "maxRedemptions")`, c.id)
+  if (!took.changes) throw new CouponRefused('This code has been fully redeemed.')
+  if (c.perCustomer != null) {
+    if (!email) throw new CouponRefused('Enter your email to use this code.')
+    await tx.run(`INSERT INTO seller_coupon_customer ("couponId", email, used) VALUES (?, ?, 0) ON CONFLICT DO NOTHING`, c.id, email)
+    const mine = await tx.run(`UPDATE seller_coupon_customer SET used = used + 1 WHERE "couponId" = ? AND email = ? AND used < ?`, c.id, email, c.perCustomer)
+    if (!mine.changes) throw new CouponRefused('You’ve already used this code.')
+  }
+  await tx.run(`INSERT INTO seller_coupon_use ("orderId", "couponId", email, status, "createdAt") VALUES (?, ?, ?, 'reserved', ?)`, orderId, c.id, email, now())
+}
+
+/** Give the use back when an order is cancelled or fails before payment. */
+async function releaseCoupon(orderId: string) {
+  await sql.tx(async (tx) => {
+    const u = await tx.get<{ couponId: string; email: string | null }>(`SELECT "couponId", email FROM seller_coupon_use WHERE "orderId" = ? AND status = 'reserved'`, orderId)
+    if (!u) return
+    const done = await tx.run(`UPDATE seller_coupon_use SET status = 'released' WHERE "orderId" = ? AND status = 'reserved'`, orderId)
+    if (!done.changes) return
+    await tx.run(`UPDATE seller_coupon SET used = used - 1 WHERE id = ? AND used > 0`, u.couponId)
+    if (u.email) await tx.run(`UPDATE seller_coupon_customer SET used = used - 1 WHERE "couponId" = ? AND email = ? AND used > 0`, u.couponId, u.email)
+  })
+}
+
+/** Payment arrived: the use is final. A late payment for a released use takes it back (the buyer did pay that price). */
+async function confirmCoupon(tx: Sql, orderId: string) {
+  const u = await tx.get<{ couponId: string; email: string | null; status: string }>(`SELECT "couponId", email, status FROM seller_coupon_use WHERE "orderId" = ?`, orderId)
+  if (!u || u.status === 'confirmed') return
+  await tx.run(`UPDATE seller_coupon_use SET status = 'confirmed' WHERE "orderId" = ?`, orderId)
+  if (u.status === 'released') {
+    await tx.run(`UPDATE seller_coupon SET used = used + 1 WHERE id = ?`, u.couponId)
+    if (u.email) await tx.run(`UPDATE seller_coupon_customer SET used = used + 1 WHERE "couponId" = ? AND email = ?`, u.couponId, u.email)
+  }
+}
+
+/** Card and PayPal checkouts nobody finished within a day free their code again (bank transfers can take days, so they keep it). */
+async function releaseStaleCoupons(couponId: string) {
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const stale = await sql.all<{ orderId: string }>(`SELECT u."orderId" FROM seller_coupon_use u JOIN seller_order o ON o.id = u."orderId" WHERE u."couponId" = ? AND u.status = 'reserved' AND o.status = 'pending' AND o.method IN ('stripe','paypal') AND o."createdAt" < ?`, couponId, cutoff)
+  for (const r of stale) {
+    await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, r.orderId)
+    await releaseCoupon(r.orderId)
+  }
+}
+
+type Priced = { totalMinor: number; listMinor: number; discountMinor: number; coupon: CouponRow | null }
+
+/** The one place a purchase is priced: list price, live offer, then the coupon. */
+async function pricePurchase(s: StoreRow, p: ProductRow, rawCode: unknown): Promise<Priced | { error: string }> {
+  const list = p.pubPriceMinor ?? 0
+  const offer = readExtras(p.pubExtras).offer
+  const given = String(rawCode ?? '').trim()
+  if (!given) {
+    const qt = priceQuote({ productId: p.id, listMinor: list, currency: p.pubCurrency ?? 'gbp', offer })
+    return { totalMinor: qt.totalMinor, listMinor: list, discountMinor: list - qt.totalMinor, coupon: null }
+  }
+  const code = normaliseCode(given)
+  const c = code ? await q.coupon(s.id, code) : undefined
+  if (c) await releaseStaleCoupons(c.id)
+  const fresh = c ? await q.coupon(s.id, c.code) : undefined
+  const qt = priceQuote({ productId: p.id, listMinor: list, currency: p.pubCurrency ?? 'gbp', offer, coupon: fresh ?? null, code: code ?? given })
+  if (qt.couponError) return { error: qt.couponError }
+  return { totalMinor: qt.totalMinor, listMinor: list, discountMinor: list - qt.totalMinor, coupon: fresh ?? null }
 }
 
 /* ---------------------------------------------------------- webhook --- */
@@ -1125,6 +1258,111 @@ export function sellerRouter() {
     res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
+  /* ---- discount codes (Stage B) ---- */
+  const couponView = (c: CouponRow) => ({ id: c.id, code: c.code, kind: c.kind, value: c.value, currency: c.currency, productIds: c.productIds ? (JSON.parse(c.productIds) as string[]) : [], startsAt: c.startsAt, endsAt: c.endsAt, maxRedemptions: c.maxRedemptions, perCustomer: c.perCustomer, used: c.used, active: Boolean(c.active), createdAt: c.createdAt })
+  /** Validates a coupon body. Codes, kinds and values are locked once a code has been used. */
+  async function cleanCoupon(storeId: string, b: Record<string, unknown>, existing?: CouponRow): Promise<Partial<CouponRow> | string> {
+    const out: Partial<CouponRow> = {}
+    const locked = Boolean(existing && existing.used > 0)
+    if (!existing || 'code' in b) {
+      const code = normaliseCode(b.code)
+      if (!code) return 'Codes use 3 to 24 letters, numbers, dashes or underscores.'
+      if (locked && code !== existing!.code) return 'A code that has been used can’t be renamed.'
+      const clash = await q.coupon(storeId, code)
+      if (clash && clash.id !== existing?.id) return 'You already have a code with that name.'
+      out.code = code
+    }
+    if (!existing || 'kind' in b || 'value' in b) {
+      const kind = (b.kind ?? existing?.kind) === 'amount' ? 'amount' : 'percent'
+      const value = Number(b.value ?? existing?.value)
+      if (!Number.isInteger(value)) return 'Enter a whole number for the discount.'
+      if (kind === 'percent' && (value < 1 || value > 100)) return 'Percent off must be between 1 and 100.'
+      if (kind === 'amount' && (value < 1 || value > 99_999_99)) return 'Amount off must be more than 0.'
+      if (locked && (kind !== existing!.kind || value !== existing!.value)) return 'A code that has been used keeps its discount. Make a new code instead.'
+      out.kind = kind
+      out.value = value
+    }
+    if (!existing || 'currency' in b) {
+      const cur = b.currency == null || b.currency === '' ? null : String(b.currency).toLowerCase()
+      if (cur && !CURRENCIES.has(cur)) return 'Unsupported currency.'
+      out.currency = cur
+    }
+    if ((out.kind ?? existing?.kind) === 'amount' && !(out.currency ?? existing?.currency)) return 'Choose the currency for an amount off.'
+    if ('productIds' in b || !existing) {
+      const ids = Array.isArray(b.productIds) ? b.productIds.map(String) : []
+      const own = ids.length ? (await q.products(storeId)).map((p) => p.id) : []
+      out.productIds = ids.length ? JSON.stringify([...new Set(ids.filter((i) => own.includes(i)))]) : null
+    }
+    for (const k of ['startsAt', 'endsAt'] as const) {
+      if (!(k in b) && existing) continue
+      const v = b[k]
+      if (v == null || v === '') { out[k] = null; continue }
+      // local time + timezone from the editor, or an exact ISO instant
+      const tz = isTimeZone(b.tz) ? String(b.tz) : 'UTC'
+      const iso = typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? zonedToUtc(v, tz) : typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? new Date(v).toISOString() : null
+      if (!iso) return 'Enter a valid date and time.'
+      out[k] = iso
+    }
+    const st = out.startsAt !== undefined ? out.startsAt : existing?.startsAt ?? null
+    const en = out.endsAt !== undefined ? out.endsAt : existing?.endsAt ?? null
+    if (st && en && Date.parse(en) <= Date.parse(st)) return 'The expiry must be after the start.'
+    for (const k of ['maxRedemptions', 'perCustomer'] as const) {
+      if (!(k in b) && existing) continue
+      const v = b[k]
+      if (v == null || v === '') { out[k] = null; continue }
+      const n = Number(v)
+      if (!Number.isInteger(n) || n < 1 || n > 1_000_000) return 'Limits must be whole numbers above 0.'
+      if (k === 'maxRedemptions' && existing && n < existing.used) return `This code has already been used ${existing.used} times.`
+      out[k] = n
+    }
+    if ('active' in b) out.active = b.active ? 1 : 0
+    return out
+  }
+
+  me.get('/coupons', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const rows = await sql.all<CouponRow>(`SELECT * FROM seller_coupon WHERE "storeId" = ? ORDER BY "createdAt" DESC`, s.id)
+    res.json({ coupons: rows.map(couponView) })
+  })
+  me.post('/coupons', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const fields = await cleanCoupon(s.id, (req.body ?? {}) as Record<string, unknown>)
+    if (typeof fields === 'string') return void res.status(400).json({ error: fields })
+    if (((await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_coupon WHERE "storeId" = ?`, s.id))?.n ?? 0) >= 200) return void res.status(400).json({ error: 'Code limit reached.' })
+    const id = `cpn_${randomBytes(10).toString('hex')}`
+    const f = fields as CouponRow
+    try {
+      await sql.run(`INSERT INTO seller_coupon (id, "storeId", code, kind, value, currency, "productIds", "startsAt", "endsAt", "maxRedemptions", "perCustomer", used, active, "createdAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`, id, s.id, f.code, f.kind, f.value, f.currency ?? null, f.productIds ?? null, f.startsAt ?? null, f.endsAt ?? null, f.maxRedemptions ?? null, f.perCustomer ?? null, f.active ?? 1, now())
+    } catch {
+      return void res.status(409).json({ error: 'You already have a code with that name.' })
+    }
+    res.status(201).json({ coupon: couponView((await q.coupon(s.id, f.code))!) })
+  })
+  me.patch('/coupons/:id', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const c = await sql.get<CouponRow>(`SELECT * FROM seller_coupon WHERE id = ? AND "storeId" = ?`, String(req.params.id), s.id)
+    if (!c) return void res.status(404).json({ error: 'Code not found.' })
+    const fields = await cleanCoupon(s.id, (req.body ?? {}) as Record<string, unknown>, c)
+    if (typeof fields === 'string') return void res.status(400).json({ error: fields })
+    const keys = Object.keys(fields) as Array<keyof CouponRow>
+    if (keys.length) await sql.run(`UPDATE seller_coupon SET ${keys.map((k) => `"${k}" = ?`).join(', ')} WHERE id = ?`, ...keys.map((k) => fields[k] as string | number | null), c.id)
+    res.json({ coupon: couponView((await sql.get<CouponRow>(`SELECT * FROM seller_coupon WHERE id = ?`, c.id))!) })
+  })
+  /** Unused codes are deleted; used ones are switched off so order history keeps its code. */
+  me.delete('/coupons/:id', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const c = await sql.get<CouponRow>(`SELECT * FROM seller_coupon WHERE id = ? AND "storeId" = ?`, String(req.params.id), s.id)
+    if (!c) return void res.status(404).json({ error: 'Code not found.' })
+    const ever = await sql.get(`SELECT 1 FROM seller_coupon_use WHERE "couponId" = ?`, c.id)
+    if (ever) await sql.run(`UPDATE seller_coupon SET active = 0 WHERE id = ?`, c.id)
+    else await sql.run(`DELETE FROM seller_coupon WHERE id = ?`, c.id)
+    res.json({ deleted: !ever, deactivated: Boolean(ever) })
+  })
+
   /** Copy a product (details, price, offer and file); the copy starts as a draft. */
   me.post('/products/:id/duplicate', async (req: Authed, res) => {
     const s = await mine(req, res)
@@ -1192,7 +1430,7 @@ export function sellerRouter() {
     const rows = await sql.all<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? ORDER BY "createdAt" DESC, id DESC LIMIT 101 OFFSET ?`, s.id, offset)
     const more = rows.length > 100
     if (more) rows.pop()
-    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt, payerName: o.payerName ?? null, payerBank: o.payerBank ?? null, hidden: !!(o as { sellerHidden?: number }).sellerHidden })) })
+    res.json({ nextOffset: more ? offset + 100 : null, orders: rows.map((o) => ({ id: o.id, product: o.productTitle, amountMinor: o.amountMinor, currency: o.currency, status: o.status, buyer: o.buyerEmail, createdAt: o.createdAt, paidAt: o.paidAt, method: o.method, reference: o.reference, buyerClaimedAt: o.buyerClaimedAt, payerName: o.payerName ?? null, payerBank: o.payerBank ?? null, hidden: !!(o as { sellerHidden?: number }).sellerHidden, listMinor: o.listMinor ?? o.amountMinor, discountMinor: o.discountMinor ?? 0, couponCode: o.couponCode ?? null })) })
   })
 
   // Remove a row from the seller's Transaction History. The order itself is kept (buyers keep their downloads, totals stay right).
@@ -1353,6 +1591,7 @@ export function sellerRouter() {
     if (!o || o.storeId !== s.id) return void res.status(404).json({ error: 'Order not found.' })
     if (o.method !== 'bank' || o.status !== 'pending') return void res.status(409).json({ error: 'Only an unpaid bank transfer can be cancelled here.' })
     await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, o.id)
+    await releaseCoupon(o.id)
     res.json({ order: { id: o.id, status: 'cancelled' } })
   })
 
@@ -1531,14 +1770,54 @@ export function sellerRouter() {
     res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
+  /** What the buyer would pay right now, with an optional code. Read only: nothing is reserved. */
+  pub.post('/:handle/quote', async (req, res) => {
+    const s = await liveStore(req, res)
+    if (!s) return
+    const found = await q.product(String(req.body?.productId ?? ''), s.id)
+    if (!found || !found.pubAt || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    const given = String(req.body?.coupon ?? '').trim()
+    const code = given ? normaliseCode(given) : null
+    const c = code ? await q.coupon(s.id, code) : undefined
+    const qt = priceQuote({ productId: found.id, listMinor: found.pubPriceMinor, currency: found.pubCurrency, offer: readExtras(found.pubExtras).offer, coupon: c ?? null, code: given ? code ?? given : null })
+    res.json({ quote: { ...qt, needsEmail: Boolean(qt.coupon && c?.perCustomer != null), cardMinimum: CARD_MINIMUM } })
+  })
+
   pub.post('/:handle/checkout', async (req, res) => {
     const s = await liveStore(req, res)
     if (!s) return
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
     const found = await q.product(productId, s.id)
     if (!found || !found.pubAt || !found.pubFileId || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
-    // the buyer pays the live discounted price when an offer is running (worked out here, never sent by the browser)
-    const p = { ...found, pubPriceMinor: salePrice(found.pubPriceMinor, readExtras(found.pubExtras)) ?? found.pubPriceMinor }
+    // The buyer pays the price worked out here: list price, live offer, then at most one code. Never sent by the browser.
+    const priced = await pricePurchase(s, found, req.body?.coupon)
+    if ('error' in priced) return void res.status(409).json({ error: priced.error, couponError: true })
+    const p = { ...found, pubPriceMinor: priced.totalMinor }
+    const couponCode = priced.coupon?.code ?? null
+    const buyerEmailRaw = String(req.body?.email ?? '').trim().toLowerCase()
+    const validEmail = /^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(buyerEmailRaw) && buyerEmailRaw.length <= 254 ? buyerEmailRaw : null
+    if (priced.coupon?.perCustomer != null && !validEmail) return void res.status(400).json({ error: 'Enter your email to use this code.', couponError: true })
+    /** Pricing columns stored on the order, so its total never changes later. */
+    const ledger = { listMinor: priced.listMinor, discountMinor: priced.discountMinor, couponCode, couponId: priced.coupon?.id ?? null }
+    /** Create the order (or return the one for this checkout key) and take the code's use in the same transaction. */
+    const placeOrder = async (insert: (tx: Sql) => Promise<{ changes: number }>, key: string) => {
+      try {
+        return await sql.tx(async (tx) => {
+          const made = await insert(tx)
+          const row = (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
+          if (made.changes) {
+            await tx.run('UPDATE seller_order SET "listMinor" = ?, "discountMinor" = ?, "couponCode" = ?, "couponId" = ? WHERE id = ?', ledger.listMinor, ledger.discountMinor, ledger.couponCode, ledger.couponId, row.id)
+            if (priced.coupon) await reserveCoupon(tx, priced.coupon, row.id, validEmail)
+          }
+          return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE id = ?', row.id))!
+        })
+      } catch (e) {
+        if (e instanceof CouponRefused) return { refused: e.message }
+        throw e
+      }
+    }
+    /** A retry must be the same purchase: same product, method and code. */
+    const samePurchase = (o: OrderRow, method: string) => o.productId === p.id && o.method === method && (o.couponCode ?? null) === couponCode
     // Free product: no payment, the order is complete straight away and the download is ready.
     if (p.pubPriceMinor === 0) {
       const key = String(req.body?.checkoutKey ?? randomUUID())
@@ -1546,18 +1825,20 @@ export function sellerRouter() {
       const email = String(req.body?.email ?? '').trim().toLowerCase()
       // free products are sent to the buyer's email: the download link only arrives there
       if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) || email.length > 254) return void res.status(400).json({ error: 'Enter your email address so we can send you the download.' })
-      const insertFree = (k: string) => sql.tx(async (tx) => {
-        await tx.run(
+      const insertFree = (k: string) => placeOrder((tx) => tx.run(
           `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
           `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', 'free', 0, p.pubCurrency, randomBytes(24).toString('base64url'), now(), k, stripeMode, 'free',
-        )
-        return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, k))!
-      })
+        ), k)
       let order = await insertFree(key)
+      if ('refused' in order) return void res.status(409).json({ error: order.refused, couponError: true })
       if (order.productId !== p.id) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
-      // A key left over from an earlier paid attempt (the product used to cost money) must not
-      // complete that paid order for free: start a fresh free order instead.
-      if (order.method !== 'free') order = await insertFree(`${key.slice(0, 80)}-f${randomBytes(4).toString('hex')}`)
+      // A key left over from an earlier paid attempt (the product used to cost money), or from a purchase with
+      // a different code, must not complete that order for free: start a fresh free order instead.
+      if (order.method !== 'free' || (order.couponCode ?? null) !== couponCode) {
+        const again = await insertFree(`${key.slice(0, 80)}-f${randomBytes(4).toString('hex')}`)
+        if ('refused' in again) return void res.status(409).json({ error: again.refused, couponError: true })
+        order = again
+      }
       try {
         await completeOrder(order, email)
       } catch (err) {
@@ -1570,21 +1851,19 @@ export function sellerRouter() {
       return void res.json({ emailed: true, email })
     }
     const method = String(req.body?.method ?? 'stripe')
-    if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method))
+    if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method, placeOrder, samePurchase))
     if (method !== 'stripe') return void res.status(400).json({ error: 'Unknown payment method.' })
     if (!readPayments(s.payments).stripe.enabled) return void res.status(409).json({ error: 'This seller doesn’t take card payments.' })
-    if (p.pubPriceMinor < MIN_MINOR) return void res.status(409).json({ error: 'Card payments need a price of at least 0.50. Choose bank transfer instead.' })
+    if (p.pubPriceMinor < CARD_MINIMUM) return void res.status(409).json({ error: couponCode ? 'With this code the price is below the 0.50 card minimum. Remove the code or choose another way to pay.' : 'Card payments need a price of at least 0.50. Choose bank transfer instead.', couponError: Boolean(couponCode) })
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Checkout isn’t switched on for this store yet.' })
     const fresh = await refreshAccount(s).catch(() => s)
     if (!fresh.stripeAccountId || !fresh.chargesReady) return void res.status(409).json({ error: 'This seller can’t take payments yet.' })
     const key = String(req.body?.checkoutKey ?? req.body?.requestId ?? randomUUID())
     if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
-    const order = await sql.tx(async tx => {
-      await tx.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`, `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode)
-      return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
-    })
-    if (order.productId !== p.id || order.stripeMode !== stripeMode || order.method !== 'stripe') return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
+    const order = await placeOrder((tx) => tx.run(`INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", "buyerEmail") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`, `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', fresh.stripeAccountId, p.pubPriceMinor, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode, priced.coupon ? validEmail : null), key)
+    if ('refused' in order) return void res.status(409).json({ error: order.refused, couponError: true })
+    if (!samePurchase(order, 'stripe') || order.stripeMode !== stripeMode) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     if (Date.now() - Date.parse(order.createdAt) > 23 * 60 * 60 * 1000) return void res.status(409).json({ error: 'This checkout attempt expired. Start a new purchase.' })
     const session = await st.checkout.sessions.create({
@@ -1605,7 +1884,7 @@ export function sellerRouter() {
   })
 
   /** PayPal and bank transfer checkout. Same order row, receipt and download flow as Stripe. */
-  async function altCheckout(req: Request, res: Response, s: StoreRow, p: ProductRow, method: 'paypal' | 'bank') {
+  async function altCheckout(req: Request, res: Response, s: StoreRow, p: ProductRow, method: 'paypal' | 'bank', placeOrder: (insert: (tx: Sql) => Promise<{ changes: number }>, key: string) => Promise<OrderRow | { refused: string }>, samePurchase: (o: OrderRow, method: string) => boolean) {
     const pay = readPayments(s.payments)
     if (!readyMethods(s, pay).includes(method)) return void res.status(409).json({ error: method === 'paypal' ? 'This seller doesn’t take PayPal.' : 'This seller doesn’t take bank transfers.' })
     const key = String(req.body?.checkoutKey ?? randomUUID())
@@ -1624,8 +1903,7 @@ export function sellerRouter() {
       payTo = JSON.stringify(chosen ?? { ...pay.bank, enabled: undefined })
     }
     const id = `ord_${randomBytes(12).toString('hex')}`
-    const order = await sql.tx(async (tx) => {
-      await tx.run(
+    const order = await placeOrder((tx) => tx.run(
         `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, reference, "buyerEmail", "payerName", "payerBank", "payTo") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
         id, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download',
         method === 'paypal' ? `paypal:${pay.paypal.email}` : 'bank',
@@ -1635,11 +1913,10 @@ export function sellerRouter() {
         payerName || null,
         payerBank || null,
         payTo,
-      )
-      return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
-    })
+      ), key)
+    if ('refused' in order) return void res.status(409).json({ error: order.refused, couponError: true })
     // A retry with the same key returns the same order; a key from another purchase is refused.
-    if (order.productId !== p.id || order.method !== method) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
+    if (!samePurchase(order, method)) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
     if (method === 'bank') {
       return void res.json({ orderUrl: `/store/${s.handle}/order/${order.id}?k=${encodeURIComponent(order.accessKey)}`, order: await orderView(order, s) })
     }
@@ -1667,7 +1944,7 @@ export function sellerRouter() {
     const po = await captureOrRead(o.providerOrderId, o.id)
     const v = verifyPaypalPayment(po, o, o.accountId.replace(/^paypal:/, ''))
     if (!v.ok) {
-      if (po.status === 'VOIDED') await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, o.id)
+      if (po.status === 'VOIDED') { await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, o.id); await releaseCoupon(o.id) }
       else if (po.status === 'COMPLETED') console.error(`[seller] PayPal order ${o.providerOrderId} for ${o.id} refused: ${v.reason}`)
       return (await q.order(o.id))!
     }

@@ -48,7 +48,7 @@ export interface ShopProduct {
   priceMinor: number
   currency: string
   /** A running discount, worked out by the server (null when none is live). */
-  offer?: { priceMinor: number; percent: number; badge: string; badgeColor: string; ends: string | null } | null
+  offer?: { priceMinor: number; percent: number; badge: string; badgeColor: string; ends: string | null; savedMinor?: number; endsAt?: string | null; countdown?: boolean } | null
   cta?: { text: string; color: string }
   hidden?: boolean
   /** Card presentation (V2); all optional so older data still renders. */
@@ -70,7 +70,7 @@ export interface ShopProduct {
 export type CardLayout = 'compact' | 'showcase' | 'featured'
 
 export type ProductExtras = {
-  offer: { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string }
+  offer: { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string; tz?: string; startsLocal?: string | null; endsLocal?: string | null; startsAt?: string | null; endsAt?: string | null; countdown?: boolean }
   cta: { text: string; color: string }
   hidden: boolean
   layout: CardLayout

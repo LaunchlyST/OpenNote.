@@ -5,7 +5,7 @@ import { Style2Page } from '../projects/seller/Style2'
 import { formatPrice, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
-import type { PublicOrder, PublicStore as Store } from '../projects/seller/api'
+import type { PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
 
 /**
@@ -89,17 +89,17 @@ export default function PublicStore({ path }: { path: string }) {
     // every product, free or paid, opens the checkout popup first
     setChoosing(p)
   }
-  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => {
+  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => {
     if (checkoutBusy.current) return
     checkoutBusy.current = true
     setBuying(p.id)
     setBuyErr(null)
     try {
-      // One key per product and method: a retry or double click reuses the same order.
-      const keyName = `desknoty.checkout.${handle}.${p.id}.${method}`
+      // One key per product, method and code: a retry or double click reuses the same order.
+      const keyName = `desknoty.checkout.${handle}.${p.id}.${method}${coupon ? `.${coupon}` : ''}`
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
-      const r = await storeApi.checkout(handle, p.id, key, method, email, payer)
+      const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon)
       // Free: the download link was sent to the buyer's email
       if (r.emailed) {
         sessionStorage.removeItem(keyName)
@@ -180,7 +180,8 @@ export default function PublicStore({ path }: { path: string }) {
       busy={buying === choosing.id}
       error={buyErr}
       seller={store.page.name || store.handle}
-      onPay={(m, email, payer) => void pay(choosing, m, email, payer)}
+      handle={store.handle}
+      onPay={(m, email, payer, coupon) => void pay(choosing, m, email, payer, coupon)}
       emailedTo={emailedTo}
       onClose={() => (setChoosing(null), setEmailedTo(null))}
     />
@@ -239,8 +240,32 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, emailedTo }: { emailedTo?: string | null; product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }) => void; onClose: () => void }) {
-  const free = product.priceMinor === 0
+function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, emailedTo, handle }: { emailedTo?: string | null; product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => void; onClose: () => void }) {
+  // The server's quote is the price: list price, live offer, then the code. The card's price is only a first guess.
+  const [quote, setQuote] = useState<PriceQuote | null>(null)
+  const [code, setCode] = useState('')
+  const [applied, setApplied] = useState<string | null>(null)
+  const [codeErr, setCodeErr] = useState<string | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [noQuotes, setNoQuotes] = useState(false)
+  const loadQuote = async (c?: string) => {
+    setChecking(true)
+    try {
+      const r = await storeApi.quote(handle, product.id, c)
+      if (c && r.quote.couponError) { setCodeErr(r.quote.couponError); setChecking(false); return }
+      setQuote(r.quote)
+      setApplied(c ? r.quote.coupon?.code ?? null : null)
+      setCodeErr(null)
+    } catch (e) {
+      // an API without quotes (not updated yet): keep the card's price and don't offer codes
+      if (!c) setNoQuotes(true)
+      else setCodeErr((e as Error).message)
+    }
+    setChecking(false)
+  }
+  useEffect(() => { void loadQuote() }, [product.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const totalMinor = quote ? quote.totalMinor : (product.offer?.priceMinor ?? product.priceMinor)
+  const free = totalMinor === 0
   const choices: Choice[] = free ? ['card'] : [
     ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
     ...(methods.includes('stripe') ? (['card'] as Choice[]) : []),
@@ -262,11 +287,15 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
   }, [])
   const method = CHOICE_METHOD[choice]
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
-  const isBank = method === 'bank'
+  // a free order (also when a code makes it free) has no payment method: just the email for the download
+  const isBank = method === 'bank' && !free
   const noBank = isBank && banks.length === 0
-  const ready = isBank || free ? valid && (free || (!noBank && payTo >= 0 && payerBank !== '' && payerName.trim().length >= 2)) : valid || !email.trim()
+  const needsEmail = Boolean(quote?.needsEmail)
+  // free (also when a code makes it free) and per-customer codes need an email; bank transfer needs the payer's details
+  const ready = free ? valid : isBank ? valid && !noBank && payTo >= 0 && payerBank !== '' && payerName.trim().length >= 2 : needsEmail ? valid : valid || !email.trim()
   const canPay = !busy && ready
-  const price = formatPrice(product.offer?.priceMinor ?? product.priceMinor, product.currency)
+  const price = formatPrice(totalMinor, product.currency)
+  const money = (m: number) => formatPrice(m, product.currency)
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', k)
@@ -280,7 +309,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
       if (remember) localStorage.setItem('desknoty.payer', JSON.stringify({ email: email.trim(), ...(isBank ? { payerBank, payerName: payerName.trim() } : (() => { try { const o = JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null'); return o ? { payerBank: o.payerBank, payerName: o.payerName } : {} } catch { return {} } })()) }))
       else localStorage.removeItem('desknoty.payer')
     } catch { /* storage blocked */ }
-    onPay(method, email.trim() || undefined, isBank ? { bankIndex: payTo, payerBank, payerName: payerName.trim() } : undefined)
+    onPay(method, email.trim() || undefined, isBank && !free ? { bankIndex: payTo, payerBank, payerName: payerName.trim() } : undefined, applied ?? undefined)
   }
   const cover = product.cover ? mediaUrl(product.cover) : null
   return (
@@ -305,7 +334,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
         <div className="co3-grid">
           <section className="co3-pay" aria-label="Payment details">
             <h2>Payment Details</h2>
-            {choices.length > 1 && (
+            {choices.length > 1 && !free && (
               <div className="co3-tabs" role="radiogroup" aria-label="Payment method">
                 {choices.map((c) => (
                   <label key={c} className={choice === c ? 'on' : undefined}>
@@ -378,14 +407,37 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
               <div>
                 <div className="co3-itemtop"><b>{product.title}</b><strong>{price}</strong></div>
                 {product.description && <small>{product.description.split('\n')[0].slice(0, 90)}</small>}
-                <div className="co3-meta"><span>Format: Digital download</span><span>Quantity: 1</span></div>
+                <div className="co3-meta"><span>Format: {product.format || product.fileType || 'Digital download'}</span><span>Quantity: 1</span></div>
               </div>
             </div>
+            {!noQuotes && (quote?.listMinor ?? product.priceMinor) > 0 && (
+              <div className="co3-code">
+                {applied ? (
+                  <div className="co3-code-on" role="status">
+                    <span>Code <b>{applied}</b> applied</span>
+                    <button type="button" onClick={() => { setCode(''); void loadQuote() }}>Remove</button>
+                  </div>
+                ) : (
+                  <>
+                    <label htmlFor="co3-code-in">Discount code</label>
+                    <div className="co3-code-row">
+                      <input id="co3-code-in" value={code} onChange={(e) => { setCode(e.target.value); setCodeErr(null) }} autoComplete="off" autoCapitalize="characters" spellCheck={false} placeholder="Enter code" aria-invalid={Boolean(codeErr)} aria-describedby={codeErr ? 'co3-code-err' : undefined} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (code.trim()) void loadQuote(code.trim()) } }} />
+                      <button type="button" disabled={!code.trim() || checking} onClick={() => void loadQuote(code.trim())}>{checking ? 'Checking…' : 'Apply'}</button>
+                    </div>
+                    {codeErr && <p id="co3-code-err" className="co3-code-err" role="alert">{codeErr}</p>}
+                  </>
+                )}
+              </div>
+            )}
             <dl className="co3-lines">
-              <dt>Subtotal</dt><dd>{price}</dd>
+              <dt>Subtotal</dt><dd>{money(quote?.listMinor ?? product.priceMinor)}</dd>
+              {quote?.offer && <><dt>Offer</dt><dd className="co3-minus">−{money(quote.offer.savedMinor)}</dd></>}
+              {quote?.coupon && <><dt>Code {quote.coupon.code}</dt><dd className="co3-minus">−{money(quote.coupon.discountMinor)}</dd></>}
               <dt>Delivery</dt><dd>FREE</dd>
             </dl>
             <div className="co3-total"><span>Total</span><b>{price}</b></div>
+            {quote && quote.savedMinor > 0 && <p className="co3-saved">You save {money(quote.savedMinor)}</p>}
+            {needsEmail && !free && <p className="co3-hint-line">This code is once per customer, so we need your email.</p>}
             {error && <p className="co-err" role="alert">{error}</p>}
             <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy ? (free ? 'Sending…' : 'Opening…') : free ? 'Send digital product' : 'Pay Now'}</button>
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>

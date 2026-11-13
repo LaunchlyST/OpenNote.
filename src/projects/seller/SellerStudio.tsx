@@ -44,7 +44,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { BuyRow, StorePage, storeStyle } from './StorePage'
-import { CardAppearance, CoverEditor, FaqEditor, GalleryEditor, LinesEditor } from './ProductEditorParts'
+import { CardAppearance, CouponsPanel, CoverEditor, FaqEditor, GalleryEditor, LinesEditor, OfferSchedule } from './ProductEditorParts'
 import { Style2Page } from './Style2'
 import { bankIcon } from './bank-icons'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
@@ -1739,6 +1739,8 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   // The server returns the card settings it actually stored. An API without Store V2 drops them,
   // so their absence means these controls can't save anything yet.
   const v2 = Boolean(product.extras && 'layout' in product.extras)
+  // Stage B: the server stores the offer's timezone; an older API doesn't
+  const v2b = Boolean(product.extras && 'tz' in (product.extras.offer ?? {}))
   const setX = (n: Partial<ProductExtras>) => setForm({ ...form, extras: { ...x, ...n } })
   const setOffer = (n: Partial<ProductExtras['offer']>) => setX({ offer: { ...x.offer, ...n } })
 
@@ -1747,7 +1749,8 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   const price = Math.round(Number(form.price || 0) * 100)
   const free = price === 0
   // live preview of the offer (the server works out the real price at checkout)
-  const off = x.offer.kind === 'percent' ? Math.round(price * Math.min(95, x.offer.value) / 100) : x.offer.value
+  // same rounding as the server: half up to the nearest penny, integers only
+  const off = x.offer.kind === 'percent' ? Math.floor((price * Math.min(95, x.offer.value) + 50) / 100) : Math.min(price, x.offer.value)
   const sale = Math.max(0, price - off)
   const pct = price > 0 ? Math.round((1 - sale / price) * 100) : 0
   const offerLive = x.offer.on && !free && sale < price
@@ -1877,10 +1880,12 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
                     <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Sale price" value={(sale / 100).toFixed(2)} onChange={(e) => { const v = Math.round((Number(e.target.value.replace(/[^0-9.]/g, '')) || 0) * 100); setOffer({ kind: 'amount', value: Math.max(0, Math.min(price, price - v)) }) }} /></div>
                   </Field>
                 </div>
-                <div className="ss-grid2">
-                  <Field label="Starts (optional)"><input type="date" className="ss-input" value={x.offer.starts ?? ''} onChange={(e) => setOffer({ starts: e.target.value || null })} /></Field>
-                  <Field label="Ends (optional)"><input type="date" className="ss-input" value={x.offer.ends ?? ''} onChange={(e) => setOffer({ ends: e.target.value || null })} /></Field>
-                </div>
+                {v2b ? <OfferSchedule offer={x.offer} setOffer={setOffer} /> : (
+                  <div className="ss-grid2">
+                    <Field label="Starts (optional)"><input type="date" className="ss-input" value={x.offer.starts ?? ''} onChange={(e) => setOffer({ starts: e.target.value || null })} /></Field>
+                    <Field label="Ends (optional)"><input type="date" className="ss-input" value={x.offer.ends ?? ''} onChange={(e) => setOffer({ ends: e.target.value || null })} /></Field>
+                  </div>
+                )}
                 <div className="ss-field">
                   <span className="ss-label">Badge</span>
                   <div className="pe-chips">
@@ -1905,8 +1910,14 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
                   </>
                 ) : <b>{fmt(price)}</b>}
               </div>
-              {offerLive && (x.offer.starts || x.offer.ends) && <small>{x.offer.starts ? `From ${x.offer.starts}` : ''}{x.offer.starts && x.offer.ends ? ' · ' : ''}{x.offer.ends ? `Until ${x.offer.ends}` : ''}</small>}
+              {offerLive && <small>Buyers save {fmt(price - sale)}.{(x.offer.startsLocal || x.offer.endsLocal || x.offer.starts || x.offer.ends) ? ' Runs only inside its dates.' : ''}</small>}
             </div>
+          </div>
+        )}
+        {!free && (
+          <div className="ss-field">
+            <span className="ss-label">Discount codes</span>
+            <CouponsPanel currency={form.currency} products={store.products.filter((p) => !p.archived).map((p) => ({ id: p.id, title: p.title }))} />
           </div>
         )}
       </PSection>
