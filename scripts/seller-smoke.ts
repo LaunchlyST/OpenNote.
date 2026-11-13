@@ -316,12 +316,27 @@ try {
   const sid3 = String(co3.json.url).split('/pay/')[1]
   await sendWebhook(HOOK, fake.event('checkout.session.async_payment_failed', fake.sessions.get(sid3)!, accountId))
   check('a failed async payment is marked failed', (await req('GET', `/api/store/ava-makes/session/${sid3}`)).json.order.status === 'failed')
+  {
+    // free products: a stale key from a paid attempt must not break (or complete) that paid order
+    const staleKey = 'stalekey_1234567890abcd'
+    await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: staleKey })
+    await req('PATCH', `/api/seller/products/${pid}`, { priceMinor: 0 }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const fr = await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: 'freekey_1234567890abc', email: 'buyer@example.com', method: 'card' })
+    check('a free product is sent to the buyer’s email', fr.status === 200 && fr.json?.emailed === true)
+    const fr2 = await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: staleKey, email: 'buyer@example.com', method: 'card' })
+    check('a free checkout with a key from an old paid attempt still works', fr2.status === 200 && fr2.json?.emailed === true)
+    const stale = await dbGet<{ status: string }>('SELECT status FROM seller_order WHERE "checkoutKey" = ?', staleKey)
+    check('the old paid order is not marked paid for free', stale?.status !== 'paid')
+    await req('PATCH', `/api/seller/products/${pid}`, { priceMinor: 1200 }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+  }
   check('an unknown product can’t be bought', (await req('POST', '/api/store/ava-makes/checkout', { productId: 'prd_nope' })).status === 404)
   check('Ava’s product can’t be bought through Ben’s store', (await req('POST', '/api/store/ben-builds/checkout', { productId: pid })).status === 404)
 
   console.log('\n  Seller sees orders')
   const ords = (await req('GET', '/api/seller/orders', undefined, A)).json.orders
-  check('Ava sees her orders', ords.length === 3 && ords.some((o: { status: string }) => o.status === 'paid'))
+  check('Ava sees her orders', ords.length === 6 && ords.some((o: { status: string }) => o.status === 'paid'))
   check('Ben sees none', (await req('GET', '/api/seller/orders', undefined, B)).json.orders.length === 0)
 
   console.log('\n  Earnings and withdrawals')
@@ -347,7 +362,7 @@ try {
   server = await boot()
   const after = await req('GET', '/api/store/ava-makes')
   check('store is still published after a restart', after.status === 200 && after.json.products[0]?.id === pid)
-  check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 3)
+  check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 6)
   const re = await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)
   const reDl = await fetch(String(re.json?.order?.downloadUrl).replace(ORIGIN, BASE))
   check('the private file still downloads after a restart', reDl.status === 200 && (await reDl.text()) === 'SECRET-PLANNER-CONTENT')

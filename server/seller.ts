@@ -711,6 +711,17 @@ export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Sess
  * Marks a verified payment's order paid and sends its receipt exactly once.
  * Every payment method ends here, after its own verification.
  */
+/** Money for emails; never throws on an odd currency code. */
+function formatMoney(minor: number, currency: string): string {
+  const value = (Number(minor) || 0) / 100
+  try { return new Intl.NumberFormat('en-GB', { style: 'currency', currency: String(currency || 'gbp').toUpperCase() }).format(value) }
+  catch { return `${value.toFixed(2)} ${String(currency || '').toUpperCase()}`.trim() }
+}
+
+function storeName(store: { published?: string | null; draft: string; handle: string }): string {
+  try { return (JSON.parse(store.published ?? store.draft) as Page).name || store.handle } catch { return store.handle }
+}
+
 export async function completeOrder(order: OrderRow, email: string | null, paymentRef: string | null = null): Promise<OrderRow> {
   await sql.tx(async (tx) => {
     await tx.run(
@@ -729,7 +740,7 @@ export async function completeOrder(order: OrderRow, email: string | null, payme
       const queued = await enqueueEmail(
         'order-receipt',
         row.buyerEmail!,
-        { url: retrievalUrl(row, store.handle), name: row.productTitle, amount: new Intl.NumberFormat('en-GB', { style: 'currency', currency: row.currency.toUpperCase() }).format(row.amountMinor / 100), email: (JSON.parse(store.published ?? store.draft) as Page).name || store.handle },
+        { url: retrievalUrl(row, store.handle), name: row.productTitle, amount: formatMoney(row.amountMinor, row.currency), email: storeName(store) },
         tx,
       )
       if (queued.queued) await tx.run('UPDATE seller_order SET "receiptId" = ? WHERE id = ?', queued.id, row.id)
@@ -1467,15 +1478,27 @@ export function sellerRouter() {
       const email = String(req.body?.email ?? '').trim().toLowerCase()
       // free products are sent to the buyer's email: the download link only arrives there
       if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) || email.length > 254) return void res.status(400).json({ error: 'Enter your email address so we can send you the download.' })
-      const order = await sql.tx(async (tx) => {
+      const insertFree = (k: string) => sql.tx(async (tx) => {
         await tx.run(
           `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
-          `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', 'free', 0, p.pubCurrency, randomBytes(24).toString('base64url'), now(), key, stripeMode, 'free',
+          `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', 'free', 0, p.pubCurrency, randomBytes(24).toString('base64url'), now(), k, stripeMode, 'free',
         )
-        return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, key))!
+        return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE "storeId" = ? AND "checkoutKey" = ?', s.id, k))!
       })
+      let order = await insertFree(key)
       if (order.productId !== p.id) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
-      await completeOrder(order, email)
+      // A key left over from an earlier paid attempt (the product used to cost money) must not
+      // complete that paid order for free: start a fresh free order instead.
+      if (order.method !== 'free') order = await insertFree(`${key.slice(0, 80)}-f${randomBytes(4).toString('hex')}`)
+      try {
+        await completeOrder(order, email)
+      } catch (err) {
+        console.error('[seller] free order email failed', order.id, err)
+        // the email could not be queued: record the order and hand the download over right here instead
+        await sql.run(`UPDATE seller_order SET status = 'paid', "paidAt" = COALESCE("paidAt", ?), "buyerEmail" = COALESCE("buyerEmail", ?) WHERE id = ?`, now(), email, order.id)
+        const saved = (await q.order(order.id))!
+        return void res.json({ orderUrl: `/store/${s.handle}/order/${saved.id}?k=${encodeURIComponent(saved.accessKey)}`, order: await orderView(saved, s) })
+      }
       return void res.json({ emailed: true, email })
     }
     const method = String(req.body?.method ?? 'stripe')
