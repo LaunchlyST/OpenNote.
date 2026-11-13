@@ -522,7 +522,26 @@ function productDraftView(p: ProductRow) {
 }
 /* ---- product extras: discount, buy button, visibility (stored as JSON beside the product) ---- */
 export type ProductOffer = { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string }
-export type ProductExtras = { offer: ProductOffer; cta: { text: string; color: string }; hidden: boolean }
+export type CardLayout = 'compact' | 'showcase' | 'featured'
+export type ProductExtras = {
+  offer: ProductOffer
+  cta: { text: string; color: string }
+  hidden: boolean
+  /** Card presentation (V2). Every field has a default so older products keep working. */
+  layout: CardLayout
+  subtitle: string
+  /** Cover crop: focal point in percent and zoom (1 = fit). */
+  crop: { x: number; y: number; zoom: number }
+  gallery: string[]
+  video: string | null
+  badges: { new: boolean; featured: boolean }
+  format: string
+  included: string[]
+  access: string
+  faq: Array<{ q: string; a: string }>
+  /** Horizontal text position inside the card, 0 = left edge, 0.5 = centre, 1 = right edge. */
+  textPos: { title: number; desc: number }
+}
 const BADGES = ['SALE', 'PERCENT', 'Limited Offer', 'Launch Special']
 const HEX = /^#[0-9a-f]{6}$/i
 const isoDay = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null)
@@ -537,7 +556,46 @@ export function cleanExtras(v: unknown): ProductExtras {
     offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48' },
     cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
     hidden: Boolean(o.hidden),
+    ...cleanCard(o),
   }
+}
+const line = (v: unknown, max: number) => String(v ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max)
+const unit = (v: unknown, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, Math.round(n * 1000) / 1000)) : d }
+const pct = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : 50 }
+/** Card presentation fields: trimmed, bounded and defaulted, never trusted from the browser. */
+function cleanCard(o: Record<string, any>) {
+  const crop = (o.crop ?? {}) as Record<string, unknown>
+  const zoom = Number(crop.zoom)
+  const badges = (o.badges ?? {}) as Record<string, unknown>
+  const tp = (o.textPos ?? {}) as Record<string, unknown>
+  const media = (Array.isArray(o.gallery) ? o.gallery : []).map(mediaRef).filter((m): m is string => Boolean(m))
+  return {
+    layout: (['compact', 'showcase', 'featured'] as const).includes(o.layout) ? (o.layout as CardLayout) : 'compact',
+    subtitle: line(o.subtitle, 100),
+    crop: { x: pct(crop.x), y: pct(crop.y), zoom: Number.isFinite(zoom) ? Math.min(2.5, Math.max(1, Math.round(zoom * 100) / 100)) : 1 },
+    gallery: [...new Set(media)].slice(0, 8),
+    video: mediaRef(o.video),
+    badges: { new: Boolean(badges.new), featured: Boolean(badges.featured) },
+    format: line(o.format, 40),
+    included: (Array.isArray(o.included) ? o.included : []).map((v: unknown) => line(v, 80)).filter(Boolean).slice(0, 12),
+    access: line(o.access, 100),
+    faq: (Array.isArray(o.faq) ? o.faq : [])
+      .map((x: any) => ({ q: line(x?.q, 140), a: String(x?.a ?? '').trim().slice(0, 600) }))
+      .filter((x: { q: string; a: string }) => x.q && x.a)
+      .slice(0, 8),
+    textPos: { title: unit(tp.title, 0), desc: unit(tp.desc, 0) },
+  }
+}
+/** Gallery images and the preview video must be the seller's own uploads, of the right kind. */
+async function ownMediaOnly(storeId: string, extrasJson: string): Promise<string> {
+  const x = JSON.parse(extrasJson) as ProductExtras
+  const ids = [...x.gallery, ...(x.video ? [x.video] : [])]
+  if (!ids.length) return extrasJson
+  const rows = await sql.all<{ id: string; type: string }>(`SELECT id, type FROM seller_media WHERE "storeId" = ? AND id IN (${ids.map(() => '?').join(', ')})`, storeId, ...ids)
+  const kind = new Map(rows.map((r) => [r.id, r.type]))
+  x.gallery = x.gallery.filter((id) => kind.get(id)?.startsWith('image/'))
+  x.video = x.video && kind.get(x.video)?.startsWith('video/') ? x.video : null
+  return JSON.stringify(x)
 }
 const readExtras = (raw: string | null | undefined) => { try { return cleanExtras(raw ? JSON.parse(raw) : {}) } catch { return cleanExtras({}) } }
 /** The price a buyer pays right now: the discount applies only while switched on and inside its dates. */
@@ -558,6 +616,12 @@ function offerView(priceMinor: number, x: ProductExtras) {
   return { priceMinor: sale, percent: pct, badge: x.offer.badge === 'PERCENT' ? `${pct}% OFF` : x.offer.badge, badgeColor: x.offer.badgeColor, ends: x.offer.ends }
 }
 
+/** A plain file-type label from the file name (PDF, ZIP, Notion …); never the protected file itself. */
+function fileKind(name: string): string | null {
+  const ext = name.split('.').pop()?.toLowerCase() ?? ''
+  return /^[a-z0-9]{1,6}$/.test(ext) && ext !== name.toLowerCase() ? ext.toUpperCase() : null
+}
+
 function productPublicView(p: ProductRow) {
   return {
     id: p.id,
@@ -566,7 +630,10 @@ function productPublicView(p: ProductRow) {
     cover: p.pubCover,
     priceMinor: p.pubPriceMinor ?? 0,
     currency: p.pubCurrency ?? 'gbp',
-    ...(() => { const x = readExtras(p.pubExtras); return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden } })(),
+    ...(() => {
+      const x = readExtras(p.pubExtras)
+      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, fileType: p.pubFileName ? fileKind(p.pubFileName) : null }
+    })(),
   }
 }
 function productProblem(p: ProductRow): string | null {
@@ -1051,6 +1118,7 @@ export function sellerRouter() {
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
+    if (fields.extras) fields.extras = await ownMediaOnly(s.id, fields.extras)
     const next = { ...p, ...fields, updatedAt: now() }
     const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, next.id, p.revision)
     if (!saved.changes) return void res.status(409).json({ error: 'Product changed elsewhere. Your edits are kept locally.' })

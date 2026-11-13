@@ -33,6 +33,7 @@
     "serve": "NODE_ENV=production tsx server/index.ts",
     "test:seller": "tsx scripts/seller-smoke.ts",
     "test:e2e:seller": "tsx scripts/e2e-seller.ts",
+    "test:e2e:store": "tsx scripts/e2e-store-v2.ts",
     "test:e2e:studio": "tsx scripts/seller-e2e.ts",
     "test:payments": "tsx scripts/payments-smoke.ts",
     "test:launch": "tsx scripts/launch-smoke.ts"

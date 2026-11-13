@@ -51,14 +51,72 @@ export interface ShopProduct {
   offer?: { priceMinor: number; percent: number; badge: string; badgeColor: string; ends: string | null } | null
   cta?: { text: string; color: string }
   hidden?: boolean
+  /** Card presentation (V2); all optional so older data still renders. */
+  layout?: CardLayout
+  subtitle?: string
+  crop?: { x: number; y: number; zoom: number }
+  gallery?: string[]
+  video?: string | null
+  badges?: { new: boolean; featured: boolean }
+  format?: string
+  included?: string[]
+  access?: string
+  faq?: Array<{ q: string; a: string }>
+  textPos?: { title: number; desc: number }
+  /** File type label worked out by the server from the protected file's name. */
+  fileType?: string | null
 }
+
+export type CardLayout = 'compact' | 'showcase' | 'featured'
 
 export type ProductExtras = {
   offer: { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string }
   cta: { text: string; color: string }
   hidden: boolean
+  layout: CardLayout
+  subtitle: string
+  crop: { x: number; y: number; zoom: number }
+  gallery: string[]
+  video: string | null
+  badges: { new: boolean; featured: boolean }
+  format: string
+  included: string[]
+  access: string
+  faq: Array<{ q: string; a: string }>
+  textPos: { title: number; desc: number }
 }
-export const DEFAULT_EXTRAS: ProductExtras = { offer: { on: false, kind: 'percent', value: 20, starts: null, ends: null, badge: 'PERCENT', badgeColor: '#e11d48' }, cta: { text: '', color: '' }, hidden: false }
+export const DEFAULT_EXTRAS: ProductExtras = {
+  offer: { on: false, kind: 'percent', value: 20, starts: null, ends: null, badge: 'PERCENT', badgeColor: '#e11d48' },
+  cta: { text: '', color: '' },
+  hidden: false,
+  layout: 'compact',
+  subtitle: '',
+  crop: { x: 50, y: 50, zoom: 1 },
+  gallery: [],
+  video: null,
+  badges: { new: false, featured: false },
+  format: '',
+  included: [],
+  access: '',
+  faq: [],
+  textPos: { title: 0, desc: 0 },
+}
+
+/** Fill any missing V2 fields so older products keep working. */
+export function withExtras(x: Partial<ProductExtras> | undefined): ProductExtras {
+  return {
+    ...DEFAULT_EXTRAS,
+    ...x,
+    offer: { ...DEFAULT_EXTRAS.offer, ...x?.offer },
+    cta: { ...DEFAULT_EXTRAS.cta, ...x?.cta },
+    crop: { ...DEFAULT_EXTRAS.crop, ...x?.crop },
+    badges: { ...DEFAULT_EXTRAS.badges, ...x?.badges },
+    textPos: { ...DEFAULT_EXTRAS.textPos, ...x?.textPos },
+    gallery: x?.gallery ?? [],
+    included: x?.included ?? [],
+    faq: x?.faq ?? [],
+  }
+}
 
 /** The seller's own (draft) view of a product. */
 export interface DraftProduct extends ShopProduct {

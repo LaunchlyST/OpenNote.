@@ -221,6 +221,33 @@ try {
   check('public store never exposes file details', !live.text.includes('planner.pdf') && !live.text.includes('fil_'))
   check('checkout is off before payouts are ready', live.json.checkoutReady === false)
 
+  console.log('\n  Product cards V2: layout, crop, gallery, text position')
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex')
+  const mineImg = (await req('POST', '/api/seller/media', png, A, { 'content-type': 'image/png' })).json?.id
+  const benImg = (await req('POST', '/api/seller/media', png, B, { 'content-type': 'image/png' })).json?.id
+  check('media uploads work for both sellers', Boolean(mineImg) && Boolean(benImg))
+  const v2 = await req('PATCH', `/api/seller/products/${pid}`, { extras: {
+    layout: 'showcase', subtitle: 'Plan a month\nin one afternoon', crop: { x: 130, y: 20, zoom: 9 }, gallery: [mineImg, benImg, 'med_bad', mineImg], video: mineImg,
+    badges: { new: true, featured: 'yes' }, format: 'PDF', included: ['30 templates', '', 'Bonus checklist'], access: 'Instant download',
+    faq: [{ q: 'Refunds?', a: 'Within 14 days.' }, { q: 'No answer', a: '' }], textPos: { title: 0.5, desc: 7 }, layoutHack: 'x',
+  } }, A)
+  const vx = v2.json?.product?.extras
+  check('card settings save', v2.status === 200 && vx?.layout === 'showcase' && vx?.format === 'PDF' && vx?.access === 'Instant download')
+  check('card text is single line and trimmed', vx?.subtitle === 'Plan a month in one afternoon' && vx?.included?.join('|') === '30 templates|Bonus checklist')
+  check('crop and text positions are clamped into range', vx?.crop?.x === 100 && vx?.crop?.zoom === 2.5 && vx?.textPos?.title === 0.5 && vx?.textPos?.desc === 1)
+  check('gallery keeps only the seller’s own images, once each', vx?.gallery?.length === 1 && vx.gallery[0] === mineImg)
+  check('an image can’t be used as the preview video', vx?.video === null)
+  check('unanswered FAQ entries are dropped', vx?.faq?.length === 1)
+  const badLayout = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, layout: 'mega' } }, A)
+  check('an unknown layout falls back to compact', badLayout.json?.product?.extras?.layout === 'compact')
+  await req('PATCH', `/api/seller/products/${pid}`, { extras: vx }, A)
+  const notYet = (await req('GET', '/api/store/ava-makes')).json.products[0]
+  check('card changes stay in the draft until Publish', (notYet.layout ?? 'compact') === 'compact' && !notYet.subtitle)
+  await req('POST', '/api/seller/store/publish', undefined, A)
+  const pub2 = (await req('GET', '/api/store/ava-makes')).json.products[0]
+  check('published card settings reach the public store', pub2.layout === 'showcase' && pub2.subtitle === 'Plan a month in one afternoon' && pub2.textPos.title === 0.5 && pub2.gallery[0] === mineImg && pub2.badges.new === true)
+  check('the public card shows a file type label, not the file name', pub2.fileType === 'PDF' && !JSON.stringify(pub2).includes('planner.pdf'))
+
   await req('PATCH', `/api/seller/products/${pid}`, { title: 'Content planner v2', priceMinor: 99 }, A)
   await req('PUT', '/api/seller/store/draft', { page: { ...store.draft, blocks: between.filter((x: { type: string }) => x.type !== 'faq') } }, A)
   const live2 = await req('GET', '/api/store/ava-makes')

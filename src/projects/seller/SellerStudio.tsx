@@ -37,14 +37,14 @@ import {
   Store,
   Trash2,
   Tag,
-  MousePointerClick,
   ChevronDown,
   AtSign,
   Globe,
   Upload,
 } from 'lucide-react'
 import { cn } from '../../lib/id'
-import { StorePage, storeStyle } from './StorePage'
+import { BuyRow, StorePage, storeStyle } from './StorePage'
+import { CardAppearance, CoverEditor, FaqEditor, GalleryEditor, LinesEditor } from './ProductEditorParts'
 import { Style2Page } from './Style2'
 import { bankIcon } from './bank-icons'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
@@ -54,6 +54,7 @@ import {
   BUTTON_STYLES,
   CURRENCIES,
   DEFAULT_EXTRAS,
+  withExtras,
   FONTS,
   PLATFORM_FEE_PERCENT,
   PRESETS,
@@ -700,7 +701,7 @@ function Studio({
     setPublishing(false)
   }
 
-  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => ({ ...p, cta: p.extras?.cta, hidden: p.extras?.hidden }))
+  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => ({ ...p, ...withExtras(p.extras), offer: p.offer, fileType: p.file ? (p.file.name.split('.').pop() ?? '').toUpperCase() || null : null }))
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
@@ -1734,7 +1735,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   })
   const form = saved.value
   const setForm = saved.edit
-  const x: ProductExtras = { ...DEFAULT_EXTRAS, ...form.extras, offer: { ...DEFAULT_EXTRAS.offer, ...form.extras?.offer }, cta: { ...DEFAULT_EXTRAS.cta, ...form.extras?.cta } }
+  const x: ProductExtras = withExtras(form.extras)
   const setX = (n: Partial<ProductExtras>) => setForm({ ...form, extras: { ...x, ...n } })
   const setOffer = (n: Partial<ProductExtras['offer']>) => setX({ offer: { ...x.offer, ...n } })
 
@@ -1751,6 +1752,17 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   const vis: 'draft' | 'published' | 'hidden' = !form.listed ? 'draft' : x.hidden ? 'hidden' : 'published'
   const setVis = (v: typeof vis) => setForm({ ...form, listed: v !== 'draft', extras: { ...x, hidden: v === 'hidden' } })
   const fmt = (m: number) => formatPrice(m, form.currency)
+  const cardPreview = {
+    ...x,
+    id: product.id,
+    title: form.title.trim() || 'Untitled product',
+    description: form.description,
+    cover: form.cover,
+    priceMinor: price,
+    currency: form.currency,
+    offer: offerLive ? { priceMinor: sale, percent: pct, badge: badgeText, badgeColor: x.offer.badgeColor, ends: x.offer.ends } : null,
+    fileType: product.file ? (product.file.name.split('.').pop() ?? '').toUpperCase() || null : null,
+  }
 
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await flushSellerEdits(); await fn() } catch (e) { setState((e as Error).message) } setBusy(false) }
 
@@ -1765,10 +1777,16 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         <span className="pe-saved" aria-live="polite">{state ?? saved.state}</span>
       </div>
 
-      <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub="Title, description, cover and file" open>
+      <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub="Title, description, what’s included and file" open>
         <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
-        <Field label="Description"><textarea className="ss-input" rows={3} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
-        <ImagePicker value={form.cover} onChange={(cover) => setForm({ ...form, cover })} label="Cover image" />
+        <Field label="Subtitle" hint="One short line on the card, about the benefit."><input className="ss-input" maxLength={100} value={x.subtitle} onChange={(e) => setX({ subtitle: e.target.value })} placeholder="e.g. Plan a month of posts in one afternoon" /></Field>
+        <Field label="Description"><textarea className="ss-input" rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
+        <div className="ss-grid2">
+          <Field label="File format" hint={product.file ? `Detected: ${(product.file.name.split('.').pop() ?? '').toUpperCase()}` : undefined}><input className="ss-input" maxLength={40} value={x.format} onChange={(e) => setX({ format: e.target.value })} placeholder="e.g. PDF, Notion template" /></Field>
+          <Field label="Access"><input className="ss-input" maxLength={100} value={x.access} onChange={(e) => setX({ access: e.target.value })} placeholder="e.g. Instant download, lifetime updates" /></Field>
+        </div>
+        <Field label="What’s included"><LinesEditor label="Included item" items={x.included} onChange={(included) => setX({ included })} placeholder="e.g. 30 caption templates" /></Field>
+        <Field label="FAQ (optional)"><FaqEditor items={x.faq} onChange={(faq) => setX({ faq })} /></Field>
         <div className="ss-field">
           <span className="ss-label">File buyers download</span>
           <div className="pe-file">
@@ -1796,6 +1814,11 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
           </div>
           <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after paying.</span>
         </div>
+      </PSection>
+
+      <PSection icon={<ImageIcon className="h-4 w-4" />} title="Media & previews" sub={`${form.cover ? 'Cover' : 'No cover'}${x.gallery.length ? ` · ${x.gallery.length} image${x.gallery.length === 1 ? '' : 's'}` : ''}${x.video ? ' · video' : ''}`}>
+        <CoverEditor cover={form.cover} crop={x.crop} onCover={(cover) => setForm({ ...form, cover })} onCrop={(crop) => setX({ crop })} />
+        <GalleryEditor gallery={x.gallery} video={x.video} onGallery={(gallery) => setX({ gallery })} onVideo={(video) => setX({ video })} />
       </PSection>
 
       <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(price)} open>
@@ -1873,7 +1896,9 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         )}
       </PSection>
 
-      <PSection icon={<MousePointerClick className="h-4 w-4" />} title="Buy button" sub={x.cta.text || (free ? 'Get it free' : 'Buy now')}>
+      <PSection icon={<LayoutGrid className="h-4 w-4" />} title="Card appearance" sub={`${x.layout.charAt(0).toUpperCase()}${x.layout.slice(1)} · ${x.cta.text || (free ? 'Get it free' : 'Buy now')}`}>
+        <CardAppearance x={x} setX={setX} store={store} preview={cardPreview} buy={<BuyRow prod={cardPreview} page={store.draft} products={[]} handle={store.handle} small={x.layout === 'compact'} />} />
+        <span className="ss-label">Buy button</span>
         <div className="pe-chips">
           {CTA_TEXTS.map((t) => <button key={t} type="button" aria-pressed={(x.cta.text || 'Buy now') === t} onClick={() => setX({ cta: { ...x.cta, text: t === 'Buy now' ? '' : t } })}>{t}</button>)}
         </div>

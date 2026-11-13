@@ -132,7 +132,7 @@ try {
   await page.getByText(/planner\.pdf · /).waitFor()
   const png = join(tmp, 'cover.png')
   writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))
-  await page.locator('input[type=file][accept^="image"]').setInputFiles(png)
+  await page.getByLabel(/Upload cover/).setInputFiles(png)
   await page.waitForTimeout(1200)
   await page.locator('.pe-pill', { hasText: 'Ready to publish' }).waitFor()
   check('product is complete and ready to publish', true)

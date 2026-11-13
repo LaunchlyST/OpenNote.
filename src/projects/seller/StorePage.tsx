@@ -3,6 +3,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, formatPrice, mediaUrl } from './model'
 import type { Block, Page, ShopProduct } from './model'
+import { Badges, FactLine, Gallery, ProductCard } from './ProductCard'
 
 /**
  * The storefront. The editor's mobile and desktop previews and the public
@@ -30,6 +31,8 @@ export interface StorePageProps {
   /** Live store: start the download of a bought product right here (no page change). */
   onDownload?: (p: ShopProduct) => void
   downloading?: string | null
+  /** Live store: open a product in the detail panel instead of leaving the page. */
+  onOpenProduct?: (p: ShopProduct) => void
 }
 
 /** The per-element look as inline style: alignment, size, colour, spacing, font. */
@@ -95,7 +98,7 @@ export function storeStyle(page: Page): CSSProperties {
     page.theme.background === 'gradient'
       ? `linear-gradient(180deg, ${preset.bg} 0%, color-mix(in srgb, ${accentOf(page)} 22%, ${preset.bg}) 100%)`
       : preset.bg
-  return { background: bg, color: preset.ink, fontFamily: font, '--ac': accentOf(page), '--on': preset.bg, '--r': `${radius}px` } as CSSProperties
+  return { background: bg, color: preset.ink, fontFamily: font, '--ac': accentOf(page), '--on': preset.bg, '--r': `${radius}px`, '--bg': preset.bg, '--fg': preset.ink } as CSSProperties
 }
 
 export function StorePage(props: StorePageProps) {
@@ -262,15 +265,8 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
     case 'featured': {
       const prod = p.products.find((x) => x.id === d.productId)
       return prod ? (
-        <section className="sp-block sp-featured">
-          <Cover p={prod} big />
-          <div className="sp-feat-body">
-            <ProductLink prod={prod} live={p.live} handle={p.handle}>
-              <h2>{prod.title}</h2>
-            </ProductLink>
-            {prod.description && <p>{prod.description.split('\n')[0]}</p>}
-            <BuyRow prod={prod} {...p} />
-          </div>
+        <section className="sp-block sp-featured-v2">
+          <ProductCard p={prod} layout="featured" href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} />} />
         </section>
       ) : p.live ? null : (
         <div className="sp-block sp-empty sp-feat-empty">Digital product: click to choose a product</div>
@@ -297,16 +293,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           {(
             <div className="sp-grid">
               {list.map((prod) => (
-                <article key={prod.id} className="sp-card">
-                  <ProductLink prod={prod} live={p.live} handle={p.handle}>
-                    <Cover p={prod} />
-                    <span className="sp-tile-text">
-                      <h3>{prod.title}</h3>
-                      {prod.description && <small>{prod.description.split('\n')[0]}</small>}
-                    </span>
-                  </ProductLink>
-                  <BuyRow prod={prod} {...p} small />
-                </article>
+                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} />
               ))}
             </div>
           )}
@@ -333,26 +320,6 @@ function TikTokCard({ url, live }: { url: string; live?: boolean }) {
   )
 }
 
-function ProductLink({ prod, live, handle, children }: { prod: ShopProduct; live?: boolean; handle: string; children: ReactNode }) {
-  return live ? (
-    <a className="sp-card-link" href={`/${handle}/p/${prod.id}`}>
-      {children}
-    </a>
-  ) : (
-    <div className="sp-card-link">{children}</div>
-  )
-}
-
-function Cover({ p, big = false }: { p: ShopProduct; big?: boolean }) {
-  const src = mediaUrl(p.cover)
-  // No picture yet: a tinted cover with the product's first letter instead of a blank box.
-  return (
-    <span className={cn('sp-cover', big && 'sp-cover-big', !src && 'sp-cover-auto')} style={src ? { backgroundImage: `url(${src})` } : undefined} aria-hidden="true">
-      {!src && (p.title.trim().charAt(0).toUpperCase() || '✦')}
-    </span>
-  )
-}
-const cn = (...c: Array<string | false | null | undefined>) => c.filter(Boolean).join(' ')
 
 /** Price with a running offer: old price struck through, sale price and badge. */
 export function PriceTag({ prod }: { prod: ShopProduct }) {
@@ -367,7 +334,7 @@ export function PriceTag({ prod }: { prod: ShopProduct }) {
 }
 export const ctaStyle = (prod: ShopProduct): CSSProperties | undefined => (prod.cta?.color ? { background: prod.cta.color, borderColor: prod.cta.color, color: '#fff' } : undefined)
 
-function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
+export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id
   // Already bought in this browser (the server confirmed the payment): Download instead of Buy now.
   if (live && owned?.[prod.id])
@@ -405,8 +372,11 @@ function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, onDown
 function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
   return (
     <section className="sp-block sp-detail">
-      <Cover p={p} big />
+      <Gallery p={p} label={`${p.title} images`} />
+      <Badges p={p} />
       <h2>{p.title}</h2>
+      {p.subtitle && <p className="sp-sheet-sub">{p.subtitle}</p>}
+      <FactLine p={p} />
       <BuyRow prod={p} {...props} />
       {p.description && (
         <div className="sp-desc">
@@ -415,6 +385,13 @@ function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
           ))}
         </div>
       )}
+      {p.included?.length ? (
+        <div className="sp-sheet-sec">
+          <h3>What’s included</h3>
+          <ul className="sp-incl">{p.included.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </div>
+      ) : null}
+      {p.faq?.length ? <Faq heading="Questions" items={p.faq} /> : null}
       <p className="sp-fine">Instant download after payment. A copy of the link is emailed to you.</p>
     </section>
   )

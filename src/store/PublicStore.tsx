@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
-import { StorePage, storeStyle } from '../projects/seller/StorePage'
+import { BuyRow, StorePage, storeStyle } from '../projects/seller/StorePage'
+import { ProductSheet } from '../projects/seller/ProductCard'
 import { Style2Page } from '../projects/seller/Style2'
 import { formatPrice, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
@@ -25,6 +26,13 @@ export default function PublicStore({ path }: { path: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [buying, setBuying] = useState<string | null>(null)
   const [buyErr, setBuyErr] = useState<string | null>(null)
+  // Product detail panel: ?p=<id> opens it, so links and the browser Back button work.
+  const [sheet, setSheet] = useState<string | null>(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('p')))
+  useEffect(() => {
+    const sync = () => setSheet(new URLSearchParams(window.location.search).get('p'))
+    window.addEventListener('popstate', sync)
+    return () => window.removeEventListener('popstate', sync)
+  }, [])
   const checkoutBusy = useRef(false)
   // More than one way to pay (or bank transfer, which needs an email): the buyer picks first.
   const [choosing, setChoosing] = useState<ShopProduct | null>(null)
@@ -132,7 +140,31 @@ export default function PublicStore({ path }: { path: string }) {
   if (err) return <Shell><Message title="Store not found" text={err} /></Shell>
   if (!store) return <Shell><Message title="Loading…" text="" /></Shell>
 
-  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading }
+  const openProduct = (p: ShopProduct) => {
+    const u = new URL(window.location.href)
+    u.searchParams.set('p', p.id)
+    window.history.pushState({ sheet: p.id }, '', u)
+    setSheet(p.id)
+  }
+  const closeSheet = () => {
+    if (window.history.state?.sheet) window.history.back()
+    else {
+      const u = new URL(window.location.href)
+      u.searchParams.delete('p')
+      window.history.replaceState(null, '', u)
+      setSheet(null)
+    }
+  }
+  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading, onOpenProduct: openProduct }
+  const sheetProduct = sheet ? store.products.find((p) => p.id === sheet) : undefined
+  const sheetView = sheetProduct && (
+    <ProductSheet
+      p={sheetProduct}
+      onClose={closeSheet}
+      buy={<BuyRow prod={sheetProduct} {...base} />}
+      description={sheetProduct.description ? <div className="sp-desc">{sheetProduct.description.split(/\n{2,}/).map((para, i) => <p key={i}>{para}</p>)}</div> : null}
+    />
+  )
   const party = celebrate && (
     <div className="ps-party" role="status">
       <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
@@ -172,6 +204,7 @@ export default function PublicStore({ path }: { path: string }) {
   return (
     <Shell store={store}>
       {buyErr && <Banner>{buyErr}</Banner>}
+      {sheetView}
       {chooser}
       {party}
       {store.page.layout === 'style2' ? <Style2Page {...base} /> : <StorePage {...base} />}
