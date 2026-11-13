@@ -6,7 +6,7 @@
  * for the inbox preview line. Every value that reaches the HTML is escaped.
  */
 
-export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt' | 'welcome'
+export type EmailKind = 'reset-password' | 'verify-email' | 'test' | 'waitlist-welcome' | 'waitlist-signup' | 'waitlist-launch' | 'order-receipt' | 'welcome' | 'claim-link'
 
 /** What a template may fill in. `email` and `count` are used by the waitlist emails. */
 export interface EmailData {
@@ -121,6 +121,17 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
       paragraphs: [hello, 'Your email address is confirmed and your Desknoty account is ready to use.'],
       action: 'Open Desknoty',
     },
+    'claim-link': {
+      subject: `Your download link: ${data.name ?? 'your free product'}`,
+      preheader: `Open this link to get ${data.name ?? 'your free product'} from ${data.email ?? 'the store'}.`,
+      heading: 'Your free download',
+      paragraphs: [
+        'Hi,',
+        `You asked for ${data.name ?? 'a free product'} from ${data.email ?? 'a store on Desknoty'}. Open the button below to confirm this is your email and get your download.`,
+        'The link is private to you and expires in 24 hours. If you didn’t ask for this, ignore this email.',
+      ],
+      action: 'Get my download',
+    },
     'order-receipt': {
       subject: `Your download: ${data.name ?? 'your purchase'}`,
       preheader: `Thanks for buying from ${data.email ?? 'this store'}. Your download is ready.`,
@@ -177,7 +188,7 @@ export function renderEmail(kind: EmailKind, data: EmailData): RenderedEmail {
 
   return {
     subject: spec.subject,
-    html: layout({ ...spec, url: data.url, footnote: kind.startsWith('waitlist') ? waitlistFootnote : kind === 'order-receipt' ? receiptFootnote : footnote }),
+    html: layout({ ...spec, url: data.url, footnote: kind.startsWith('waitlist') ? waitlistFootnote : kind === 'order-receipt' || kind === 'claim-link' ? receiptFootnote : footnote }),
     text: text(spec.heading, spec.paragraphs, spec.action, data.url, kind.startsWith('waitlist') ? waitlistFootnote : kind === 'order-receipt' ? receiptFootnote : footnote),
   }
 }

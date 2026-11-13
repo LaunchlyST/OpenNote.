@@ -15,7 +15,8 @@ export interface OutgoingMessage {
 
 export interface Transport {
   name: 'smtp' | 'resend' | 'local' | 'none'
-  send(message: OutgoingMessage): Promise<void>
+  /** Resolves with the provider's message id when it gives one (used to match bounce events). */
+  send(message: OutgoingMessage): Promise<void | { id?: string }>
 }
 
 /** Delivers over SMTP: your own server, or the local catcher in development. */
@@ -90,6 +91,7 @@ export function resendTransport(): Transport {
       })
       const detail = await res.text().catch(() => '')
       if (!res.ok) throw Object.assign(new Error(`Resend ${res.status}: ${detail.slice(0, 300)}`), { responseCode: res.status })
+      try { return { id: String((JSON.parse(detail) as { id?: string }).id ?? '') || undefined } } catch { return {} }
     },
   }
 }

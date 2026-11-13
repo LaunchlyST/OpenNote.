@@ -37,7 +37,7 @@ async function call<T>(method: string, path: string, body?: unknown, headers: Re
     throw new SellerError(`The Desknoty server isn’t responding (${res.status}). Try again in a moment.`, 0)
   }
   if (res.status === 401) throw new SellerError('Your session has ended. Sign in again to open Seller Studio.', 401)
-  if (!res.ok) throw new SellerError(json?.error ?? `Request failed (${res.status}).`, res.status, Boolean(json?.setup))
+  if (!res.ok) throw Object.assign(new SellerError(json?.error ?? `Request failed (${res.status}).`, res.status, Boolean(json?.setup)), { data: json })
   return json as T
 }
 
@@ -98,6 +98,7 @@ export interface PublicStore {
 }
 export interface PublicOrder {
   id: string
+  storeHandle?: string
   /** Stage C: a bundle's items, each with its own download. */
   items?: Array<{ productId: string; title: string; fileName: string; downloadUrl: string }>
   status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'disputed'
@@ -142,6 +143,8 @@ export type EmailStatus = 'sent' | 'queued' | 'failed'
 
 export interface PublicReview { id: string; rating: number; body: string; name: string; verified: boolean; createdAt: string; edited: boolean }
 
+export interface ClaimState { claimId: string; email: string; delivery: string | null; cooldownSeconds: number; sendsLeftToday: number }
+
 export interface PriceQuote {
   currency: string
   listMinor: number
@@ -168,6 +171,11 @@ export const storeApi = {
   reportReview: (handle: string, reviewId: string, reason: string) => call<{ reported: boolean }>('POST', `/api/store/${encodeURIComponent(handle)}/reviews/${encodeURIComponent(reviewId)}/report`, { reason }),
   favourites: () => call<{ productIds: string[] }>('GET', '/api/favourites'),
   favourite: (productId: string, on: boolean) => call<{ saved: boolean }>(on ? 'PUT' : 'DELETE', `/api/favourites/${encodeURIComponent(productId)}`),
+  /** Free product: validate the address and email a private link (no download URL comes back). */
+  claimFree: (handle: string, body: { productId: string; email: string; name: string; clientRef: string; acceptSuggestion?: boolean; coupon?: string; website?: string }) =>
+    call<ClaimState & { status: 'sent' | 'queued' }>('POST', `/api/store/${encodeURIComponent(handle)}/claim`, body),
+  claimStatus: (handle: string, claimId: string, ref: string) => call<ClaimState & { message: string | null }>('GET', `/api/store/${encodeURIComponent(handle)}/claim/${encodeURIComponent(claimId)}?ref=${encodeURIComponent(ref)}`),
+  openClaim: (handle: string, claimId: string, t: string) => call<{ orderUrl: string; order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/claim/${encodeURIComponent(claimId)}/open`, { t }),
   /** Bank transfer: "I've sent it" (never unlocks the download). */
   claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
   /** Back from PayPal: the server verifies the payment with PayPal. */

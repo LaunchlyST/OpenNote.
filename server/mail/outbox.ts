@@ -121,10 +121,11 @@ async function sendDue() {
     if (!claimed.changes) continue
 
     try {
-      await transport.send({ id: row.id, to: row.recipient, subject: row.subject, html: row.html, text: row.text })
+      const sent = await transport.send({ id: row.id, to: row.recipient, subject: row.subject, html: row.html, text: row.text })
       await sql.run(
-        `UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, "sentAt" = ?, "lastError" = NULL, html = NULL, text = NULL WHERE id = ?`,
+        `UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, "sentAt" = ?, "lastError" = NULL, html = NULL, text = NULL, "providerId" = ? WHERE id = ?`,
         Date.now(),
+        (sent as { id?: string } | void)?.id ?? null,
         row.id,
       )
       log(`sent ${row.kind} #${row.id} to ${maskEmail(row.recipient)} via ${transport.name}`)
@@ -188,11 +189,11 @@ export async function sendNow(id: number, timeoutMs = 8000): Promise<SendNowResu
     }
   }
   try {
-    await Promise.race([
+    const sent = await Promise.race([
       transport.send({ id: row.id, to: row.recipient, subject: row.subject, html: row.html, text: row.text }),
       new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('The email provider didn’t answer in time.'), { timeout: true })), timeoutMs)),
     ])
-    await sql.run(`UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, "sentAt" = ?, "lastError" = NULL, html = NULL, text = NULL WHERE id = ?`, Date.now(), id)
+    await sql.run(`UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, "sentAt" = ?, "lastError" = NULL, html = NULL, text = NULL, "providerId" = ? WHERE id = ?`, Date.now(), (sent as { id?: string } | void)?.id ?? null, id)
     log(`sent ${row.kind} #${id} to ${maskEmail(row.recipient)} via ${transport.name} (immediate)`)
     return { status: 'sent' }
   } catch (err) {

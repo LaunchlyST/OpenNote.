@@ -15,7 +15,7 @@
  */
 import { spawn } from 'node:child_process'
 import type { ChildProcess } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync as readDirS, readFileSync as readFileS, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
@@ -39,6 +39,12 @@ function check(label: string, ok: boolean, detail = '') {
 }
 
 /** Reads the server's database directly (SQLite file, or Postgres when DATABASE_URL is set). */
+/** A write for test setup, on its own short-lived connection. */
+function dbRun(text: string, ...params: unknown[]) {
+  const d = new Database(join(tmp, 'seller.db'))
+  try { d.prepare(text).run(...(params as never[])) } finally { d.close() }
+}
+
 async function dbGet<T>(text: string, ...params: unknown[]): Promise<T> {
   if (process.env.DATABASE_URL) {
     const c = new pg.Client({ connectionString: process.env.DATABASE_URL })
@@ -88,6 +94,8 @@ function boot(extra: Record<string, string> = {}): Promise<ChildProcess> {
       SMTP_HOST: '',
       SMTP_PRESET: '',
       REQUIRE_EMAIL_VERIFICATION: 'false',
+      EMAIL_ALLOW_TEST_DOMAINS: '1',
+      RESEND_WEBHOOK_SECRET: `whsec_${Buffer.from('desknoty-test-webhook-secret').toString('base64')}`,
       STRIPE_SECRET_KEY: 'sk_test_fake',
       STRIPE_WEBHOOK_SECRET: WHSEC,
       STRIPE_API_BASE: fake.url,
@@ -344,26 +352,120 @@ try {
   await sendWebhook(HOOK, fake.event('checkout.session.async_payment_failed', fake.sessions.get(sid3)!, accountId))
   check('a failed async payment is marked failed', (await req('GET', `/api/store/ava-makes/session/${sid3}`)).json.order.status === 'failed')
   {
-    // free products: a stale key from a paid attempt must not break (or complete) that paid order
+    console.log('\n  Free products by email (V3)')
+    const { readdirSync, readFileSync } = await import('node:fs')
+    const mailDir = join(tmp, 'mailbox')
+    const linkFor = (to: string) => {
+      const files = readdirSync(mailDir).sort().reverse()
+      for (const f of files) {
+        const m = JSON.parse(readFileSync(join(mailDir, f), 'utf8'))
+        if (m.to === to) { const r = /\/claim\/(clm_[a-f0-9]+)\?t=([A-Za-z0-9_-]+)/.exec(m.text ?? m.html ?? ''); if (r) return { id: r[1], t: r[2] } }
+      }
+      return null
+    }
+    const mails = (to: string) => readdirSync(mailDir).filter((f) => JSON.parse(readFileSync(join(mailDir, f), 'utf8')).to === to).length
     const staleKey = 'stalekey_1234567890abcd'
     await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: staleKey })
     await req('PATCH', `/api/seller/products/${pid}`, { priceMinor: 0 }, A)
     await req('POST', '/api/seller/store/publish', undefined, A)
-    const fr = await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: 'freekey_1234567890abc', email: 'buyer@example.com', method: 'card' })
-    check('a free product is sent to the buyer’s email', fr.status === 200 && fr.json?.emailed === true)
-    const fr2 = await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: staleKey, email: 'buyer@example.com', method: 'card' })
-    check('a free checkout with a key from an old paid attempt still works', fr2.status === 200 && fr2.json?.emailed === true)
+    const claim = (body: Record<string, unknown>, ip = '') => req('POST', '/api/store/ava-makes/claim', { productId: pid, name: 'Mia', ...body }, '', ip ? { 'x-forwarded-for': ip } : {})
+    const ref = (n: number) => `ref_${String(n).padStart(20, '0')}`
+    const ordersNow = async () => (await dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "productId" = ? AND method = 'free'`, pid)).n
+
+    check('the old instant free checkout is closed (email only)', (await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: 'freekey_1234567890abc', email: 'mia@buyer.test' })).json?.code === 'use_claim')
+    check('malformed address: the exact message, nothing sent', (await claim({ email: 'mia@@buyer', clientRef: ref(1) })).json?.error === 'We couldn’t verify this email address. Please check it and try again.')
+    check('a domain that doesn’t exist is refused', (await claim({ email: 'mia@no-such-place-zq9x.invalid', clientRef: ref(1) })).status === 422)
+    check('a domain that accepts no mail (null MX) is refused', (await claim({ email: 'someone@example.com', clientRef: ref(1) })).status === 422)
+    const sug = await claim({ email: 'mia@gmail.con', clientRef: ref(1) })
+    check('a typo gets a suggestion to confirm', sug.status === 409 && sug.json?.code === 'suggest' && sug.json?.suggestion === 'mia@gmail.com')
+    check('keeping the typo is checked as typed (and refused: .con doesn’t exist)', (await claim({ email: 'mia@gmail.con', clientRef: ref(1), acceptSuggestion: true })).status === 422)
+    check('bots that fill the hidden field are refused', (await claim({ email: 'bot@buyer.test', clientRef: ref(1), website: 'http://spam' })).status === 400)
+    check('nothing was mailed for refused addresses', mails('someone@example.com') === 0 && mails('bot@buyer.test') === 0)
+
+    const before = await ordersNow()
+    const ok = await claim({ email: 'Mia@Buyer.test', clientRef: ref(2) })
+    check('a valid address: “sent” after the provider accepted it', ok.status === 200 && ok.json?.status === 'sent' && ok.json?.cooldownSeconds > 0)
+    check('the response has no download link, no order and no key', !/download|accessKey|orderUrl|ord_/.test(ok.text))
+    check('no order exists before the link is opened', (await ordersNow()) === before)
+    const l1 = linkFor('mia@buyer.test')!
+    check('the email contains a private claim link', Boolean(l1))
+    check('resending within a minute is refused by the server', (await claim({ email: 'mia@buyer.test', clientRef: ref(2) })).status === 429)
+    const burst = await Promise.all([1, 2, 3, 4].map(() => claim({ email: 'mia@buyer.test', clientRef: ref(2) })))
+    check('parallel repeats can’t get around the cooldown', burst.every((r) => r.status === 429))
+    // correcting the address: the old link stops working
+    dbRun(`UPDATE seller_claim SET "lastSentAt" = '2000-01-01T00:00:00.000Z' WHERE "clientRef" = ?`, ref(2))
+    const fix = await claim({ email: 'mia2@buyer.test', clientRef: ref(2) })
+    check('changing the address reuses the same claim', fix.status === 200 && fix.json.claimId === ok.json.claimId)
+    const l2 = linkFor('mia2@buyer.test')!
+    check('the superseded link no longer works', (await req('POST', `/api/store/ava-makes/claim/${l1.id}/open`, { t: l1.t })).status === 404)
+    check('a guessed token is refused', (await req('POST', `/api/store/ava-makes/claim/${l2.id}/open`, { t: 'x'.repeat(43) })).status === 404)
+    const opened = await req('POST', `/api/store/ava-makes/claim/${l2.id}/open`, { t: l2.t })
+    check('opening the link creates the order and gives the download', opened.status === 200 && Boolean(opened.json?.order?.downloadUrl))
+    const file = await fetch(opened.json.order.downloadUrl)
+    check('…and the file downloads', file.status === 200 && (await file.text()) === 'SECRET-PLANNER-CONTENT')
+    const twice = await Promise.all([1, 2, 3].map(() => req('POST', `/api/store/ava-makes/claim/${l2.id}/open`, { t: l2.t })))
+    check('opening it again (even at once) gives the same order, no duplicates', twice.every((r) => r.json?.order?.id === opened.json.order.id) && (await ordersNow()) === before + 1)
+    // the same person from another browser
+    const other = await claim({ email: 'mia2@buyer.test', clientRef: ref(3) })
+    const l3 = linkFor('mia2@buyer.test')!
+    check('the same address from another browser reuses the existing order', other.status === 200 && (await req('POST', `/api/store/ava-makes/claim/${l3.id}/open`, { t: l3.t })).json?.order?.id === opened.json.order.id && (await ordersNow()) === before + 1)
+    // expiry
+    await claim({ email: 'late@buyer.test', clientRef: ref(4) })
+    const l4 = linkFor('late@buyer.test')!
+    dbRun(`UPDATE seller_claim SET "tokenExpiresAt" = '2000-01-01T00:00:00.000Z' WHERE id = ?`, l4.id)
+    check('an expired link is refused with a clear message', (await req('POST', `/api/store/ava-makes/claim/${l4.id}/open`, { t: l4.t })).status === 410)
+    // daily cap per claim
+    for (let i = 0; i < 6; i++) { dbRun(`UPDATE seller_claim SET "lastSentAt" = '2000-01-01T00:00:00.000Z' WHERE "clientRef" = ?`, ref(5)); await claim({ email: 'cap@buyer.test', clientRef: ref(5) }) }
+    dbRun(`UPDATE seller_claim SET "lastSentAt" = '2000-01-01T00:00:00.000Z' WHERE "clientRef" = ?`, ref(5))
+    const capped = await claim({ email: 'cap@buyer.test', clientRef: ref(5) })
+    check('5 sends a day per claim, then refused', capped.status === 429 && capped.json?.sendsLeftToday === 0 && mails('cap@buyer.test') === 5)
+    // status for the page that asked; never the link
+    const stat = await req('GET', `/api/store/ava-makes/claim/${ok.json.claimId}?ref=${ref(2)}`)
+    check('the page can poll delivery status, without links or keys', stat.status === 200 && !/t=|accessKey|download/.test(stat.text))
+    check('…but only with its own browser reference', (await req('GET', `/api/store/ava-makes/claim/${ok.json.claimId}?ref=${ref(9)}`)).status === 404)
+
+    // bounces: signed Resend (Svix) events only
+    const { createHmac } = await import('node:crypto')
+    const secret = Buffer.from('desknoty-test-webhook-secret').toString('base64')
+    const signed = (body: string, id: string, ts = Math.floor(Date.now() / 1000)) => ({ 'svix-id': id, 'svix-timestamp': String(ts), 'svix-signature': `v1,${createHmac('sha256', Buffer.from(secret, 'base64')).update(`${id}.${ts}.${body}`).digest('base64')}`, 'content-type': 'application/json' })
+    await claim({ email: 'bounce@buyer.test', clientRef: ref(6) })
+    const bc = await dbGet<any>(`SELECT id, "outboxId" FROM seller_claim WHERE "clientRef" = ?`, ref(6))
+    dbRun(`UPDATE email_outbox SET "providerId" = 're_msg_bounce' WHERE id = ?`, bc.outboxId)
+    const bounce = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_msg_bounce', to: ['bounce@buyer.test'], bounce: { type: 'Permanent', message: 'mailbox does not exist' } } })
+    check('an unsigned bounce is refused', (await req('POST', '/api/mail/resend-webhook', Buffer.from(bounce), '', { 'content-type': 'application/json' })).status === 401)
+    check('a bounce signed with the wrong secret is refused', (await req('POST', '/api/mail/resend-webhook', Buffer.from(bounce), '', { ...signed(bounce, 'msg_x'), 'svix-signature': 'v1,AAAA' })).status === 401)
+    check('an old replayed bounce is refused', (await req('POST', '/api/mail/resend-webhook', Buffer.from(bounce), '', signed(bounce, 'msg_old', Math.floor(Date.now() / 1000) - 3600))).status === 401)
+    check('a signed permanent bounce is accepted', (await req('POST', '/api/mail/resend-webhook', Buffer.from(bounce), '', signed(bounce, 'msg_1'))).status === 200)
+    const ob = await dbGet<any>('SELECT status FROM email_outbox WHERE id = ?', bc.outboxId)
+    check('the bounced email is marked bounced, never delivered', ob.status === 'bounced')
+    const bs = await req('GET', `/api/store/ava-makes/claim/${bc.id}?ref=${ref(6)}`)
+    check('the buyer’s page is told it bounced', bs.json?.delivery === 'bounced' && bs.json?.message === 'We couldn’t deliver to this address. Please check your email.')
+    const again = await claim({ email: 'bounce@buyer.test', clientRef: ref(7) })
+    check('a bounced address is refused next time, nothing sent', again.status === 422 && again.json?.code === 'undeliverable')
+    check('the same event delivered twice is handled once', (await req('POST', '/api/mail/resend-webhook', Buffer.from(bounce), '', signed(bounce, 'msg_1'))).json?.duplicate === true)
+    await claim({ email: 'soft@buyer.test', clientRef: ref(8) })
+    const sc = await dbGet<any>(`SELECT "outboxId" FROM seller_claim WHERE "clientRef" = ?`, ref(8))
+    dbRun(`UPDATE email_outbox SET "providerId" = 're_msg_soft' WHERE id = ?`, sc.outboxId)
+    const soft = JSON.stringify({ type: 'email.bounced', data: { email_id: 're_msg_soft', to: ['soft@buyer.test'], bounce: { type: 'Transient', message: 'mailbox full' } } })
+    await req('POST', '/api/mail/resend-webhook', Buffer.from(soft), '', signed(soft, 'msg_2'))
+    check('a temporary bounce doesn’t block the address', !(await dbGet<any>(`SELECT 1 AS x FROM email_suppression WHERE email = 'soft@buyer.test'`)))
+    const dl = JSON.stringify({ type: 'email.delivered', data: { email_id: 're_msg_soft', to: ['soft@buyer.test'] } })
+    await req('POST', '/api/mail/resend-webhook', Buffer.from(dl), '', signed(dl, 'msg_3'))
+    check('a delivered event is recorded as delivered', (await dbGet<any>(`SELECT delivery FROM seller_claim WHERE "clientRef" = ?`, ref(8))).delivery === 'delivered')
+
+    // a stale key from a paid attempt never completes that paid order for free
     const stale = await dbGet<{ status: string }>('SELECT status FROM seller_order WHERE "checkoutKey" = ?', staleKey)
     check('the old paid order is not marked paid for free', stale?.status !== 'paid')
     await req('PATCH', `/api/seller/products/${pid}`, { priceMinor: 1200 }, A)
     await req('POST', '/api/seller/store/publish', undefined, A)
+    check('a paid product can’t be claimed free', (await claim({ email: 'mia3@buyer.test', clientRef: ref(10) })).status === 409)
   }
   check('an unknown product can’t be bought', (await req('POST', '/api/store/ava-makes/checkout', { productId: 'prd_nope' })).status === 404)
   check('Ava’s product can’t be bought through Ben’s store', (await req('POST', '/api/store/ben-builds/checkout', { productId: pid })).status === 404)
 
   console.log('\n  Seller sees orders')
   const ords = (await req('GET', '/api/seller/orders', undefined, A)).json.orders
-  check('Ava sees her orders', ords.length === 6 && ords.some((o: { status: string }) => o.status === 'paid'))
+  check('Ava sees her orders', ords.length === 5 && ords.some((o: { status: string }) => o.status === 'paid'))
   check('Ben sees none', (await req('GET', '/api/seller/orders', undefined, B)).json.orders.length === 0)
 
   console.log('\n  Earnings and withdrawals')
@@ -389,7 +491,7 @@ try {
   server = await boot({ ADMIN_EMAILS: 'ben@seller.test' })
   const after = await req('GET', '/api/store/ava-makes')
   check('store is still published after a restart', after.status === 200 && after.json.products[0]?.id === pid)
-  check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 6)
+  check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 5)
   {
     console.log('\n  Pricing, offers and discount codes (Stage B)')
     const unit = (sid: string) => (fake.calls.filter((c) => c.path === '/v1/checkout/sessions').find((c) => String(c.body?.metadata?.desknotyOrderId ?? '') && fake.sessions.get(sid)?.metadata?.desknotyOrderId === c.body.metadata.desknotyOrderId)?.body as any)?.line_items?.[0]?.price_data?.unit_amount
@@ -453,8 +555,13 @@ try {
 
     // a code that makes it free completes as a free order
     await req('POST', '/api/seller/coupons', { code: 'GIFT', kind: 'percent', value: 100, maxRedemptions: 5 }, A)
-    const gift = await buy({ coupon: 'GIFT', email: 'gift@buyer.test' })
-    check('a 100% code completes as a free order, sent by email', gift.status === 200 && gift.json.emailed === true)
+    const giftTry = await buy({ coupon: 'GIFT', email: 'gift@buyer.test' })
+    check('a 100% code is sent by email, not unlocked at checkout', giftTry.status === 409 && giftTry.json?.code === 'use_claim')
+    const gc = await req('POST', '/api/store/ava-makes/claim', { productId: pid, email: 'gift@buyer.test', name: 'Gift', clientRef: 'ref_gift_000000000000000', coupon: 'GIFT' })
+    const gfile = readDirS(join(tmp, 'mailbox')).sort().map((f) => JSON.parse(readFileS(join(tmp, 'mailbox', f), 'utf8'))).filter((m: any) => m.to === 'gift@buyer.test').pop()
+    const gl = /\/claim\/(clm_[a-f0-9]+)\?t=([A-Za-z0-9_-]+)/.exec(gfile?.text ?? '')!
+    const gift = await req('POST', `/api/store/ava-makes/claim/${gl[1]}/open`, { t: gl[2] })
+    check('a 100% code completes as a free order once the email link is opened', gc.status === 200 && gift.status === 200 && Boolean(gift.json?.order?.downloadUrl))
     const go = await dbGet<any>(`SELECT * FROM seller_order WHERE "couponCode" = 'GIFT'`)
     check('the free order keeps the full list price and the discount', go.amountMinor === 0 && go.listMinor === 1200 && go.discountMinor === 1200 && go.status === 'paid')
     check('the free order used the code', (await dbGet<any>(`SELECT used FROM seller_coupon WHERE code = 'GIFT'`)).used === 1)

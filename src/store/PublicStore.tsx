@@ -5,7 +5,7 @@ import { Style2Page } from '../projects/seller/Style2'
 import { formatPrice, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
-import type { EmailStatus, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
+import type { ClaimState, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
 
 /**
@@ -41,7 +41,7 @@ export default function PublicStore({ path }: { path: string }) {
   const params = new URLSearchParams(window.location.search)
 
   useEffect(() => {
-    if (kind === 'thanks' || kind === 'order') return
+    if (kind === 'thanks' || kind === 'order' || kind === 'claim') return
     storeApi.get(handle).then(setStore).catch((e: Error) => setErr(e.message))
   }, [handle])
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function PublicStore({ path }: { path: string }) {
   // and only a confirmed payment turns Buy now into Download.
   const [owned, setOwned] = useState<Record<string, string>>({})
   useEffect(() => {
-    if (kind === 'thanks' || kind === 'order') return
+    if (kind === 'thanks' || kind === 'order' || kind === 'claim') return
     let alive = true
     const ids = new Set((store?.products ?? []).map((p) => p.id))
     const saved = Object.entries(readOwned()).filter(([pid]) => ids.has(pid))
@@ -61,7 +61,7 @@ export default function PublicStore({ path }: { path: string }) {
       const m = url.match(/\/order\/([^/?#]+)\?(?:.*&)?k=([^&#]+)/)
       if (!m) return null
       const r = await storeApi.order(handle, m[1], decodeURIComponent(m[2])).catch(() => null)
-      return r?.order.status === 'paid' ? ([productId, url] as const) : null
+      return r?.order.status === 'paid' && (r.order.method as string) !== 'free' ? ([productId, url] as const) : null
     })).then((list) => alive && setOwned(Object.fromEntries(list.filter((x): x is readonly [string, string] => Boolean(x)))))
     return () => { alive = false }
   }, [handle, kind, store])
@@ -69,8 +69,6 @@ export default function PublicStore({ path }: { path: string }) {
   // Download a bought product right here: fetch a fresh signed link (the server checks the payment again), then start it.
   const [downloading, setDownloading] = useState<string | null>(null)
   const [celebrate, setCelebrate] = useState<string | null>(null)
-  // Free order result: the email status as the provider reported it, plus the order for an immediate download.
-  const [freeDone, setFreeDone] = useState<FreeDone | null>(null)
   const download = async (p: ShopProduct) => {
     const url = readOwned()[p.id]
     const m = url?.match(/\/order\/([^/?#]+)\?(?:.*&)?k=([^&#]+)/)
@@ -103,16 +101,6 @@ export default function PublicStore({ path }: { path: string }) {
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
       const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon)
-      // Free: the order is complete. Show the download right away and the email's real status.
-      if (r.emailStatus && r.order && r.orderUrl) {
-        sessionStorage.removeItem(keyName)
-        rememberOwned(handle, p.id, r.orderUrl)
-        setOwned((o) => ({ ...o, [p.id]: r.orderUrl! }))
-        setFreeDone({ email: r.email ?? email ?? '', status: r.emailStatus, error: r.emailError ?? null, order: r.order, orderUrl: r.orderUrl })
-        setBuying(null)
-        checkoutBusy.current = false
-        return
-      }
       // Free (or otherwise already confirmed): download right here, no page change
       if (r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
         rememberOwned(handle, p.id, r.orderUrl)
@@ -133,9 +121,10 @@ export default function PublicStore({ path }: { path: string }) {
     }
   }
 
+  if (kind === 'claim') return <Shell><ClaimOpen handle={handle} claimId={id} token={params.get('t') ?? ''} /></Shell>
   if (kind === 'thanks' && params.get('paypal_order'))
-    return <Shell><OrderStatus handle={handle} load={() => storeApi.paypalConfirm(handle, params.get('paypal_order') ?? '', params.get('k') ?? '')} /></Shell>
-  if (kind === 'thanks') return <Shell><OrderStatus handle={handle} load={() => storeApi.session(handle, params.get('session_id') ?? '')} /></Shell>
+    return <Shell><OrderStatus backToStore handle={handle} load={() => storeApi.paypalConfirm(handle, params.get('paypal_order') ?? '', params.get('k') ?? '')} /></Shell>
+  if (kind === 'thanks') return <Shell><OrderStatus backToStore handle={handle} load={() => storeApi.session(handle, params.get('session_id') ?? '')} /></Shell>
   if (kind === 'order')
     return (
       <Shell>
@@ -161,6 +150,8 @@ export default function PublicStore({ path }: { path: string }) {
     }
   }
   const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading, onOpenProduct: openProduct, savedIds: fav.ids, onToggleSave: (p: ShopProduct) => void fav.toggle(p.id) }
+  const paidId = params.get('paid')
+  const paidProduct = paidId ? store.products.find((p) => (owned[p.id] ?? '').includes(`/order/${paidId}`)) : undefined
   const sheetProduct = sheet ? store.products.find((p) => p.id === sheet) : undefined
   const sheetView = sheetProduct && (
     <ProductSheet
@@ -194,8 +185,7 @@ export default function PublicStore({ path }: { path: string }) {
       seller={store.page.name || store.handle}
       handle={store.handle}
       onPay={(m, email, payer, coupon) => void pay(choosing, m, email, payer, coupon)}
-      freeDone={freeDone}
-      onClose={() => (setChoosing(null), setFreeDone(null))}
+      onClose={() => setChoosing(null)}
     />
   )
 
@@ -217,6 +207,7 @@ export default function PublicStore({ path }: { path: string }) {
   return (
     <Shell store={store}>
       {buyErr && <Banner>{buyErr}</Banner>}
+      {paidProduct && <PaidConfirm product={paidProduct} onDownload={() => void download(paidProduct)} />}
       {sheetView}
       {chooser}
       {party}
@@ -329,45 +320,133 @@ function useFavourites() {
   return { ids, mode, toggle }
 }
 
-type FreeDone = { email: string; status: EmailStatus; error: string | null; order: PublicOrder; orderUrl: string }
-
-/**
- * After a free order: the download is right here, and the email's status is what the provider said.
- * "Email sent" only appears once the provider accepted it.
- */
-function FreeResult({ handle, product, done, onClose }: { handle: string; product: ShopProduct; done: FreeDone; onClose: () => void }) {
-  const [status, setStatus] = useState<EmailStatus>(done.status)
-  const [note, setNote] = useState<string | null>(done.error)
-  const [sending, setSending] = useState(false)
-  const k = new URL(done.orderUrl, window.location.origin).searchParams.get('k') ?? ''
-  const resend = async () => {
-    setSending(true)
-    try {
-      const r = await storeApi.resend(handle, done.order.id, k)
-      setStatus(r.emailStatus)
-      setNote(r.emailStatus === 'sent' ? null : r.emailError ?? null)
-    } catch (e) {
-      setNote((e as Error).message)
-    }
-    setSending(false)
+/** "Payment confirmed": shown briefly on the store after returning from the payment page, then closes itself. */
+function PaidConfirm({ product, onDownload }: { product: ShopProduct; onDownload: () => void }) {
+  const [open, setOpen] = useState(true)
+  const close = () => {
+    setOpen(false)
+    const u = new URL(window.location.href)
+    u.searchParams.delete('paid')
+    window.history.replaceState(null, '', u)
   }
+  useEffect(() => {
+    if (!open) return
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const t = window.setTimeout(close, reduce ? 8000 : 4500)
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    document.addEventListener('keydown', k)
+    return () => { window.clearTimeout(t); document.removeEventListener('keydown', k) }
+  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!open) return null
   return (
-    <div className="co3-sent" role="status" aria-live="polite">
-      <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
-      <h2>{status === 'sent' ? 'Email sent' : 'Your download is ready'}</h2>
-      {status === 'sent' ? (
-        <p>We sent the download link for <b>{product.title}</b> to <b>{done.email}</b>. Check your spam folder if you can’t see it.</p>
-      ) : (
-        <p className="co3-mailnote">{note ?? 'We couldn’t confirm the email was sent.'}</p>
-      )}
-      {done.order.downloadUrl && (
-        <button type="button" className="co3-pay-btn" onClick={() => startDownload(done.order.downloadUrl!, done.order.fileName)}>Download</button>
-      )}
-      <button type="button" className="co3-resend" disabled={sending} onClick={() => void resend()}>{sending ? 'Sending…' : status === 'sent' ? 'Resend download email' : 'Try sending the email again'}</button>
-      {status === 'sent' && note && <p className="co3-mailnote">{note}</p>}
-      <button type="button" className="co3-done" onClick={onClose}>Done</button>
+    <div className="co-back" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+      <div className="co3 co3-paid" role="dialog" aria-modal="true" aria-labelledby="paid-h">
+        <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
+        <h2 id="paid-h">Payment confirmed — your download is ready.</h2>
+        <p>{product.title}. We’ve also emailed you a receipt with a secure download link.</p>
+        <button type="button" className="co3-pay-btn" onClick={onDownload}>Download</button>
+        <button type="button" className="co3-done" autoFocus onClick={close}>Continue</button>
+      </div>
     </div>
   )
+}
+
+/**
+ * Free products: name + email, then a private link by email. Nothing here unlocks the file;
+ * only opening the emailed link does. The same browser reuses its claim (no duplicate orders),
+ * and a corrected address replaces the old link.
+ */
+function FreeClaim({ handle, product, coupon, onClose }: { handle: string; product: ShopProduct; coupon?: string; onClose: () => void }) {
+  const refKey = `desknoty.claimref.${product.id}`
+  const [ref] = useState(() => {
+    try { const r = localStorage.getItem(refKey); if (r) return r; const n = crypto.randomUUID().replace(/-/g, ''); localStorage.setItem(refKey, n); return n } catch { return crypto.randomUUID().replace(/-/g, '') }
+  })
+  const [name, setName] = useState(() => { try { return JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null')?.name ?? '' } catch { return '' } })
+  const [email, setEmail] = useState(() => { try { return JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null')?.email ?? '' } catch { return '' } })
+  const [website, setWebsite] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [suggestion, setSuggestion] = useState<string | null>(null)
+  const [sent, setSent] = useState<ClaimState | null>(null)
+  const [wait, setWait] = useState(0)
+  const [bounced, setBounced] = useState<string | null>(null)
+  useEffect(() => { if (wait <= 0) return; const t = window.setTimeout(() => setWait((w) => w - 1), 1000); return () => window.clearTimeout(t) }, [wait])
+  // after "sent", check for a bounce for a few minutes (the server learns of it from Resend)
+  useEffect(() => {
+    if (!sent) return
+    let n = 0
+    const t = window.setInterval(() => {
+      n += 1
+      if (n > 24) return window.clearInterval(t)
+      storeApi.claimStatus(handle, sent.claimId, ref).then((r) => { if (r.delivery === 'bounced') { setBounced(r.message); window.clearInterval(t) } }).catch(() => {})
+    }, 10000)
+    return () => window.clearInterval(t)
+  }, [sent, handle, ref])
+  const submit = async (acceptSuggestion = false, override?: string) => {
+    const addr = (override ?? email).trim()
+    setBusy(true); setError(null); setBounced(null)
+    try {
+      const r = await storeApi.claimFree(handle, { productId: product.id, email: addr, name: name.trim(), clientRef: ref, acceptSuggestion, coupon, website })
+      try { localStorage.setItem('desknoty.payer', JSON.stringify({ ...(JSON.parse(localStorage.getItem('desknoty.payer') ?? '{}') ?? {}), email: addr, name: name.trim() })) } catch { /* storage blocked */ }
+      setSuggestion(null)
+      setSent(r)
+      setWait(r.cooldownSeconds || 60)
+      if (r.status === 'queued') setError('We’re still sending your link. If it hasn’t arrived in a few minutes, use Send again.')
+    } catch (e) {
+      const err = e as Error & { body?: { code?: string; suggestion?: string; cooldownSeconds?: number } }
+      const body = (err as unknown as { data?: { code?: string; suggestion?: string; cooldownSeconds?: number } }).data ?? err.body
+      if (body?.code === 'suggest' && body.suggestion) { setSuggestion(body.suggestion); setBusy(false); return }
+      if (typeof body?.cooldownSeconds === 'number') setWait(body.cooldownSeconds)
+      setError(err.message)
+    }
+    setBusy(false)
+  }
+  const validLook = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())
+  return (
+    <div className="co3-claim">
+      <section className="co3-pay" aria-label="Your details">
+        <h2>Get it free</h2>
+        <p className="co3-claim-lead">We’ll email you a private link to <b>{product.title}</b>. Open it to download.</p>
+        {coupon && <p className="co3-code-on" role="status"><span>Code <b>{coupon}</b> applied: this one’s free</span></p>}
+        <label className="co3-field"><span>Name</span><input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Jane Smith" /></label>
+        <label className="co3-field"><span>Email</span>
+          <input type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => { setEmail(e.target.value); setSuggestion(null); setError(null) }} maxLength={254} placeholder="jane@example.com" aria-label="Email" aria-invalid={Boolean(error && !sent)} aria-describedby={error ? 'claim-err' : undefined} />
+        </label>
+        {/* left empty by people; filled by bots */}
+        <label className="co3-hp" aria-hidden="true">Website<input tabIndex={-1} autoComplete="off" value={website} onChange={(e) => setWebsite(e.target.value)} /></label>
+        {suggestion && (
+          <div className="co3-suggest" role="alert">
+            <span>Did you mean <b>{suggestion}</b>?</span>
+            <div>
+              <button type="button" onClick={() => { setEmail(suggestion); void submit(false, suggestion) }}>Yes, use it</button>
+              <button type="button" onClick={() => void submit(true)}>No, keep {email.trim()}</button>
+            </div>
+          </div>
+        )}
+        {error && <p id="claim-err" className="co3-code-err" role="alert">{error}</p>}
+        {bounced && <p className="co3-code-err" role="alert">{bounced}</p>}
+        {sent && !error && !bounced && <p className="co3-claim-sent" role="status">Check your inbox for your download link.</p>}
+        <button type="button" className="co3-pay-btn" disabled={busy || !validLook || wait > 0} onClick={() => void submit()}>
+          {busy ? 'Sending…' : sent ? (wait > 0 ? `Send again (${wait}s)` : 'Send again') : 'Send me the product'}
+        </button>
+        {sent && <p className="co3-hint-line">Sent to {sent.email}. Wrong address? Change it above and press Send again; the old link stops working.</p>}
+        <button type="button" className="co3-done" onClick={onClose}>Close</button>
+      </section>
+    </div>
+  )
+}
+
+/** The emailed link: proves the address, then shows the download. */
+function ClaimOpen({ handle, claimId, token }: { handle: string; claimId: string; token: string }) {
+  const [state, setState] = useState<{ error?: string; orderUrl?: string } | null>(null)
+  useEffect(() => {
+    storeApi.openClaim(handle, claimId, token)
+      .then((r) => { window.location.replace(r.orderUrl.replace(/^\/store\/[^/]+\//, `/store/${handle}/`)); setState({ orderUrl: r.orderUrl }) })
+      .catch((e: Error) => setState({ error: e.message }))
+  }, [handle, claimId, token])
+  if (!state) return <Message title="Opening your download…" text="" />
+  if (state.error) return <Message title="We couldn’t open this link" text={state.error} />
+  return <Message title="Opening your download…" text="" />
 }
 
 /** Copy a value to the clipboard, with a short "Copied" confirmation. */
@@ -383,7 +462,7 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, freeDone, handle }: { freeDone?: FreeDone | null; product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => void; onClose: () => void }) {
+function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => void; onClose: () => void }) {
   // The server's quote is the price: list price, live offer, then the code. The card's price is only a first guess.
   const [quote, setQuote] = useState<PriceQuote | null>(null)
   const [code, setCode] = useState('')
@@ -466,8 +545,8 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
           <button type="button" className="co3-x" onClick={onClose} aria-label="Close checkout">✕</button>
         </nav>
 
-        {freeDone ? (
-          <FreeResult handle={handle} product={product} done={freeDone} onClose={onClose} />
+        {free ? (
+          <FreeClaim handle={handle} product={product} coupon={applied ?? undefined} onClose={onClose} />
         ) : (
         <div className="co3-grid">
           <section className="co3-pay" aria-label="Payment details">
@@ -672,7 +751,7 @@ function rememberOwned(_handle: string, productId: string, url: string) {
   try { localStorage.setItem(OWNED, JSON.stringify({ ...readOwned(), [productId]: url })) } catch { /* private mode: the receipt email link still works */ }
 }
 
-function OrderStatus({ handle, load, claim }: { handle: string; load: () => Promise<{ order: PublicOrder }>; claim?: () => Promise<{ order: PublicOrder }> }) {
+function OrderStatus({ handle, load, claim, backToStore }: { handle: string; load: () => Promise<{ order: PublicOrder }>; claim?: () => Promise<{ order: PublicOrder }>; backToStore?: boolean }) {
   const [order, setOrder] = useState<PublicOrder | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [tries, setTries] = useState(0)
@@ -695,7 +774,10 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
       const k = `desknoty.autodl.${order.id}`
       try { if (!sessionStorage.getItem(k) && !localStorage.getItem(k)) { localStorage.setItem(k, '1'); startDownload(order.downloadUrl, order.fileName) } } catch { /* storage blocked: the Download button still works */ }
     }
-    if (order.status === 'paid' && order.retrievalUrl) rememberOwned(handle, order.productId, order.retrievalUrl)
+    // paid purchases unlock Download on the store in this browser; free products stay email-only
+    if (order.status === 'paid' && order.retrievalUrl && (order.method as string) !== 'free') rememberOwned(handle, order.productId, order.retrievalUrl)
+    // back from Stripe or PayPal with a confirmed payment: return to the store, which shows the confirmation
+    if (backToStore && order.status === 'paid' && (order.method as string) !== 'free' && order.storeHandle) { window.location.replace(`/${order.storeHandle}?paid=${encodeURIComponent(order.id)}`); return }
     else if (order.status === 'pending' && /\/order\//.test(window.location.pathname)) rememberOwned(handle, order.productId, window.location.pathname + window.location.search)
   }, [order, handle])
   useEffect(() => {

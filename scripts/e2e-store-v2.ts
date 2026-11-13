@@ -47,7 +47,7 @@ function run(cmd: string[], env: Record<string, string>, ready: string): Promise
 const api = await run([process.execPath, '--import', 'tsx', 'server/index.ts'], {
   NODE_ENV: 'development', BETTER_AUTH_URL: SITE, BETTER_AUTH_SECRET: 'f'.repeat(64), DATABASE_PATH: DB,
   MAILBOX_DIR: join(tmp, 'mailbox'), SELLER_FILES_DIR: join(tmp, 'files'), SELLER_MEDIA_DIR: join(tmp, 'media'),
-  API_PORT: String(API_PORT), SMTP_HOST: '', SMTP_PRESET: '', REQUIRE_EMAIL_VERIFICATION: 'false',
+  API_PORT: String(API_PORT), SMTP_HOST: '', SMTP_PRESET: '', REQUIRE_EMAIL_VERIFICATION: 'false', EMAIL_ALLOW_TEST_DOMAINS: '1',
   STRIPE_SECRET_KEY: '', TIKTOK_CLIENT_KEY: '', TIKTOK_CLIENT_SECRET: '',
 }, 'listening')
 const web = await run(['npx', 'vite', 'preview', '--port', String(WEB_PORT), '--strictPort'], { API_PORT: String(API_PORT) }, 'Local')
@@ -201,20 +201,36 @@ try {
   await co.getByLabel('Discount code').fill('GIFT')
   await co.getByRole('button', { name: 'Apply' }).click()
   await co.getByText(/Code GIFT applied/).waitFor()
-  check('checkout: a 100% code makes it free', (await co.locator('.co3-total b').innerText()) === '£0' && (await co.getByRole('button', { name: 'Send digital product' }).count()) === 1)
-  check('checkout: free needs an email first', await co.getByRole('button', { name: 'Send digital product' }).isDisabled())
+  const send = co.getByRole('button', { name: 'Send me the product' })
+  check('checkout: a 100% code turns it into the free email form', (await co.getByText(/Code GIFT applied/).count()) === 1 && (await send.count()) === 1)
+  check('checkout: it needs an email first', await send.isDisabled())
+  await co.getByLabel('Name').fill('Fan')
+  await co.getByLabel('Email').fill('someone@example.com')
+  await send.click()
+  await co.getByText('We couldn’t verify this email address. Please check it and try again.').waitFor()
+  check('free: an address that can’t receive mail gets the exact inline message', true)
+  check('free: what was typed is kept for correcting', (await co.getByLabel('Email').inputValue()) === 'someone@example.com' && (await co.getByLabel('Name').inputValue()) === 'Fan')
+  await co.getByLabel('Email').fill('fan@gmial.com')
+  await send.click()
+  await co.getByText(/Did you mean/).waitFor()
+  check('free: a typo gets a suggestion to confirm', (await co.getByText('fan@gmail.com').count()) >= 1)
   await co.getByLabel('Email').fill('fan@buyer.test')
-  await co.getByRole('button', { name: 'Send digital product' }).click()
-  await shop.getByRole('heading', { name: 'Email sent' }).waitFor({ timeout: 10000 }).catch(async () => { console.log('    checkout text:', (await co.innerText()).replace(/\s+/g, ' ').slice(0, 600)) })
-  const sentH = await shop.getByRole('heading', { name: 'Email sent' }).count(), dlB = await shop.locator('.co3-sent').getByRole('button', { name: 'Download', exact: true }).count()
-  check('checkout: "Email sent" only after the provider accepted it, Download right there', sentH === 1 && dlB === 1, `heading ${sentH}, download ${dlB}`)
-  const again = shop.locator('.co3-sent').getByRole('button', { name: 'Resend download email' })
-  await again.click()
-  await again.waitFor()
-  await shop.waitForTimeout(400)
-  await again.click()
-  await shop.locator('.co3-sent').getByText(/wait a minute/).waitFor()
-  check('checkout: resending again within a minute says to wait', true)
+  await send.click()
+  await co.getByText('Check your inbox for your download link.').waitFor()
+  check('free: “Check your inbox” after the provider accepted it', true)
+  check('free: the button becomes Send again, with a cooldown', /Send again \(\d+s\)/.test(await co.locator('.co3-pay-btn').innerText()) && await co.locator('.co3-pay-btn').isDisabled())
+  check('free: no download anywhere on the page', (await shop.getByRole('button', { name: 'Download', exact: true }).count()) === 0 && (await shop.getByRole('link', { name: /Download/ }).count()) === 0)
+  check('free: no order exists yet', !db.prepare(`SELECT 1 FROM seller_order WHERE "couponCode" = 'GIFT'`).get())
+  // the buyer opens the emailed link
+  const { readdirSync, readFileSync } = await import('node:fs')
+  const mail = readdirSync(join(tmp, 'mailbox')).sort().map((f) => JSON.parse(readFileSync(join(tmp, 'mailbox', f), 'utf8'))).filter((m: any) => m.to === 'fan@buyer.test').pop()
+  const link = /https?:\/\/[^\s"]+\/claim\/clm_[a-f0-9]+\?t=[A-Za-z0-9_-]+/.exec(mail?.text ?? '')![0]
+  await co.getByRole('button', { name: 'Close', exact: true }).click()
+  check('free: the product button is not turned into Download', (await shop.locator('.sp-card').first().getByRole('button', { name: /Download/ }).count()) === 0)
+  const inbox = await ctx.newPage()
+  await inbox.goto(link.replace(/^https?:\/\/[^/]+/, SITE))
+  await inbox.getByRole('link', { name: /Download/ }).first().waitFor()
+  check('free: opening the emailed link gives the download', true)
   const order = db.prepare(`SELECT "amountMinor", "listMinor", "discountMinor", "couponCode", status FROM seller_order WHERE "couponCode" = 'GIFT'`).get() as any
   check('the order stores 0 paid, 12.00 list, 12.00 off, code GIFT', order?.amountMinor === 0 && order?.listMinor === 1200 && order?.discountMinor === 1200 && order?.status === 'paid')
 

@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { resendWebhook } from './mail/webhook.ts'
 import express from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import { fromNodeHeaders, toNodeHandler } from 'better-auth/node'
@@ -89,6 +90,8 @@ app.all('/api/auth/*splat', (req, res) => {
 
 // Stripe signs the raw body, so its webhook is mounted before the JSON parser.
 app.post('/api/stripe/webhook', ...stripeWebhookHandler())
+// Resend delivery events (bounces): raw body, signature checked inside.
+app.post('/api/mail/resend-webhook', express.raw({ type: () => true, limit: '1mb' }), (req, res, next) => { resendWebhook(req, res).catch(next) })
 
 const jsonBody = express.json({ limit: '2mb' })
 app.use((req, res, next) => /^\/api\/seller\/products\/[^/]+\/file$/.test(req.path) || req.path === '/api/seller/media' ? next() : jsonBody(req, res, next))

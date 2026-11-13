@@ -13,6 +13,7 @@
  * payouts and paid checkout need setting up; without TikTok credentials the
  * TikTok step says so and "Continue without TikTok" works.
  */
+import { checkEmail } from './email-check.ts'
 import { CARD_MINIMUM, isTimeZone, normaliseCode, offerPrice, offerWindow, quote as priceQuote, zonedToUtc } from './seller-pricing.ts'
 import type { CouponRow } from './seller-pricing.ts'
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -249,6 +250,38 @@ export async function ensureSellerTables() {
       "productId" TEXT NOT NULL,
       "createdAt" TEXT NOT NULL,
       PRIMARY KEY ("userId", "productId")
+    );
+
+    -- V3: free products are claimed through an emailed link. One claim per browser per product;
+    -- only the latest link works; the order is created when the link is opened.
+    CREATE TABLE IF NOT EXISTS seller_claim (
+      id TEXT PRIMARY KEY,
+      "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
+      "productId" TEXT NOT NULL,
+      "clientRef" TEXT NOT NULL,
+      email TEXT NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      "couponCode" TEXT,
+      "tokenHash" TEXT NOT NULL,
+      "tokenExpiresAt" TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      "sendCount" INTEGER NOT NULL DEFAULT 0,
+      "sendDay" TEXT NOT NULL DEFAULT '',
+      "lastSentAt" TEXT,
+      "outboxId" INTEGER,
+      delivery TEXT,
+      "orderId" TEXT,
+      "ipHash" TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL,
+      "updatedAt" TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS seller_claim_ref ON seller_claim ("storeId", "productId", "clientRef");
+    CREATE INDEX IF NOT EXISTS seller_claim_ip ON seller_claim ("ipHash", "createdAt");
+    -- Addresses that hard-bounced: never mailed again, and the buyer is told plainly.
+    CREATE TABLE IF NOT EXISTS email_suppression (
+      email TEXT PRIMARY KEY,
+      reason TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS oauth_state (
@@ -1891,6 +1924,149 @@ export function sellerRouter() {
     res.json({ handle: s.handle, page: JSON.parse(s.published!), products, checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
+  /* ---- V3: free products by email ---- */
+  const CLAIM_INVALID = 'We couldn’t verify this email address. Please check it and try again.'
+  const CLAIM_BOUNCED = 'We couldn’t deliver to this address. Please check your email.'
+  const sha = (v: string) => createHmac('sha256', env.secret).update(v).digest('base64url')
+  const dayOf = (iso: string) => iso.slice(0, 10)
+  const claimView = (c: { id: string; email: string; delivery: string | null; lastSentAt: string | null; sendCount: number; sendDay: string }) => {
+    const wait = c.lastSentAt ? Math.max(0, 60 - Math.floor((Date.now() - Date.parse(c.lastSentAt)) / 1000)) : 0
+    return { claimId: c.id, email: c.email, delivery: c.delivery, cooldownSeconds: wait, sendsLeftToday: c.sendDay === dayOf(now()) ? Math.max(0, 5 - c.sendCount) : 5 }
+  }
+
+  /**
+   * Ask for a free product. Validates the address, then emails a private link; the file is only
+   * reachable by opening that link. Returns no download URL and no order key.
+   */
+  pub.post('/:handle/claim', async (req, res) => {
+    const s = await liveStore(req, res)
+    if (!s) return
+    const b = (req.body ?? {}) as Record<string, unknown>
+    // bots fill every field; people never see this one
+    if (String(b.website ?? '').trim()) return void res.status(400).json({ error: 'Please try again.' })
+    const clientRef = String(b.clientRef ?? '')
+    if (!/^[A-Za-z0-9_-]{16,64}$/.test(clientRef)) return void res.status(400).json({ error: 'Please reload the page and try again.' })
+    const found = await q.product(String(b.productId ?? ''), s.id)
+    if (!found || !found.pubAt || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t available.' })
+    const bundle = readExtras(found.pubExtras).bundle
+    if (!found.pubFileId && bundle.length < 2) return void res.status(404).json({ error: 'This product isn’t available.' })
+    const priced = await pricePurchase(s, found, b.coupon)
+    if ('error' in priced) return void res.status(409).json({ error: priced.error, couponError: true })
+    if (priced.totalMinor !== 0) return void res.status(409).json({ error: 'This product isn’t free right now.' })
+    const email = String(b.email ?? '').trim().toLowerCase()
+    const name = String(b.name ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80)
+    const ipHash = sha(`ip:${req.ip}`).slice(0, 24)
+    const t = now()
+    // abuse limits: per network per hour, per address per day
+    const hourAgo = new Date(Date.now() - 3600e3).toISOString()
+    const fromIp = await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM seller_claim WHERE "ipHash" = ? AND "updatedAt" > ?`, ipHash, hourAgo)
+    if ((fromIp?.n ?? 0) >= 20) return void res.status(429).json({ error: 'Too many requests from this network. Please try again later.' })
+    // validation before anything is sent
+    if (await sql.get(`SELECT 1 FROM email_suppression WHERE email = ?`, email)) return void res.status(422).json({ code: 'undeliverable', error: CLAIM_BOUNCED })
+    const verdict = await checkEmail(email, { acceptSuggestion: Boolean(b.acceptSuggestion) })
+    if (verdict.status === 'suggest') return void res.status(409).json({ code: 'suggest', suggestion: verdict.suggestion })
+    if (verdict.status === 'invalid') return void res.status(422).json({ code: 'invalid', error: CLAIM_INVALID })
+    const perEmail = await sql.get<{ n: number }>(`SELECT CAST(COALESCE(SUM("sendCount"), 0) AS INTEGER) AS n FROM seller_claim WHERE email = ? AND "sendDay" = ?`, email, dayOf(t))
+    if ((perEmail?.n ?? 0) >= 10) return void res.status(429).json({ error: 'We’ve sent a lot of links to this address today. Please check your inbox or try tomorrow.' })
+
+    // one claim per browser per product: reuse it; a new address replaces the old link
+    const token = randomBytes(32).toString('base64url')
+    const expires = new Date(Date.now() + 24 * 3600e3).toISOString()
+    const existing = await sql.get<{ id: string; email: string; lastSentAt: string | null; sendCount: number; sendDay: string; status: string }>(`SELECT id, email, "lastSentAt", "sendCount", "sendDay", status FROM seller_claim WHERE "storeId" = ? AND "productId" = ? AND "clientRef" = ?`, s.id, found.id, clientRef)
+    let id = existing?.id ?? `clm_${randomBytes(12).toString('hex')}`
+    if (existing) {
+      // server-side cooldown and daily cap, with one guarded UPDATE so parallel clicks can't get around them
+      const minuteAgo = new Date(Date.now() - 60e3).toISOString()
+      const ok = await sql.run(
+        `UPDATE seller_claim SET email = ?, name = ?, "couponCode" = ?, "tokenHash" = ?, "tokenExpiresAt" = ?, status = CASE WHEN status = 'verified' AND email = ? THEN 'verified' ELSE 'pending' END, delivery = NULL, "sendCount" = CASE WHEN "sendDay" = ? THEN "sendCount" + 1 ELSE 1 END, "sendDay" = ?, "lastSentAt" = ?, "ipHash" = ?, "updatedAt" = ? WHERE id = ? AND ("lastSentAt" IS NULL OR "lastSentAt" < ?) AND ("sendDay" <> ? OR "sendCount" < 5)`,
+        email, name, priced.coupon?.code ?? null, sha(token), expires, email, dayOf(t), dayOf(t), t, ipHash, t, id, minuteAgo, dayOf(t),
+      )
+      if (!ok.changes) {
+        const c = (await sql.get<any>(`SELECT * FROM seller_claim WHERE id = ?`, id))!
+        const v = claimView(c)
+        return void res.status(429).json({ error: v.sendsLeftToday === 0 ? 'You’ve reached today’s limit for this product. Please check your inbox or try tomorrow.' : `Please wait ${v.cooldownSeconds} seconds before sending again.`, ...v })
+      }
+    } else {
+      try {
+        await sql.run(`INSERT INTO seller_claim (id, "storeId", "productId", "clientRef", email, name, "couponCode", "tokenHash", "tokenExpiresAt", status, "sendCount", "sendDay", "lastSentAt", "ipHash", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?, ?, ?, ?)`, id, s.id, found.id, clientRef, email, name, priced.coupon?.code ?? null, sha(token), expires, dayOf(t), t, ipHash, t, t)
+      } catch {
+        // a parallel first submission won: treat this one as a too-fast repeat
+        const c = await sql.get<any>(`SELECT * FROM seller_claim WHERE "storeId" = ? AND "productId" = ? AND "clientRef" = ?`, s.id, found.id, clientRef)
+        return void res.status(429).json({ error: 'Please wait a moment before sending again.', ...(c ? claimView(c) : {}) })
+      }
+    }
+    const link = `${seller.siteUrl}/store/${s.id}/claim/${id}?t=${token}`
+    const queued = await enqueueEmail('claim-link', email, { url: link, name: found.pubTitle ?? 'your free product', email: storeName(s) })
+    if (!queued.queued) return void res.status(422).json({ code: 'invalid', error: CLAIM_INVALID })
+    await sql.run(`UPDATE seller_claim SET "outboxId" = ? WHERE id = ?`, queued.id, id)
+    const sent = await sendNow(queued.id)
+    const c = (await sql.get<any>(`SELECT * FROM seller_claim WHERE id = ?`, id))!
+    if (sent.status === 'sent') {
+      await sql.run(`UPDATE seller_claim SET delivery = 'accepted' WHERE id = ? AND delivery IS NULL`, id)
+      return void res.json({ status: 'sent', ...claimView({ ...c, delivery: 'accepted' }) })
+    }
+    if (sent.status === 'queued') return void res.json({ status: 'queued', ...claimView(c) })
+    await sql.run(`UPDATE seller_claim SET delivery = 'provider_rejected' WHERE id = ?`, id)
+    res.status(502).json({ code: 'provider_rejected', error: 'We couldn’t send the email right now. Please try again in a moment.', ...claimView({ ...c, delivery: 'provider_rejected' }) })
+  })
+
+  /** Delivery status for the page that asked (same browser reference). Never reveals links or keys. */
+  pub.get('/:handle/claim/:claimId', async (req, res) => {
+    const c = await sql.get<any>(`SELECT * FROM seller_claim WHERE id = ? AND "clientRef" = ?`, String(req.params.claimId), String(req.query.ref ?? ''))
+    if (!c) return void res.status(404).json({ error: 'Not found.' })
+    res.set('Cache-Control', 'no-store').json({ ...claimView(c), message: c.delivery === 'bounced' ? CLAIM_BOUNCED : null })
+  })
+
+  /** Opening the emailed link: proves the address, then creates (or reuses) the free order. */
+  pub.post('/:handle/claim/:claimId/open', async (req, res) => {
+    const c = await sql.get<any>(`SELECT * FROM seller_claim WHERE id = ?`, String(req.params.claimId))
+    const token = String(req.body?.t ?? '')
+    const a = Buffer.from(sha(token)), want = Buffer.from(c?.tokenHash ?? '')
+    if (!c || !token || a.length !== want.length || !timingSafeEqual(a, want)) return void res.status(404).json({ code: 'invalid_link', error: 'This link isn’t valid. It may have been replaced by a newer email: use the latest one.' })
+    if (Date.parse(c.tokenExpiresAt) < Date.now()) return void res.status(410).json({ code: 'expired', error: 'This link has expired. Ask for a new one from the store.' })
+    const s = await q.storeById(c.storeId)
+    const found = s ? await q.product(c.productId, s.id) : undefined
+    if (!s || !found || !found.pubAt) return void res.status(404).json({ error: 'This product isn’t available any more.' })
+    // the same address already has this product: hand back that order instead of a duplicate
+    let order = c.orderId ? await q.order(c.orderId) : await sql.get<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? AND "productId" = ? AND method = 'free' AND status = 'paid' AND "buyerEmail" = ? ORDER BY "createdAt" LIMIT 1`, s.id, found.id, c.email)
+    if (!order) {
+      const priced = await pricePurchase(s, found, c.couponCode ?? '')
+      if ('error' in priced || priced.totalMinor !== 0) return void res.status(409).json({ error: 'This product isn’t free any more.' })
+      const bundle = readExtras(found.pubExtras).bundle
+      let items: Array<{ productId: string; title: string; fileId: string; fileName: string }> = []
+      if (bundle.length >= 2) {
+        const list = await Promise.all(bundle.map((pid) => q.product(pid, s.id)))
+        if (list.some((i) => !i || !i.pubAt || !i.pubFileId)) return void res.status(409).json({ error: 'This bundle isn’t available right now.' })
+        items = list.map((i) => ({ productId: i!.id, title: i!.pubTitle ?? '', fileId: i!.pubFileId!, fileName: i!.pubFileName ?? 'download' }))
+      }
+      const oid = `ord_${randomBytes(12).toString('hex')}`
+      try {
+        await sql.tx(async (tx) => {
+          // the claim row is the lock: only one opening of this claim creates the order
+          const took = await tx.run(`UPDATE seller_claim SET "orderId" = ?, status = 'verified', "updatedAt" = ? WHERE id = ? AND "orderId" IS NULL`, oid, now(), c.id)
+          if (!took.changes) throw new Error('already-claimed')
+          await tx.run(
+            `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method, status, "paidAt", "buyerEmail", "emailedAt", "listMinor", "discountMinor", "couponCode", "couponId") VALUES (?, ?, ?, ?, ?, ?, 'free', 0, ?, ?, ?, ?, ?, 'free', 'paid', ?, ?, ?, ?, ?, ?, ?)`,
+            oid, s.id, found.id, found.pubTitle ?? '', items.length ? 'bundle' : found.pubFileId, items.length ? 'bundle' : found.pubFileName ?? 'download', found.pubCurrency ?? 'gbp', randomBytes(24).toString('base64url'), now(), `claim-${c.id}`, stripeMode, now(), c.email, now(),
+            priced.listMinor, priced.discountMinor, priced.coupon?.code ?? null, priced.coupon?.id ?? null,
+          )
+          if (priced.coupon) await reserveCoupon(tx, priced.coupon, oid, c.email)
+          await confirmCoupon(tx, oid)
+          for (const e of items) await tx.run(`INSERT INTO seller_entitlement ("orderId", "productId", title, "fileId", "fileName") VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`, oid, e.productId, e.title, e.fileId, e.fileName)
+        })
+      } catch (e) {
+        if (e instanceof CouponRefused) return void res.status(409).json({ error: e.message })
+        if ((e as Error).message !== 'already-claimed') throw e
+      }
+      const fresh = await sql.get<any>(`SELECT "orderId" FROM seller_claim WHERE id = ?`, c.id)
+      order = fresh?.orderId ? await q.order(fresh.orderId) : undefined
+    } else if (!c.orderId) {
+      await sql.run(`UPDATE seller_claim SET "orderId" = ?, status = 'verified', "updatedAt" = ? WHERE id = ?`, order.id, now(), c.id)
+    }
+    if (!order) return void res.status(500).json({ error: 'Something went wrong. Please open the link again.' })
+    res.json({ orderUrl: `/store/${s.handle}/order/${order.id}?k=${encodeURIComponent(order.accessKey)}`, order: await orderView(order, s) })
+  })
+
   /** What the buyer would pay right now, with an optional code. Read only: nothing is reserved. */
   pub.post('/:handle/quote', async (req, res) => {
     const s = await liveStore(req, res)
@@ -1951,48 +2127,8 @@ export function sellerRouter() {
     }
     /** A retry must be the same purchase: same product, method and code. */
     const samePurchase = (o: OrderRow, method: string) => o.productId === p.id && o.method === method && (o.couponCode ?? null) === couponCode
-    // Free product: no payment, the order is complete straight away and the download is ready.
-    if (p.pubPriceMinor === 0) {
-      const key = String(req.body?.checkoutKey ?? randomUUID())
-      if (!/^[a-zA-Z0-9_-]{16,100}$/.test(key)) return void res.status(400).json({ error: 'Invalid checkout key.' })
-      const email = String(req.body?.email ?? '').trim().toLowerCase()
-      // free products are sent to the buyer's email: the download link only arrives there
-      if (!/^[^\s@<>,;"]+@[^\s@<>,;"]+\.[^\s@<>,;"]+$/.test(email) || email.length > 254) return void res.status(400).json({ error: 'Enter your email address so we can send you the download.' })
-      const insertFree = (k: string) => placeOrder((tx) => tx.run(
-          `INSERT INTO seller_order (id, "storeId", "productId", "productTitle", "fileId", "fileName", "accountId", "amountMinor", currency, "accessKey", "createdAt", "checkoutKey", "stripeMode", method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT ("storeId", "checkoutKey") DO NOTHING`,
-          `ord_${randomBytes(12).toString('hex')}`, s.id, p.id, p.pubTitle ?? '', p.pubFileId, p.pubFileName ?? 'download', 'free', 0, p.pubCurrency, randomBytes(24).toString('base64url'), now(), k, stripeMode, 'free',
-        ), k)
-      let order = await insertFree(key)
-      if ('refused' in order) return void res.status(409).json({ error: order.refused, couponError: true })
-      if (order.productId !== p.id) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
-      // A key left over from an earlier paid attempt (the product used to cost money), or from a purchase with
-      // a different code, must not complete that order for free: start a fresh free order instead.
-      if (order.method !== 'free' || (order.couponCode ?? null) !== couponCode) {
-        const again = await insertFree(`${key.slice(0, 80)}-f${randomBytes(4).toString('hex')}`)
-        if ('refused' in again) return void res.status(409).json({ error: again.refused, couponError: true })
-        order = again
-      }
-      // Mark it paid and queue the receipt, then send that receipt now and report what the provider said.
-      // The download is handed over on the page either way, so a mail problem never blocks the buyer.
-      let emailStatus: 'sent' | 'queued' | 'failed' = 'failed'
-      let emailError: string | null = null
-      try {
-        const done = await completeOrder(order, email)
-        if (done.receiptId) {
-          const r = await sendNow(Number(done.receiptId))
-          emailStatus = r.status
-          if (r.status === 'failed') emailError = 'We couldn’t send the email. Your download is ready here, and you can try sending the email again.'
-          if (r.status === 'queued') emailError = 'The email is on its way but hasn’t been confirmed yet. Your download is ready here.'
-        } else emailError = 'We couldn’t queue the email for that address. Your download is ready here.'
-      } catch (err) {
-        console.error('[seller] free order email failed', order.id, err)
-        // the email could not be queued: record the order and hand the download over right here instead
-        await sql.run(`UPDATE seller_order SET status = 'paid', "paidAt" = COALESCE("paidAt", ?), "buyerEmail" = COALESCE("buyerEmail", ?) WHERE id = ?`, now(), email, order.id)
-        emailError = 'We couldn’t send the email. Your download is ready here, and you can try sending the email again.'
-      }
-      const saved = (await q.order(order.id))!
-      return void res.json({ emailed: emailStatus === 'sent', emailStatus, emailError, email, orderUrl: `/store/${s.handle}/order/${saved.id}?k=${encodeURIComponent(saved.accessKey)}`, order: await orderView(saved, s) })
-    }
+    // Free products (also a code that makes it free) are delivered by email only: see /claim.
+    if (p.pubPriceMinor === 0) return void res.status(409).json({ code: 'use_claim', error: 'Free products are sent by email. Enter your email to get the link.' })
     const method = String(req.body?.method ?? 'stripe')
     if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method, placeOrder, samePurchase))
     if (method !== 'stripe') return void res.status(400).json({ error: 'Unknown payment method.' })
@@ -2099,6 +2235,7 @@ export function sellerRouter() {
     const receipt = o.receiptId ? await sql.get<{status: string}>('SELECT status FROM email_outbox WHERE id = ?', o.receiptId) : null
     return {
       id: o.id,
+      storeHandle: s.handle,
       status: o.status,
       product: o.productTitle,
       productId: o.productId,

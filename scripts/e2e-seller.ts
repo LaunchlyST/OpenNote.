@@ -71,6 +71,7 @@ const api = await run(
     SMTP_HOST: '',
     SMTP_PRESET: '',
     REQUIRE_EMAIL_VERIFICATION: 'false',
+    EMAIL_ALLOW_TEST_DOMAINS: '1',
     STRIPE_SECRET_KEY: 'sk_test_fake',
     STRIPE_WEBHOOK_SECRET: WHSEC,
     STRIPE_API_BASE: fake.url,
@@ -228,13 +229,19 @@ try {
   await m.getByRole('dialog', { name: 'Pay for Content planner' }).getByRole('button', { name: 'Pay Now' }).click()
   await m.waitForURL(/\/pay\/cs_/)
   await m.getByRole('button', { name: 'Pay' }).click()
-  await m.waitForURL(/\/thanks\?session_id=/)
-  await m.getByText('Payment confirmed').waitFor()
-  check('after paying, the confirmation shows the download', await m.getByRole('link', { name: /Download planner\.pdf/ }).isVisible())
+  await m.waitForURL(/[?&]paid=ord_/, { timeout: 20000 })
+  const paidBox = m.getByRole('dialog', { name: 'Payment confirmed — your download is ready.' })
+  await paidBox.waitFor()
+  check('after paying, the store says “Payment confirmed — your download is ready.”', true)
+  check('the confirmation has Download and Continue', (await paidBox.getByRole('button', { name: 'Download' }).count()) === 1 && (await paidBox.getByRole('button', { name: 'Continue' }).count()) === 1)
   await m.screenshot({ path: join(SHOTS, 'mobile-thanks.png') })
-  const dlHref = (await m.getByRole('link', { name: /Download planner\.pdf/ }).getAttribute('href'))!
-  const dl = await m.request.get(dlHref)
-  check('the download is the seller’s file', dl.status() === 200 && (await dl.text()) === 'E2E-PLANNER-FILE')
+  const [paidFile] = await Promise.all([m.waitForEvent('download', { timeout: 10000 }), paidBox.getByRole('button', { name: 'Download' }).click()])
+  check('the download is the seller’s file', readFileSync((await paidFile.path())!, 'utf8') === 'E2E-PLANNER-FILE')
+  await paidBox.waitFor({ state: 'detached', timeout: 10000 })
+  check('the confirmation closes by itself', true)
+  check('…and the paid marker leaves the address bar', !/paid=/.test(m.url()))
+  const paidRow = db.prepare("SELECT id, \"accessKey\" FROM seller_order WHERE status = 'paid' ORDER BY \"paidAt\" DESC LIMIT 1").get() as { id: string; accessKey: string }
+  const dlHref = (await (await m.request.get(`${SITE}/api/store/ava-makes/order/${paidRow.id}?k=${encodeURIComponent(paidRow.accessKey)}`)).json()).order.downloadUrl as string
 
   // Back on the store, this buyer sees Download instead of Buy now (checked with the server)
   await m.goto(productUrl)
