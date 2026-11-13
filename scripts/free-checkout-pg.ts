@@ -24,7 +24,7 @@ let failures = 0
 const check = (label: string, ok: boolean, detail = '') => { if (ok) console.log(`  PASS  ${label}`); else { failures++; console.log(`  FAIL  ${label}${detail ? ` — ${detail}` : ''}`) } }
 
 let log = ''
-const child = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
+const child = spawn(process.execPath, ['--import', 'tsx', ...(process.env.PRELOAD ? ['--import', process.env.PRELOAD] : []), 'server/index.ts'], {
   env: { ...process.env, NODE_ENV: 'development', DATABASE_URL: PG, SUPABASE_DB_URL: '', BETTER_AUTH_URL: ORIGIN, BETTER_AUTH_SECRET: 'p'.repeat(64), API_PORT: String(port), MAILBOX_DIR: join(tmp, 'mailbox'), SELLER_FILES_DIR: join(tmp, 'files'), SELLER_MEDIA_DIR: join(tmp, 'media'), SMTP_HOST: '', SMTP_PRESET: '', REQUIRE_EMAIL_VERIFICATION: 'false', STRIPE_SECRET_KEY: '', TIKTOK_CLIENT_KEY: '', TIKTOK_CLIENT_SECRET: '', ...(process.env.BAD_RESEND ? { MAIL_TRANSPORT: 'resend', RESEND_API_KEY: 're_invalid_key_for_test', RESEND_FROM: 'Desknoty <noreply@desknoty.com>' } : {}) },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
@@ -87,6 +87,13 @@ try {
     const parallel = await Promise.all([1, 2, 3].map(() => req('POST', `/api/store/${handle}/order/${co.json.order.id}/resend`, { k })))
     check('parallel resends can’t get around the limit', parallel.every((r) => r.status === 429))
     check('resend needs the order key', (await req('POST', `/api/store/${handle}/order/${co.json.order.id}/resend`, { k: 'nope' })).status === 404)
+    // The live situation: an order that is paid but was never emailed, checked out again with the same key.
+    const key2 = `pgkey_reuse_${Date.now()}_abcdefgh`
+    const first = await req('POST', `/api/store/${handle}/checkout`, { productId: pid, checkoutKey: key2, email: 'again@pg.test', method: 'stripe' })
+    await db.query(`UPDATE seller_order SET "emailedAt" = NULL, "receiptId" = NULL WHERE id = $1`, [first.json.order.id])
+    const again = await req('POST', `/api/store/${handle}/checkout`, { productId: pid, checkoutKey: key2, email: 'again@pg.test', method: 'stripe' })
+    check('a paid but never-emailed order gets its email on the next checkout', again.json?.emailStatus === 'sent' && again.json?.order?.id === first.json.order.id)
+    await db.query(`DELETE FROM seller_order WHERE id = $1`, [first.json.order.id])
     const orders = (await db.query(`SELECT count(*)::int AS n FROM seller_order WHERE "productId" = $1`, [pid])).rows[0].n
     check('resending never creates another order', orders === 1)
     const sent = (await db.query(`SELECT count(*)::int AS n FROM email_outbox WHERE recipient = $1 AND kind = 'order-receipt' AND status = 'sent'`, [buyer])).rows[0].n

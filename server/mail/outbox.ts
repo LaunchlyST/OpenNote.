@@ -213,8 +213,11 @@ export function processOutbox(): Promise<void> {
   return running
 }
 
+/** Wake the worker soon. setTimeout exists in every runtime (setImmediate doesn't), and this never throws. */
 function kick() {
-  setImmediate(() => void processOutbox().catch((err) => console.error('[mail] worker error', err)))
+  try {
+    setTimeout(() => void processOutbox().catch((err) => console.error('[mail] worker error', err)), 0)
+  } catch { /* the interval worker picks it up */ }
 }
 
 /** Starts the background worker. A message stuck in "sending" by a crash is retried. */

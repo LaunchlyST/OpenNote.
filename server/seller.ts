@@ -281,6 +281,7 @@ interface ProductRow {
   updatedAt: string
 }
 interface OrderRow {
+  receiptError?: string | null
   listMinor?: number | null
   discountMinor?: number
   couponCode?: string | null
@@ -850,6 +851,7 @@ function storeName(store: { published?: string | null; draft: string; handle: st
 }
 
 export async function completeOrder(order: OrderRow, email: string | null, paymentRef: string | null = null): Promise<OrderRow> {
+  // 1. The order itself: paid, payment reference, code use. Committed on its own, so a mail problem can't undo it.
   await sql.tx(async (tx) => {
     await tx.run(
       `UPDATE seller_order SET status = 'paid', "paidAt" = ?, "buyerEmail" = COALESCE(?, "buyerEmail") WHERE id = ? AND status IN ('pending','failed','cancelled')`,
@@ -859,22 +861,24 @@ export async function completeOrder(order: OrderRow, email: string | null, payme
     )
     if (paymentRef && order.method === 'stripe') await tx.run('UPDATE seller_order SET "paymentIntent" = ? WHERE id = ?', paymentRef, order.id)
     await confirmCoupon(tx, order.id)
-    // Claim the receipt atomically: only the call that sets emailedAt sends it.
-    const claim = await tx.run(`UPDATE seller_order SET "emailedAt" = ? WHERE id = ? AND status = 'paid' AND "emailedAt" IS NULL AND "buyerEmail" IS NOT NULL`, now(), order.id)
-    if (!claim.changes) return
-    const row = (await q.order(order.id, tx))!
-    const store = await q.storeById(row.storeId, tx)
-    if (store) {
-      const queued = await enqueueEmail(
-        'order-receipt',
-        row.buyerEmail!,
-        { url: retrievalUrl(row, store.handle), name: row.productTitle, amount: formatMoney(row.amountMinor, row.currency), email: storeName(store) },
-        tx,
-      )
-      if (queued.queued) await tx.run('UPDATE seller_order SET "receiptId" = ? WHERE id = ?', queued.id, row.id)
-      else await tx.run('UPDATE seller_order SET "emailedAt" = NULL WHERE id = ?', row.id)
-    }
   })
+  // 2. The receipt. Claimed atomically (only the call that sets emailedAt queues it); any failure is recorded
+  //    on the order and the claim released, so it can be retried and the cause is visible.
+  const claim = await sql.run(`UPDATE seller_order SET "emailedAt" = ? WHERE id = ? AND status = 'paid' AND "emailedAt" IS NULL AND "buyerEmail" IS NOT NULL`, now(), order.id)
+  if (claim.changes) {
+    try {
+      const row = (await q.order(order.id))!
+      const store = await q.storeById(row.storeId)
+      if (!store) throw new Error('store not found')
+      const queued = await enqueueEmail('order-receipt', row.buyerEmail!, { url: retrievalUrl(row, store.handle), name: row.productTitle, amount: formatMoney(row.amountMinor, row.currency), email: storeName(store) })
+      if (!queued.queued) throw new Error(`receipt not queued: ${queued.reason}`)
+      await sql.run('UPDATE seller_order SET "receiptId" = ?, "receiptError" = NULL WHERE id = ?', queued.id, row.id)
+    } catch (err) {
+      const reason = (err instanceof Error ? `${err.name}: ${err.message}` : String(err)).slice(0, 300)
+      console.error('[seller] receipt failed', order.id, reason)
+      await sql.run('UPDATE seller_order SET "emailedAt" = NULL, "receiptError" = ? WHERE id = ?', reason, order.id).catch(() => {})
+    }
+  }
   return (await q.order(order.id))!
 }
 
