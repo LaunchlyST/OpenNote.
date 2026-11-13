@@ -128,7 +128,7 @@ try {
   await price.fill('12.00')
   const file = join(tmp, 'planner.pdf')
   writeFileSync(file, 'E2E-PLANNER-FILE')
-  await page.locator('input[type=file]:not([accept])').setInputFiles(file)
+  await page.locator('.pe-file input[type=file]').setInputFiles(file)
   await page.getByText(/planner\.pdf · /).waitFor()
   const png = join(tmp, 'cover.png')
   writeFileSync(png, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64'))

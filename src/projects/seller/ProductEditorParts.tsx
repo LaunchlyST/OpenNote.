@@ -345,3 +345,72 @@ export function CouponsPanel({ currency, products }: { currency: string; product
     </div>
   )
 }
+
+/* ---------------------------------------------------- Stage C: editor --- */
+
+/** Free sample: a separate public file. The paid file is never used as a preview. */
+export function SampleEditor({ productId, sample, onChanged }: { productId: string; sample: { name: string; size?: number } | null | undefined; onChanged: (p: import('./model').DraftProduct) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const run = async (fn: () => Promise<{ product: import('./model').DraftProduct }>) => {
+    setBusy(true); setErr(null)
+    try { onChanged((await trackSellerWork(fn())).product) } catch (e) { setErr((e as Error).message) }
+    setBusy(false)
+  }
+  return (
+    <div className="pe2-sample">
+      <div className="ss-row">
+        <span className="ss-file">{sample ? `${sample.name}${sample.size ? ` · ${(sample.size / 1024 / 1024).toFixed(2)} MB` : ''}` : 'No free sample'}</span>
+        <label className="ss-ghost cursor-pointer">
+          {busy ? 'Uploading…' : sample ? 'Replace sample' : 'Upload sample'}
+          <input type="file" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; if (f.size > 25 * 1024 * 1024) return setErr('Samples can be up to 25 MB.'); void run(() => sellerApi.uploadSample(productId, f)) }} />
+        </label>
+        {sample && <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(() => sellerApi.removeSample(productId))}>Remove</button>}
+      </div>
+      <span className="ss-hint">Anyone can download the sample from the product page once you publish. Upload a short excerpt, not the full product: your paid file stays private.</span>
+      {err && <span className="ss-hint pe2-err">{err}</span>}
+    </div>
+  )
+}
+
+/** Pick some of the seller's other products (related products, bundle contents). */
+export function ProductPicker({ value, onChange, options, label, empty }: { value: string[]; onChange: (v: string[]) => void; options: Array<{ id: string; title: string; note?: string }>; label: string; empty: string }) {
+  if (!options.length) return <p className="ss-hint">{empty}</p>
+  return (
+    <div className="pe2-pick" role="group" aria-label={label}>
+      {options.map((o) => (
+        <label key={o.id}>
+          <input type="checkbox" checked={value.includes(o.id)} onChange={(e) => onChange(e.target.checked ? [...value, o.id] : value.filter((x) => x !== o.id))} />
+          <span>{o.title || 'Untitled product'}</span>
+          {o.note && <small>{o.note}</small>}
+        </label>
+      ))}
+    </div>
+  )
+}
+
+/** The seller sees their reviews but can't change them: only Desknoty can remove abusive ones. */
+export function SellerReviews({ handle, productId, published }: { handle: string; productId: string; published: boolean }) {
+  const [data, setData] = useState<{ summary: { average: number; count: number; breakdown: number[] }; reviews: Array<{ id: string; rating: number; body: string; name: string; createdAt: string }> } | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  useEffect(() => {
+    if (!published) return
+    import('./api').then(({ storeApi }) => storeApi.reviews(handle, productId)).then(setData).catch((e: Error) => setErr(e.message))
+  }, [handle, productId, published])
+  if (!published) return <p className="ss-hint">Reviews appear here once the product is published and buyers start rating it.</p>
+  if (err) return <p className="ss-hint">Reviews couldn’t be loaded: {err}</p>
+  if (!data) return <p className="ss-hint">Loading reviews…</p>
+  return (
+    <div className="pe2-reviews">
+      {data.summary.count === 0 ? <p className="ss-hint">No reviews yet.</p> : (
+        <>
+          <p><b>{data.summary.average.toFixed(1)} out of 5</b> from {data.summary.count} verified review{data.summary.count === 1 ? '' : 's'}</p>
+          <ul>
+            {data.reviews.slice(0, 5).map((r) => <li key={r.id}><span>{'★'.repeat(r.rating)}{'☆'.repeat(5 - r.rating)}</span> <b>{r.name}</b>{r.body ? `: ${r.body}` : ''}</li>)}
+          </ul>
+        </>
+      )}
+      <p className="ss-hint">Only buyers with a completed order can review, once per product. You can’t edit or hide reviews; abusive ones can be reported from the product page and Desknoty decides.</p>
+    </div>
+  )
+}

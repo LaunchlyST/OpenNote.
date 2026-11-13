@@ -58,6 +58,8 @@ export const sellerApi = {
   createCoupon: (c: CouponInput) => call<{ coupon: Coupon }>('POST', '/api/seller/coupons', c),
   updateCoupon: (id: string, c: Partial<CouponInput>) => call<{ coupon: Coupon }>('PATCH', `/api/seller/coupons/${id}`, c),
   deleteCoupon: (id: string) => call<{ deleted: boolean; deactivated: boolean }>('DELETE', `/api/seller/coupons/${id}`),
+  uploadSample: (id: string, file: File) => call<{ product: DraftProduct }>('PUT', `/api/seller/products/${id}/sample`, file, { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) }),
+  removeSample: (id: string) => call<{ product: DraftProduct }>('DELETE', `/api/seller/products/${id}/sample`),
   duplicateProduct: (id: string) => call<{ product: DraftProduct; store: StoreView }>('POST', `/api/seller/products/${id}/duplicate`),
   deleteProduct: (id: string) => call<{ store: StoreView }>('DELETE', `/api/seller/products/${id}`),
   uploadFile: (id: string, file: File) =>
@@ -96,6 +98,8 @@ export interface PublicStore {
 }
 export interface PublicOrder {
   id: string
+  /** Stage C: a bundle's items, each with its own download. */
+  items?: Array<{ productId: string; title: string; fileName: string; downloadUrl: string }>
   status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'disputed'
   product: string
   productId?: string
@@ -136,6 +140,8 @@ export type CouponInput = { code: string; kind: 'percent' | 'amount'; value: num
 /** sent: the email provider accepted it. queued: not confirmed yet. failed: the provider refused it. */
 export type EmailStatus = 'sent' | 'queued' | 'failed'
 
+export interface PublicReview { id: string; rating: number; body: string; name: string; verified: boolean; createdAt: string; edited: boolean }
+
 export interface PriceQuote {
   currency: string
   listMinor: number
@@ -156,6 +162,12 @@ export const storeApi = {
   quote: (handle: string, productId: string, coupon?: string) => call<{ quote: PriceQuote }>('POST', `/api/store/${encodeURIComponent(handle)}/quote`, { productId, coupon: coupon || undefined }),
   /** Send the download email again for an existing order (rate limited by the server). */
   resend: (handle: string, id: string, k: string) => call<{ emailStatus: EmailStatus; to: string; emailError?: string }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/resend`, { k }),
+  reviews: (handle: string, productId: string) => call<{ summary: { average: number; count: number; breakdown: number[] }; reviews: PublicReview[] }>('GET', `/api/store/${encodeURIComponent(handle)}/products/${encodeURIComponent(productId)}/reviews`),
+  myReview: (handle: string, orderId: string, k: string, productId?: string) => call<{ review: { id: string; rating: number; body: string; name: string; status: string } | null; eligible: boolean }>('GET', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(orderId)}/review?k=${encodeURIComponent(k)}${productId ? `&productId=${encodeURIComponent(productId)}` : ''}`),
+  saveReview: (handle: string, orderId: string, k: string, r: { rating: number; body: string; name: string; productId?: string }) => call<{ review: { id: string; rating: number } }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(orderId)}/review`, { k, ...r }),
+  reportReview: (handle: string, reviewId: string, reason: string) => call<{ reported: boolean }>('POST', `/api/store/${encodeURIComponent(handle)}/reviews/${encodeURIComponent(reviewId)}/report`, { reason }),
+  favourites: () => call<{ productIds: string[] }>('GET', '/api/favourites'),
+  favourite: (productId: string, on: boolean) => call<{ saved: boolean }>(on ? 'PUT' : 'DELETE', `/api/favourites/${encodeURIComponent(productId)}`),
   /** Bank transfer: "I've sent it" (never unlocks the download). */
   claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
   /** Back from PayPal: the server verifies the payment with PayPal. */

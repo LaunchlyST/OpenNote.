@@ -65,6 +65,13 @@ export interface ShopProduct {
   textPos?: { title: number; desc: number }
   /** File type label worked out by the server from the protected file's name. */
   fileType?: string | null
+  /** Stage C: real review totals (null when there are none). */
+  rating?: { average: number; count: number; breakdown: number[] } | null
+  /** Stage C: a free public sample (never the paid file). */
+  sample?: { name: string; url?: string; size?: number } | null
+  related?: string[]
+  /** Stage C: a bundle's items; available only when every item can be delivered. */
+  bundle?: { items: Array<{ id: string; title: string }>; available: boolean } | null
 }
 
 export type CardLayout = 'compact' | 'showcase' | 'featured'
@@ -84,6 +91,8 @@ export type ProductExtras = {
   access: string
   faq: Array<{ q: string; a: string }>
   textPos: { title: number; desc: number }
+  related: string[]
+  bundle: string[]
 }
 export const DEFAULT_EXTRAS: ProductExtras = {
   offer: { on: false, kind: 'percent', value: 20, starts: null, ends: null, badge: 'PERCENT', badgeColor: '#e11d48' },
@@ -100,6 +109,8 @@ export const DEFAULT_EXTRAS: ProductExtras = {
   access: '',
   faq: [],
   textPos: { title: 0, desc: 0 },
+  related: [],
+  bundle: [],
 }
 
 /** Fill any missing V2 fields so older products keep working. */
@@ -115,6 +126,8 @@ export function withExtras(x: Partial<ProductExtras> | undefined): ProductExtras
     gallery: x?.gallery ?? [],
     included: x?.included ?? [],
     faq: x?.faq ?? [],
+    related: x?.related ?? [],
+    bundle: x?.bundle ?? [],
   }
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { Check, ChevronLeft, ChevronRight, X as XIcon } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Download, Flag, Heart, Share2, X as XIcon } from 'lucide-react'
+import { storeApi } from './api'
+import type { PublicReview } from './api'
 import { mediaUrl } from './model'
 import type { ShopProduct } from './model'
 
@@ -62,13 +64,47 @@ export function Gallery({ p, label }: { p: ShopProduct; label: string }) {
 
 export function Badges({ p }: { p: ShopProduct }) {
   const b = p.badges
-  if (!b?.new && !b?.featured) return null
+  if (!b?.new && !b?.featured && !p.bundle) return null
   return (
     <span className="sp-pbadges">
-      {b.featured && <span className="sp-pbadge feat">Featured</span>}
-      {b.new && <span className="sp-pbadge new">New</span>}
+      {b?.featured && <span className="sp-pbadge feat">Featured</span>}
+      {b?.new && <span className="sp-pbadge new">New</span>}
+      {p.bundle && <span className="sp-pbadge bundle">Bundle · {p.bundle.items.length}</span>}
     </span>
   )
+}
+
+/** Star rating from real reviews. Nothing is shown when there are none. */
+export function Stars({ value, count, size = 'sm' }: { value: number; count?: number; size?: 'sm' | 'lg' }) {
+  const pct = Math.max(0, Math.min(100, (value / 5) * 100))
+  return (
+    <span className={cn('sp-stars', size)} role="img" aria-label={`Rated ${value.toFixed(1)} out of 5${count != null ? ` from ${count} review${count === 1 ? '' : 's'}` : ''}`}>
+      <span className="sp-stars-row" aria-hidden="true"><span className="sp-stars-on" style={{ width: `${pct}%` }}>★★★★★</span>★★★★★</span>
+      {count != null && <span className="sp-stars-n">{value.toFixed(1)} ({count})</span>}
+    </span>
+  )
+}
+
+/** Save (heart) with a clear on/off state. */
+export function SaveButton({ saved, onToggle, label }: { saved: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button type="button" className={cn('sp-save-btn', saved && 'on')} aria-pressed={saved} aria-label={saved ? `Remove ${label} from saved` : `Save ${label}`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); onToggle() }}>
+      <Heart className="h-4 w-4" aria-hidden="true" fill={saved ? 'currentColor' : 'none'} />
+    </button>
+  )
+}
+
+/** Native share sheet where the browser has one; otherwise copy the product link. */
+export function ShareButton({ url, title }: { url: string; title: string }) {
+  const [done, setDone] = useState(false)
+  const share = async () => {
+    try {
+      if (navigator.share) { await navigator.share({ title, url }); return }
+      await navigator.clipboard.writeText(url)
+      setDone(true); window.setTimeout(() => setDone(false), 1600)
+    } catch { /* cancelled */ }
+  }
+  return <button type="button" className="sp-act" onClick={() => void share()}><Share2 className="h-4 w-4" aria-hidden="true" /> {done ? 'Link copied' : 'Share'}</button>
 }
 
 /** File format and access in one quiet line; only facts the seller entered or the server worked out. */
@@ -165,10 +201,12 @@ export type CardProps = {
   /** Editor only: move title/description. */
   onMoveText?: (which: 'title' | 'desc', pos: number) => void
   layout?: ShopProduct['layout']
+  saved?: boolean
+  onToggleSave?: () => void
 }
 
 /** One product card in the seller's chosen layout. Unused fields are simply not rendered. */
-export function ProductCard({ p, onOpen, href, buy, onMoveText, layout }: CardProps) {
+export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, onToggleSave }: CardProps) {
   const kind = layout ?? p.layout ?? 'compact'
   const tp = p.textPos ?? { title: 0, desc: 0 }
   const sub = p.subtitle || (p.description ? p.description.split('\n')[0] : '')
@@ -186,6 +224,7 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout }: CardPr
         <Link label={`Open ${p.title}`}>{kind === 'compact' ? <CoverImage p={p} /> : <CoverImage p={p} className="sp-cover-big" />}</Link>
         <Badges p={p} />
         {p.offer && <em className="sp-badge sp-badge-float" style={{ background: p.offer.badgeColor }}>{p.offer.badge}</em>}
+        {onToggleSave && <SaveButton saved={Boolean(saved)} onToggle={onToggleSave} label={p.title} />}
       </div>
       <div className="sp-card-body">
         <div className="sp-move-box">
@@ -200,6 +239,7 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout }: CardPr
             <MovableText as="p" pos={tp.desc} onMove={onMoveText ? (v) => onMoveText('desc', v) : undefined} label="Description" className="sp-card-sub">{sub}</MovableText>
           </div>
         )}
+        {p.rating && p.rating.count > 0 && <Stars value={p.rating.average} count={p.rating.count} />}
         {kind !== 'compact' && <FactLine p={p} />}
         {kind === 'featured' && p.included?.length ? (
           <ul className="sp-incl sp-incl-card">{p.included.slice(0, 3).map((x, i) => <li key={i}><Check className="h-3.5 w-3.5" aria-hidden="true" />{x}</li>)}</ul>
@@ -214,7 +254,7 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout }: CardPr
  * Product detail: a side panel on desktop, a full-screen sheet on mobile.
  * Escape and the close button close it; focus moves in on open and returns on close.
  */
-export function ProductSheet({ p, onClose, buy, description }: { p: ShopProduct; onClose: () => void; buy: ReactNode; description: ReactNode }) {
+export function ProductSheet({ p, onClose, buy, description, handle, products = [], onOpenProduct, saved, onToggleSave, savedNote }: { p: ShopProduct; onClose: () => void; buy: ReactNode; description: ReactNode; handle?: string; products?: ShopProduct[]; onOpenProduct?: (p: ShopProduct) => void; saved?: boolean; onToggleSave?: () => void; savedNote?: string }) {
   const panel = useRef<HTMLDivElement>(null)
   const titleId = useId()
   useEffect(() => {
@@ -246,7 +286,14 @@ export function ProductSheet({ p, onClose, buy, description }: { p: ShopProduct;
             <Badges p={p} />
             <h2 id={titleId}>{p.title}</h2>
             {p.subtitle && <p className="sp-sheet-sub">{p.subtitle}</p>}
+            {p.rating && p.rating.count > 0 && <a className="sp-sheet-rating" href="#sp-reviews"><Stars value={p.rating.average} count={p.rating.count} /></a>}
             <FactLine p={p} />
+            <div className="sp-acts">
+              {onToggleSave && <button type="button" className={cn('sp-act', saved && 'on')} aria-pressed={Boolean(saved)} onClick={onToggleSave}><Heart className="h-4 w-4" aria-hidden="true" fill={saved ? 'currentColor' : 'none'} /> {saved ? 'Saved' : 'Save'}</button>}
+              {handle && <ShareButton url={`${window.location.origin}/${handle}?p=${p.id}`} title={p.title} />}
+              {p.sample?.url && <a className="sp-act" href={p.sample.url} download><Download className="h-4 w-4" aria-hidden="true" /> Free sample</a>}
+            </div>
+            {savedNote && saved && <p className="sp-fine">{savedNote}</p>}
           </div>
           <div className="sp-sheet-buy">{buy}</div>
           {description}
@@ -254,6 +301,13 @@ export function ProductSheet({ p, onClose, buy, description }: { p: ShopProduct;
             <section className="sp-sheet-sec">
               <h3>What’s included</h3>
               <ul className="sp-incl">{p.included.map((x, i) => <li key={i}><Check className="h-4 w-4" aria-hidden="true" />{x}</li>)}</ul>
+            </section>
+          ) : null}
+          {p.bundle ? (
+            <section className="sp-sheet-sec">
+              <h3>In this bundle</h3>
+              <ul className="sp-incl">{p.bundle.items.map((i) => <li key={i.id}><Check className="h-4 w-4" aria-hidden="true" />{i.title}</li>)}</ul>
+              {!p.bundle.available && <p className="sp-fine">This bundle can’t be bought right now because one of its products isn’t available.</p>}
             </section>
           ) : null}
           {p.faq?.length ? (
@@ -264,6 +318,23 @@ export function ProductSheet({ p, onClose, buy, description }: { p: ShopProduct;
               ))}
             </section>
           ) : null}
+          {handle && <Reviews handle={handle} productId={p.id} />}
+          {(() => {
+            const rel = (p.related ?? []).map((id) => products.find((x) => x.id === id)).filter((x): x is ShopProduct => Boolean(x))
+            return rel.length ? (
+              <section className="sp-sheet-sec">
+                <h3>You might also like</h3>
+                <div className="sp-related">
+                  {rel.map((r) => (
+                    <button key={r.id} type="button" className="sp-rel" onClick={() => onOpenProduct?.(r)}>
+                      <CoverImage p={r} />
+                      <span>{r.title}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null
+          })()}
           <p className="sp-fine">Instant download after payment. A copy of the link is emailed to you.</p>
         </div>
         <div className="sp-sheet-bar">{buy}</div>
@@ -272,3 +343,52 @@ export function ProductSheet({ p, onClose, buy, description }: { p: ShopProduct;
   )
 }
 
+
+/** Verified reviews with real totals, a rating breakdown, and a way to report abuse. */
+function Reviews({ handle, productId }: { handle: string; productId: string }) {
+  const [data, setData] = useState<{ summary: { average: number; count: number; breakdown: number[] }; reviews: PublicReview[] } | null>(null)
+  const [err, setErr] = useState(false)
+  const [reported, setReported] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    let alive = true
+    storeApi.reviews(handle, productId).then((r) => alive && setData(r)).catch(() => alive && setErr(true))
+    return () => { alive = false }
+  }, [handle, productId])
+  const report = async (id: string) => {
+    const reason = window.prompt('What’s wrong with this review? (for example: abusive, spam, not about the product)')
+    if (!reason?.trim()) return
+    try { await storeApi.reportReview(handle, id, reason.trim()); setReported((r) => ({ ...r, [id]: true })) } catch { /* keep the button */ }
+  }
+  return (
+    <section className="sp-sheet-sec" id="sp-reviews" aria-label="Reviews">
+      <h3>Reviews</h3>
+      {err ? <p className="sp-fine">Reviews couldn’t be loaded.</p> : !data ? <p className="sp-fine">Loading reviews…</p> : data.summary.count === 0 ? (
+        <p className="sp-noreviews">No reviews yet. Buyers can leave one from their order page.</p>
+      ) : (
+        <>
+          <div className="sp-rsum">
+            <div><b>{data.summary.average.toFixed(1)}</b><Stars value={data.summary.average} size="lg" /><span>{data.summary.count} review{data.summary.count === 1 ? '' : 's'}</span></div>
+            <ol className="sp-rbars" aria-label="Rating breakdown">
+              {[5, 4, 3, 2, 1].map((n) => {
+                const c = data.summary.breakdown[n - 1]
+                return <li key={n}><span>{n}★</span><i><b style={{ width: `${data.summary.count ? (c / data.summary.count) * 100 : 0}%` }} /></i><span>{c}</span></li>
+              })}
+            </ol>
+          </div>
+          <ul className="sp-rlist">
+            {data.reviews.map((r) => (
+              <li key={r.id}>
+                <div className="sp-rhead"><Stars value={r.rating} /><b>{r.name}</b><span className="sp-verified"><Check className="h-3.5 w-3.5" aria-hidden="true" /> Verified buyer</span></div>
+                {r.body && <p>{r.body}</p>}
+                <div className="sp-rfoot">
+                  <time dateTime={r.createdAt}>{new Date(r.createdAt).toLocaleDateString()}</time>{r.edited ? ' · edited' : ''}
+                  <button type="button" disabled={reported[r.id]} onClick={() => void report(r.id)}><Flag className="h-3 w-3" aria-hidden="true" /> {reported[r.id] ? 'Reported' : 'Report'}</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  )
+}

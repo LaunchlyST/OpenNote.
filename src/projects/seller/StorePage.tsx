@@ -33,6 +33,9 @@ export interface StorePageProps {
   downloading?: string | null
   /** Live store: open a product in the detail panel instead of leaving the page. */
   onOpenProduct?: (p: ShopProduct) => void
+  /** Live store: saved products and the toggle. */
+  savedIds?: string[]
+  onToggleSave?: (p: ShopProduct) => void
 }
 
 /** The per-element look as inline style: alignment, size, colour, spacing, font. */
@@ -266,7 +269,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       const prod = p.products.find((x) => x.id === d.productId)
       return prod ? (
         <section className="sp-block sp-featured-v2">
-          <ProductCard p={prod} layout="featured" href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} />} />
+          <ProductCard p={prod} layout="featured" href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} />
         </section>
       ) : p.live ? null : (
         <div className="sp-block sp-empty sp-feat-empty">Digital product: click to choose a product</div>
@@ -293,7 +296,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           {(
             <div className="sp-grid">
               {list.map((prod) => (
-                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} />
+                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} />
               ))}
             </div>
           )}
@@ -366,6 +369,13 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
         ) : (
           <a className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} href={owned[prod.id]}>Download</a>
         )}
+      </div>
+    )
+  if (prod.bundle && !prod.bundle.available)
+    return (
+      <div className="sp-buyrow">
+        <PriceTag prod={prod} />
+        <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled title="One of this bundle’s products isn’t available">Unavailable</button>
       </div>
     )
   if (prod.priceMinor === 0)

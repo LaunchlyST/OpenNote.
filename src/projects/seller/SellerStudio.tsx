@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
   Monitor,
+  Star,
   Redo2,
   Share2,
   Undo2,
@@ -44,7 +45,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/id'
 import { BuyRow, StorePage, storeStyle } from './StorePage'
-import { CardAppearance, CouponsPanel, CoverEditor, FaqEditor, GalleryEditor, LinesEditor, OfferSchedule } from './ProductEditorParts'
+import { CardAppearance, CouponsPanel, CoverEditor, FaqEditor, GalleryEditor, LinesEditor, OfferSchedule, ProductPicker, SampleEditor, SellerReviews } from './ProductEditorParts'
 import { Style2Page } from './Style2'
 import { bankIcon } from './bank-icons'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
@@ -701,7 +702,7 @@ function Studio({
     setPublishing(false)
   }
 
-  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => ({ ...p, ...withExtras(p.extras), offer: p.offer, fileType: p.file ? (p.file.name.split('.').pop() ?? '').toUpperCase() || null : null }))
+  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => { const ex = withExtras(p.extras); return { ...p, ...ex, offer: p.offer, fileType: p.file ? (p.file.name.split('.').pop() ?? '').toUpperCase() || null : null, bundle: ex.bundle.length ? { items: ex.bundle.map((id) => ({ id, title: store.products.find((q) => q.id === id)?.title ?? '' })), available: ex.bundle.length >= 2 } : null } })
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
@@ -1741,6 +1742,8 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
   const v2 = Boolean(product.extras && 'layout' in product.extras)
   // Stage B: the server stores the offer's timezone; an older API doesn't
   const v2b = Boolean(product.extras && 'tz' in (product.extras.offer ?? {}))
+  // Stage C: the server stores bundle/related lists; an older API doesn't
+  const v2c = Boolean(product.extras && 'bundle' in product.extras)
   const setX = (n: Partial<ProductExtras>) => setForm({ ...form, extras: { ...x, ...n } })
   const setOffer = (n: Partial<ProductExtras['offer']>) => setX({ offer: { ...x.offer, ...n } })
 
@@ -1768,6 +1771,8 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
     currency: form.currency,
     offer: offerLive ? { priceMinor: sale, percent: pct, badge: badgeText, badgeColor: x.offer.badgeColor, ends: x.offer.ends } : null,
     fileType: product.file ? (product.file.name.split('.').pop() ?? '').toUpperCase() || null : null,
+    bundle: x.bundle.length ? { items: x.bundle.map((id) => ({ id, title: store.products.find((q) => q.id === id)?.title ?? '' })), available: x.bundle.length >= 2 } : null,
+    sample: product.sample ?? null,
   }
 
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await flushSellerEdits(); await fn() } catch (e) { setState((e as Error).message) } setBusy(false) }
@@ -1795,6 +1800,16 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         </div>
         <Field label="What’s included"><LinesEditor label="Included item" items={x.included} onChange={(included) => setX({ included })} placeholder="e.g. 30 caption templates" /></Field>
         <Field label="FAQ (optional)"><FaqEditor items={x.faq} onChange={(faq) => setX({ faq })} /></Field>
+        {v2c && (
+          <>
+            <Field label="Bundle" hint="Tick 2 or more products to sell them together. Buyers get every file; a bundle needs no file of its own.">
+              <ProductPicker label="Bundle contents" value={x.bundle} onChange={(bundle) => setX({ bundle })} empty="Add other products first to make a bundle." options={store.products.filter((o) => o.id !== product.id && !o.archived && !(o.extras?.bundle?.length)).map((o) => ({ id: o.id, title: o.title, note: o.file ? undefined : 'needs a file' }))} />
+            </Field>
+            <Field label="Related products" hint="Shown under “You might also like”.">
+              <ProductPicker label="Related products" value={x.related} onChange={(related) => setX({ related: related.slice(0, 6) })} empty="Your other products will show here." options={store.products.filter((o) => o.id !== product.id && !o.archived).map((o) => ({ id: o.id, title: o.title }))} />
+            </Field>
+          </>
+        )}
         </fieldset>
         <div className="ss-field">
           <span className="ss-label">File buyers download</span>
@@ -1830,6 +1845,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
           <>
             <CoverEditor cover={form.cover} crop={x.crop} onCover={(cover) => setForm({ ...form, cover })} onCrop={(crop) => setX({ crop })} />
             <GalleryEditor gallery={x.gallery} video={x.video} onGallery={(gallery) => setX({ gallery })} onVideo={(video) => setX({ video })} />
+            {v2c && <Field label="Free sample"><SampleEditor productId={product.id} sample={product.sample} onChanged={(p) => setStore({ ...store, products: store.products.map((o) => (o.id === p.id ? { ...o, sample: p.sample } : o)) })} /></Field>}
           </>
         ) : (
           <>
@@ -1934,6 +1950,12 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
           {BADGE_COLOURS.map((c) => <button key={c} type="button" role="radio" aria-checked={x.cta.color === c} aria-label={`Button colour ${c}`} style={{ background: c }} onClick={() => setX({ cta: { ...x.cta, color: c } })} />)}
         </div>
       </PSection>
+
+      {v2c && (
+        <PSection icon={<Star className="h-4 w-4" />} title="Reviews" sub="From verified buyers">
+          <SellerReviews handle={store.handle} productId={product.id} published={product.published} />
+        </PSection>
+      )}
 
       <PSection icon={<Globe className="h-4 w-4" />} title="Publishing" sub={vis === 'draft' ? 'Draft' : vis === 'hidden' ? 'Hidden · link only' : 'Published'} open>
         <div className="pe-seg pe-seg3" role="radiogroup" aria-label="Visibility">

@@ -26,6 +26,8 @@ export default function PublicStore({ path }: { path: string }) {
   const [err, setErr] = useState<string | null>(null)
   const [buying, setBuying] = useState<string | null>(null)
   const [buyErr, setBuyErr] = useState<string | null>(null)
+  // Saved products: in the account when signed in, otherwise only in this browser.
+  const fav = useFavourites()
   // Product detail panel: ?p=<id> opens it, so links and the browser Back button work.
   const [sheet, setSheet] = useState<string | null>(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('p')))
   useEffect(() => {
@@ -158,13 +160,20 @@ export default function PublicStore({ path }: { path: string }) {
       setSheet(null)
     }
   }
-  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading, onOpenProduct: openProduct }
+  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading, onOpenProduct: openProduct, savedIds: fav.ids, onToggleSave: (p: ShopProduct) => void fav.toggle(p.id) }
   const sheetProduct = sheet ? store.products.find((p) => p.id === sheet) : undefined
   const sheetView = sheetProduct && (
     <ProductSheet
+      key={sheetProduct.id}
       p={sheetProduct}
       onClose={closeSheet}
       buy={<BuyRow prod={sheetProduct} {...base} />}
+      handle={store.handle}
+      products={store.products}
+      onOpenProduct={openProduct}
+      saved={fav.ids.includes(sheetProduct.id)}
+      onToggleSave={() => void fav.toggle(sheetProduct.id)}
+      savedNote={fav.mode === 'local' ? 'Saved in this browser only. Sign in to Desknoty to keep saved products on every device.' : undefined}
       description={sheetProduct.description ? <div className="sp-desc">{sheetProduct.description.split(/\n{2,}/).map((para, i) => <p key={i}>{para}</p>)}</div> : null}
     />
   )
@@ -230,6 +239,51 @@ function BankIcon({ name }: { name: string }) {
   return <span className="co2-bi co2-bi-txt" aria-hidden="true">{name === 'Other bank' ? '…' : name.charAt(0)}</span>
 }
 
+/** Order page: the buyer rates what they bought. One review per product, editable; shown as a verified review. */
+function ReviewForm({ handle, orderId, products }: { handle: string; orderId: string; products: Array<{ id: string; title: string }> }) {
+  const k = new URLSearchParams(window.location.search).get('k') ?? ''
+  const [pid, setPid] = useState(products[0]?.id ?? '')
+  const [rating, setRating] = useState(0)
+  const [body, setBody] = useState('')
+  const [name, setName] = useState('')
+  const [state, setState] = useState<{ busy: boolean; msg: string | null; removed: boolean; had: boolean }>({ busy: false, msg: null, removed: false, had: false })
+  useEffect(() => {
+    if (!k || !pid) return
+    storeApi.myReview(handle, orderId, k, pid).then((r) => {
+      if (r.review) { setRating(r.review.rating); setBody(r.review.body); setName(r.review.name); setState((s) => ({ ...s, had: true, removed: r.review!.status === 'removed' })) }
+      else { setRating(0); setBody(''); setState((s) => ({ ...s, had: false, removed: false })) }
+    }).catch(() => {})
+  }, [handle, orderId, k, pid])
+  if (!k) return null
+  const save = async () => {
+    setState((s) => ({ ...s, busy: true, msg: null }))
+    try {
+      await storeApi.saveReview(handle, orderId, k, { rating, body, name, productId: pid })
+      setState((s) => ({ ...s, busy: false, had: true, msg: 'Thanks. Your review is live.' }))
+    } catch (e) { setState((s) => ({ ...s, busy: false, msg: (e as Error).message })) }
+  }
+  return (
+    <form className="ps-review" onSubmit={(e) => { e.preventDefault(); if (rating) void save() }}>
+      <h2>{state.had ? 'Your review' : 'Rate this product'}</h2>
+      {products.length > 1 && (
+        <select value={pid} onChange={(e) => setPid(e.target.value)} aria-label="Product to review">{products.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
+      )}
+      {state.removed ? <p className="ps-fine">Your review for this product was removed by Desknoty for breaking the review rules.</p> : (
+        <>
+          <div className="ps-stars" role="radiogroup" aria-label="Rating">
+            {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} star${n === 1 ? '' : 's'}`} className={n <= rating ? 'on' : undefined} onClick={() => setRating(n)}>★</button>)}
+          </div>
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={3} placeholder="What did you think? (optional)" aria-label="Your review" />
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="Name to show (optional)" aria-label="Name to show" />
+          <button type="submit" className="sp-btn" disabled={!rating || state.busy}>{state.busy ? 'Saving…' : state.had ? 'Update review' : 'Post review'}</button>
+          <p className="ps-fine">Shown as a verified buyer review. You can edit it any time from this page.</p>
+        </>
+      )}
+      {state.msg && <p className="ps-fine" role="status">{state.msg}</p>}
+    </form>
+  )
+}
+
 /** Order page: send the download email again (same order, same link; the server rate-limits it). */
 function ResendEmail({ handle, orderId }: { handle: string; orderId: string }) {
   const [state, setState] = useState<{ busy: boolean; text: string | null }>({ busy: false, text: null })
@@ -249,6 +303,30 @@ function ResendEmail({ handle, orderId }: { handle: string; orderId: string }) {
       {state.text && <p className="ps-fine">{state.text}</p>}
     </div>
   )
+}
+
+/**
+ * Saved products. Signed-in Desknoty users keep them in their account (private to them).
+ * Guests keep them in this browser only: they vanish if site data is cleared, and don't sync.
+ */
+function useFavourites() {
+  const KEY = 'desknoty.saved'
+  const [ids, setIds] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(KEY) ?? '[]') } catch { return [] } })
+  const [mode, setMode] = useState<'account' | 'local'>('local')
+  useEffect(() => {
+    storeApi.favourites().then((r) => { setMode('account'); setIds(r.productIds) }).catch(() => setMode('local'))
+  }, [])
+  const toggle = async (id: string) => {
+    const on = !ids.includes(id)
+    const next = on ? [id, ...ids] : ids.filter((x) => x !== id)
+    setIds(next)
+    if (mode === 'account') {
+      try { await storeApi.favourite(id, on) } catch { setIds(ids) }
+    } else {
+      try { localStorage.setItem(KEY, JSON.stringify(next.slice(0, 200))) } catch { /* storage blocked: saved for this visit only */ }
+    }
+  }
+  return { ids, mode, toggle }
 }
 
 type FreeDone = { email: string; status: EmailStatus; error: string | null; order: PublicOrder; orderUrl: string }
@@ -639,9 +717,16 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
           {order.product} · {formatPrice(order.amountMinor, order.currency)}
           {order.receiptSent && order.email ? ` · receipt accepted for sending to ${order.email} (delivery unconfirmed)` : ''}
         </p>
-        <a className="sp-btn ps-download" href={order.downloadUrl!} download>
-          Download {order.fileName}
-        </a>
+        {order.downloadUrl && (
+          <a className="sp-btn ps-download" href={order.downloadUrl} download>
+            Download {order.fileName}
+          </a>
+        )}
+        {order.items && order.items.length > 0 && (
+          <ul className="ps-items" aria-label="Products in this bundle">
+            {order.items.map((i) => <li key={i.productId}><span>{i.title}</span><a className="sp-btn sp-btn-sm" href={i.downloadUrl} download>Download</a></li>)}
+          </ul>
+        )}
         <p className="ps-fine">
           {order.downloadExpiresAt
             ? `This download link works until ${new Date(order.downloadExpiresAt).toLocaleString()}.`
@@ -651,6 +736,7 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
         {order.retrievalUrl && <a href={order.retrievalUrl}>Permanent purchase link</a>}
         <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>
         {order.email && <ResendEmail handle={handle} orderId={order.id} />}
+        <ReviewForm handle={handle} orderId={order.id} products={order.items && order.items.length ? order.items.map((i) => ({ id: i.productId, title: i.title })) : [{ id: order.productId ?? '', title: order.product }]} />
         <a href={back}>Back to the store</a>
       </div>
     )
