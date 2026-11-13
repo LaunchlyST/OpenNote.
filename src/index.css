@@ -8624,3 +8624,8 @@ select.ss-input option {
 .co3-minus { color: #15803d; }
 .co3-saved { margin-top: -4px; font-size: 13px; font-weight: 650; color: #15803d; }
 .co3-hint-line { font-size: 12.5px; color: var(--mut, #7a8794); }
+.co3-resend, .co3-done { display: block; width: 100%; margin-top: 8px; padding: 10px; border-radius: 12px; font-weight: 650; font-size: 14px; background: #fff; border: 1px solid var(--bd, #dbe7f0); }
+.co3-resend:disabled { opacity: 0.55; }
+.co3-done { border-color: transparent; color: var(--mut, #7a8794); }
+.co3-mailnote { padding: 10px 12px; border-radius: 10px; background: #fff7ed; color: #9a3412; font-size: 13.5px; line-height: 1.45; }
+.ps-resend { display: grid; gap: 6px; justify-items: center; }

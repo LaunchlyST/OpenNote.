@@ -159,14 +159,19 @@ export function senderProblem(): string | null {
   return null
 }
 
-/** Checks the Resend API key once, so a wrong key shows up at startup, not at the first sign-up. Read-only: no email is sent here. */
+/**
+ * Checks the Resend API key once at startup. No email is sent and no extra permission is needed:
+ * an empty POST /emails is rejected by validation (422) when the key is good, and with 401/403
+ * when it isn't. (Listing emails needs a full-access key, so a sending-only key would wrongly fail.)
+ */
 export async function verifyResend(): Promise<{ ok: true } | { ok: false; error: string }> {
   if (env.mail.transport !== 'resend' || !env.resend.apiKey) return { ok: false, error: 'Resend is not configured' }
   try {
-    const res = await fetch('https://api.resend.com/emails', { headers: { Authorization: `Bearer ${env.resend.apiKey}` } })
+    const res = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.resend.apiKey}` }, body: '{}' })
     const detail = await res.text().catch(() => '')
-    if (!res.ok) return { ok: false, error: `Resend ${res.status}: ${detail.slice(0, 300)}` }
-    return { ok: true }
+    if (res.status === 401 || res.status === 403) return { ok: false, error: `Resend ${res.status}: ${detail.slice(0, 300)}` }
+    if (res.status === 422 || res.status === 400 || res.ok) return { ok: true }
+    return { ok: false, error: `Resend ${res.status}: ${detail.slice(0, 300)}` }
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }

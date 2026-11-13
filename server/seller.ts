@@ -28,7 +28,7 @@ import { sql } from './db.ts'
 import { ddl } from './sql.ts'
 import type { Sql } from './sql.ts'
 import { env } from './env.ts'
-import { enqueueEmail, transportName } from './mail/index.ts'
+import { enqueueEmail, sendNow, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
 import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices } from './payments.ts'
 import type { PaymentSettings } from './payments.ts'
@@ -834,6 +834,10 @@ export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Sess
  * Marks a verified payment's order paid and sends its receipt exactly once.
  * Every payment method ends here, after its own verification.
  */
+/** j***@example.com, for showing which address a receipt went to. */
+const maskAddress = (e: string) => { const [u, d] = e.split('@'); return `${u.slice(0, 1)}***@${d ?? ''}` }
+const formatMoneyMinor = (m: number, c: string) => formatMoney(m, c)
+
 /** Money for emails; never throws on an odd currency code. */
 function formatMoney(minor: number, currency: string): string {
   const value = (Number(minor) || 0) / 100
@@ -1839,16 +1843,26 @@ export function sellerRouter() {
         if ('refused' in again) return void res.status(409).json({ error: again.refused, couponError: true })
         order = again
       }
+      // Mark it paid and queue the receipt, then send that receipt now and report what the provider said.
+      // The download is handed over on the page either way, so a mail problem never blocks the buyer.
+      let emailStatus: 'sent' | 'queued' | 'failed' = 'failed'
+      let emailError: string | null = null
       try {
-        await completeOrder(order, email)
+        const done = await completeOrder(order, email)
+        if (done.receiptId) {
+          const r = await sendNow(Number(done.receiptId))
+          emailStatus = r.status
+          if (r.status === 'failed') emailError = 'We couldn’t send the email. Your download is ready here, and you can try sending the email again.'
+          if (r.status === 'queued') emailError = 'The email is on its way but hasn’t been confirmed yet. Your download is ready here.'
+        } else emailError = 'We couldn’t queue the email for that address. Your download is ready here.'
       } catch (err) {
         console.error('[seller] free order email failed', order.id, err)
         // the email could not be queued: record the order and hand the download over right here instead
         await sql.run(`UPDATE seller_order SET status = 'paid', "paidAt" = COALESCE("paidAt", ?), "buyerEmail" = COALESCE("buyerEmail", ?) WHERE id = ?`, now(), email, order.id)
-        const saved = (await q.order(order.id))!
-        return void res.json({ orderUrl: `/store/${s.handle}/order/${saved.id}?k=${encodeURIComponent(saved.accessKey)}`, order: await orderView(saved, s) })
+        emailError = 'We couldn’t send the email. Your download is ready here, and you can try sending the email again.'
       }
-      return void res.json({ emailed: true, email })
+      const saved = (await q.order(order.id))!
+      return void res.json({ emailed: emailStatus === 'sent', emailStatus, emailError, email, orderUrl: `/store/${s.handle}/order/${saved.id}?k=${encodeURIComponent(saved.accessKey)}`, order: await orderView(saved, s) })
     }
     const method = String(req.body?.method ?? 'stripe')
     if (method === 'paypal' || method === 'bank') return void (await altCheckout(req, res, s, p, method, placeOrder, samePurchase))
@@ -2006,6 +2020,35 @@ export function sellerRouter() {
       return void res.status(404).json({ error: 'Order not found.' })
     }
     res.json({ order: await orderView(o, ownerStore) })
+  })
+
+  /**
+   * "Resend download email": the same order, the same secure link, a fresh receipt. Needs the order's
+   * private key (no seller account). At least a minute apart and at most 5 in 24 hours, enforced with one
+   * guarded UPDATE so parallel clicks can't get around it.
+   */
+  pub.post('/:handle/order/:orderId/resend', async (req, res) => {
+    const found = await buyerOrder(String(req.params.orderId), String(req.body?.k ?? ''))
+    if (!found) return void res.status(404).json({ error: 'Order not found.' })
+    const o = found.o
+    if (o.status !== 'paid') return void res.status(409).json({ error: 'The download email is sent once the order is complete.' })
+    if (!o.buyerEmail) return void res.status(409).json({ error: 'This order has no email address to send to.' })
+    const t = Date.now()
+    const nowIso = new Date(t).toISOString(), minuteAgo = new Date(t - 60_000).toISOString(), dayAgo = new Date(t - 86_400_000).toISOString()
+    const ok = await sql.run(
+      `UPDATE seller_order SET "resendCount" = CASE WHEN "resendAt" IS NULL OR "resendAt" < ? THEN 1 ELSE "resendCount" + 1 END, "resendAt" = ? WHERE id = ? AND ("resendAt" IS NULL OR "resendAt" < ?) AND ("resendAt" IS NULL OR "resendAt" < ? OR "resendCount" < 5)`,
+      dayAgo, nowIso, o.id, minuteAgo, dayAgo,
+    )
+    if (!ok.changes) return void res.status(429).json({ error: 'Please wait a minute before sending it again. You can resend up to 5 times a day.' })
+    const store = found.st
+    const queued = await enqueueEmail('order-receipt', o.buyerEmail, { url: retrievalUrl(o, store.handle), name: o.productTitle, amount: formatMoneyMinor(o.amountMinor, o.currency), email: storeName(store) })
+    if (!queued.queued) return void res.status(400).json({ error: 'We couldn’t send to that email address.' })
+    await sql.run('UPDATE seller_order SET "receiptId" = ?, "emailedAt" = COALESCE("emailedAt", ?) WHERE id = ?', queued.id, nowIso, o.id)
+    const r = await sendNow(queued.id)
+    const masked = maskAddress(o.buyerEmail)
+    if (r.status === 'sent') return void res.json({ emailStatus: 'sent', to: masked })
+    if (r.status === 'queued') return void res.json({ emailStatus: 'queued', to: masked, emailError: 'The email is on its way but hasn’t been confirmed yet.' })
+    res.status(502).json({ emailStatus: 'failed', to: masked, error: 'We couldn’t send the email right now. Your download link on this page still works.' })
   })
 
   /** Bank transfer: the buyer says they've sent it. Recorded for the seller; it never unlocks the download. */

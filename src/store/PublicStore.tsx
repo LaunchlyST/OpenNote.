@@ -5,7 +5,7 @@ import { Style2Page } from '../projects/seller/Style2'
 import { formatPrice, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
-import type { PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
+import type { EmailStatus, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
 
 /**
@@ -67,7 +67,8 @@ export default function PublicStore({ path }: { path: string }) {
   // Download a bought product right here: fetch a fresh signed link (the server checks the payment again), then start it.
   const [downloading, setDownloading] = useState<string | null>(null)
   const [celebrate, setCelebrate] = useState<string | null>(null)
-  const [emailedTo, setEmailedTo] = useState<string | null>(null)
+  // Free order result: the email status as the provider reported it, plus the order for an immediate download.
+  const [freeDone, setFreeDone] = useState<FreeDone | null>(null)
   const download = async (p: ShopProduct) => {
     const url = readOwned()[p.id]
     const m = url?.match(/\/order\/([^/?#]+)\?(?:.*&)?k=([^&#]+)/)
@@ -100,10 +101,12 @@ export default function PublicStore({ path }: { path: string }) {
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
       const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon)
-      // Free: the download link was sent to the buyer's email
-      if (r.emailed) {
+      // Free: the order is complete. Show the download right away and the email's real status.
+      if (r.emailStatus && r.order && r.orderUrl) {
         sessionStorage.removeItem(keyName)
-        setEmailedTo(r.email ?? email ?? '')
+        rememberOwned(handle, p.id, r.orderUrl)
+        setOwned((o) => ({ ...o, [p.id]: r.orderUrl! }))
+        setFreeDone({ email: r.email ?? email ?? '', status: r.emailStatus, error: r.emailError ?? null, order: r.order, orderUrl: r.orderUrl })
         setBuying(null)
         checkoutBusy.current = false
         return
@@ -182,8 +185,8 @@ export default function PublicStore({ path }: { path: string }) {
       seller={store.page.name || store.handle}
       handle={store.handle}
       onPay={(m, email, payer, coupon) => void pay(choosing, m, email, payer, coupon)}
-      emailedTo={emailedTo}
-      onClose={() => (setChoosing(null), setEmailedTo(null))}
+      freeDone={freeDone}
+      onClose={() => (setChoosing(null), setFreeDone(null))}
     />
   )
 
@@ -227,6 +230,68 @@ function BankIcon({ name }: { name: string }) {
   return <span className="co2-bi co2-bi-txt" aria-hidden="true">{name === 'Other bank' ? '…' : name.charAt(0)}</span>
 }
 
+/** Order page: send the download email again (same order, same link; the server rate-limits it). */
+function ResendEmail({ handle, orderId }: { handle: string; orderId: string }) {
+  const [state, setState] = useState<{ busy: boolean; text: string | null }>({ busy: false, text: null })
+  const k = new URLSearchParams(window.location.search).get('k') ?? ''
+  const go = async () => {
+    setState({ busy: true, text: null })
+    try {
+      const r = await storeApi.resend(handle, orderId, k)
+      setState({ busy: false, text: r.emailStatus === 'sent' ? `Email sent to ${r.to}.` : r.emailError ?? 'Not confirmed yet.' })
+    } catch (e) {
+      setState({ busy: false, text: (e as Error).message })
+    }
+  }
+  return (
+    <div className="ps-resend" aria-live="polite">
+      <button type="button" className="sp-btn sp-btn-line" disabled={state.busy || !k} onClick={() => void go()}>{state.busy ? 'Sending…' : 'Resend download email'}</button>
+      {state.text && <p className="ps-fine">{state.text}</p>}
+    </div>
+  )
+}
+
+type FreeDone = { email: string; status: EmailStatus; error: string | null; order: PublicOrder; orderUrl: string }
+
+/**
+ * After a free order: the download is right here, and the email's status is what the provider said.
+ * "Email sent" only appears once the provider accepted it.
+ */
+function FreeResult({ handle, product, done, onClose }: { handle: string; product: ShopProduct; done: FreeDone; onClose: () => void }) {
+  const [status, setStatus] = useState<EmailStatus>(done.status)
+  const [note, setNote] = useState<string | null>(done.error)
+  const [sending, setSending] = useState(false)
+  const k = new URL(done.orderUrl, window.location.origin).searchParams.get('k') ?? ''
+  const resend = async () => {
+    setSending(true)
+    try {
+      const r = await storeApi.resend(handle, done.order.id, k)
+      setStatus(r.emailStatus)
+      setNote(r.emailStatus === 'sent' ? null : r.emailError ?? null)
+    } catch (e) {
+      setNote((e as Error).message)
+    }
+    setSending(false)
+  }
+  return (
+    <div className="co3-sent" role="status" aria-live="polite">
+      <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
+      <h2>{status === 'sent' ? 'Email sent' : 'Your download is ready'}</h2>
+      {status === 'sent' ? (
+        <p>We sent the download link for <b>{product.title}</b> to <b>{done.email}</b>. Check your spam folder if you can’t see it.</p>
+      ) : (
+        <p className="co3-mailnote">{note ?? 'We couldn’t confirm the email was sent.'}</p>
+      )}
+      {done.order.downloadUrl && (
+        <button type="button" className="co3-pay-btn" onClick={() => startDownload(done.order.downloadUrl!, done.order.fileName)}>Download</button>
+      )}
+      <button type="button" className="co3-resend" disabled={sending} onClick={() => void resend()}>{sending ? 'Sending…' : status === 'sent' ? 'Resend download email' : 'Try sending the email again'}</button>
+      {status === 'sent' && note && <p className="co3-mailnote">{note}</p>}
+      <button type="button" className="co3-done" onClick={onClose}>Done</button>
+    </div>
+  )
+}
+
 /** Copy a value to the clipboard, with a short "Copied" confirmation. */
 function CopyRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   const [done, setDone] = useState(false)
@@ -240,7 +305,7 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, emailedTo, handle }: { emailedTo?: string | null; product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => void; onClose: () => void }) {
+function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, freeDone, handle }: { freeDone?: FreeDone | null; product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => void; onClose: () => void }) {
   // The server's quote is the price: list price, live offer, then the code. The card's price is only a first guess.
   const [quote, setQuote] = useState<PriceQuote | null>(null)
   const [code, setCode] = useState('')
@@ -323,13 +388,8 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
           <button type="button" className="co3-x" onClick={onClose} aria-label="Close checkout">✕</button>
         </nav>
 
-        {emailedTo ? (
-          <div className="co3-sent" role="status">
-            <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
-            <h2>Check your email</h2>
-            <p>We sent the download link for <b>{product.title}</b> to <b>{emailedTo}</b>. It can take a minute; check your spam folder too.</p>
-            <button type="button" className="co3-pay-btn" onClick={onClose}>Done</button>
-          </div>
+        {freeDone ? (
+          <FreeResult handle={handle} product={product} done={freeDone} onClose={onClose} />
         ) : (
         <div className="co3-grid">
           <section className="co3-pay" aria-label="Payment details">
@@ -589,7 +649,8 @@ function OrderStatus({ handle, load, claim }: { handle: string; load: () => Prom
           {' Save your permanent purchase link below to get a new download link later.'}
         </p>
         {order.retrievalUrl && <a href={order.retrievalUrl}>Permanent purchase link</a>}
-        <p className="ps-fine">Receipt: {order.receiptStatus.replaceAll('_', ' ')}. Email delivery is not confirmed.</p>
+        <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>
+        {order.email && <ResendEmail handle={handle} orderId={order.id} />}
         <a href={back}>Back to the store</a>
       </div>
     )

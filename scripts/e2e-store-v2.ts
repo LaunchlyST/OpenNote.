@@ -205,8 +205,16 @@ try {
   check('checkout: free needs an email first', await co.getByRole('button', { name: 'Send digital product' }).isDisabled())
   await co.getByLabel('Email').fill('fan@buyer.test')
   await co.getByRole('button', { name: 'Send digital product' }).click()
-  await shop.getByRole('heading', { name: 'Check your email' }).waitFor({ timeout: 10000 }).catch(async () => { console.log('    checkout text:', (await co.innerText()).replace(/\s+/g, ' ').slice(0, 600)) })
-  check('checkout: the free order is sent to the email', true)
+  await shop.getByRole('heading', { name: 'Email sent' }).waitFor({ timeout: 10000 }).catch(async () => { console.log('    checkout text:', (await co.innerText()).replace(/\s+/g, ' ').slice(0, 600)) })
+  const sentH = await shop.getByRole('heading', { name: 'Email sent' }).count(), dlB = await shop.locator('.co3-sent').getByRole('button', { name: 'Download', exact: true }).count()
+  check('checkout: "Email sent" only after the provider accepted it, Download right there', sentH === 1 && dlB === 1, `heading ${sentH}, download ${dlB}`)
+  const again = shop.locator('.co3-sent').getByRole('button', { name: 'Resend download email' })
+  await again.click()
+  await again.waitFor()
+  await shop.waitForTimeout(400)
+  await again.click()
+  await shop.locator('.co3-sent').getByText(/wait a minute/).waitFor()
+  check('checkout: resending again within a minute says to wait', true)
   const order = db.prepare(`SELECT "amountMinor", "listMinor", "discountMinor", "couponCode", status FROM seller_order WHERE "couponCode" = 'GIFT'`).get() as any
   check('the order stores 0 paid, 12.00 list, 12.00 off, code GIFT', order?.amountMinor === 0 && order?.listMinor === 1200 && order?.discountMinor === 1200 && order?.status === 'paid')
 
@@ -268,7 +276,8 @@ try {
   check('old API: title and price still edit normally', await old.getByPlaceholder('e.g. Content planner template').isEditable())
 
   // old API without quotes: checkout keeps the card price and offers no code box
-  const noQ = await ctx.newPage()
+  const noQctx = await browser.newContext({ viewport: { width: 1380, height: 900 } })
+  const noQ = await noQctx.newPage()
   await noQ.route('**/api/store/*/quote', (r) => r.fulfill({ status: 404, json: { error: 'Not found.' } }))
   await noQ.goto(`${SITE}/ava-makes`)
   await noQ.locator('.sp-card .sp-btn').first().click()

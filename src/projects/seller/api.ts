@@ -133,6 +133,9 @@ export interface Coupon {
 }
 export type CouponInput = { code: string; kind: 'percent' | 'amount'; value: number; currency?: string | null; productIds?: string[]; startsAt?: string | null; endsAt?: string | null; tz?: string; maxRedemptions?: number | null; perCustomer?: number | null; active?: boolean }
 
+/** sent: the email provider accepted it. queued: not confirmed yet. failed: the provider refused it. */
+export type EmailStatus = 'sent' | 'queued' | 'failed'
+
 export interface PriceQuote {
   currency: string
   listMinor: number
@@ -148,9 +151,11 @@ export interface PriceQuote {
 export const storeApi = {
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
   checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) =>
-    call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}) }),
+    call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string; emailStatus?: EmailStatus; emailError?: string | null }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}) }),
   /** The authoritative price right now, optionally with a discount code. Nothing is reserved. */
   quote: (handle: string, productId: string, coupon?: string) => call<{ quote: PriceQuote }>('POST', `/api/store/${encodeURIComponent(handle)}/quote`, { productId, coupon: coupon || undefined }),
+  /** Send the download email again for an existing order (rate limited by the server). */
+  resend: (handle: string, id: string, k: string) => call<{ emailStatus: EmailStatus; to: string; emailError?: string }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/resend`, { k }),
   /** Bank transfer: "I've sent it" (never unlocks the download). */
   claim: (handle: string, id: string, k: string) => call<{ order: PublicOrder }>('POST', `/api/store/${encodeURIComponent(handle)}/order/${encodeURIComponent(id)}/claim`, { k }),
   /** Back from PayPal: the server verifies the payment with PayPal. */

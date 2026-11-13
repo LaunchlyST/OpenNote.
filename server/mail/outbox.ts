@@ -163,6 +163,48 @@ async function sendDue() {
   await sql.run(`DELETE FROM email_outbox WHERE "createdAt" < ? AND kind != 'order-receipt' AND status IN ('sent','skipped','failed')`, now - KEEP_LOG_FOR)
 }
 
+export type SendNowResult = { status: 'sent' } | { status: 'queued'; reason: string } | { status: 'failed'; error: string }
+
+/**
+ * Sends one queued message right now, inside the caller's request, and reports
+ * what the provider said. Serverless hosts may pause background work after the
+ * response, so a buyer's receipt must not depend on the worker alone.
+ * The row is claimed first, so the worker can never send it a second time.
+ */
+export async function sendNow(id: number, timeoutMs = 8000): Promise<SendNowResult> {
+  if (transport.name === 'none') return { status: 'queued', reason: 'Email isn’t set up on this server yet.' }
+  const row = await sql.get<Row>(`SELECT id, kind, recipient, subject, html, text, attempts FROM email_outbox WHERE id = ?`, id)
+  if (!row) return { status: 'failed', error: 'Message not found.' }
+  const claimed = await sql.run(`UPDATE email_outbox SET status = 'sending', "nextAttemptAt" = ? WHERE id = ? AND status IN ('queued','retrying','failed')`, Date.now() + CLAIM_MS, id)
+  if (!claimed.changes) {
+    // The worker picked it up first: wait for its result rather than guessing.
+    const until = Date.now() + timeoutMs
+    for (;;) {
+      const st = await sql.get<{ status: string; lastError: string | null }>(`SELECT status, "lastError" FROM email_outbox WHERE id = ?`, id)
+      if (st?.status === 'sent') return { status: 'sent' }
+      if (st?.status === 'failed' || st?.status === 'retrying') return { status: 'failed', error: st.lastError ?? 'The email provider refused the message.' }
+      if (Date.now() > until) return { status: 'queued', reason: 'The email provider hasn’t confirmed it yet.' }
+      await new Promise((r) => setTimeout(r, 150))
+    }
+  }
+  try {
+    await Promise.race([
+      transport.send({ id: row.id, to: row.recipient, subject: row.subject, html: row.html, text: row.text }),
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('The email provider didn’t answer in time.'), { timeout: true })), timeoutMs)),
+    ])
+    await sql.run(`UPDATE email_outbox SET status = 'sent', attempts = attempts + 1, "sentAt" = ?, "lastError" = NULL, html = NULL, text = NULL WHERE id = ?`, Date.now(), id)
+    log(`sent ${row.kind} #${id} to ${maskEmail(row.recipient)} via ${transport.name} (immediate)`)
+    return { status: 'sent' }
+  } catch (err) {
+    const reason = (err instanceof Error ? err.message : String(err)).slice(0, 300)
+    // keep it for the worker to retry (a timeout may still have been delivered; retries are idempotent from the buyer's view)
+    await sql.run(`UPDATE email_outbox SET status = ?, attempts = attempts + 1, "lastError" = ?, "nextAttemptAt" = ? WHERE id = ?`, row.kind === 'order-receipt' ? 'failed' : 'retrying', reason, Date.now() + BASE_DELAY, id)
+    log(`immediate send of ${row.kind} #${id} failed: ${reason}`)
+    if ((err as { timeout?: boolean }).timeout) return { status: 'queued', reason }
+    return { status: 'failed', error: reason }
+  }
+}
+
 /** Runs one pass of the worker. Concurrent calls share the same pass. */
 export function processOutbox(): Promise<void> {
   running ??= sendDue().finally(() => {
