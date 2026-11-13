@@ -162,7 +162,7 @@ export function AeroPage() {
         <div className="ae-sky" aria-hidden="true">
           {SKIES.map((s) => <div key={s} className={`ae-layer ${s} ${s === sky ? 'on' : ''}`} />)}
           <div className="ae-stars" />
-          <div className="ae-sun" /><div className="ae-moon" />
+          <div className="ae-rays" /><div className="ae-sun" /><div className="ae-moon" />
           <div className="ae-par p1"><div className="ae-cloud c1" /><div className="ae-cloud c2" /></div>
           <div className="ae-par p2"><div className="ae-cloud c3" /></div>
           <div className="ae-horizon" />
