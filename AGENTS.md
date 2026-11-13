@@ -87,8 +87,18 @@ elayadesign/ai-design-skills (MIT, see the LICENSE beside it).
 - **Never** modify, commit or discard the other agent's uncommitted work.
 - **Never** change the website's design, features, authentication or
   deployment settings unless the user asks for it specifically.
-- **Never** deploy. Publishing needs `DEPLOY_ENABLED=true`, which is off, and
-  needs the user's explicit "DEPLOY NOW".
+- **Deploy only what the user asked for.** Deployment is authorized for changes
+  the user explicitly requests to ship; it is never a side effect of a push.
+  `.env` carries `DEPLOY_ENABLED=true`, `DEPLOY_HOOK_URL` stays empty, and the
+  `Deploy to GitHub Pages` workflow only runs when it is dispatched by hand.
+  Frontend: dispatch `deploy.yml` for `main`. API: `scripts/deploy-supabase.sh`.
+  Never publish unrelated or half-finished work, never deploy on top of another
+  agent's uncommitted changes, and never call a change live until the run has
+  succeeded and the live page has actually been checked.
+- **When the tree also holds the other agent's work, stage only your own
+  files.** `npm run sync:push` runs `git add -A`, so use it only when the
+  working tree is clean of anyone else's changes; otherwise commit your paths
+  explicitly and push.
 - Never commit secrets. `.env` is git-ignored; `.env.example` is the template.
 
 ## Where things live

@@ -64,8 +64,14 @@ elayadesign/ai-design-skills (MIT, see the LICENSE beside it).
 - Never touch the other agent's uncommitted work.
 - Never change the site's design, features, auth or deployment settings unless
   specifically asked.
-- Never deploy. Publishing requires `DEPLOY_ENABLED=true` plus the user's
-  explicit "DEPLOY NOW".
+- Deploy only what the user explicitly asks to ship; a push never deploys by
+  itself. `.env` sets `DEPLOY_ENABLED=true`, `DEPLOY_HOOK_URL` stays empty, and
+  Pages deploys only when `deploy.yml` is dispatched by hand (API:
+  `scripts/deploy-supabase.sh`). Never publish unrelated or half-finished work,
+  never deploy on top of the other agent's uncommitted changes, and never claim
+  a change is live before the run succeeds and the live page is checked.
+- When the tree also holds the other agent's work, stage only your own files —
+  `sync:push` runs `git add -A` and would sweep their changes into your commit.
 - Never commit secrets; `.env` is git-ignored.
 
 ## Seller Studio: Style 2
