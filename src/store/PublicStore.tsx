@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { BuyRow, StorePage, storeStyle } from '../projects/seller/StorePage'
 import { ProductSheet } from '../projects/seller/ProductCard'
 import { Style2Page } from '../projects/seller/Style2'
@@ -28,6 +28,8 @@ export default function PublicStore({ path }: { path: string }) {
   const [buyErr, setBuyErr] = useState<string | null>(null)
   // Saved products: in the account when signed in, otherwise only in this browser.
   const fav = useFavourites()
+  // Free products this browser already asked for, with the live resend cooldown from the server.
+  const { claims, waitSeconds } = useClaims(handle, store?.products, kind)
   // Product detail panel: ?p=<id> opens it, so links and the browser Back button work.
   const [sheet, setSheet] = useState<string | null>(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('p')))
   useEffect(() => {
@@ -101,8 +103,9 @@ export default function PublicStore({ path }: { path: string }) {
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
       const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon)
-      // Free (or otherwise already confirmed): download right here, no page change
-      if (r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
+      // Free (or otherwise already confirmed): download right here, no page change.
+      // Only a paid product with a real price is remembered as owned: free ones stay email-only.
+      if (p.priceMinor > 0 && r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
         rememberOwned(handle, p.id, r.orderUrl)
         setOwned((o) => ({ ...o, [p.id]: r.orderUrl! }))
         setChoosing(null)
@@ -149,7 +152,8 @@ export default function PublicStore({ path }: { path: string }) {
       setSheet(null)
     }
   }
-  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading, onOpenProduct: openProduct, savedIds: fav.ids, onToggleSave: (p: ShopProduct) => void fav.toggle(p.id) }
+  const openClaimAgain = (p: ShopProduct) => { setChoosing(p) }
+  const base = { page: store.page, products: store.products, handle: store.handle, live: true, checkoutReady: store.checkoutReady, onBuy: buy, buying, owned, onDownload: (p: ShopProduct) => void download(p), downloading, onOpenProduct: openProduct, savedIds: fav.ids, onToggleSave: (p: ShopProduct) => void fav.toggle(p.id), claims: Object.fromEntries(Object.entries(claims).map(([pid, c]) => [pid, { waitSeconds: waitSeconds(pid), email: c.email }])) as Record<string, { waitSeconds: number; email: string }>, onClaimAgain: openClaimAgain }
   const paidId = params.get('paid')
   const paidProduct = paidId ? store.products.find((p) => (owned[p.id] ?? '').includes(`/order/${paidId}`)) : undefined
   const sheetProduct = sheet ? store.products.find((p) => p.id === sheet) : undefined
@@ -320,6 +324,72 @@ function useFavourites() {
   return { ids, mode, toggle }
 }
 
+/** A free product the browser already asked for: claim id + address + cooldown end. No link, ever. */
+type ClaimMemo = { claimId: string; email: string; until: number }
+const CLAIM_EVENT = 'desknoty:claim'
+function claimKey(productId: string) { return `desknoty.claim.${productId}` }
+function readClaimMemo(productId: string): ClaimMemo | null {
+  try { const j = JSON.parse(localStorage.getItem(claimKey(productId)) ?? 'null'); const claimId = typeof j?.claimId === 'string' ? j.claimId : ''; const email = typeof j?.email === 'string' ? j.email : ''; const until = typeof j?.until === 'number' ? j.until : 0; if (!claimId) return null; return { claimId, email, until } } catch { return null }
+}
+function writeClaimMemo(productId: string, m: ClaimMemo) { try { localStorage.setItem(claimKey(productId), JSON.stringify(m)) } catch { /* storage blocked: this visit only */ } }
+function dropClaimMemo(productId: string) { try { localStorage.removeItem(claimKey(productId)) } catch { /* ignore */ } }
+
+/**
+ * Free products asked for in this browser, with the live resend cooldown. Backed by the server:
+ * the claim status is re-checked on load, so closing the popup and refreshing brings the same
+ * "Send again" state back. Nothing private (no download token, no link) is stored here.
+ */
+function useClaims(handle: string, products: ShopProduct[] | undefined, kind: string) {
+  const [claims, setClaims] = useState<Record<string, { claimId: string; email: string; until: number; sendsLeftToday: number }>>({})
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (kind === 'thanks' || kind === 'order' || kind === 'claim' || !products) return
+    let alive = true
+    void Promise.all(products.filter((p) => !p.hidden).map(async (p) => {
+      const memo = readClaimMemo(p.id)
+      const ref = (() => { try { return localStorage.getItem(`desknoty.claimref.${p.id}`) ?? '' } catch { return '' } })()
+      if (!memo || !ref) return null
+      const r = await storeApi.claimStatus(handle, memo.claimId, ref).catch(() => null)
+      if (!r) { dropClaimMemo(p.id); return null }
+      const until = memo.until > Date.now() ? memo.until : Date.now() + Math.max(0, r.cooldownSeconds) * 1000
+      const next = { claimId: memo.claimId, email: r.email || memo.email, until, sendsLeftToday: r.sendsLeftToday }
+      writeClaimMemo(p.id, { claimId: next.claimId, email: next.email, until: next.until })
+      return [p.id, next] as const
+    })).then((list) => {
+      const nextClaims: Record<string, { claimId: string; email: string; until: number; sendsLeftToday: number }> = {}
+      for (const entry of list) {
+        const [pid, v] = (entry ?? []) as readonly [string, { claimId: string; email: string; until: number; sendsLeftToday: number }]
+        if (v) nextClaims[pid] = v
+      }
+      if (alive) setClaims(nextClaims)
+    })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle, kind, products])
+  useEffect(() => {
+    const onClaim = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { productId?: string; claim?: { claimId?: string; email?: string; cooldownSeconds?: number } }
+      if (!detail?.productId) return
+      const claim = detail.claim
+      if (claim?.claimId) {
+        const until = Date.now() + Math.max(0, Math.ceil(claim.cooldownSeconds ?? 60)) * 1000
+        writeClaimMemo(detail.productId, { claimId: claim.claimId, email: claim.email ?? '', until })
+        setClaims((c) => ({ ...c, [detail.productId!]: { claimId: claim.claimId!, email: claim.email ?? '', until, sendsLeftToday: 0 } }))
+      } else setClaims((c) => { const n = { ...c }; delete n[detail.productId!]; return n })
+    }
+    window.addEventListener(CLAIM_EVENT, onClaim)
+    return () => window.removeEventListener(CLAIM_EVENT, onClaim)
+  }, [])
+  useEffect(() => { if (!Object.keys(claims).length) return; const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t) }, [Object.keys(claims).length])
+  const waitSeconds = (productId: string) => {
+    const c = claims[productId]
+    if (!c) return 0
+    return Math.max(0, Math.ceil((c.until - Date.now()) / 1000))
+  }
+  return { claims, now, waitSeconds }
+}
+
+
 /** "Payment confirmed": shown briefly on the store after returning from the payment page, then closes itself. */
 function PaidConfirm({ product, onDownload }: { product: ShopProduct; onDownload: () => void }) {
   const [open, setOpen] = useState(true)
@@ -361,14 +431,17 @@ function FreeClaim({ handle, product, coupon, onClose }: { handle: string; produ
   const [ref] = useState(() => {
     try { const r = localStorage.getItem(refKey); if (r) return r; const n = crypto.randomUUID().replace(/-/g, ''); localStorage.setItem(refKey, n); return n } catch { return crypto.randomUUID().replace(/-/g, '') }
   })
-  const [name, setName] = useState(() => { try { return JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null')?.name ?? '' } catch { return '' } })
-  const [email, setEmail] = useState(() => { try { return JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null')?.email ?? '' } catch { return '' } })
+  const payer = useMemo(() => { try { return JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null') ?? {} } catch { return {} } }, [])
+  const [name, setName] = useState(() => String(payer?.name ?? ''))
+  // A free product already asked about in this browser: keep the address it was sent to, so
+  // reopening the form via "Send again" is just a resend, not a new claim.
+  const [email, setEmail] = useState(() => String(readClaimMemo(product.id)?.email || payer?.email || ''))
   const [website, setWebsite] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [suggestion, setSuggestion] = useState<string | null>(null)
-  const [sent, setSent] = useState<ClaimState | null>(null)
-  const [wait, setWait] = useState(0)
+  const [sent, setSent] = useState<ClaimState | null>(() => { const m = readClaimMemo(product.id); return m ? { claimId: m.claimId, email: m.email, delivery: null, cooldownSeconds: 0, sendsLeftToday: 0 } : null })
+  const [wait, setWait] = useState(() => { const m = readClaimMemo(product.id); return m ? Math.max(0, Math.ceil((m.until - Date.now()) / 1000)) : 0 })
   const [bounced, setBounced] = useState<string | null>(null)
   useEffect(() => { if (wait <= 0) return; const t = window.setTimeout(() => setWait((w) => w - 1), 1000); return () => window.clearTimeout(t) }, [wait])
   // after "sent", check for a bounce for a few minutes (the server learns of it from Resend)
@@ -390,7 +463,12 @@ function FreeClaim({ handle, product, coupon, onClose }: { handle: string; produ
       try { localStorage.setItem('desknoty.payer', JSON.stringify({ ...(JSON.parse(localStorage.getItem('desknoty.payer') ?? '{}') ?? {}), email: addr, name: name.trim() })) } catch { /* storage blocked */ }
       setSuggestion(null)
       setSent(r)
-      setWait(r.cooldownSeconds || 60)
+      const cooldown = r.cooldownSeconds || 60
+      setWait(cooldown)
+      // remember the claim on this device so the store can show "Send again" again after a
+      // close/refresh; the sent address and cooldown are re-derived from the server when it re-checks.
+      writeClaimMemo(product.id, { claimId: r.claimId, email: addr, until: Date.now() + cooldown * 1000 })
+      window.dispatchEvent(new CustomEvent(CLAIM_EVENT, { detail: { productId: product.id, claim: { claimId: r.claimId, email: addr, cooldownSeconds: cooldown } } }))
       if (r.status === 'queued') setError('We’re still sending your link. If it hasn’t arrived in a few minutes, use Send again.')
     } catch (e) {
       const err = e as Error & { body?: { code?: string; suggestion?: string; cooldownSeconds?: number } }
@@ -427,7 +505,7 @@ function FreeClaim({ handle, product, coupon, onClose }: { handle: string; produ
         {bounced && <p className="co3-code-err" role="alert">{bounced}</p>}
         {sent && !error && !bounced && <p className="co3-claim-sent" role="status">Check your inbox for your download link.</p>}
         <button type="button" className="co3-pay-btn" disabled={busy || !validLook || wait > 0} onClick={() => void submit()}>
-          {busy ? 'Sending…' : sent ? (wait > 0 ? `Send again (${wait}s)` : 'Send again') : 'Send me the product'}
+          {busy ? 'Sending…' : sent ? (wait > 0 ? `Send again (${wait}s)` : 'Send again') : (error ? 'Try again' : 'Send me the product')}
         </button>
         {sent && <p className="co3-hint-line">Sent to {sent.email}. Wrong address? Change it above and press Send again; the old link stops working.</p>}
         <button type="button" className="co3-done" onClick={onClose}>Close</button>
@@ -793,10 +871,11 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
     return (
       <div className="ps-msg ps-paid">
         <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
-        <p className="ps-kicker">Payment confirmed</p>
-        <h1>Thanks for your order</h1>
+        <p className="ps-kicker">{(order.method as string) === 'free' ? 'Download ready' : 'Payment confirmed'}</p>
+        <h1>{(order.method as string) === 'free' ? 'Your download is ready' : 'Thanks for your order'}</h1>
         <p>
-          {order.product} · {formatPrice(order.amountMinor, order.currency)}
+          {order.product}
+          {order.amountMinor > 0 && <> · {formatPrice(order.amountMinor, order.currency)}</>}
           {order.receiptSent && order.email ? ` · receipt accepted for sending to ${order.email} (delivery unconfirmed)` : ''}
         </p>
         {order.downloadUrl && (
@@ -816,7 +895,7 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
           {' Save your permanent purchase link below to get a new download link later.'}
         </p>
         {order.retrievalUrl && <a href={order.retrievalUrl}>Permanent purchase link</a>}
-        <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>
+        {(order.method as string) !== 'free' && <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>}
         {order.email && <ResendEmail handle={handle} orderId={order.id} />}
         <ReviewForm handle={handle} orderId={order.id} products={order.items && order.items.length ? order.items.map((i) => ({ id: i.productId, title: i.title })) : [{ id: order.productId ?? '', title: order.product }]} />
         <a href={back}>Back to the store</a>

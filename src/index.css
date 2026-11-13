@@ -7512,6 +7512,22 @@ select.ss-input option {
 .ps-fine { font-size: 12.5px !important; opacity: 0.6 !important; }
 .ps-msg a.sp-btn { color: var(--on, #fff); text-decoration: none; }
 
+/* The order page is a standalone page: the storefront theme (--ac/--on) is only set inside a
+   store block, so buttons here must not depend on it — white text on a transparent background
+   made the Download and Post review buttons nearly invisible. */
+.ps-msg a.sp-btn,
+.ps-msg button.sp-btn,
+.ps-review .sp-btn {
+  background: var(--color-ink, #191919);
+  color: #fff;
+  border-color: transparent;
+  text-decoration: none;
+}
+.ps-msg a.sp-btn:hover:not(:disabled),
+.ps-msg button.sp-btn:hover:not(:disabled) { background: #000; }
+.ps-msg a.sp-btn:disabled,
+.ps-msg button.sp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
 /* Seller Studio single-panel states: a white panel on the page, not the dark studio frame */
 .ss-compact .ss-editor { min-height: 0; }
 .ss-state { display: grid; justify-items: center; gap: 10px; max-width: 420px; margin: 0 auto; padding: 40px 8px; text-align: center; color: #111114; }

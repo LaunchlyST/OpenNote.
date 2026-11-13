@@ -28,6 +28,13 @@ export interface StorePageProps {
   onGrab?: (blockId: string, e: ReactPointerEvent) => void
   /** Live store: products this browser has paid for (product id → order page with the download). */
   owned?: Record<string, string>
+  /**
+   * Live store: free products this browser has already asked for (product id → resend state).
+   * Free products never show Download here: the file only comes from the emailed link.
+   */
+  claims?: Record<string, { waitSeconds: number; email: string }>
+  /** Live store: reopen the email form for a free product, with the address it was sent to prefilled. */
+  onClaimAgain?: (p: ShopProduct) => void
   /** Live store: start the download of a bought product right here (no page change). */
   onDownload?: (p: ShopProduct) => void
   downloading?: string | null
@@ -355,10 +362,11 @@ function Countdown({ endsAt }: { endsAt: string }) {
 }
 export const ctaStyle = (prod: ShopProduct): CSSProperties | undefined => (prod.cta?.color ? { background: prod.cta.color, borderColor: prod.cta.color, color: '#fff' } : undefined)
 
-export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
+export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, claims, onClaimAgain, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id
   // Already bought in this browser (the server confirmed the payment): Download instead of Buy now.
-  if (live && owned?.[prod.id])
+  // Free products never reach this branch: their file is only ever downloaded from the emailed link.
+  if (live && owned?.[prod.id] && prod.priceMinor > 0)
     return (
       <div className="sp-buyrow">
         <span className="sp-price sp-owned">Purchased</span>
@@ -378,15 +386,31 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
         <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled title="One of this bundle’s products isn’t available">Unavailable</button>
       </div>
     )
-  if (prod.priceMinor === 0)
+  if (prod.priceMinor === 0) {
+    // This browser already asked for it: "Send again" reopens the form (the address prefilled),
+    // and the button shows the server's resend cooldown while it runs. No link is ever shown here.
+    const claim = live ? claims?.[prod.id] : undefined
+    const label = buying === prod.id
+      ? 'Getting it…'
+      : claim
+        ? (claim.waitSeconds > 0 ? `Send again (${claim.waitSeconds}s)` : 'Send again')
+        : prod.cta?.text || 'Get it free'
     return (
       <div className="sp-buyrow">
         <span className="sp-price">Free</span>
-        <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={!live || buying === prod.id} onClick={() => onBuy?.(prod)}>
-          {buying === prod.id ? 'Getting it…' : prod.cta?.text || 'Get it free'}
+        <button
+          type="button"
+          className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'}
+          style={ctaStyle(prod)}
+          disabled={!live || buying === prod.id}
+          onClick={() => { const run = claim && onClaimAgain ? onClaimAgain : onBuy; run?.(prod) }}
+          title={claim ? `We emailed a private link to ${claim.email}. Open it to download.` : undefined}
+        >
+          {label}
         </button>
       </div>
     )
+  }
   return (
     <div className="sp-buyrow">
       <PriceTag prod={prod} />
@@ -420,7 +444,7 @@ function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
         </div>
       ) : null}
       {p.faq?.length ? <Faq heading="Questions" items={p.faq} /> : null}
-      <p className="sp-fine">Instant download after payment. A copy of the link is emailed to you.</p>
+      <p className="sp-fine">{p.priceMinor === 0 ? 'A private link is emailed to you. Open it to download.' : 'Instant download after payment. A copy of the link is emailed to you.'}</p>
     </section>
   )
 }

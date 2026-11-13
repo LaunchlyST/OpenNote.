@@ -79,7 +79,7 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
       <div className="s2p-info">
         <h3>{p.title}</h3>
         {props.only && p.description && <p className="s2p-desc">{p.description}</p>}
-        {props.live && props.owned?.[p.id] ? (
+        {props.live && props.owned?.[p.id] && p.priceMinor > 0 ? (
           <>
             <span className="s2p-price">Purchased</span>
             {props.onDownload ? (
@@ -91,8 +91,8 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
         ) : (
           <>
             {p.priceMinor === 0 ? <span className="s2p-price">Free</span> : <PriceTag prod={p} />}
-            <button type="button" className="s2p-buy" style={ctaStyle(p)} disabled={p.priceMinor === 0 ? !props.live || props.buying === p.id : disabled} onClick={() => props.onBuy?.(p)}>
-              {props.buying === p.id ? 'Opening checkout…' : p.cta?.text || (p.priceMinor === 0 ? 'Get it free' : 'Buy now')}
+            <button type="button" className="s2p-buy" style={ctaStyle(p)} disabled={p.priceMinor === 0 ? !props.live || props.buying === p.id : disabled} onClick={() => (p.priceMinor === 0 && props.claims?.[p.id] ? props.onClaimAgain?.(p) : props.onBuy?.(p))} title={props.claims?.[p.id] ? `We emailed a private link to ${props.claims[p.id].email}. Open it to download.` : undefined}>
+              {props.buying === p.id ? 'Opening checkout…' : props.claims?.[p.id] ? (props.claims[p.id].waitSeconds > 0 ? `Send again (${props.claims[p.id].waitSeconds}s)` : 'Send again') : (p.cta?.text || (p.priceMinor === 0 ? 'Get it free' : 'Buy now'))}
             </button>
           </>
         )}
