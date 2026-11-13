@@ -454,7 +454,7 @@ const GAP = 3
  * follow the pointer — one close behind it, one lagging further — and the
  * tiles under them light up. With no pointer (phones), the lights drift.
  */
-function TileField({ reduced }: { reduced: boolean }) {
+export function TileField({ reduced }: { reduced: boolean }) {
   const canvas = useRef<HTMLCanvasElement | null>(null)
 
   useEffect(() => {

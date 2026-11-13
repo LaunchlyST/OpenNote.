@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { TileField } from './ComingSoon'
 import './aero.css'
 
 /**
- * Under construction — "Somewhere between yesterday & tomorrow".
- * Frutiger Aero, directed: a living sky that follows the visitor's own clock,
- * a glass orb, the headline mirrored in the water, a message in a bottle,
- * and bubbles to pop while you wait.
+ * Under construction — "Good things take a little time."
+ * An editorial collage on the waitlist's living tile field: a big serif
+ * headline, hand drawn stickers you can pick up and move, and paper tabs.
  * Informational only: no sign-in, no sign-up, no forms, no links.
  */
 
@@ -23,204 +23,136 @@ const NOTE = [
   'We’re getting closer, and we can’t wait to show you what we’ve been making.',
 ]
 
-type Sky = 'dawn' | 'day' | 'dusk' | 'night'
-const SKIES: Sky[] = ['dawn', 'day', 'dusk', 'night']
-const skyFor = (h: number): Sky => (h >= 5 && h < 8 ? 'dawn' : h >= 8 && h < 17 ? 'day' : h >= 17 && h < 20 ? 'dusk' : 'night')
-
-const POPS: [number, string][] = [
-  [1, 'Pop. That’s one.'],
-  [5, 'You’re good at this.'],
-  [12, 'Very patient. We like you.'],
-  [25, 'We’re building as fast as you’re popping.'],
-  [50, 'Okay, now you’re just showing off.'],
-]
+const HEARTS = ['Thank you.', 'That one made our day.', 'Okay, we’re blushing.', 'You’re officially our favourite.', 'We’ll build faster. Promise.']
 
 function Mark({ size = 28 }: { size?: number }) {
   return (
     <svg viewBox="0 0 32 32" width={size} height={size} aria-hidden="true">
-      <rect x="4" y="6" width="24" height="22" rx="6" fill="rgba(255,255,255,.92)" />
+      <rect x="4" y="6" width="24" height="22" rx="6" fill="#fff" stroke="#0b6fb8" strokeWidth="1.2" />
       <rect x="4" y="6" width="24" height="8" rx="4" fill="#0b6fb8" />
-      <path d="M11 3.5v5M21 3.5v5" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M11 3.5v5M21 3.5v5" stroke="#0b6fb8" strokeWidth="2.4" strokeLinecap="round" />
       <circle cx="22.5" cy="22.5" r="3.6" fill="#c8ff3d" />
     </svg>
   )
 }
 
-function Bottle() {
+/* ---- hand drawn stickers ---- */
+const Daisy = ({ c = '#f2c94c' }: { c?: string }) => (
+  <svg viewBox="0 0 120 120"><path d="M60 46c-4-18-2-34 6-36s10 18 2 34c10-14 26-22 31-15s-8 19-25 24c17-2 32 4 31 12s-19 9-32 0c13 11 18 27 11 31s-17-11-19-28c-1 17-9 32-17 30s-6-19 6-31c-14 9-31 9-32 1s15-15 31-15c-16-6-27-18-21-24s20 1 28 17Z" fill="none" stroke={c} strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" /></svg>
+)
+const Flower = ({ c, m = '#e2a93b' }: { c: string; m?: string }) => (
+  <svg viewBox="0 0 100 100"><g fill={c}>{[0, 72, 144, 216, 288].map((r) => <ellipse key={r} cx="50" cy="27" rx="15" ry="22" transform={`rotate(${r} 50 50)`} />)}</g><circle cx="50" cy="50" r="8" fill={m} /></svg>
+)
+const Heart = () => (
+  <svg viewBox="0 0 100 100"><path d="M50 86C22 66 10 50 12 34c2-14 18-22 30-14 4 3 6 6 8 10 2-4 4-7 8-10 12-8 28 0 30 14 2 16-10 32-38 52Z" fill="#f6d36b" stroke="#e86a6a" strokeWidth="5" strokeLinejoin="round" /><circle cx="38" cy="44" r="3.5" fill="#c4473f" /><circle cx="60" cy="44" r="3.5" fill="#c4473f" /><path d="M40 56c5 6 13 6 18 0" fill="none" stroke="#c4473f" strokeWidth="4" strokeLinecap="round" /></svg>
+)
+const Sticky = () => (
+  <svg viewBox="0 0 150 130"><path d="M10 14 140 6l4 104-120 14Z" fill="#fff27a" /><path d="M24 124l120-14-14 20Z" fill="#e2d35c" opacity=".7" /><path d="M54 2h46v18H54Z" fill="rgba(200,230,255,.75)" transform="rotate(-4 77 11)" /><path d="M30 46c20-3 50-6 86-6M30 66c24-3 46-4 70-4M30 86c16-2 30-2 44-2" stroke="#7a6a1c" strokeWidth="5" strokeLinecap="round" opacity=".55" fill="none" /><path d="M96 82l8 8 18-22" fill="none" stroke="#3a7d2c" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+)
+
+/** A sticker you can pick up and drop anywhere. */
+function Sticker({ className, label, children, shuffle }: { className: string; label: string; children: ReactNode; shuffle: number }) {
+  const [pos, setPos] = useState({ x: 0, y: 0, r: 0 })
+  const [held, setHeld] = useState(false)
+  const start = useRef({ x: 0, y: 0, px: 0, py: 0 })
+  useEffect(() => {
+    if (!shuffle) return
+    setPos({ x: (Math.random() - 0.5) * 220, y: (Math.random() - 0.5) * 140, r: (Math.random() - 0.5) * 40 })
+  }, [shuffle])
   return (
-    <svg viewBox="0 0 160 72" aria-hidden="true">
-      <defs>
-        <linearGradient id="ae-glass" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#e9fbff" stopOpacity=".85" />
-          <stop offset=".45" stopColor="#9fe3f2" stopOpacity=".45" />
-          <stop offset="1" stopColor="#2fa9cf" stopOpacity=".7" />
-        </linearGradient>
-        <linearGradient id="ae-paper" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fffdf4" />
-          <stop offset="1" stopColor="#efe6cf" />
-        </linearGradient>
-      </defs>
-      {/* body + neck */}
-      <path d="M14 36c0-14 9-22 26-22h52c8 0 13 3 18 8l8 6h14v16h-14l-8 6c-5 5-10 8-18 8H40C23 58 14 50 14 36Z" fill="url(#ae-glass)" stroke="rgba(255,255,255,.9)" strokeWidth="1.5" />
-      {/* rolled note */}
-      <rect x="34" y="27" width="62" height="18" rx="9" fill="url(#ae-paper)" />
-      <path d="M44 27v18M86 27v18" stroke="rgba(120,96,40,.18)" strokeWidth="1" />
-      <rect x="61" y="26" width="7" height="20" rx="2" fill="#c8ff3d" />
-      {/* cork */}
-      <rect x="132" y="26" width="16" height="20" rx="4" fill="#c99a62" />
-      <path d="M136 30v12M141 30v12" stroke="rgba(90,55,20,.35)" strokeWidth="1.2" strokeLinecap="round" />
-      {/* glints */}
-      <path d="M26 30c2-7 8-11 16-11h44" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" opacity=".9" />
-      <path d="M100 19c4 0 8 2 11 5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" opacity=".7" />
-      {/* waterline inside */}
-      <path d="M18 46c10 3 20-2 30 1s20 3 30 0 20-2 30 1" fill="none" stroke="rgba(255,255,255,.55)" strokeWidth="1.2" />
-    </svg>
+    <span
+      className={`st ${className} ${held ? 'held' : ''}`}
+      role="img"
+      aria-label={label}
+      style={{ ['--x' as string]: `${pos.x}px`, ['--y' as string]: `${pos.y}px`, ['--r' as string]: `${pos.r}deg` }}
+      onPointerDown={(e) => { e.currentTarget.setPointerCapture(e.pointerId); start.current = { x: pos.x, y: pos.y, px: e.clientX, py: e.clientY }; setHeld(true) }}
+      onPointerMove={(e) => { if (held) setPos((p) => ({ ...p, x: start.current.x + e.clientX - start.current.px, y: start.current.y + e.clientY - start.current.py })) }}
+      onPointerUp={() => setHeld(false)}
+      onPointerCancel={() => setHeld(false)}
+    >
+      <span className="st-in">{children}</span>
+    </span>
   )
 }
 
-type Bubble = { id: number; x: number; size: number; dur: number; sway: number; popped?: boolean }
+type Float = { id: number; x: number }
 
 export function AeroPage() {
-  const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState<HTMLElement | null>(null)
+  const [shuffle, setShuffle] = useState(0)
+  const [hearts, setHearts] = useState(0)
+  const [floats, setFloats] = useState<Float[]>([])
   const [now, setNow] = useState(() => new Date())
-  const [sky, setSky] = useState<Sky>(() => skyFor(new Date().getHours()))
-  const [bubbles, setBubbles] = useState<Bubble[]>([])
-  const [pops, setPops] = useState(0)
-  const audio = useRef<AudioContext | null>(null)
+  const [rm] = useState(reduced)
 
   useEffect(() => {
     const prev = document.title, bg = document.body.style.background
     document.title = 'Desknoty — under construction'
-    document.body.style.background = '#0a84c9'
-    const q = new URLSearchParams(window.location.search).get('sky') as Sky | null
-    if (q && SKIES.includes(q)) setSky(q)
+    document.body.style.background = '#fffef8'
     const t = setInterval(() => setNow(new Date()), 15000)
     return () => { document.title = prev; document.body.style.background = bg; clearInterval(t) }
   }, [])
 
-  // Gentle parallax on fine pointers, one write per frame.
-  useEffect(() => {
-    const el = root.current
-    if (!el || reduced() || !window.matchMedia('(pointer: fine)').matches) return
-    let raf = 0, px = 0, py = 0
-    const move = (e: PointerEvent) => {
-      px = e.clientX / window.innerWidth - 0.5
-      py = e.clientY / window.innerHeight - 0.5
-      if (!raf) raf = requestAnimationFrame(() => { raf = 0; el.style.setProperty('--px', px.toFixed(3)); el.style.setProperty('--py', py.toFixed(3)) })
+  const love = () => {
+    const id = Date.now() + Math.random()
+    setHearts((h) => h + 1)
+    if (!rm) {
+      setFloats((f) => [...f, { id, x: (Math.random() - 0.5) * 60 }])
+      setTimeout(() => setFloats((f) => f.filter((x) => x.id !== id)), 1600)
     }
-    window.addEventListener('pointermove', move, { passive: true })
-    return () => { window.removeEventListener('pointermove', move); cancelAnimationFrame(raf) }
-  }, [])
-
-  // Bubbles drift up from the water, a few at a time.
-  useEffect(() => {
-    if (reduced()) return
-    let id = 0
-    const spawn = () => {
-      if (document.hidden) return
-      setBubbles((b) => (b.length >= 7 ? b : [...b, { id: ++id, x: 6 + Math.random() * 88, size: 18 + Math.random() * 44, dur: 13 + Math.random() * 9, sway: (Math.random() - 0.5) * 80 }]))
-    }
-    spawn(); setTimeout(spawn, 900)
-    const t = setInterval(spawn, 2300)
-    return () => clearInterval(t)
-  }, [])
-
-  const plip = useCallback((size: number) => {
-    try {
-      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      const ctx = (audio.current ??= new Ctx())
-      const o = ctx.createOscillator(), g = ctx.createGain(), t = ctx.currentTime
-      const f = 1400 - size * 12
-      o.type = 'sine'
-      o.frequency.setValueAtTime(f, t)
-      o.frequency.exponentialRampToValueAtTime(f * 2.2, t + 0.06)
-      g.gain.setValueAtTime(0.0001, t)
-      g.gain.exponentialRampToValueAtTime(0.06, t + 0.008)
-      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12)
-      o.connect(g).connect(ctx.destination)
-      o.start(t); o.stop(t + 0.14)
-    } catch { /* sound is a bonus */ }
-  }, [])
-
-  const pop = (b: Bubble) => {
-    if (b.popped) return
-    plip(b.size)
-    setPops((p) => p + 1)
-    setBubbles((all) => all.map((x) => (x.id === b.id ? { ...x, popped: true } : x)))
-    setTimeout(() => setBubbles((all) => all.filter((x) => x.id !== b.id)), 420)
   }
 
-  const popLine = [...POPS].reverse().find(([n]) => pops >= n)?.[1] ?? 'Pop a bubble while you wait'
   const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  const openNote = (el: HTMLElement) => setOpen((cur) => cur ?? el)
-  const H1 = () => (<><span><b>Good things</b></span> <span><b>take a little time.</b></span></>)
+  const heartLine = hearts ? HEARTS[Math.min(hearts, HEARTS.length) - 1] : null
 
   return (
-    <div ref={root} className="ae" data-sky={sky}>
+    <div className="ae">
+      <TileField reduced={rm} />
       <div className={`ae-scene ${open ? 'away' : ''}`}>
-        <div className="ae-sky" aria-hidden="true">
-          {SKIES.map((s) => <div key={s} className={`ae-layer ${s} ${s === sky ? 'on' : ''}`} />)}
-          <div className="ae-stars" />
-          <div className="ae-rays" /><div className="ae-sun" /><div className="ae-moon" />
-          <div className="ae-par p1"><div className="ae-cloud c1" /><div className="ae-cloud c2" /></div>
-          <div className="ae-par p2"><div className="ae-cloud c3" /></div>
-          <div className="ae-horizon" />
-          <div className="ae-shimmer"><i /><i /><i /></div>
-          <h2 className="ae-h1 ae-reflect"><H1 /></h2>
-        </div>
-
-        <div className="ae-bubbles">
-          {bubbles.map((b) => (
-            <span key={b.id} className="ae-rise" style={{ left: `${b.x}%`, ['--dur' as string]: `${b.dur}s`, ['--sway' as string]: `${b.sway}px` }}
-              onAnimationEnd={(e) => { if (e.animationName === 'ae-float') setBubbles((all) => all.filter((x) => x.id !== b.id)) }}>
-              <span className={`ae-bub ${b.popped ? 'pop' : ''}`} style={{ width: b.size, height: b.size }} onPointerDown={() => pop(b)} aria-hidden="true" />
-            </span>
-          ))}
-        </div>
-
         <header className="ae-top">
           <span className="ae-brand"><Mark /> Desknoty</span>
-          <div className="ae-pills">
-            <button type="button" className="ae-pill ae-clock" onClick={() => setSky((s) => SKIES[(SKIES.indexOf(s) + 1) % SKIES.length])} aria-label={`Change the sky. Showing ${sky}.`}>
-              <span className="ae-dial" aria-hidden="true"><i /></span>
-              <span className="ae-pill-t"><span className="ae-hide-sm">Your sky · </span>{time}</span>
-            </button>
-            <span className="ae-pill ae-status"><i aria-hidden="true" /> <span className="ae-hide-sm">Under</span> construction</span>
-          </div>
+          <span className="ae-status"><i aria-hidden="true" /> Under construction<span className="ae-time"> · {time}</span></span>
         </header>
 
         <main className="ae-main">
           <div className="ae-hero">
-            <div className="ae-orbit" aria-hidden="true">
-              <svg className="ae-ring" viewBox="0 0 200 200">
-                <defs><path id="ae-circle" d="M100,100 m-88,0 a88,88 0 1,1 176,0 a88,88 0 1,1 -176,0" /></defs>
-                <text><textPath href="#ae-circle" textLength="548" lengthAdjust="spacing">Building · Fixing the little things · Polishing · Worth the wait ·</textPath></text>
-              </svg>
-              <div className="ae-orb"><div className="ae-orb-in"><Mark size={92} /></div></div>
-            </div>
-            <h1 className="ae-h1"><H1 /></h1>
+            <Sticker className="s-daisy" label="A hand drawn daisy" shuffle={shuffle}><Daisy /></Sticker>
+            <Sticker className="s-f1" label="A red flower" shuffle={shuffle}><Flower c="#e36b62" /></Sticker>
+            <Sticker className="s-f2" label="A yellow flower" shuffle={shuffle}><Flower c="#f2c94c" m="#b8862b" /></Sticker>
+            <Sticker className="s-f3" label="A green flower" shuffle={shuffle}><Flower c="#7aa35a" m="#f2c94c" /></Sticker>
+
+            <h1 className="ae-h1">
+              <span className="l1"><b>Good things</b></span>
+              <span className="l2"><i className="ae-dot" aria-hidden="true" /><b>take a little time.</b></span>
+            </h1>
+
+            <Sticker className="s-sticky" label="A sticky note with a tick" shuffle={shuffle}><Sticky /></Sticker>
+            <span className="ae-script" aria-hidden="true">
+              <svg viewBox="0 0 420 150"><path className="ae-swash" d="M8 118c40 10 90-6 130-30 30-18 40-44 22-46-26-3-40 40-18 52 24 13 70-18 96-36 10-7 20-10 22-2 2 9-14 22-4 26 14 6 40-16 60-24 18-8 36-6 40 4" fill="none" stroke="#3f6fe0" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" pathLength="1" /></svg>
+              <em>worth the wait</em>
+            </span>
+            <Sticker className="s-heart" label="A smiling heart" shuffle={shuffle}><Heart /></Sticker>
+            <Sticker className="s-mark" label="The Desknoty logo" shuffle={shuffle}><Mark size={64} /></Sticker>
+            <i className="ae-blip" aria-hidden="true" />
           </div>
 
-          <div className="ae-below">
-            <p className="ae-sub">Desknoty is still under construction. We’re fixing, improving and polishing the little details before welcoming everyone in.</p>
-            <button type="button" className="ae-cta" onClick={(e) => openNote(e.currentTarget)} aria-haspopup="dialog">
-              Read our little note
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
-          </div>
-
-          <button type="button" className="ae-bottle" onClick={(e) => openNote(e.currentTarget)} aria-label="Open the message in a bottle" aria-haspopup="dialog">
-            <span className="ae-bottle-tag" aria-hidden="true">A note for you</span>
-            <span className="ae-bottle-bob"><Bottle /></span>
-            <span className="ae-ripples" aria-hidden="true"><i /><i /></span>
-          </button>
+          <p className="ae-sub">Desknoty is still under construction. We’re fixing, improving and polishing the little details before welcoming everyone in.</p>
+          <p className="ae-hint" aria-hidden="true">Psst. The stickers move.</p>
         </main>
 
         <footer className="ae-foot">
-          <span className="ae-pops" aria-live="polite">{pops > 0 && <b>{pops}</b>}{popLine}</span>
-          <span className="ae-motto">Somewhere between yesterday &amp; tomorrow</span>
+          <span className="ae-copy">© {now.getFullYear()} Desknoty</span>
+          <nav className="ae-tabs" aria-label="While you wait">
+            <button type="button" className="ae-tab t-note" onClick={(e) => { const el = e.currentTarget; setOpen((c) => c ?? el) }} aria-haspopup="dialog">Read our note</button>
+            <button type="button" className="ae-tab" onClick={() => setShuffle((s) => s + 1)}>Shuffle stickers</button>
+            <button type="button" className="ae-tab t-love" onClick={love}>
+              Send some love{hearts > 0 && <b>{hearts}</b>}
+              {floats.map((f) => <span key={f.id} className="ae-float" style={{ ['--fx' as string]: `${f.x}px` }} aria-hidden="true">♥</span>)}
+            </button>
+          </nav>
+          <span className="ae-motto" aria-live="polite">{heartLine ?? 'Between yesterday & tomorrow'}</span>
         </footer>
+        <div className="ae-word" aria-hidden="true">{'Desknoty'.split('').map((c, i) => <span key={i} style={{ ['--i' as string]: i }}>{c}</span>)}</div>
       </div>
 
       {open && <Note from={open} onClosed={() => setOpen(null)} />}
