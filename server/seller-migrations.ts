@@ -25,7 +25,7 @@ export async function migrateSeller() {
   }
   for (const [table, columns] of Object.entries({
     seller_store: { revision: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", payments: 'TEXT' },
-    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0', extras: 'TEXT', pubExtras: 'TEXT', archived: 'INTEGER NOT NULL DEFAULT 0' },
+    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0', extras: 'TEXT', pubExtras: 'TEXT', archived: 'INTEGER NOT NULL DEFAULT 0', sampleFileId: 'TEXT', sampleName: 'TEXT', sampleSize: 'INTEGER', pubSampleFileId: 'TEXT', pubSampleName: 'TEXT' },
     seller_order: { checkoutKey: 'TEXT', checkoutUrl: 'TEXT', receiptId: 'INTEGER', paymentIntent: 'TEXT', refunded: 'INTEGER NOT NULL DEFAULT 0', disputed: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", method: "TEXT NOT NULL DEFAULT 'stripe'", reference: 'TEXT', providerOrderId: 'TEXT', buyerClaimedAt: 'TEXT', payerName: 'TEXT', payerBank: 'TEXT', payTo: 'TEXT', sellerHidden: 'INTEGER NOT NULL DEFAULT 0', listMinor: 'INTEGER', discountMinor: 'INTEGER NOT NULL DEFAULT 0', couponCode: 'TEXT', couponId: 'TEXT', resendCount: 'INTEGER NOT NULL DEFAULT 0', resendAt: 'TEXT', receiptError: 'TEXT' },
   })) {
     const existing = sql.dialect === 'sqlite'
@@ -36,5 +36,7 @@ export async function migrateSeller() {
   // One Desknoty order per PayPal order and per bank reference: duplicate notifications can't fork an order.
   await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_order_provider ON seller_order ("providerOrderId") WHERE "providerOrderId" IS NOT NULL; CREATE UNIQUE INDEX IF NOT EXISTS seller_order_reference ON seller_order (reference) WHERE reference IS NOT NULL;')
   await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_checkout_key ON seller_order ("storeId", "checkoutKey"); CREATE TABLE IF NOT EXISTS seller_connections ("storeId" TEXT NOT NULL REFERENCES seller_store(id), mode TEXT NOT NULL, "accountId" TEXT NOT NULL, PRIMARY KEY ("storeId", mode));')
+  // Stage C: what each order grants (bundle items), snapshotted at purchase so later bundle edits never remove access.
+  await sql.exec('CREATE TABLE IF NOT EXISTS seller_entitlement ("orderId" TEXT NOT NULL, "productId" TEXT NOT NULL, title TEXT NOT NULL, "fileId" TEXT NOT NULL, "fileName" TEXT NOT NULL, PRIMARY KEY ("orderId", "productId"))')
   await sql.run('INSERT INTO seller_connections ("storeId", mode, "accountId") SELECT id, "stripeMode", "stripeAccountId" FROM seller_store WHERE "stripeAccountId" IS NOT NULL ON CONFLICT DO NOTHING')
 }

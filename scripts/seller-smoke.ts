@@ -386,7 +386,7 @@ try {
 
   console.log('\n  Restart keeps everything')
   await new Promise<void>((r) => (server.once('exit', () => r()), server.kill('SIGTERM')))
-  server = await boot()
+  server = await boot({ ADMIN_EMAILS: 'ben@seller.test' })
   const after = await req('GET', '/api/store/ava-makes')
   check('store is still published after a restart', after.status === 200 && after.json.products[0]?.id === pid)
   check('orders survive a restart', (await req('GET', '/api/seller/orders', undefined, A)).json?.orders?.length === 6)
@@ -494,6 +494,115 @@ try {
     check('deleting a used code switches it off instead', del.json?.deactivated === true && (await req('GET', '/api/seller/coupons', undefined, A)).json.coupons.some((c: any) => c.code === 'SAVE10' && !c.active))
     const seller = (await req('GET', '/api/seller/orders', undefined, A)).json.orders.find((o: any) => o.id === o1.id)
     check('the seller’s order list shows list price, discount and code', seller.listMinor === 1200 && seller.discountMinor === 120 && seller.couponCode === 'SAVE10')
+
+    console.log('\n  Reviews, samples and favourites (Stage C)')
+    const giftOrder = await dbGet<any>(`SELECT id, "accessKey" FROM seller_order WHERE "couponCode" = 'GIFT'`)
+    const empty = (await req('GET', `/api/store/ava-makes/products/${pid}/reviews`)).json
+    check('no reviews yet: honest zero, no invented numbers', empty.summary.count === 0 && empty.reviews.length === 0)
+    check('a wrong order key can’t review', (await req('POST', `/api/store/ava-makes/order/${giftOrder.id}/review`, { k: 'nope', rating: 5 })).status === 404)
+    check('ratings must be 1 to 5', (await req('POST', `/api/store/ava-makes/order/${giftOrder.id}/review`, { k: giftOrder.accessKey, rating: 6 })).status === 400)
+    const rv = await req('POST', `/api/store/ava-makes/order/${giftOrder.id}/review`, { k: giftOrder.accessKey, rating: 2, body: 'Too short for the price.', name: 'Gift buyer' })
+    check('a buyer with a completed order can review', rv.status === 201 && rv.json.review.rating === 2)
+    const ed = await req('POST', `/api/store/ava-makes/order/${giftOrder.id}/review`, { k: giftOrder.accessKey, rating: 4, body: 'Better after the update.', name: 'Gift buyer' })
+    check('the buyer can edit their review (still one review)', ed.status === 200 && ed.json.review.id === rv.json.review.id)
+    const lateOrder = await dbGet<any>(`SELECT id, "accessKey" FROM seller_order WHERE "buyerEmail" = 'late@buyer.test' AND status = 'paid'`)
+    const r2 = await req('POST', `/api/store/ava-makes/order/${lateOrder.id}/review`, { k: lateOrder.accessKey, rating: 5, body: 'Great.' })
+    check('a second buyer adds their own review', r2.status === 201)
+    const pend = await dbGet<any>(`SELECT id, "accessKey" FROM seller_order WHERE status = 'pending' AND "productId" = ? LIMIT 1`, pid)
+    check('an unpaid order can’t review', (await req('POST', `/api/store/ava-makes/order/${pend.id}/review`, { k: pend.accessKey, rating: 5 })).status === 403)
+    check('an order can’t review a product it doesn’t include', (await req('POST', `/api/store/ava-makes/order/${giftOrder.id}/review`, { k: giftOrder.accessKey, rating: 5, productId: other })).status === 403)
+    const sum = (await req('GET', `/api/store/ava-makes/products/${pid}/reviews`)).json
+    check('real average, count and breakdown', sum.summary.count === 2 && sum.summary.average === 4.5 && sum.summary.breakdown.join() === '0,0,0,1,1')
+    check('reviews are labelled verified, edits are shown', sum.reviews.every((x: any) => x.verified) && sum.reviews.some((x: any) => x.edited))
+    const storeRating = (await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === pid).rating
+    check('the store’s product card gets the same summary', storeRating?.count === 2 && storeRating?.average === 4.5)
+    check('sellers have no way to edit or delete reviews', (await req('DELETE', `/api/seller/reviews/${rv.json.review.id}`, undefined, A)).status === 404 && (await req('PATCH', `/api/seller/reviews/${rv.json.review.id}`, { rating: 5 }, A)).status === 404)
+    check('a seller can’t use moderation', (await req('POST', `/api/admin/reviews/${rv.json.review.id}/moderate`, { action: 'remove', reason: 'x' }, A)).status === 403)
+    check('anyone can report a review', (await req('POST', `/api/store/ava-makes/reviews/${rv.json.review.id}/report`, { reason: 'Abusive language' })).json?.reported === true)
+    check('reporting alone doesn’t hide it', (await req('GET', `/api/store/ava-makes/products/${pid}/reviews`)).json.summary.count === 2)
+    const listed = (await req('GET', '/api/admin/reviews/reported', undefined, B)).json
+    check('an admin sees reported reviews', listed.reviews?.some((x: any) => x.id === rv.json.review.id && x.reports === 1))
+    check('removing needs a reason', (await req('POST', `/api/admin/reviews/${rv.json.review.id}/moderate`, { action: 'remove' }, B)).status === 400)
+    await req('POST', `/api/admin/reviews/${rv.json.review.id}/moderate`, { action: 'remove', reason: 'Abuse' }, B)
+    const after = (await req('GET', `/api/store/ava-makes/products/${pid}/reviews`)).json
+    check('an admin-removed review is gone from totals and the list', after.summary.count === 1 && !after.reviews.some((x: any) => x.id === rv.json.review.id))
+    check('the author can’t quietly repost a removed review', (await req('POST', `/api/store/ava-makes/order/${giftOrder.id}/review`, { k: giftOrder.accessKey, rating: 5 })).status === 403)
+
+    // samples
+    const smp = await req('PUT', `/api/seller/products/${pid}/sample`, Buffer.from('FREE-SAMPLE-PAGES'), A, { 'content-type': 'application/pdf', 'x-file-name': 'planner-sample.pdf' })
+    check('seller uploads a free sample', smp.status === 200 && smp.json.product.sample?.name === 'planner-sample.pdf')
+    check('another seller can’t add a sample to it', (await req('PUT', `/api/seller/products/${pid}/sample`, Buffer.from('x'), B, { 'x-file-name': 'x' })).status === 404)
+    check('the sample isn’t public before Publish', !(await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === pid).sample)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const pubS = (await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === pid).sample
+    const dl = await fetch(`${BASE}/api/store-sample/${pid}`)
+    const text = await dl.text()
+    check('the published sample downloads without paying', dl.status === 200 && text === 'FREE-SAMPLE-PAGES' && Boolean(pubS?.url))
+    check('the sample is never the paid file', !text.includes('SECRET-PLANNER-CONTENT'))
+    check('a product without a sample gives nothing', (await fetch(`${BASE}/api/store-sample/${other}`)).status === 404)
+    await req('DELETE', `/api/seller/products/${pid}/sample`, undefined, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    check('removing the sample and publishing takes it down', (await fetch(`${BASE}/api/store-sample/${pid}`)).status === 404)
+
+    // favourites
+    check('favourites need sign-in', (await req('GET', '/api/favourites')).status === 401)
+    check('saving a product works for a signed-in customer', (await req('PUT', `/api/favourites/${pid}`, undefined, B)).json?.saved === true)
+    check('saving twice keeps one entry', (await req('PUT', `/api/favourites/${pid}`, undefined, B)).status === 200 && (await req('GET', '/api/favourites', undefined, B)).json.productIds.length === 1)
+    check('favourites are private to their owner', (await req('GET', '/api/favourites', undefined, A)).json.productIds.length === 0)
+    check('an unpublished product can’t be saved', (await req('PUT', `/api/favourites/${other}`, undefined, B)).status === 404)
+    await req('DELETE', `/api/favourites/${pid}`, undefined, B)
+    check('removing a favourite works', (await req('GET', '/api/favourites', undefined, B)).json.productIds.length === 0)
+    check('the store never publishes save counts', !JSON.stringify((await req('GET', '/api/store/ava-makes')).json).match(/saved|favourite/i))
+
+    console.log('\n  Related products and bundles (Stage C)')
+    await req('PUT', `/api/seller/products/${other}/file`, Buffer.from('SECOND-PRODUCT-FILE'), A, { 'content-type': 'application/pdf', 'x-file-name': 'second.pdf' })
+    const benProd = (await req('POST', '/api/seller/products', { title: 'Ben thing', priceMinor: 300, currency: 'gbp' }, B)).json.product.id
+    const bun = (await req('POST', '/api/seller/products', { title: 'Everything bundle', priceMinor: 1500, currency: 'gbp' }, A)).json.product.id
+    const exB = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === bun).extras
+    const one = await req('PATCH', `/api/seller/products/${bun}`, { extras: { ...exB, bundle: [pid] } }, A)
+    check('a one-item bundle is flagged', /at least 2/.test(one.json?.product?.problem ?? ''))
+    const set = await req('PATCH', `/api/seller/products/${bun}`, { extras: { ...exB, bundle: [pid, other, bun, benProd], related: [other, benProd, bun] } }, A)
+    check('a bundle keeps only the seller’s own products, never itself', JSON.stringify(set.json.product.extras.bundle) === JSON.stringify([pid, other]))
+    check('related products are the seller’s own, never itself', JSON.stringify(set.json.product.extras.related) === JSON.stringify([other]))
+    check('a bundle needs no file of its own', set.json.product.problem === null)
+    const exP = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === pid).extras
+    check('a bundle can’t go inside another bundle', JSON.stringify((await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...exP, bundle: [] , related: [] } }, A)).json.product.extras.bundle) === '[]' && JSON.stringify((await req('PATCH', `/api/seller/products/${other}`, { extras: { ...(await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === other).extras, bundle: [bun, pid] } }, A)).json.product.extras.bundle) === JSON.stringify([pid]))
+    const exO = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === other).extras
+    await req('PATCH', `/api/seller/products/${other}`, { extras: { ...exO, bundle: [] } }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const pubB = (await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === bun)
+    check('the store lists what the bundle includes', pubB?.bundle?.available === true && pubB.bundle.items.map((i: any) => i.id).sort().join() === [pid, other].sort().join())
+    check('the store lists related products', JSON.stringify(pubB.related) === JSON.stringify([other]))
+    const bco = await req('POST', '/api/store/ava-makes/checkout', { productId: bun, checkoutKey: `bundle_${Date.now()}_abcdefgh` })
+    const bsid = String(bco.json?.url ?? '').split('/pay/')[1]
+    const bses = fake.sessions.get(bsid)!
+    check('a bundle is charged its own price', bco.status === 200 && (fake.calls.filter((c) => c.path === '/v1/checkout/sessions').at(-1)!.body as any).line_items[0].price_data.unit_amount === '1500')
+    await sendWebhook(HOOK, fake.event('checkout.session.completed', { ...bses, status: 'complete', payment_status: 'paid', customer_details: { email: 'bundle@buyer.test' } }, accountId))
+    const bo = await dbGet<any>('SELECT id, "accessKey" FROM seller_order WHERE "sessionId" = ?', bsid)
+    const bview = (await req('GET', `/api/store/ava-makes/order/${bo.id}?k=${encodeURIComponent(bo.accessKey)}`)).json.order
+    check('the bundle order lists every item with its own download', bview.items.length === 2 && bview.downloadUrl === null)
+    const files = await Promise.all(bview.items.map(async (i: any) => (await fetch(i.downloadUrl)).text()))
+    check('each item downloads its own file', files.sort().join('|') === ['SECOND-PRODUCT-FILE', 'SECRET-PLANNER-CONTENT'].sort().join('|'), files.join('|'))
+    const forged = bview.items[0].downloadUrl.replace(/~prd_[a-f0-9]{20}/, `~${benProd}`)
+    check('an item download link can’t be changed to another product', (await fetch(forged)).status === 403)
+    check('a bundle buyer can review an item from the bundle', (await req('POST', `/api/store/ava-makes/order/${bo.id}/review`, { k: bo.accessKey, rating: 5, productId: other })).status === 201)
+    // the seller changes the bundle later: past buyers keep what they bought
+    const exB2 = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === bun).extras
+    const third = (await req('POST', '/api/seller/products', { title: 'Third product', priceMinor: 400, currency: 'gbp' }, A)).json.product.id
+    await req('PUT', `/api/seller/products/${third}/file`, Buffer.from('THIRD-FILE'), A, { 'content-type': 'application/pdf', 'x-file-name': 'third.pdf' })
+    await req('PATCH', `/api/seller/products/${bun}`, { extras: { ...exB2, bundle: [pid, third] } }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const again = (await req('GET', `/api/store/ava-makes/order/${bo.id}?k=${encodeURIComponent(bo.accessKey)}`)).json.order
+    check('changing the bundle later keeps past buyers’ items', again.items.map((i: any) => i.productId).sort().join() === [pid, other].sort().join())
+    check('…and their downloads still work', (await fetch(again.items.find((i: any) => i.productId === other).downloadUrl)).status === 200)
+    // an item that isn't live makes the bundle unavailable rather than half-delivered
+    const exT = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((x: any) => x.id === third).extras
+    await req('PATCH', `/api/seller/products/${third}`, { listed: false, extras: exT }, A)
+    await req('DELETE', `/api/seller/products/${third}`, undefined, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const gone = (await req('GET', '/api/store/ava-makes')).json.products.find((x: any) => x.id === bun)
+    check('a bundle with a missing item shows as unavailable', gone?.bundle?.available === false)
+    check('…and can’t be bought', (await req('POST', '/api/store/ava-makes/checkout', { productId: bun, checkoutKey: `bundle2_${Date.now()}_abcdefgh` })).status === 409)
   }
   const re = await req('GET', `/api/store/ava-makes/order/${oid}?k=${k}`)
   const reDl = await fetch(String(re.json?.order?.downloadUrl).replace(ORIGIN, BASE))

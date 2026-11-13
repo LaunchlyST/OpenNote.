@@ -219,6 +219,38 @@ export async function ensureSellerTables() {
       "createdAt" TEXT NOT NULL
     );
 
+    -- Stage C: verified reviews. One per buyer per product; only Desknoty admins can remove one.
+    CREATE TABLE IF NOT EXISTS seller_review (
+      id TEXT PRIMARY KEY,
+      "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
+      "productId" TEXT NOT NULL,
+      "orderId" TEXT NOT NULL,
+      "reviewerKey" TEXT NOT NULL,
+      rating INTEGER NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      name TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'visible',
+      "removedReason" TEXT,
+      "createdAt" TEXT NOT NULL,
+      "updatedAt" TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS seller_review_one ON seller_review ("productId", "reviewerKey");
+    CREATE INDEX IF NOT EXISTS seller_review_product ON seller_review ("productId", status);
+    CREATE TABLE IF NOT EXISTS seller_review_report (
+      "reviewId" TEXT NOT NULL REFERENCES seller_review(id) ON DELETE CASCADE,
+      reporter TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL,
+      PRIMARY KEY ("reviewId", reporter)
+    );
+    -- Stage C: favourites of signed-in customers (private to them).
+    CREATE TABLE IF NOT EXISTS customer_favourite (
+      "userId" TEXT NOT NULL,
+      "productId" TEXT NOT NULL,
+      "createdAt" TEXT NOT NULL,
+      PRIMARY KEY ("userId", "productId")
+    );
+
     CREATE TABLE IF NOT EXISTS oauth_state (
       state TEXT PRIMARY KEY,
       "userId" TEXT NOT NULL,
@@ -252,6 +284,11 @@ interface StoreRow {
   updatedAt: string
 }
 interface ProductRow {
+  sampleFileId?: string | null
+  sampleName?: string | null
+  sampleSize?: number | null
+  pubSampleFileId?: string | null
+  pubSampleName?: string | null
   revision: number
   id: string
   storeId: string
@@ -550,12 +587,13 @@ function productDraftView(p: ProductRow) {
     priceMinor: p.priceMinor,
     currency: p.currency,
     file: p.fileId ? { name: p.fileName, size: p.fileSize, type: p.fileType } : null,
+    sample: p.sampleFileId ? { name: p.sampleName, size: p.sampleSize } : null,
     listed: Boolean(p.listed),
     published: Boolean(p.pubAt),
     extras: readExtras(p.extras),
     archived: Boolean(p.archived),
     offer: offerView(p.priceMinor, readExtras(p.extras)),
-    changed: Boolean(p.pubAt) && ((p.extras ?? null) !== (p.pubExtras ?? null) || p.title !== p.pubTitle || p.description !== p.pubDescription || p.cover !== p.pubCover || p.priceMinor !== p.pubPriceMinor || p.currency !== p.pubCurrency || p.fileId !== p.pubFileId),
+    changed: Boolean(p.pubAt) && ((p.extras ?? null) !== (p.pubExtras ?? null) || p.title !== p.pubTitle || p.description !== p.pubDescription || p.cover !== p.pubCover || p.priceMinor !== p.pubPriceMinor || p.currency !== p.pubCurrency || p.fileId !== p.pubFileId || (p.sampleFileId ?? null) !== (p.pubSampleFileId ?? null)),
     problem: productProblem(p),
   }
 }
@@ -582,6 +620,10 @@ export type ProductExtras = {
   faq: Array<{ q: string; a: string }>
   /** Horizontal text position inside the card, 0 = left edge, 0.5 = centre, 1 = right edge. */
   textPos: { title: number; desc: number }
+  /** Stage C: products shown under 'You might also like' (own products only). */
+  related: string[]
+  /** Stage C: a bundle lists 2 or more of the seller's own products; buying it grants all of them. */
+  bundle: string[]
 }
 const BADGES = ['SALE', 'PERCENT', 'Limited Offer', 'Launch Special']
 const HEX = /^#[0-9a-f]{6}$/i
@@ -637,8 +679,11 @@ function cleanCard(o: Record<string, any>) {
       .filter((x: { q: string; a: string }) => x.q && x.a)
       .slice(0, 8),
     textPos: { title: unit(tp.title, 0), desc: unit(tp.desc, 0) },
+    related: ids(o.related, 6),
+    bundle: ids(o.bundle, 20),
   }
 }
+const ids = (v: unknown, max: number) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((x) => /^prd_[a-f0-9]{20}$/.test(x)))].slice(0, max)
 /** Gallery images and the preview video must be the seller's own uploads, of the right kind. */
 async function ownMediaOnly(storeId: string, extrasJson: string): Promise<string> {
   const x = JSON.parse(extrasJson) as ProductExtras
@@ -648,6 +693,17 @@ async function ownMediaOnly(storeId: string, extrasJson: string): Promise<string
   const kind = new Map(rows.map((r) => [r.id, r.type]))
   x.gallery = x.gallery.filter((id) => kind.get(id)?.startsWith('image/'))
   x.video = x.video && kind.get(x.video)?.startsWith('video/') ? x.video : null
+  return JSON.stringify(x)
+}
+/** Related products and bundle items: the seller's own products only; bundles hold plain products, never themselves. */
+async function ownProductsOnly(storeId: string, selfId: string, extrasJson: string): Promise<string> {
+  const x = JSON.parse(extrasJson) as ProductExtras
+  if (!x.related.length && !x.bundle.length) return extrasJson
+  const own = await sql.all<{ id: string; extras: string | null }>(`SELECT id, extras FROM seller_product WHERE "storeId" = ?`, storeId)
+  const mine = new Set(own.map((r) => r.id))
+  const isBundle = new Set(own.filter((r) => { try { return (JSON.parse(r.extras ?? '{}').bundle ?? []).length >= 2 } catch { return false } }).map((r) => r.id))
+  x.related = x.related.filter((id) => mine.has(id) && id !== selfId)
+  x.bundle = x.bundle.filter((id) => mine.has(id) && id !== selfId && !isBundle.has(id))
   return JSON.stringify(x)
 }
 const readExtras = (raw: string | null | undefined) => { try { return cleanExtras(raw ? JSON.parse(raw) : {}) } catch { return cleanExtras({}) } }
@@ -688,7 +744,7 @@ function productPublicView(p: ProductRow) {
     currency: p.pubCurrency ?? 'gbp',
     ...(() => {
       const x = readExtras(p.pubExtras)
-      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, fileType: p.pubFileName ? fileKind(p.pubFileName) : null }
+      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle }
     })(),
   }
 }
@@ -696,6 +752,9 @@ function productProblem(p: ProductRow): string | null {
   if (!p.title.trim()) return 'Add a title.'
   if (!CURRENCIES.has(p.currency)) return 'Choose a currency.'
   if (p.priceMinor < 0) return 'The price can’t be negative.'
+  const bundle = readExtras(p.extras).bundle
+  if (bundle.length === 1) return 'A bundle needs at least 2 products.'
+  if (bundle.length >= 2) return null
   if (!p.fileId) return 'Upload the file buyers will download.'
   return null
 }
@@ -881,6 +940,28 @@ export async function completeOrder(order: OrderRow, email: string | null, payme
   }
   return (await q.order(order.id))!
 }
+
+/* ---------------------------------------------------------- reviews --- */
+
+/** Average, count and 1-5 breakdown of visible reviews, per product. Real numbers only. */
+async function ratingSummaries(storeId: string) {
+  const rows = await sql.all<{ productId: string; rating: number; n: number }>(`SELECT "productId", rating, CAST(COUNT(*) AS INTEGER) AS n FROM seller_review WHERE "storeId" = ? AND status = 'visible' GROUP BY "productId", rating`, storeId)
+  const out = new Map<string, { average: number; count: number; breakdown: number[] }>()
+  for (const r of rows) {
+    const cur = out.get(r.productId) ?? { average: 0, count: 0, breakdown: [0, 0, 0, 0, 0] }
+    cur.breakdown[r.rating - 1] += Number(r.n)
+    cur.count += Number(r.n)
+    out.set(r.productId, cur)
+  }
+  for (const v of out.values()) v.average = Math.round((v.breakdown.reduce((n, c, i) => n + c * (i + 1), 0) / v.count) * 10) / 10
+  return out
+}
+/** Products an order entitles its buyer to: the product itself, plus bundle items (Stage C, part 4). */
+async function orderProducts(o: OrderRow): Promise<string[]> {
+  const items = await sql.all<{ productId: string }>(`SELECT "productId" FROM seller_entitlement WHERE "orderId" = ?`, o.id).catch(() => [] as Array<{ productId: string }>)
+  return [o.productId, ...items.map((i) => i.productId)]
+}
+const reviewerKey = (o: OrderRow) => (o.buyerEmail ? `email:${o.buyerEmail.trim().toLowerCase()}` : `order:${o.id}`)
 
 async function markOrder(sessionId: string, status: 'failed' | 'cancelled') {
   const o = await q.orderBySession(sessionId)
@@ -1206,7 +1287,7 @@ export function sellerRouter() {
     await sql.tx(async (tx) => {
       for (const p of await q.products(s.id, tx)) {
         if (p.listed && !p.archived && !productProblem(p)) {
-          await tx.run(`UPDATE seller_product SET "pubExtras" = extras, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = "priceMinor", "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubAt" = ? WHERE id = ?`, t, p.id)
+          await tx.run(`UPDATE seller_product SET "pubExtras" = extras, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = "priceMinor", "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubSampleFileId" = "sampleFileId", "pubSampleName" = "sampleName", "pubAt" = ? WHERE id = ?`, t, p.id)
         } else {
           await tx.run(`UPDATE seller_product SET "pubAt" = NULL WHERE id = ?`, p.id)
         }
@@ -1259,7 +1340,7 @@ export function sellerRouter() {
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
-    if (fields.extras) fields.extras = await ownMediaOnly(s.id, fields.extras)
+    if (fields.extras) fields.extras = await ownProductsOnly(s.id, p.id, await ownMediaOnly(s.id, fields.extras))
     const next = { ...p, ...fields, updatedAt: now() }
     const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, next.id, p.revision)
     if (!saved.changes) return void res.status(409).json({ error: 'Product changed elsewhere. Your edits are kept locally.' })
@@ -1411,6 +1492,29 @@ export function sellerRouter() {
     await sql.run(`UPDATE seller_product SET "fileId" = ?, "fileName" = ?, "fileSize" = ?, "fileType" = ?, "updatedAt" = ? WHERE id = ?`, fileId, name, body.length, type, now(), p.id)
     // The old file stays if the live product or a paid order still points at it.
     void old // Immutable versions are retained, including in-flight checkout reservations.
+    res.json({ product: productDraftView((await q.product(p.id, s.id))!) })
+  })
+
+  /** A free sample buyers can download before paying. Stored apart from the paid file; never the paid file. */
+  me.put('/products/:id/sample', express.raw({ type: () => true, limit: 25 * 1024 * 1024 }), async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const p = await q.product(String(req.params.id), s.id)
+    if (!p) return void res.status(404).json({ error: 'Product not found.' })
+    const body = req.body as Buffer
+    if (!Buffer.isBuffer(body) || body.length === 0) return void res.status(400).json({ error: 'Empty file.' })
+    const name = decodeURIComponent(String(req.headers['x-file-name'] ?? 'sample')).replace(/[\\/\0\r\n"]/g, '_').slice(0, 120) || 'sample'
+    const id = `smp_${randomBytes(16).toString('hex')}`
+    await blobs().put('media', id, body, 'application/octet-stream')
+    await sql.run(`UPDATE seller_product SET "sampleFileId" = ?, "sampleName" = ?, "sampleSize" = ?, "updatedAt" = ? WHERE id = ?`, id, name, body.length, now(), p.id)
+    res.json({ product: productDraftView((await q.product(p.id, s.id))!) })
+  })
+  me.delete('/products/:id/sample', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const p = await q.product(String(req.params.id), s.id)
+    if (!p) return void res.status(404).json({ error: 'Product not found.' })
+    await sql.run(`UPDATE seller_product SET "sampleFileId" = NULL, "sampleName" = NULL, "sampleSize" = NULL, "updatedAt" = ? WHERE id = ?`, now(), p.id)
     res.json({ product: productDraftView((await q.product(p.id, s.id))!) })
   })
 
@@ -1775,7 +1879,16 @@ export function sellerRouter() {
   pub.get('/:handle', async (req, res) => {
     const s = await liveStore(req, res)
     if (!s) return
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products: (await liveProducts(s)).map(productPublicView), checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
+    const ratings = await ratingSummaries(s.id)
+    const live = await liveProducts(s)
+    const liveIds = new Set(live.filter((p) => p.pubFileId).map((p) => p.id))
+    const titles = new Map(live.map((p) => [p.id, p.pubTitle ?? '']))
+    const products = live.map((p) => {
+      const v = productPublicView(p) as ReturnType<typeof productPublicView> & { related: string[]; bundle: string[] }
+      const items = v.bundle.filter((id) => liveIds.has(id))
+      return { ...v, rating: ratings.get(p.id) ?? null, related: v.related.filter((id) => liveIds.has(id) || titles.has(id)), bundle: v.bundle.length ? { items: items.map((id) => ({ id, title: titles.get(id) ?? '' })), available: items.length === v.bundle.length && items.length >= 2 } : null }
+    })
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products, checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
   /** What the buyer would pay right now, with an optional code. Read only: nothing is reserved. */
@@ -1796,7 +1909,17 @@ export function sellerRouter() {
     if (!s) return
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
     const found = await q.product(productId, s.id)
-    if (!found || !found.pubAt || !found.pubFileId || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    const bundleIds = found ? readExtras(found.pubExtras).bundle : []
+    if (!found || !found.pubAt || (!found.pubFileId && bundleIds.length < 2) || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    // A bundle can only be bought when the order will grant every item: each must be live with a file.
+    let entitlements: Array<{ productId: string; title: string; fileId: string; fileName: string }> = []
+    if (bundleIds.length >= 2) {
+      const items = await Promise.all(bundleIds.map((id) => q.product(id, s.id)))
+      if (items.some((i) => !i || !i.pubAt || !i.pubFileId)) return void res.status(409).json({ error: 'This bundle isn’t available right now: one of its products is missing.' })
+      entitlements = items.map((i) => ({ productId: i!.id, title: i!.pubTitle ?? '', fileId: i!.pubFileId!, fileName: i!.pubFileName ?? 'download' }))
+      found.pubFileId = 'bundle'
+      found.pubFileName = 'bundle'
+    }
     // The buyer pays the price worked out here: list price, live offer, then at most one code. Never sent by the browser.
     const priced = await pricePurchase(s, found, req.body?.coupon)
     if ('error' in priced) return void res.status(409).json({ error: priced.error, couponError: true })
@@ -1816,6 +1939,8 @@ export function sellerRouter() {
           if (made.changes) {
             await tx.run('UPDATE seller_order SET "listMinor" = ?, "discountMinor" = ?, "couponCode" = ?, "couponId" = ? WHERE id = ?', ledger.listMinor, ledger.discountMinor, ledger.couponCode, ledger.couponId, row.id)
             if (priced.coupon) await reserveCoupon(tx, priced.coupon, row.id, validEmail)
+            // the bundle's contents as bought: later edits to the bundle never change this order
+            for (const e of entitlements) await tx.run(`INSERT INTO seller_entitlement ("orderId", "productId", title, "fileId", "fileName") VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`, row.id, e.productId, e.title, e.fileId, e.fileName)
           }
           return (await tx.get<OrderRow>('SELECT * FROM seller_order WHERE id = ?', row.id))!
         })
@@ -1981,7 +2106,8 @@ export function sellerRouter() {
       currency: o.currency,
       email: o.buyerEmail,
       fileName: o.fileName,
-      downloadUrl: o.status === 'paid' ? `${seller.apiUrl}/api/store-download/${signDownload(o.id, downloadExpiresAt)}` : null,
+      // a bundle has no file of its own: its items each have a download below
+      downloadUrl: o.status === 'paid' && o.fileId !== 'bundle' ? `${seller.apiUrl}/api/store-download/${signDownload(o.id, downloadExpiresAt)}` : null,
       retrievalUrl: o.status === 'paid' ? retrievalUrl(o, s.handle) : null,
       downloadExpiresAt,
       method: o.method,
@@ -1991,6 +2117,9 @@ export function sellerRouter() {
       payerBank: o.method === 'bank' ? o.payerBank ?? null : null,
       receiptSent: receipt?.status === 'sent',
       receiptStatus: receipt?.status === 'sent' ? 'accepted' : receipt?.status ?? 'not_queued',
+      items: o.status === 'paid'
+        ? (await sql.all<{ productId: string; title: string; fileName: string }>(`SELECT "productId", title, "fileName" FROM seller_entitlement WHERE "orderId" = ? ORDER BY title`, o.id)).map((e) => ({ productId: e.productId, title: e.title, fileName: e.fileName, downloadUrl: `${seller.apiUrl}/api/store-download/${signDownload(`${o.id}~${e.productId}`, downloadExpiresAt)}` }))
+        : [],
     }
   }
 
@@ -2055,6 +2184,58 @@ export function sellerRouter() {
     res.status(502).json({ emailStatus: 'failed', to: masked, error: 'We couldn’t send the email right now. Your download link on this page still works.' })
   })
 
+  /** Public reviews for a product: visible ones only, newest first, with real totals. */
+  pub.get('/:handle/products/:productId/reviews', async (req, res) => {
+    const s = await liveStore(req, res)
+    if (!s) return
+    const p = await q.product(String(req.params.productId), s.id)
+    if (!p || !p.pubAt) return void res.status(404).json({ error: 'Product not found.' })
+    const rows = await sql.all<{ id: string; rating: number; body: string; name: string; createdAt: string; updatedAt: string }>(`SELECT id, rating, body, name, "createdAt", "updatedAt" FROM seller_review WHERE "productId" = ? AND status = 'visible' ORDER BY "createdAt" DESC LIMIT 100`, p.id)
+    res.json({ summary: (await ratingSummaries(s.id)).get(p.id) ?? { average: 0, count: 0, breakdown: [0, 0, 0, 0, 0] }, reviews: rows.map((r) => ({ id: r.id, rating: r.rating, body: r.body, name: r.name || 'Verified buyer', verified: true, createdAt: r.createdAt, edited: r.updatedAt !== r.createdAt })) })
+  })
+
+  /** The buyer's own review for a product they bought (order link key required). */
+  pub.post('/:handle/order/:orderId/review', async (req, res) => {
+    const found = await buyerOrder(String(req.params.orderId), String(req.body?.k ?? ''))
+    if (!found) return void res.status(404).json({ error: 'Order not found.' })
+    const { o, st } = found
+    if (o.status !== 'paid') return void res.status(403).json({ error: 'You can review a product once your order is complete.' })
+    const productId = String(req.body?.productId ?? o.productId)
+    if (!(await orderProducts(o)).includes(productId)) return void res.status(403).json({ error: 'This order doesn’t include that product.' })
+    const rating = Number(req.body?.rating)
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) return void res.status(400).json({ error: 'Choose 1 to 5 stars.' })
+    const body = String(req.body?.body ?? '').replace(/\r/g, '').trim().slice(0, 2000)
+    const name = String(req.body?.name ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 40)
+    const key = reviewerKey(o)
+    const t = now()
+    const existing = await sql.get<{ id: string; status: string }>(`SELECT id, status FROM seller_review WHERE "productId" = ? AND "reviewerKey" = ?`, productId, key)
+    if (existing?.status === 'removed') return void res.status(403).json({ error: 'This review was removed by Desknoty for breaking the review rules.' })
+    if (existing) await sql.run(`UPDATE seller_review SET rating = ?, body = ?, name = ?, "updatedAt" = ? WHERE id = ?`, rating, body, name, t, existing.id)
+    else await sql.run(`INSERT INTO seller_review (id, "storeId", "productId", "orderId", "reviewerKey", rating, body, name, status, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'visible', ?, ?) ON CONFLICT DO NOTHING`, `rev_${randomBytes(10).toString('hex')}`, st.id, productId, o.id, key, rating, body, name, t, t)
+    const mineNow = (await sql.get<{ id: string; rating: number; body: string; name: string }>(`SELECT id, rating, body, name FROM seller_review WHERE "productId" = ? AND "reviewerKey" = ?`, productId, key))!
+    res.status(existing ? 200 : 201).json({ review: mineNow })
+  })
+  pub.get('/:handle/order/:orderId/review', async (req, res) => {
+    const found = await buyerOrder(String(req.params.orderId), String(req.query.k ?? ''))
+    if (!found) return void res.status(404).json({ error: 'Order not found.' })
+    const productId = String(req.query.productId ?? found.o.productId)
+    const r = await sql.get<{ id: string; rating: number; body: string; name: string; status: string }>(`SELECT id, rating, body, name, status FROM seller_review WHERE "productId" = ? AND "reviewerKey" = ?`, productId, reviewerKey(found.o))
+    res.json({ review: r ?? null, eligible: found.o.status === 'paid' })
+  })
+
+  /** Anyone can report a review. It stays up until a Desknoty admin decides; sellers can't remove reviews. */
+  pub.post('/:handle/reviews/:reviewId/report', async (req, res) => {
+    const s = await liveStore(req, res)
+    if (!s) return
+    const r = await sql.get<{ id: string }>(`SELECT id FROM seller_review WHERE id = ? AND "storeId" = ?`, String(req.params.reviewId), s.id)
+    if (!r) return void res.status(404).json({ error: 'Review not found.' })
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+    if (!reason) return void res.status(400).json({ error: 'Tell us what’s wrong with this review.' })
+    const reporter = createHmac('sha256', env.secret).update(`report:${req.ip}:${req.headers['user-agent'] ?? ''}`).digest('base64url').slice(0, 32)
+    await sql.run(`INSERT INTO seller_review_report ("reviewId", reporter, reason, "createdAt") VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`, r.id, reporter, reason, now())
+    res.json({ reported: true })
+  })
+
   /** Bank transfer: the buyer says they've sent it. Recorded for the seller; it never unlocks the download. */
   pub.post('/:handle/order/:orderId/claim', async (req, res) => {
     const found = await buyerOrder(String(req.params.orderId), String(req.body?.k ?? ''))
@@ -2101,11 +2282,72 @@ export function sellerRouter() {
 
   /** Private file, only through a valid, unexpired link for a paid order. */
   r.get('/api/store-download/:token', async (req, res) => {
-    const orderId = verifyDownload(String(req.params.token))
+    const signed = verifyDownload(String(req.params.token))
+    const [orderId, itemId] = signed ? signed.split('~') : [null, null]
     const o = orderId ? await q.order(orderId) : undefined
     if (!o || o.status !== 'paid') return void res.status(403).json({ error: 'This download link is invalid or has expired.' })
+    if (itemId) {
+      const e = await sql.get<{ fileId: string; fileName: string }>(`SELECT "fileId", "fileName" FROM seller_entitlement WHERE "orderId" = ? AND "productId" = ?`, o.id, itemId)
+      if (!e || !/^fil_[a-f0-9]{32}$/.test(e.fileId) || !(await blobs().exists('files', e.fileId))) return void res.status(410).json({ error: 'This file is no longer available.' })
+      return void (await blobs().send('files', e.fileId, res, { fileName: e.fileName.replace(/[^\w.\- ]/g, '_'), type: 'application/octet-stream', cache: 'private, no-store' }))
+    }
     if (!/^fil_[a-f0-9]{32}$/.test(o.fileId) || !(await blobs().exists('files', o.fileId))) return void res.status(410).json({ error: 'This file is no longer available.' })
     await blobs().send('files', o.fileId, res, { fileName: o.fileName.replace(/[^\w.\- ]/g, '_'), type: 'application/octet-stream', cache: 'private, no-store' })
+  })
+
+  /** The product's published free sample. Separate storage from the paid file, so it can never leak it. */
+  r.get('/api/store-sample/:productId', async (req, res) => {
+    const p = await sql.get<ProductRow>(`SELECT * FROM seller_product WHERE id = ?`, String(req.params.productId))
+    const st = p ? await q.storeById(p.storeId) : undefined
+    if (!p || !st || !st.published || !p.pubAt || !p.pubSampleFileId || !/^smp_[a-f0-9]{32}$/.test(p.pubSampleFileId) || !(await blobs().exists('media', p.pubSampleFileId))) return void res.status(404).json({ error: 'No sample for this product.' })
+    await blobs().send('media', p.pubSampleFileId, res, { fileName: (p.pubSampleName ?? 'sample').replace(/[^\w.\- ]/g, '_'), type: 'application/octet-stream', cache: 'public, max-age=300' })
+  })
+
+  /** Signed-in customers' saved products. Private: only the owner can read them, and no counts are published. */
+  r.get('/api/favourites', async (req, res) => {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
+    if (!session) return void res.status(401).json({ error: 'Not signed in.' })
+    const rows = await sql.all<{ productId: string }>(`SELECT "productId" FROM customer_favourite WHERE "userId" = ? ORDER BY "createdAt" DESC`, session.user.id)
+    res.set('Cache-Control', 'no-store').json({ productIds: rows.map((x) => x.productId) })
+  })
+  r.put('/api/favourites/:productId', async (req, res) => {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
+    if (!session) return void res.status(401).json({ error: 'Not signed in.' })
+    const p = await sql.get<{ id: string }>(`SELECT id FROM seller_product WHERE id = ? AND "pubAt" IS NOT NULL`, String(req.params.productId))
+    if (!p) return void res.status(404).json({ error: 'Product not found.' })
+    const n = await sql.get<{ n: number }>(`SELECT CAST(COUNT(*) AS INTEGER) AS n FROM customer_favourite WHERE "userId" = ?`, session.user.id)
+    if ((n?.n ?? 0) >= 500) return void res.status(400).json({ error: 'You’ve saved the maximum number of products.' })
+    await sql.run(`INSERT INTO customer_favourite ("userId", "productId", "createdAt") VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, session.user.id, p.id, now())
+    res.json({ saved: true })
+  })
+  r.delete('/api/favourites/:productId', async (req, res) => {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
+    if (!session) return void res.status(401).json({ error: 'Not signed in.' })
+    await sql.run(`DELETE FROM customer_favourite WHERE "userId" = ? AND "productId" = ?`, session.user.id, String(req.params.productId))
+    res.json({ saved: false })
+  })
+
+  /** Review moderation: Desknoty administrators only. Sellers have no way to edit, hide or delete reviews. */
+  const requireAdminSession = async (req: Request, res: Response) => {
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
+    if (!session) { res.status(401).json({ error: 'Not signed in.' }); return null }
+    if ((session.user as { role?: string | null }).role !== 'admin') { res.status(403).json({ error: 'Administrators only.' }); return null }
+    return session
+  }
+  r.get('/api/admin/reviews/reported', async (req, res) => {
+    if (!(await requireAdminSession(req, res))) return
+    const rows = await sql.all<Record<string, unknown>>(`SELECT r.id, r."productId", r.rating, r.body, r.name, r.status, r."removedReason", CAST(COUNT(x.reporter) AS INTEGER) AS reports, MAX(x.reason) AS "lastReason" FROM seller_review r JOIN seller_review_report x ON x."reviewId" = r.id GROUP BY r.id, r."productId", r.rating, r.body, r.name, r.status, r."removedReason" ORDER BY reports DESC LIMIT 200`)
+    res.json({ reviews: rows })
+  })
+  r.post('/api/admin/reviews/:id/moderate', express.json(), async (req, res) => {
+    if (!(await requireAdminSession(req, res))) return
+    const action = req.body?.action === 'remove' ? 'removed' : req.body?.action === 'restore' ? 'visible' : null
+    if (!action) return void res.status(400).json({ error: 'Use action remove or restore.' })
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 300)
+    if (action === 'removed' && !reason) return void res.status(400).json({ error: 'Give the rule the review broke.' })
+    const done = await sql.run(`UPDATE seller_review SET status = ?, "removedReason" = ? WHERE id = ?`, action, action === 'removed' ? reason : null, String(req.params.id))
+    if (!done.changes) return void res.status(404).json({ error: 'Review not found.' })
+    res.json({ status: action })
   })
 
   r.get('/api/store-media/:id', async (req, res) => {
