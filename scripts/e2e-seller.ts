@@ -18,6 +18,7 @@ import type { ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
+import { createServer } from 'node:net'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
@@ -26,8 +27,10 @@ const require = createRequire(import.meta.url)
 const { chromium, devices } = require('playwright') as typeof import('playwright')
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-e2e-seller-'))
-const API_PORT = 4100 + Math.floor(Math.random() * 50)
-const WEB_PORT = 4200 + Math.floor(Math.random() * 50)
+/** A port nothing else is using right now. */
+const freePort = () => new Promise<number>((resolve) => { const srv = createServer(); srv.listen(0, () => { const p = (srv.address() as { port: number }).port; srv.close(() => resolve(p)) }) })
+const API_PORT = await freePort()
+const WEB_PORT = await freePort()
 const SITE = `http://localhost:${WEB_PORT}`
 const WHSEC = 'whsec_e2e'
 const HOOK = `http://127.0.0.1:${API_PORT}/api/stripe/webhook`
@@ -47,7 +50,7 @@ const fake = await startFakeStripe({ webhookUrl: HOOK, webhookSecret: WHSEC })
 const sent = fake.sent
 
 function run(cmd: string[], env: Record<string, string>, ready: string): Promise<ChildProcess> {
-  const child = spawn(cmd[0], cmd.slice(1), { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(cmd[0], cmd.slice(1), { env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
   let log = ''
   child.stdout!.on('data', (d) => (log += d))
   child.stderr!.on('data', (d) => (log += d))
@@ -334,7 +337,8 @@ try {
   db.close()
 } finally {
   await browser.close()
-  web.kill('SIGTERM')
+  // stop vite too, not just the npx wrapper
+  try { process.kill(-web.pid!, 'SIGTERM') } catch { web.kill('SIGTERM') }
   await new Promise<void>((r) => (api.once('exit', () => r()), api.kill('SIGTERM')))
   await fake.close()
   if (!process.env.SHOTS_DIR) rmSync(tmp, { recursive: true, force: true })
