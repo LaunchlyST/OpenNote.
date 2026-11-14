@@ -1,0 +1,1114 @@
+/* ===== Desknoty maintenance page ====================================
+   A painted alpine lake at dusk: cobalt water, sunlit ridges, one canoe.
+   Everything is scoped under `.mnt`, so nothing here reaches the app or
+   the landing page. The lake is flat SVG layers inside one perspective
+   box; the camera push, the water and the canoe are CSS transitions and
+   keyframes, which is why reduced motion and a hidden tab can pause the
+   whole scene in one place. */
+
+.mnt {
+  --mnt-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --mnt-travel: cubic-bezier(0.36, 0.02, 0.1, 1);
+  --mnt-ink: #1b2027;
+  --mnt-ink-soft: rgba(27, 32, 39, 0.7);
+  --mnt-cream: #fbf3e2;
+  --mnt-cream-soft: rgba(251, 243, 226, 0.86);
+  --mnt-gold: #e8b46c;
+  --mnt-paper: #f8f1e4;
+  --mnt-paper-dark: #efe3cd;
+  --mnt-deep: #081a29;
+  --mnt-navy: #0b1d2e;
+  --mnt-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+  --mnt-paper-noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.52' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23p)' opacity='0.4'/%3E%3C/svg%3E");
+
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow-x: clip;
+  background: var(--mnt-navy);
+  color: var(--mnt-cream);
+  font-family: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.mnt *,
+.mnt *::before,
+.mnt *::after {
+  box-sizing: border-box;
+}
+
+.mnt ::selection {
+  background: var(--mnt-gold);
+  color: var(--mnt-ink);
+}
+
+.mnt button {
+  font: inherit;
+}
+
+.mnt :focus-visible {
+  outline: 2px solid var(--mnt-cream);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.mnt-skip {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 60;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--mnt-paper);
+  color: var(--mnt-ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 0.25s var(--mnt-ease);
+}
+
+.mnt-skip:focus-visible {
+  transform: none;
+  outline-color: var(--mnt-ink);
+}
+
+/* ---- the lake ------------------------------------------------------
+   `perspective` lives on the world; the art box always keeps a 16:10
+   frame, so every layer shares the same coordinate space. Each layer is
+   pushed back and scaled by the exact amount the perspective would have
+   shrunk it, which keeps it pixel-aligned at rest and gives a clean,
+   depth-proportional push when the camera moves. */
+
+.mnt-world {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 70% at 50% 92%, rgba(16, 45, 66, 0.9), rgba(6, 18, 30, 0) 70%),
+    var(--mnt-deep);
+  perspective: 900px;
+  perspective-origin: 50% 50%;
+}
+
+.mnt-layers {
+  position: relative;
+  width: max(100vw, 160dvh);
+  height: max(100dvh, 62.5vw);
+  transform: translate3d(0, 0, 0);
+  transform-style: preserve-3d;
+  transition: transform 950ms var(--mnt-ease);
+  will-change: transform;
+}
+
+.mnt-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  transform: translateZ(calc(var(--depth) * -1)) scale(var(--scale));
+  backface-visibility: hidden;
+}
+
+.mnt-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.mnt.is-open .mnt-layers {
+  transform: translate3d(-1.4%, -2.6%, 620px);
+  transition: transform 2200ms var(--mnt-travel) 60ms;
+}
+
+.mnt-vignette {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(125% 95% at 50% 44%, rgba(4, 14, 26, 0) 42%, rgba(4, 14, 26, 0.45) 100%),
+    linear-gradient(to bottom, rgba(4, 14, 26, 0.28), rgba(4, 14, 26, 0) 26%);
+}
+
+.mnt-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background-image: var(--mnt-noise);
+  background-size: 180px;
+  opacity: 0.17;
+  mix-blend-mode: overlay;
+}
+
+/* ---- the page ------------------------------------------------------ */
+
+.mnt-ui {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1560px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 16px 18px 16px;
+  transition: opacity 0.8s ease 0.9s;
+}
+
+@media (min-width: 881px) {
+  .mnt-ui {
+    padding: 30px 52px 24px;
+  }
+}
+
+.mnt.is-open .mnt-ui {
+  opacity: 0.35;
+  transition: opacity 0.5s ease;
+}
+
+.mnt-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.mnt-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  animation: mnt-rise 0.9s var(--mnt-ease) 0.1s both;
+}
+
+/* The Pro dashboard rail's mark, at the same size. */
+.mnt-mark {
+  width: 30px;
+  height: 30px;
+  font-size: 30px;
+  box-shadow: 0 6px 18px -8px rgba(3, 12, 22, 0.8);
+}
+
+.mnt-word {
+  font-size: 15.5px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #fdf6e8;
+  text-shadow: 0 1px 12px rgba(3, 12, 22, 0.55);
+}
+
+/* The one piece of status, folded into the scene instead of a dark box. */
+.mnt-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 13px 7px 11px;
+  border: 1px solid rgba(251, 243, 226, 0.26);
+  border-radius: 999px;
+  background: rgba(8, 22, 36, 0.3);
+  backdrop-filter: blur(9px) saturate(1.1);
+  color: rgba(251, 243, 226, 0.9);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  line-height: 1;
+  text-transform: uppercase;
+  white-space: nowrap;
+  animation: mnt-rise 0.9s var(--mnt-ease) 0.16s both;
+}
+
+.mnt-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mnt-gold);
+  box-shadow: 0 0 0 3px rgba(232, 180, 108, 0.2);
+  animation: mnt-pulse 3.4s ease-in-out infinite;
+}
+
+@keyframes mnt-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes mnt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.mnt-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 26px;
+  min-height: 0;
+  padding-bottom: 8px;
+}
+
+@media (min-width: 881px) {
+  .mnt-main {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: clamp(28px, 5vw, 84px);
+    padding: 40px 0 clamp(20px, 5vh, 54px);
+  }
+}
+
+/* ---- the message --------------------------------------------------- */
+
+.mnt-copy {
+  position: relative;
+  z-index: 0;
+  max-width: 660px;
+  animation: mnt-rise 1.1s var(--mnt-ease) 0.24s both;
+  transition:
+    opacity 0.45s ease 0.05s,
+    transform 0.55s var(--mnt-ease) 0.05s;
+}
+
+/* A soft pool of shade keeps cream type readable over any part of the
+   painting without boxing the copy in. */
+.mnt-copy::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: -18% -16% -22% -24%;
+  background: radial-gradient(
+    120% 90% at 24% 60%,
+    rgba(5, 18, 32, 0.66),
+    rgba(5, 18, 32, 0.28) 52%,
+    rgba(5, 18, 32, 0) 76%
+  );
+  pointer-events: none;
+}
+
+.mnt.is-open .mnt-copy {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.mnt-h1 {
+  max-width: 15ch;
+  margin: 0;
+  padding-bottom: 0.06em;
+  font-family: 'Instrument Serif', 'Times New Roman', Georgia, serif;
+  font-size: clamp(2.7rem, 6vw, 5.3rem);
+  font-weight: 400;
+  line-height: 0.99;
+  letter-spacing: -0.014em;
+  color: #fdf6e8;
+  text-wrap: balance;
+  text-shadow:
+    0 1px 2px rgba(4, 14, 26, 0.4),
+    0 18px 60px rgba(4, 14, 26, 0.5);
+}
+
+.mnt-lead {
+  max-width: 44ch;
+  margin: 18px 0 0;
+  color: var(--mnt-cream-soft);
+  font-size: clamp(1rem, 1.1vw, 1.0625rem);
+  line-height: 1.65;
+  text-wrap: pretty;
+  text-shadow: 0 1px 20px rgba(4, 14, 26, 0.55);
+}
+
+@media (min-width: 881px) {
+  .mnt-lead {
+    margin-top: 22px;
+  }
+}
+
+/* ---- the invitation ------------------------------------------------ */
+
+.mnt-invite {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  gap: 7px;
+  width: min(322px, 100%);
+  padding: 20px 24px 17px;
+  border: 0;
+  border-radius: 3px;
+  background-color: var(--mnt-paper);
+  background-image: var(--mnt-paper-noise);
+  background-size: 220px;
+  color: var(--mnt-ink);
+  text-align: left;
+  cursor: pointer;
+  transform: rotate(-1.5deg);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 2px 6px -2px rgba(3, 12, 22, 0.35),
+    0 34px 60px -28px rgba(3, 12, 22, 0.9);
+  transition:
+    transform 0.45s var(--mnt-ease),
+    box-shadow 0.45s var(--mnt-ease),
+    opacity 0.4s ease;
+  animation: mnt-note-in 1.1s var(--mnt-ease) 0.42s both;
+}
+
+/* The crease that says this is folded paper, not a card. */
+.mnt-invite::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 13px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(120, 96, 62, 0),
+    rgba(120, 96, 62, 0.16) 18%,
+    rgba(120, 96, 62, 0.16) 82%,
+    rgba(120, 96, 62, 0)
+  );
+}
+
+/* A turned corner, painted rather than a border. */
+.mnt-invite::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  background: linear-gradient(135deg, rgba(120, 96, 62, 0.16) 0 50%, var(--mnt-paper-dark) 50% 100%);
+  box-shadow: -2px -2px 6px -3px rgba(3, 12, 22, 0.35);
+}
+
+@keyframes mnt-note-in {
+  from {
+    opacity: 0;
+    transform: translateY(26px) rotate(-4deg);
+  }
+}
+
+.mnt-invite:hover {
+  transform: rotate(-0.4deg) translateY(-3px);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 2px 6px -2px rgba(3, 12, 22, 0.3),
+    0 44px 70px -30px rgba(3, 12, 22, 0.95);
+}
+
+.mnt-invite:active {
+  transform: rotate(-1deg) translateY(0);
+  transition-duration: 0.12s;
+}
+
+.mnt-invite-kicker {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8d6c3f;
+}
+
+.mnt-invite-title {
+  font-family: 'Instrument Serif', 'Times New Roman', Georgia, serif;
+  font-size: 1.3125rem;
+  line-height: 1.2;
+  color: #1a2028;
+  text-wrap: balance;
+}
+
+.mnt-invite-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 8px;
+  padding-top: 11px;
+  border-top: 1px solid rgba(27, 32, 39, 0.14);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: #1a2028;
+}
+
+.mnt-invite-arrow {
+  font-size: 0.9375rem;
+  transition: transform 0.35s var(--mnt-ease);
+}
+
+.mnt-invite:hover .mnt-invite-arrow {
+  transform: translate(3px, -3px);
+}
+
+.mnt.is-open .mnt-invite {
+  opacity: 0;
+  transform: translateY(8px) rotate(-1.5deg) scale(0.98);
+  transition: opacity 0.3s ease, transform 0.4s var(--mnt-ease);
+  pointer-events: none;
+}
+
+/* ---- footer -------------------------------------------------------- */
+
+.mnt-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(251, 243, 226, 0.14);
+  color: rgba(251, 243, 226, 0.56);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: opacity 0.5s ease;
+  animation: mnt-rise 1.1s var(--mnt-ease) 0.62s both;
+}
+
+.mnt.is-open .mnt-foot {
+  opacity: 0;
+}
+
+/* ---- water and canoe motion ---------------------------------------- */
+
+.mnt.is-ready .mnt-water-calm {
+  animation: mnt-drift-slow 34s ease-in-out infinite alternate;
+}
+
+.mnt.is-ready .mnt-water-sheen {
+  animation:
+    mnt-drift 19s ease-in-out infinite alternate,
+    mnt-glow 11s ease-in-out infinite alternate;
+}
+
+.mnt.is-ready .mnt-canoe-bob {
+  animation: mnt-bob 9.5s ease-in-out infinite;
+}
+
+@keyframes mnt-drift {
+  from {
+    transform: translateX(-16px);
+  }
+  to {
+    transform: translateX(22px);
+  }
+}
+
+@keyframes mnt-drift-slow {
+  from {
+    transform: translateX(10px);
+  }
+  to {
+    transform: translateX(-14px);
+  }
+}
+
+@keyframes mnt-glow {
+  from {
+    opacity: 0.72;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mnt-bob {
+  0%,
+  100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate(4px, -2.5px) rotate(0.7deg);
+  }
+}
+
+.mnt-water-calm,
+.mnt-water-sheen,
+.mnt-canoe-bob {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+/* ---- the note ------------------------------------------------------ */
+
+.mnt-note {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: clamp(0px, 4vw, 48px);
+  background: rgba(4, 14, 26, 0.28);
+  perspective: 1800px;
+  perspective-origin: 50% 50%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.35s ease,
+    background-color 0.6s ease,
+    visibility 0s linear 0.35s;
+}
+
+.mnt.is-open .mnt-note {
+  background: rgba(4, 14, 26, 0.6);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:
+    opacity 0.7s ease 0.5s,
+    background-color 0.9s ease 0.35s,
+    visibility 0s linear 0s;
+}
+
+.mnt-note:focus {
+  outline: none;
+}
+
+.mnt-paper {
+  position: relative;
+  width: min(784px, 100%);
+  max-height: min(88dvh, 880px);
+  perspective: 1700px;
+  transform-origin: 50% 100%;
+  transform: translate3d(0, 5%, 0) rotateX(56deg) scale(0.44);
+  transition: transform 0.6s var(--mnt-ease);
+}
+
+.mnt.is-open .mnt-paper {
+  transform: none;
+  transition: transform 1.75s var(--mnt-travel) 0.42s;
+}
+
+/* The folded cover: part of the paper until it swings open. */
+.mnt-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 34px;
+  overflow: hidden;
+  border-radius: 3px;
+  background-color: var(--mnt-paper);
+  background-image: var(--mnt-paper-noise);
+  background-size: 220px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.75) inset,
+    0 40px 90px -40px rgba(2, 10, 20, 0.95),
+    0 10px 30px -18px rgba(2, 10, 20, 0.7);
+  transform-origin: 0 50%;
+  transform: rotateY(0deg);
+  transition:
+    transform 0.5s var(--mnt-ease) 0.06s,
+    opacity 0.22s ease 0.28s;
+}
+
+.mnt.is-open .mnt-cover {
+  transform: rotateY(-174deg);
+  opacity: 0;
+  transition:
+    transform 1.05s cubic-bezier(0.55, 0.02, 0.3, 1) 1.12s,
+    opacity 0.42s linear 1.42s;
+}
+
+/* The fold down the middle of the closed note. */
+.mnt-cover-fold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 34px;
+  margin-left: -17px;
+  background: linear-gradient(
+    90deg,
+    rgba(120, 96, 62, 0) 0%,
+    rgba(120, 96, 62, 0.1) 42%,
+    rgba(120, 96, 62, 0.16) 50%,
+    rgba(120, 96, 62, 0.1) 58%,
+    rgba(120, 96, 62, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.mnt-cover-top {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mnt-cover-icon {
+  width: 26px;
+  height: 26px;
+  font-size: 26px;
+}
+
+.mnt-cover-kicker {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #8d6c3f;
+}
+
+.mnt-cover-title {
+  max-width: 18ch;
+  font-family: 'Instrument Serif', 'Times New Roman', Georgia, serif;
+  font-size: clamp(1.75rem, 4.2vw, 2.4rem);
+  line-height: 1.1;
+  color: #1a2028;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.mnt-cover-seal {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: radial-gradient(120% 120% at 32% 26%, #d9a05c, #a9662f 70%, #8a4f22);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 12px 22px -12px rgba(80, 40, 10, 0.9);
+}
+
+.mnt-cover-seal-inner {
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255, 236, 205, 0.6);
+  border-radius: 50%;
+}
+
+.mnt-cover-hint {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(27, 32, 39, 0.52);
+}
+
+/* The page that was under the cover. */
+.mnt-letter {
+  position: relative;
+  z-index: 1;
+  max-height: min(88dvh, 880px);
+  padding: clamp(30px, 5vw, 62px) clamp(24px, 5vw, 68px) clamp(28px, 4vw, 52px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 3px;
+  background-color: rgba(248, 241, 228, 0.95);
+  background-image: var(--mnt-paper-noise);
+  background-size: 220px;
+  backdrop-filter: blur(12px) saturate(1.04);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.7) inset,
+    0 50px 110px -50px rgba(2, 10, 20, 0.95),
+    0 12px 34px -22px rgba(2, 10, 20, 0.7);
+  opacity: 0;
+  transform: translateY(10px);
+  transition:
+    opacity 0.24s ease,
+    transform 0.3s ease;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(120, 96, 62, 0.35) transparent;
+}
+
+.mnt.is-open .mnt-letter {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 0.6s ease 1.62s,
+    transform 0.7s var(--mnt-ease) 1.62s;
+}
+
+.mnt-letter::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mnt-letter::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(120, 96, 62, 0.28);
+}
+
+.mnt-letter-kicker {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #97733f;
+}
+
+.mnt-letter-title {
+  margin: 14px 0 0;
+  font-family: 'Instrument Serif', 'Times New Roman', Georgia, serif;
+  font-size: clamp(1.9rem, 3.4vw, 2.6rem);
+  font-weight: 400;
+  line-height: 1.06;
+  letter-spacing: -0.01em;
+  color: #171c23;
+  text-wrap: balance;
+}
+
+.mnt-letter-body {
+  max-width: 54ch;
+  margin-top: 22px;
+  color: var(--mnt-ink-soft);
+  font-size: 1rem;
+  line-height: 1.72;
+}
+
+.mnt-letter-body p {
+  margin: 0 0 1em;
+  text-wrap: pretty;
+}
+
+.mnt-letter-body p:first-child {
+  color: #22282f;
+}
+
+.mnt-letter-body p:last-child {
+  margin-bottom: 0;
+}
+
+.mnt-sign {
+  position: relative;
+  margin-top: 26px;
+}
+
+.mnt-sign-line {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--mnt-ink-soft);
+}
+
+.mnt-sign-name {
+  margin: 4px 0 0;
+  font-family: 'Instrument Serif', 'Times New Roman', Georgia, serif;
+  font-size: 1.375rem;
+  line-height: 1.2;
+  color: #1b2027;
+}
+
+.mnt-sign-mark {
+  display: block;
+  width: 148px;
+  height: 16px;
+  margin-top: 2px;
+  color: #b07c41;
+  opacity: 0.72;
+}
+
+.mnt-notes {
+  margin-top: 34px;
+  padding-top: 18px;
+  border-top: 1px solid rgba(27, 32, 39, 0.14);
+}
+
+.mnt-notes-title {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #97733f;
+}
+
+.mnt-notes-body {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 10px 0 0;
+  color: var(--mnt-ink-soft);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.mnt-notes-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b07c41;
+  box-shadow: 0 0 0 3px rgba(176, 124, 65, 0.16);
+}
+
+.mnt-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 28px;
+  padding: 10px 16px 10px 13px;
+  border: 1px solid rgba(27, 32, 39, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #1b2027;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  cursor: pointer;
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    transform 0.25s var(--mnt-ease);
+}
+
+.mnt-back svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 0.3s var(--mnt-ease);
+}
+
+.mnt-back:hover {
+  border-color: rgba(27, 32, 39, 0.32);
+  background: #fff;
+}
+
+.mnt-back:hover svg {
+  transform: translateX(-3px);
+}
+
+.mnt-back:active {
+  transform: translateY(1px);
+}
+
+.mnt-back:focus-visible {
+  outline-color: #1b2027;
+}
+
+/* ---- small screens --------------------------------------------------
+   Portrait phones get a deliberate window: the lake becomes a wide
+   landscape band above the page, cropped across the summit and the
+   canoe, and the message sits on the deep water colour below it. */
+
+@media (max-width: 880px) {
+  .mnt-world {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: 48dvh;
+    min-height: 320px;
+  }
+
+  .mnt-world::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 28%;
+    background: linear-gradient(to bottom, rgba(8, 26, 41, 0), var(--mnt-navy));
+    pointer-events: none;
+  }
+
+  .mnt-layers {
+    width: 100%;
+    height: 100%;
+  }
+
+  .mnt.is-open .mnt-layers {
+    transform: translate3d(0, -1.5%, 380px);
+    transition: transform 1900ms var(--mnt-travel) 40ms;
+  }
+
+  .mnt-ui {
+    padding: 16px 18px 20px;
+  }
+
+  .mnt-main {
+    padding-top: calc(48dvh + 22px);
+  }
+
+  .mnt-copy {
+    max-width: none;
+  }
+
+  .mnt-h1 {
+    max-width: 18ch;
+    font-size: clamp(2.15rem, 9.6vw, 2.9rem);
+    line-height: 1.02;
+  }
+
+  .mnt-lead {
+    margin-top: 14px;
+    font-size: 0.9375rem;
+    line-height: 1.62;
+    max-width: 40ch;
+  }
+
+  .mnt-invite {
+    width: 100%;
+    transform: rotate(-0.8deg);
+  }
+
+  .mnt-foot {
+    margin-top: 22px;
+    font-size: 8.5px;
+    letter-spacing: 0.1em;
+  }
+
+  .mnt-note {
+    padding: 0;
+    perspective: 1200px;
+  }
+
+  .mnt-paper {
+    width: 100%;
+    max-height: 100dvh;
+    transform: translate3d(0, 4%, 0) rotateX(48deg) scale(0.62);
+  }
+
+  .mnt-letter {
+    max-height: 100dvh;
+    min-height: 100dvh;
+    padding: max(30px, calc(env(safe-area-inset-top) + 22px)) 22px
+      max(32px, calc(env(safe-area-inset-bottom) + 26px));
+    border-radius: 0;
+  }
+
+  .mnt-cover {
+    border-radius: 0;
+    padding: 24px;
+  }
+
+  .mnt-letter-title {
+    font-size: clamp(1.9rem, 8vw, 2.3rem);
+  }
+
+  .mnt-letter-body {
+    font-size: 0.9375rem;
+  }
+
+  .mnt-back {
+    margin-top: 30px;
+  }
+
+  .mnt.is-open .mnt-note {
+    background: rgba(4, 14, 26, 0.72);
+  }
+}
+
+@media (max-width: 380px) {
+  .mnt-status {
+    font-size: 9.5px;
+    padding: 6px 10px 6px 9px;
+  }
+
+  .mnt-word {
+    font-size: 15px;
+  }
+
+  .mnt-h1 {
+    font-size: 2.05rem;
+  }
+}
+
+/* ---- reduced motion -------------------------------------------------
+   No camera, no drift, no unfold: the note opens directly with a short
+   fade. Both the JS flag and the media query are handled so the scene
+   is already still on the very first paint. */
+
+@media (prefers-reduced-motion: reduce) {
+  .mnt *,
+  .mnt *::before,
+  .mnt *::after {
+    animation: none !important;
+  }
+}
+
+.mnt.is-reduced .mnt-copy,
+.mnt.is-reduced .mnt-invite,
+.mnt.is-reduced .mnt-head,
+.mnt.is-reduced .mnt-foot {
+  animation: none;
+}
+
+.mnt.is-reduced .mnt-layer {
+  animation: none;
+}
+
+.mnt.is-reduced .mnt-canoe-bob,
+.mnt.is-reduced .mnt-water-calm,
+.mnt.is-reduced .mnt-water-sheen {
+  animation: none !important;
+}
+
+.mnt.is-reduced.is-open .mnt-layers,
+.mnt.is-reduced.is-open .mnt-paper {
+  transform: none;
+  transition: none;
+}
+
+.mnt.is-reduced .mnt-layers,
+.mnt.is-reduced .mnt-paper {
+  transition: none;
+}
+
+.mnt.is-reduced .mnt-copy {
+  transition: opacity 0.2s ease;
+  transform: none;
+}
+
+.mnt.is-reduced .mnt-note {
+  transition:
+    opacity 0.2s ease,
+    visibility 0s linear 0.2s,
+    background-color 0.2s ease;
+}
+
+.mnt.is-reduced.is-open .mnt-note {
+  transition:
+    opacity 0.2s ease,
+    visibility 0s linear 0s,
+    background-color 0.2s ease;
+}
+
+.mnt.is-reduced .mnt-cover {
+  display: none;
+}
+
+.mnt.is-reduced .mnt-letter {
+  transition: opacity 0.2s ease;
+  transform: none;
+}
+
+.mnt.is-reduced.is-open .mnt-letter {
+  transition: opacity 0.24s ease 0.06s;
+}
+
+/* A tab in the background gets no frames at all. */
+.mnt.is-hidden *,
+.mnt.is-hidden *::before,
+.mnt.is-hidden *::after {
+  animation-play-state: paused !important;
+}
+
+/* Browsers without backdrop blur still get an opaque, readable paper. */
+@supports not (backdrop-filter: blur(2px)) {
+  .mnt-letter {
+    background-color: #f8f1e4;
+  }
+
+  .mnt-status {
+    background-color: rgba(8, 22, 36, 0.55);
+  }
+}

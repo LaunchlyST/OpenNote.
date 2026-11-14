@@ -41,6 +41,7 @@
     "test:launch": "tsx scripts/launch-smoke.ts"
   },
   "dependencies": {
+    "@types/three": "^0.187.0",
     "@tailwindcss/vite": "^4.3.3",
     "better-auth": "^1.7.7",
     "better-sqlite3": "^12.11.1",
@@ -52,7 +53,8 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "stripe": "^17.7.0",
-    "tailwindcss": "^4.3.3"
+    "tailwindcss": "^4.3.3",
+    "three": "^0.187.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
