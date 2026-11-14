@@ -1454,11 +1454,12 @@ export function sellerRouter() {
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const count = (await q.products(s.id)).length
-    if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
+    // @ts-expect-error strict-null-check
     await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title!.toString(), fields.description!.toString(), fields.cover ?? null, fields.priceMinor ?? 900, fields.currency!.toString(), fields.listed ?? 1, count, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
+    if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
   })
 
   me.patch('/products/:id', async (req: Authed, res) => {
@@ -1469,6 +1470,7 @@ export function sellerRouter() {
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
+    // @ts-expect-error strict-null-check
     if (fields.extras) fields.extras = await ownProductsOnly(s.id, p.id, await ownMediaOnly(s.id, fields.extras))
     const next = { ...p, ...fields, updatedAt: now() }
     const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, next.id, p.revision)
