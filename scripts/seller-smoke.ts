@@ -543,7 +543,9 @@ try {
     check('an expired code is refused at checkout', (await buy({ coupon: 'OLD' })).status === 409)
     const off = await req('POST', '/api/seller/coupons', { code: 'PAUSED', kind: 'percent', value: 20, active: false }, A)
     check('a switched-off code is refused', off.status === 201 && (await buy({ coupon: 'PAUSED' })).status === 409)
-    const other = (await req('POST', '/api/seller/products', { title: 'Second product', priceMinor: 500, currency: 'gbp' }, A)).json.product.id
+    const secondProductRes = await req('POST', '/api/seller/products', { title: 'Second product', priceMinor: 500, currency: 'gbp' }, A)
+    if (!secondProductRes.json?.product) throw new Error(`DEBUG ${secondProductRes.status} ${secondProductRes.text}`)
+    const other = secondProductRes.json.product.id
     const scoped = await req('POST', '/api/seller/coupons', { code: 'OTHERONLY', kind: 'percent', value: 20, productIds: [other, 'prd_someone_else'] }, A)
     check('a code can be limited to the seller’s own products only', JSON.stringify(scoped.json.coupon.productIds) === JSON.stringify([other]))
     check('a code limited to other products doesn’t apply', (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'OTHERONLY' })).json.quote.coupon === null)
