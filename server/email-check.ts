@@ -170,7 +170,7 @@ export async function checkEmail(raw: string, opts: { acceptSuggestion?: boolean
   if (hint && !opts.acceptSuggestion) return { status: 'suggest', suggestion: `${email.slice(0, email.lastIndexOf('@'))}@${hint}` }
   let dnsAnswer: DnsAnswer
   if (testDomains() && domain.endsWith('.test')) dnsAnswer = { kind: 'mx', hosts: [domain] }
-  else dnsAnswer = await withTimeout((deps.dns ?? lookupDomain)(domain), 4000, { kind: 'error' })
+  else dnsAnswer = await withTimeout((deps.dns ?? lookupDomain)(domain), 15000, { kind: 'error' })
   if (dnsAnswer.kind === 'nxdomain') return { status: 'invalid', reason: 'no-domain' }
   if (dnsAnswer.kind === 'none') return { status: 'invalid', reason: 'no-mail' }
   // RFC 7505: a single MX of "." means the domain accepts no mail
