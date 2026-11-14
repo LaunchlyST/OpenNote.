@@ -102,6 +102,21 @@ const uid = () => Math.random().toString(36).slice(2, 9)
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
+const STORAGE_KEY = 'cs.store.doc.v1'
+
+function loadDoc(): Doc {
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY)
+    if (!raw) return demoDoc()
+    const parsed = JSON.parse(raw) as Partial<Doc>
+    if (!Array.isArray(parsed.sections) || !Array.isArray(parsed.products)) return demoDoc()
+    return { sections: parsed.sections, products: parsed.products, published: Boolean(parsed.published) }
+  } catch {
+    /* corrupted or blocked storage -> start fresh */
+    return demoDoc()
+  }
+}
+
 const TAG: Record<SectionType, string> = {
   profile: 'Locked',
   products: 'Upload Digital Product',
@@ -281,7 +296,7 @@ function IconFor({ type, size = 13 }: { type: SectionType; size?: number }) {
 /* ------------------------------------------------------------------- page --- */
 
 export function CreatorStore() {
-  const [doc, setDoc] = useState<Doc>(demoDoc)
+  const [doc, setDoc] = useState<Doc>(loadDoc)
   const docRef = useRef(doc)
   useEffect(() => {
     docRef.current = doc
@@ -307,6 +322,23 @@ export function CreatorStore() {
   const toastTimer = useRef<number | undefined>(undefined)
   const dragSnapshot = useRef<Doc | null>(null)
 
+  const persistNow = useCallback(() => {
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(docRef.current))
+    } catch {
+      /* storage blocked */
+    }
+  }, [])
+
+  const markSaving = useCallback(() => {
+    setSaveState('saving')
+    window.clearTimeout(saveTimer.current)
+    saveTimer.current = window.setTimeout(() => {
+      persistNow()
+      setSaveState('saved')
+    }, 650)
+  }, [persistNow])
+
   const syncHistory = useCallback(() => {
     setCanUndo(past.current.length > 0)
     setCanRedo(future.current.length > 0)
@@ -317,12 +349,6 @@ export function CreatorStore() {
       window.clearTimeout(saveTimer.current)
       window.clearTimeout(toastTimer.current)
     }
-  }, [])
-
-  const markSaving = useCallback(() => {
-    setSaveState('saving')
-    window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => setSaveState('saved'), 650)
   }, [])
 
   const flash = useCallback((message: string) => {
@@ -350,11 +376,15 @@ export function CreatorStore() {
   )
 
   /** A live edit while dragging: no history entry until the pointer is released. */
-  const live = useCallback((updater: (current: Doc) => Doc) => {
-    const next = updater(docRef.current)
-    docRef.current = next
-    setDoc(next)
-  }, [])
+  const live = useCallback(
+    (updater: (current: Doc) => Doc) => {
+      const next = updater(docRef.current)
+      docRef.current = next
+      setDoc(next)
+      markSaving()
+    },
+    [markSaving],
+  )
 
   const undo = () => {
     const prev = past.current.pop()
@@ -499,7 +529,9 @@ export function CreatorStore() {
   }
 
   const publish = () => {
+    persistNow()
     edit((current) => ({ ...current, published: true }))
+    setSaveState('saved')
     flash('Store published — your page is live')
   }
 
@@ -733,6 +765,54 @@ const PALETTE: Array<{ type: SectionType; icon: ReactNode; label: string; descri
     icon: <MonitorPlay size={15} />,
     label: 'Digital Product Video Preview',
     description: 'Video + swipeable Buy page',
+  },
+  {
+    type: 'showcase',
+    icon: <LayoutGrid size={15} />,
+    label: 'Showcase',
+    description: 'Featured product cards',
+  },
+  {
+    type: 'links',
+    icon: <Link2 size={15} />,
+    label: 'Links',
+    description: 'Your other stores and pages',
+  },
+  {
+    type: 'social',
+    icon: <Share2 size={15} />,
+    label: 'Social',
+    description: 'Instagram, TikTok, YouTube…',
+  },
+  {
+    type: 'text',
+    icon: <AlignLeft size={15} />,
+    label: 'Text',
+    description: 'A headline or note',
+  },
+  {
+    type: 'image',
+    icon: <ImageIcon size={15} />,
+    label: 'Image',
+    description: 'One image with caption',
+  },
+  {
+    type: 'video',
+    icon: <VideoIcon size={15} />,
+    label: 'Video',
+    description: 'Embed or link a video',
+  },
+  {
+    type: 'newsletter',
+    icon: <Mail size={15} />,
+    label: 'Newsletter',
+    description: 'Collect subscriber emails',
+  },
+  {
+    type: 'divider',
+    icon: <Minus size={15} />,
+    label: 'Divider',
+    description: 'A quiet break between sections',
   },
   {
     type: 'email',
@@ -1856,13 +1936,11 @@ function StorefrontViewer({
 function Storefront({ doc }: { doc: Doc }) {
   return (
     <div className="cs-storefront">
-      {doc.sections
-        .filter((s) => s.type !== 'divider')
-        .map((section) => (
-          <div key={section.id} className="cs-storefront-block">
-            <BlockContent section={section} products={doc.products} />
-          </div>
-        ))}
+      {doc.sections.map((section) => (
+        <div key={section.id} className="cs-storefront-block">
+          <BlockContent section={section} products={doc.products} />
+        </div>
+      ))}
       <p className="cs-storefront-foot">Made with Launchly</p>
     </div>
   )

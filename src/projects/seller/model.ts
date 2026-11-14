@@ -15,6 +15,41 @@ export interface Block {
   look?: Look
 }
 
+/**
+ * A product slide inside one product block. A block can hold one slide or a
+ * swipeable carousel of them; either way it counts as ONE product block when
+ * the store's pages are balanced.
+ *
+ * Digital and affiliate settings are kept side by side, so switching a slide
+ * between the two never deletes the other side's file, product or cover.
+ */
+export interface AffiliateLink {
+  /** The destination. http(s) only; validated again by the server. */
+  url: string
+  title: string
+  description: string
+  /** Cover image id (media_…), never a private product file. */
+  cover: string | null
+  /** Optional "View product ↗"; empty hides the button (the image stays clickable). */
+  cta: string
+}
+
+export interface ProductSlide {
+  id: string
+  kind: 'digital' | 'affiliate'
+  /** Digital: the product this slide sells. Empty until one is picked. */
+  productId: string | null
+  /** Affiliate: the external destination and its presentation. */
+  affiliate: AffiliateLink
+}
+
+/** Page 2 and Page 3. Home stays in `Page.blocks` so older stores keep working. */
+export interface StorePageDoc {
+  id: string
+  name: string
+  blocks: Block[]
+}
+
 export interface Look {
   align?: 'left' | 'center' | 'right'
   size?: 's' | 'm' | 'l' | 'xl'
@@ -30,6 +65,8 @@ export interface Page {
   theme: { preset: string; accent: string; font: string; button: 'rounded' | 'pill' | 'sharp'; background: 'solid' | 'gradient' }
   socials: { instagram: string; youtube: string; x: string; website: string }
   blocks: Block[]
+  /** Page 2 and Page 3 (Home is `blocks`, above). Absent on older stores. */
+  pages?: StorePageDoc[]
   /** Banner behind the profile: an image or short video (plays when tapped). */
   banner?: { media: string; kind: 'image' | 'video' } | null
   /** A second design to try; `use` picks which one Publish puts live. */
@@ -72,6 +109,8 @@ export interface ShopProduct {
   related?: string[]
   /** Stage C: a bundle's items; available only when every item can be delivered. */
   bundle?: { items: Array<{ id: string; title: string }>; available: boolean } | null
+  /** Affiliate / external mode: when set, shows an external link instead of Buy/Download. */
+  affiliate?: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
 }
 
 export type CardLayout = 'compact' | 'showcase' | 'featured'
@@ -93,6 +132,7 @@ export type ProductExtras = {
   textPos: { title: number; desc: number }
   related: string[]
   bundle: string[]
+  affiliate: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
 }
 export const DEFAULT_EXTRAS: ProductExtras = {
   offer: { on: false, kind: 'percent', value: 20, starts: null, ends: null, badge: 'PERCENT', badgeColor: '#e11d48' },
@@ -111,6 +151,7 @@ export const DEFAULT_EXTRAS: ProductExtras = {
   textPos: { title: 0, desc: 0 },
   related: [],
   bundle: [],
+  affiliate: { url: '', image: '', title: '', description: '', disclosure: '' },
 }
 
 /** Fill any missing V2 fields so older products keep working. */
@@ -120,6 +161,9 @@ export function withExtras(x: Partial<ProductExtras> | undefined): ProductExtras
     ...x,
     offer: { ...DEFAULT_EXTRAS.offer, ...x?.offer },
     cta: { ...DEFAULT_EXTRAS.cta, ...x?.cta },
+    hidden: x?.hidden ?? false,
+    layout: x?.layout ?? 'compact',
+    subtitle: x?.subtitle ?? '',
     crop: { ...DEFAULT_EXTRAS.crop, ...x?.crop },
     badges: { ...DEFAULT_EXTRAS.badges, ...x?.badges },
     textPos: { ...DEFAULT_EXTRAS.textPos, ...x?.textPos },
@@ -128,6 +172,7 @@ export function withExtras(x: Partial<ProductExtras> | undefined): ProductExtras
     faq: x?.faq ?? [],
     related: x?.related ?? [],
     bundle: x?.bundle ?? [],
+    affiliate: x?.affiliate ?? DEFAULT_EXTRAS.affiliate,
   }
 }
 
@@ -211,7 +256,7 @@ export function newBlock(type: BlockType): Block {
     text: { heading: 'About', body: '' },
     image: { media: null, alt: '', caption: '' },
     links: { links: [{ label: 'My YouTube', url: '' }] },
-    featured: { productId: null, note: '' },
+    featured: { productId: null, note: '', slides: [] },
     grid: { heading: 'Shop', productIds: [] },
     faq: { heading: 'FAQ', items: [{ q: 'How do I get my download?', a: 'Right after paying, and by email.' }] },
     tiktok: { heading: 'Latest on TikTok', videos: [] },
@@ -220,6 +265,143 @@ export function newBlock(type: BlockType): Block {
     footer: { text: '' },
   }
   return { id, type, hidden: false, data: data[type] }
+}
+
+/* ------------------------------------------------ store pages + slides --- */
+
+/** Three store pages at most: Home, Page 2 and Page 3. */
+export const MAX_STORE_PAGES = 3
+/** A product block (one product, a carousel, or a collection) per page. */
+export const MAX_PRODUCT_BLOCKS_PER_PAGE = 3
+
+/** A block that presents products. A carousel is still one block, whatever its slide count. */
+export const isProductBlock = (b: Block) => b.type === 'featured' || b.type === 'grid'
+
+export const productBlockCount = (blocks: Block[]) => blocks.filter(isProductBlock).length
+
+export const pageLabel = (index: number) => (index === 0 ? 'Home' : `Page ${index + 1}`)
+
+export const newPageId = () => `pg_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
+
+export function newStorePage(): StorePageDoc {
+  return { id: newPageId(), name: '', blocks: [] }
+}
+
+/** Home first, then Page 2 and Page 3 exactly as saved (never more than three). */
+export function storePages(page: Page): Array<{ id: string; name: string; blocks: Block[]; index: number }> {
+  const extra = (page.pages ?? []).slice(0, MAX_STORE_PAGES - 1)
+  return [
+    { id: 'home', name: pageLabel(0), blocks: page.blocks, index: 0 },
+    ...extra.map((p, i) => ({ id: p.id, name: pageLabel(i + 1), blocks: p.blocks, index: i + 1 })),
+  ]
+}
+
+/** Replace one page's blocks without touching the other pages. */
+export function withPageBlocks(page: Page, index: number, blocks: Block[]): Page {
+  if (index <= 0) return { ...page, blocks }
+  const extra = [...(page.pages ?? [])]
+  while (extra.length < index) extra.push(newStorePage())
+  extra[index - 1] = { ...extra[index - 1], blocks }
+  return { ...page, pages: extra }
+}
+
+/** A page visitors can see: it has at least one visible section. Home is always shown. */
+export function pageHasContent(blocks: Block[]): boolean {
+  return blocks.some((b) => !b.hidden && b.type !== 'header' && b.type !== 'footer')
+}
+
+/** Add blank page docs up to `index` (Page 2 and Page 3 are created on demand). */
+export function ensurePage(page: Page, index: number): Page {
+  if (index <= 0) return page
+  const extra = [...(page.pages ?? [])]
+  while (extra.length < Math.min(index, MAX_STORE_PAGES - 1)) extra.push(newStorePage())
+  return { ...page, pages: extra }
+}
+
+/**
+ * Where a new product block goes. The current page takes it when it still has
+ * room; otherwise the next page is used, creating Page 2/Page 3 as needed.
+ * Returns null when all three pages are full.
+ */
+export function findProductBlockPage(page: Page, from: number): { page: Page; pageIndex: number } | null {
+  let next = page
+  for (let i = Math.max(0, from); i < MAX_STORE_PAGES; i++) {
+    if (!storePages(next)[i]) next = ensurePage(next, i)
+    if (productBlockCount(storePages(next)[i].blocks) < MAX_PRODUCT_BLOCKS_PER_PAGE) return { page: next, pageIndex: i }
+  }
+  return null
+}
+
+/** Insert a block at a structured position: after the header, before the footer. */
+export function insertAt(blocks: Block[], block: Block, at: number): Block[] {
+  const next = [...blocks]
+  const max = next.length
+  next.splice(Math.min(Math.max(0, at), max), 0, block)
+  return next
+}
+
+/** New slide defaults. Both sides are kept so switching type loses nothing. */
+export function newSlide(kind: ProductSlide['kind'] = 'digital', productId: string | null = null): ProductSlide {
+  return {
+    id: `sld_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`,
+    kind,
+    productId,
+    affiliate: { url: '', title: '', description: '', cover: null, cta: 'View product ↗' },
+  }
+}
+
+/** Normalise a slide from older or partial data. */
+export function cleanSlide(raw: Partial<ProductSlide> | null | undefined): ProductSlide | null {
+  if (!raw || typeof raw !== 'object') return null
+  const a = (raw.affiliate ?? {}) as Partial<AffiliateLink>
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : newSlide().id,
+    kind: raw.kind === 'affiliate' ? 'affiliate' : 'digital',
+    productId: typeof raw.productId === 'string' && raw.productId ? raw.productId : null,
+    affiliate: {
+      url: typeof a.url === 'string' ? a.url : '',
+      title: typeof a.title === 'string' ? a.title : '',
+      description: typeof a.description === 'string' ? a.description : '',
+      cover: typeof a.cover === 'string' ? a.cover : null,
+      cta: typeof a.cta === 'string' ? a.cta : 'View product ↗',
+    },
+  }
+}
+
+/**
+ * The slides of a product block. Older stores only have `productId`, so that
+ * becomes a single digital slide; a block with neither is an empty slot.
+ */
+export function slidesOf(block: Block): ProductSlide[] {
+  const raw = Array.isArray(block.data?.slides) ? block.data.slides : []
+  const slides = raw.map((s: Partial<ProductSlide>) => cleanSlide(s)).filter((s: ProductSlide | null): s is ProductSlide => Boolean(s))
+  if (slides.length) return slides
+  return block.data?.productId ? [{ ...newSlide('digital', String(block.data.productId)), id: `sld_${block.id}` }] : []
+}
+
+/** What the server (and older renderers) use as "the product" of a block. */
+export function primaryProductId(slides: ProductSlide[]): string | null {
+  return slides.find((s) => s.kind === 'digital' && s.productId)?.productId ?? null
+}
+
+/** http(s) only: no javascript:, data:, credentials or empty hosts. Query strings survive. */
+export function safeExternalUrl(input: string): string | null {
+  const raw = input.trim()
+  if (!raw) return null
+  try {
+    const u = new URL(raw)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+    if (!u.hostname || u.username || u.password) return null
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+
+/** An empty affiliate URL is allowed while drafting; a filled one must be safe. */
+export const affiliateUrlProblem = (url: string): string | null => {
+  if (!url.trim()) return null
+  return safeExternalUrl(url) ? null : 'Enter a full http:// or https:// link. Other link types aren’t allowed.'
 }
 
 export const PRESETS = [

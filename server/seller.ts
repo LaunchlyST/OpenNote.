@@ -13,7 +13,7 @@
  * payouts and paid checkout need setting up; without TikTok credentials the
  * TikTok step says so and "Continue without TikTok" works.
  */
-import { checkEmail } from './email-check.ts'
+import { checkEmail, normalizeEmail } from './email-check.ts'
 import { CARD_MINIMUM, isTimeZone, normaliseCode, offerPrice, offerWindow, quote as priceQuote, zonedToUtc } from './seller-pricing.ts'
 import type { CouponRow } from './seller-pricing.ts'
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
@@ -422,6 +422,19 @@ const safeUrl = (v: unknown) => {
     return ''
   }
 }
+/** Affiliate destinations: http(s) only, no credentials, query strings and tracking params intact. */
+const affiliateUrl = (v: unknown) => {
+  const s = str(v, 1000).trim()
+  if (!s) return ''
+  try {
+    const u = new URL(s)
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return ''
+    if (!u.hostname || u.username || u.password) return ''
+    return u.toString()
+  } catch {
+    return ''
+  }
+}
 const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.test(v) ? v : null)
 
 /* ------------------------------------------------------- page schema --- */
@@ -442,6 +455,8 @@ interface Page {
   theme: { preset: string; accent: string; font: string; button: string; background: string }
   socials: { instagram: string; youtube: string; x: string; website: string }
   blocks: Block[]
+  /** Page 2 and Page 3. Home is `blocks`, so older stores keep working unchanged. */
+  pages?: Array<{ id: string; name: string; blocks: Block[] }>
   /** Banner behind the profile (image or short video). */
   banner?: { media: string; kind: 'image' | 'video' }
   /** Editor only: a second design the seller can try, and which one Publish puts live. */
@@ -502,9 +517,39 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
           }),
         }
         break
-      case 'featured':
-        data = { productId: typeof d.productId === 'string' && productIds.has(d.productId) ? d.productId : null, note: str(d.note, 200) }
+      case 'featured': {
+        const rawSlides = Array.isArray(d.slides) ? d.slides.slice(0, 8) : []
+        const slides: Array<Record<string, unknown>> = []
+        for (const raw of rawSlides) {
+          if (!raw || typeof raw !== 'object') continue
+          const s = raw as Record<string, unknown>
+          const a = (s.affiliate ?? {}) as Record<string, unknown>
+          const kind = s.kind === 'affiliate' ? 'affiliate' : 'digital'
+          const slideId = /^sld_[a-z0-9_-]{4,40}$/i.test(String(s.id)) ? String(s.id) : `sld_${randomBytes(6).toString('hex')}`
+          // Both sides are kept, so switching a slide's type never loses the other one.
+          slides.push({
+            id: slideId,
+            kind,
+            productId: typeof s.productId === 'string' && productIds.has(s.productId) ? s.productId : null,
+            affiliate: {
+              // Only http(s) destinations are stored; anything else is dropped.
+              url: affiliateUrl(a.url),
+              title: str(a.title, 80),
+              description: str(a.description, 500),
+              cover: mediaRef(a.cover),
+              cta: str(a.cta, 40),
+            },
+          })
+        }
+        const firstDigital = slides.find((s) => s.kind === 'digital' && s.productId)?.productId
+        data = {
+          // Older renderers read productId; keep it pointing at the first digital slide.
+          productId: typeof firstDigital === 'string' ? firstDigital : typeof d.productId === 'string' && productIds.has(d.productId) ? d.productId : null,
+          note: str(d.note, 200),
+          ...(rawSlides.length ? { slides } : {}),
+        }
         break
+      }
       case 'grid':
         data = {
           heading: str(d.heading, 120),
@@ -548,6 +593,28 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
   const ordered = [{ ...head, hidden: false }, ...blocks.filter((b) => b.type !== 'footer' && b.type !== 'header'), { ...foot, hidden: false }]
   blocks.length = 0
   blocks.push(...ordered)
+  // Page 2 and Page 3: content only (the profile header, page tabs and footer are
+  // shared and rendered once around the selected page). Home is `blocks` above,
+  // so stores saved before pages existed load unchanged.
+  const pages: Array<{ id: string; name: string; blocks: Block[] }> = []
+  if (!nested) {
+    const pagesIn = Array.isArray(p.pages) ? p.pages.slice(0, 2) : []
+    const seenPages = new Set<string>()
+    for (const raw of pagesIn) {
+      if (!raw || typeof raw !== 'object') continue
+      const pg = raw as Record<string, unknown>
+      let pageId = str(pg.id, 40)
+      if (!/^pg_[a-z0-9_-]{4,40}$/i.test(pageId) || seenPages.has(pageId)) pageId = `pg_${randomBytes(6).toString('hex')}`
+      seenPages.add(pageId)
+      const one = cleanPage({ ...pg, pages: [], style2: null, use: 1 }, productIds, true)
+      if (typeof one === 'string') continue
+      pages.push({
+        id: pageId,
+        name: str(pg.name, 40),
+        blocks: one.blocks.filter((b) => b.type !== 'header' && b.type !== 'footer'),
+      })
+    }
+  }
   const socials = (p.socials ?? {}) as Record<string, unknown>
   return {
     name: str(p.name, 60),
@@ -568,6 +635,7 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
       return media ? { banner: { media, kind: b!.kind === 'video' ? 'video' : 'image' } } : {}
     })(),
     blocks,
+    ...(pages.length ? { pages } : {}),
     ...(nested ? {} : cleanStyle2(p, productIds)),
   }
 }
@@ -657,6 +725,8 @@ export type ProductExtras = {
   related: string[]
   /** Stage C: a bundle lists 2 or more of the seller's own products; buying it grants all of them. */
   bundle: string[]
+  /** Affiliate / external mode: when set, shows an external link instead of Buy/Download. */
+  affiliate?: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
 }
 const BADGES = ['SALE', 'PERCENT', 'Limited Offer', 'Launch Special']
 const HEX = /^#[0-9a-f]{6}$/i
@@ -668,11 +738,23 @@ export function cleanExtras(v: unknown): ProductExtras {
   let value = Math.round(Number(f.value) || 0)
   value = kind === 'percent' ? Math.min(95, Math.max(0, value)) : Math.max(0, Math.min(99_999_99, value))
   const cta = (o.cta ?? {}) as Record<string, unknown>
+  const affiliate = (o.affiliate ?? {}) as Record<string, unknown>
+  const affiliateUrl = String(affiliate.url ?? '').trim()
+  let safeUrl: string | null = null
+  if (affiliateUrl) {
+    try {
+      new URL(affiliateUrl)
+      safeUrl = affiliateUrl
+    } catch {
+      /* invalid URL */
+    }
+  }
   return {
     offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48', ...offerSchedule(f) },
     cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
     hidden: Boolean(o.hidden),
     ...cleanCard(o),
+    affiliate: safeUrl ? { url: safeUrl, image: String(affiliate.image ?? '').trim() || undefined, title: String(affiliate.title ?? '').trim() || undefined, description: String(affiliate.description ?? '').trim() || undefined, disclosure: String(affiliate.disclosure ?? '').trim() || undefined } : undefined,
   }
 }
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
@@ -777,7 +859,7 @@ function productPublicView(p: ProductRow) {
     currency: p.pubCurrency ?? 'gbp',
     ...(() => {
       const x = readExtras(p.pubExtras)
-      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle }
+      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle, affiliate: x.affiliate }
     })(),
   }
 }
@@ -1349,6 +1431,20 @@ export function sellerRouter() {
     if ('listed' in b) out.listed = b.listed ? 1 : 0
     if ('extras' in b) out.extras = JSON.stringify(cleanExtras(b.extras))
     if ('archived' in b) out.archived = b.archived ? 1 : 0
+    if ('affiliate' in b) {
+      const affiliateBody = b as Record<string, unknown>
+      const a = affiliateBody.affiliate
+      if (!a || typeof a !== 'object') return
+      const url = String((a as { url?: string }).url ?? '').trim()
+      if (!url) return
+      // safe URL validation - only allow http/https and preserve query params
+      try {
+        new URL(url)
+        ;(out as Record<string, unknown>).affiliate = { url, image: String((a as { image?: string }).image ?? '').trim() || undefined, title: String((a as { title?: string }).title ?? '').trim() || undefined, description: String((a as { description?: string }).description ?? '').trim() || undefined, disclosure: String((a as { disclosure?: string }).disclosure ?? '').trim() || undefined }
+      } catch {
+        /* invalid URL — drop affiliate data */
+      }
+    }
     return out
   }
 
@@ -1361,7 +1457,7 @@ export function sellerRouter() {
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title!.toString(), fields.description!.toString(), fields.cover ?? null, fields.priceMinor ?? 900, fields.currency!.toString(), fields.listed ?? 1, count, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -1925,10 +2021,10 @@ export function sellerRouter() {
   })
 
   /* ---- V3: free products by email ---- */
-  const CLAIM_INVALID = 'This email address couldn’t be verified. Please check it and try again.'
+  const CLAIM_INVALID = 'Please check your email address and try again.'
   const CLAIM_BOUNCED = 'We couldn’t deliver to this address. Please check your email.'
-  const CLAIM_INCONCLUSIVE = 'We couldn’t verify this email address yet. Please use another email address you check regularly and try again.'
-  const CLAIM_UNAVAILABLE = 'Email verification is temporarily unavailable. Please try again.'
+  const CLAIM_TEMPORARY = 'We couldn’t check your email right now. Please try again.'
+  const CLAIM_SEND_FAILED = 'We couldn’t send your email right now. Please try again.'
   const sha = (v: string) => createHmac('sha256', env.secret).update(v).digest('base64url')
   const dayOf = (iso: string) => iso.slice(0, 10)
   const claimView = (c: { id: string; email: string; delivery: string | null; lastSentAt: string | null; sendCount: number; sendDay: string }) => {
@@ -1955,7 +2051,7 @@ export function sellerRouter() {
     const priced = await pricePurchase(s, found, b.coupon)
     if ('error' in priced) return void res.status(409).json({ error: priced.error, couponError: true })
     if (priced.totalMinor !== 0) return void res.status(409).json({ error: 'This product isn’t free right now.' })
-    const email = String(b.email ?? '').trim().toLowerCase()
+    const email = normalizeEmail(String(b.email ?? ''))
     const name = String(b.name ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 80)
     const ipHash = sha(`ip:${req.ip}`).slice(0, 24)
     const t = now()
@@ -1967,11 +2063,13 @@ export function sellerRouter() {
     if (await sql.get(`SELECT 1 FROM email_suppression WHERE email = ?`, email)) return void res.status(422).json({ code: 'undeliverable', error: CLAIM_BOUNCED })
     const verdict = await checkEmail(email, { acceptSuggestion: Boolean(b.acceptSuggestion) })
     if (verdict.status === 'suggest') return void res.status(409).json({ code: 'suggest', suggestion: verdict.suggestion })
-    // mailbox-existence validation before anything is sent: only a provider-confirmed deliverable
-    // mailbox gets the private link. Inconclusive/unavailable outcomes stop the send.
+    // Built-in checks before anything is sent: syntax, and whether the domain can receive mail
+    // (MX, or A/AAAA as the implicit mail host, RFC 7505 null MX). A pass means the domain
+    // accepts mail, so the private link goes out — the emailed link proves ownership, and the
+    // signed Resend bounce events settle addresses that turn out not to exist. A DNS timeout is
+    // a temporary failure, never a proof that the address is fake.
     if (verdict.status === 'invalid') return void res.status(422).json({ code: 'invalid', error: CLAIM_INVALID, reason: verdict.reason })
-    if (verdict.status === 'unavailable') return void res.status(503).json({ code: 'unavailable', error: CLAIM_UNAVAILABLE })
-    if (verdict.status === 'inconclusive') return void res.status(422).json({ code: 'inconclusive', error: CLAIM_INCONCLUSIVE })
+    if (verdict.status === 'temporary') return void res.status(503).json({ code: 'temporary', error: CLAIM_TEMPORARY })
     // 'deliverable': the mailbox exists and accepts mail → continue with the claim + email.
     const perEmail = await sql.get<{ n: number }>(`SELECT CAST(COALESCE(SUM("sendCount"), 0) AS INTEGER) AS n FROM seller_claim WHERE email = ? AND "sendDay" = ?`, email, dayOf(t))
     if ((perEmail?.n ?? 0) >= 10) return void res.status(429).json({ error: 'We’ve sent a lot of links to this address today. Please check your inbox or try tomorrow.' })
@@ -2004,7 +2102,7 @@ export function sellerRouter() {
     }
     const link = `${seller.siteUrl}/store/${s.id}/claim/${id}?t=${token}`
     const queued = await enqueueEmail('claim-link', email, { url: link, name: found.pubTitle ?? 'your free product', email: storeName(s) })
-    if (!queued.queued) return void res.status(422).json({ code: 'invalid', error: CLAIM_INVALID })
+    if (!queued.queued) return void res.status(503).json({ code: 'unavailable', error: CLAIM_SEND_FAILED })
     await sql.run(`UPDATE seller_claim SET "outboxId" = ? WHERE id = ?`, queued.id, id)
     const sent = await sendNow(queued.id)
     const c = (await sql.get<any>(`SELECT * FROM seller_claim WHERE id = ?`, id))!

@@ -55,23 +55,37 @@ import {
   BUTTON_STYLES,
   CURRENCIES,
   DEFAULT_EXTRAS,
+  MAX_PRODUCT_BLOCKS_PER_PAGE,
+  MAX_STORE_PAGES,
+  affiliateUrlProblem,
+  ensurePage,
+  findProductBlockPage,
+  forgetLegacyDraft,
+  formatPrice,
+  handleProblem,
+  insertAt,
+  isProductBlock,
+  mediaUrl,
+  newBlock,
+  newSlide,
+  pageLabel,
+  primaryProductId,
+  productBlockCount,
+  readLegacyDraft,
+  slidesOf,
+  storePages,
+  toHandle,
+  withPageBlocks,
   withExtras,
   FONTS,
   PLATFORM_FEE_PERCENT,
   PRESETS,
   blockLabel,
-  forgetLegacyDraft,
-  formatPrice,
-  handleProblem,
-  mediaUrl,
-  newBlock,
-  readLegacyDraft,
-  toHandle,
 } from './model'
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, DraftProduct, ProductExtras, Page, PayMethod, PaymentSettings, SavedBank, SellerSetup, StoreView } from './model'
+import type { Block, BlockType, DraftProduct, ProductExtras, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -490,6 +504,8 @@ function Studio({
   // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
   const page: Page = full
   const [slide, setSlide] = useState<0 | 1>(full.use === 2 ? 1 : 0)
+  // Which store page the editor and the phone are on (Home = 0, then Page 2/Page 3).
+  const [pageIndex, setPageIndex] = useState(0)
   const styleBar = useRef<HTMLDivElement>(null)
   const [anchor, setAnchor] = useState<DOMRect | null>(null)
   const [toast, setToast] = useState(false)
@@ -545,8 +561,40 @@ function Studio({
   }, [])
   const closeEditor = useCallback(() => openEditor(null), [openEditor])
 
-  // Drag a new section from Editor tools into the phone; a click (no drag) adds it at the end.
-  const startInsert = (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => {
+  // The blocks of a page, in the shape the editor shows them (Home pins the
+  // profile first and the footer last; Page 2/3 hold content only).
+  const blocksOf = useCallback((p: Page, i: number) => (i === 0 ? pinEnds(p.blocks) : (storePages(p)[i]?.blocks ?? [])), [])
+  const safePageIndex = Math.min(pageIndex, storePages(page).length - 1)
+  const cleanFor = (i: number, next: Block[]) => (i === 0 ? pinEnds(next) : next.filter((b) => b.type !== 'header' && b.type !== 'footer'))
+  /** Write one page's blocks without touching the others. */
+  const setBlocksOn = (i: number, next: Block[]) => edit(withPageBlocks(page, i, cleanFor(i, next)))
+
+  /**
+   * Place a product block on the page with room: the current page first, then
+   * Page 2, then Page 3. A fourth product block on a page creates the next page
+   * rather than piling up, and a carousel is one block however many slides it has.
+   */
+  const placeProductBlock = (nb: Block, at?: number, from = safePageIndex) => {
+    const found = findProductBlockPage(page, from)
+    if (!found) {
+      setErr(`All ${MAX_STORE_PAGES} pages already hold ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks each. Delete one to add another.`)
+      return
+    }
+    const base = blocksOf(found.page, found.pageIndex)
+    const want = at === undefined || found.pageIndex !== from ? (found.pageIndex === 0 ? base.length - 1 : base.length) : at
+    const next = insertAt(base, nb, want)
+    edit(withPageBlocks(found.page, found.pageIndex, cleanFor(found.pageIndex, next)))
+    setPageIndex(found.pageIndex)
+    window.setTimeout(() => {
+      const el = slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`)
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      openEditor(nb.id, el ?? undefined)
+    }, 140)
+  }
+  const productBlock = (productId: string): Block => ({ ...newBlock('featured'), data: { productId, note: '', slides: [newSlide('digital', productId)] } })
+
+  // Drag a new section (or a product) from the editor into the phone; a click adds it without dragging.
+  const dragNewBlock = (e: ReactPointerEvent, make: () => Block) => {
     if (e.button !== 0) return
     e.preventDefault()
     closeEditor()
@@ -556,7 +604,7 @@ function Studio({
     let others: HTMLElement[] = []
     const ghost = document.createElement('div')
     ghost.className = 'et-ghost'
-    ghost.textContent = blockLabel(type)
+    ghost.textContent = blockLabel(make().type)
     const place = (x: number, y: number) => {
       ghost.style.transform = `translate(${x + 12}px, ${y + 12}px)`
       const scroller = slideRef.current
@@ -590,33 +638,60 @@ function Studio({
       ghost.remove()
       setDropAt(null)
       if (moved && target === null) return
-      const nb = data ? { ...newBlock(type), data: { ...newBlock(type).data, ...data } } : newBlock(type)
-      const all = pinEnds(page.blocks)
-      let at = all.length - 1 // before the footer
+      const nb = make()
+      const all = blocksOf(page, safePageIndex)
+      let at = safePageIndex === 0 ? all.length - 1 : all.length
       if (moved && target !== null && others[target]) at = all.findIndex((b) => b.id === others[target!].dataset.id)
       else if (moved && target !== null && others.length) at = all.findIndex((b) => b.id === others[others.length - 1].dataset.id) + 1
-      const next = [...all]
-      next.splice(Math.max(1, at), 0, nb)
-      edit({ ...page, blocks: next })
-      window.setTimeout(() => openEditor(nb.id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`) ?? undefined), 80)
+      if (isProductBlock(nb)) {
+        placeProductBlock(nb, Math.max(safePageIndex === 0 ? 1 : 0, at))
+        return
+      }
+      setBlocksOn(safePageIndex, insertAt(all, nb, at))
+      window.setTimeout(() => {
+        const el = slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`)
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        openEditor(nb.id, el ?? undefined)
+      }, 80)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
     window.addEventListener('pointercancel', up)
   }
+  const startInsert = (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) =>
+    dragNewBlock(e, () => (data ? { ...newBlock(type), data: { ...newBlock(type).data, ...data } } : newBlock(type)))
+  /** Drag one of the seller's products into the phone (or tap it to add a block). */
+  const startProductInsert = (productId: string, e: ReactPointerEvent) => dragNewBlock(e, () => productBlock(productId))
 
-  // Add a block at the bottom (above the footer) and open its editor
+  // Add a block at the bottom of the page on screen (above the footer on Home) and open its editor
   const addBlock = (type: BlockType, data?: Record<string, unknown>) => {
     const nb = data ? { ...newBlock(type), data: { ...newBlock(type).data, ...data } } : newBlock(type)
-    const all = pinEnds(page.blocks)
-    const next = [...all]
-    next.splice(all.length - 1, 0, nb)
-    edit({ ...page, blocks: next })
+    if (isProductBlock(nb)) return placeProductBlock(nb)
+    const all = blocksOf(page, safePageIndex)
+    const at = safePageIndex === 0 ? all.length - 1 : all.length
+    setBlocksOn(safePageIndex, insertAt(all, nb, at))
     window.setTimeout(() => {
       const el = slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`)
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       openEditor(nb.id, el ?? undefined)
     }, 120)
+  }
+
+  /** Move a block to another page (order is kept; product limits still apply). */
+  const moveBlockToPage = (id: string, to: number) => {
+    const from = storePages(page).findIndex((pg) => pg.blocks.some((b) => b.id === id))
+    if (from < 0 || from === to) return
+    const block = blocksOf(page, from).find((b) => b.id === id)
+    if (!block) return
+    if (isProductBlock(block) && productBlockCount(blocksOf(page, to)) >= MAX_PRODUCT_BLOCKS_PER_PAGE) {
+      setErr(`${pageLabel(to)} already has ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks. Move one away first.`)
+      return
+    }
+    let next = withPageBlocks(page, from, cleanFor(from, blocksOf(page, from).filter((b) => b.id !== id)))
+    const targetBase = blocksOf(next, to)
+    next = withPageBlocks(next, to, insertAt(targetBase, block, to === 0 ? 1 : 0))
+    edit(next)
+    setPageIndex(to)
   }
   // Digital product from the Add block popup: create it (image, title, headline, price, file) with the existing product API
   const createProduct = async (f: NewProduct) => {
@@ -668,9 +743,10 @@ function Studio({
       // put the shown sections in their new order; hidden ones and the pinned ends stay where they are
       const shown = new Set(order)
       const queue = [...order]
-      const byId = new Map(page.blocks.map((b) => [b.id, b]))
-      const next = pinEnds(page.blocks).map((b) => (shown.has(b.id) ? byId.get(queue.shift()!)! : b))
-      if (next.map((b) => b.id).join() !== pinEnds(page.blocks).map((b) => b.id).join()) edit({ ...page, blocks: next })
+      const base = blocksOf(page, safePageIndex)
+      const byId = new Map(base.map((b) => [b.id, b]))
+      const next = base.map((b) => (shown.has(b.id) ? byId.get(queue.shift()!)! : b))
+      if (next.map((b) => b.id).join() !== base.map((b) => b.id).join()) setBlocksOn(safePageIndex, next)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -770,10 +846,25 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
-          <PageEditor onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }} page={page} onChange={edit} products={store.products} open={picked} setOpen={openEditor} onStartInsert={startInsert} onAdd={addBlock} createProduct={createProduct} />
-          {picked && page.blocks.find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
+          <PageEditor
+            onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }}
+            page={page}
+            pageIndex={safePageIndex}
+            onSelectPage={setPageIndex}
+            onChange={edit}
+            products={store.products}
+            open={picked}
+            setOpen={openEditor}
+            onStartInsert={startInsert}
+            onAdd={addBlock}
+            onStartProduct={startProductInsert}
+            onAddProduct={(id) => placeProductBlock(productBlock(id))}
+            onMoveBlock={moveBlockToPage}
+            createProduct={createProduct}
+          />
+          {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
-        {tab === 'products' && slide === 0 && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} />}
+        {tab === 'products' && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
@@ -845,11 +936,8 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onPick={(id, el) => {
-                  // a Digital product in the phone opens that product's editor in the Products tab
-                  const blk = page.blocks.find((x) => x.id === id)
-                  const pid = blk?.type === 'featured' ? (blk.data.productId as string | undefined) : undefined
-                  if (pid && store.products.some((x) => x.id === pid)) { closeEditor(); setOpenProduct(pid); setTab('products'); return }
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onPick={(id, el) => {
+                  // picking a product block opens its slides editor; the product itself stays untouched
                   setTab('page'); openEditor(id, el)
                 }} />
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
@@ -1018,13 +1106,20 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, onAdd, createProduct, onOpenProduct }: { onOpenProduct?: (id: string) => void; page: Page; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
-  const blocks = pinEnds(page.blocks)
-  const setBlocks = (b: Block[]) => onChange({ ...page, blocks: pinEnds(b) })
+function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onStartInsert, onAdd, onStartProduct, onAddProduct, onMoveBlock, createProduct, onOpenProduct }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; onStartProduct: (id: string, e: ReactPointerEvent) => void; onAddProduct: (id: string) => void; onMoveBlock: (id: string, to: number) => void; createProduct: (f: NewProduct) => Promise<string> }) {
+  const pages = storePages(page)
+  const isHome = pageIndex === 0
+  // Home keeps its pinned profile and footer; Page 2/3 hold content only.
+  const blocks = isHome ? pinEnds(page.blocks) : (pages[pageIndex]?.blocks ?? [])
+  const first = isHome ? 1 : 0
+  const last = isHome ? blocks.length - 2 : blocks.length - 1
+  const setBlocks = (b: Block[]) => onChange(withPageBlocks(page, pageIndex, isHome ? pinEnds(b) : b.filter((x) => x.type !== 'header' && x.type !== 'footer')))
   const [adding, setAdding] = useState(false)
   const [menu, setMenu] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  // a product tile that was just dragged must not also count as a tap
+  const draggedAt = useRef(0)
   useEffect(() => {
     if (!menu) return
     const close = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest('.bl-menu, .bl-more')) setMenu(null) }
@@ -1032,7 +1127,7 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
     return () => document.removeEventListener('pointerdown', close)
   }, [menu])
   const move = (from: number, to: number) => {
-    if (to < 1 || to > blocks.length - 2 || from === to) return
+    if (to < first || to > last || from === to) return
     const next = [...blocks]
     const [b] = next.splice(from, 1)
     next.splice(to, 0, b)
@@ -1050,23 +1145,78 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
     if (blocks.find((x) => x.id === id)?.type === 'featured' && open === id) return setOpen(null)
     setOpen(id, e.currentTarget.closest('.bl-card') as HTMLElement)
   }
+  const productTiles = products.filter((p) => p.title.trim() && !p.archived)
   return (
     <div className="ss-stack">
-      <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
-      <ul className="bl-list" aria-label="Page blocks">
-        <li className="bl-card bl-locked">
-          <span className="bl-grip bl-grip-off" aria-hidden="true" />
-          <Tile kind="header" />
-          <span className="bl-name"><b>Header</b><small>Your TikTok photo, name and username</small></span>
-          <span className="bl-lock" title="Always at the top"><Lock className="h-3.5 w-3.5" /></span>
-        </li>
-        <li className={cn('bl-card', open === BANNER_ID && 'on')} data-pinned={BANNER_ID}>
-          <span className="bl-grip bl-grip-off" aria-hidden="true" />
-          <button type="button" className="bl-main" onClick={openRow(BANNER_ID)}>
-            <Tile kind="banner" />
-            <span className="bl-name"><b>Banner</b><small>{page.banner ? (page.banner.kind === 'video' ? 'Video' : 'Image') : 'Add an image or video'}</small></span>
+      {/* Store pages: Home, then Page 2 and Page 3 as the seller needs them */}
+      <div className="pg-pages" role="tablist" aria-label="Store pages">
+        {pages.map((pg) => (
+          <button key={pg.id} type="button" role="tab" aria-selected={pg.index === pageIndex} className={pg.index === pageIndex ? 'on' : ''} onClick={() => onSelectPage(pg.index)}>
+            {pageLabel(pg.index)}
           </button>
-        </li>
+        ))}
+        {pages.length < MAX_STORE_PAGES && (
+          <button type="button" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => { onChange(ensurePage(page, pages.length)); onSelectPage(pages.length) }}>
+            <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
+          </button>
+        )}
+      </div>
+      {productTiles.length > 0 && (
+        <>
+          <p className="pg-hint">Drag a product into the phone to place it, or tap to add it to this page. {MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks fit per page; a carousel counts as one.</p>
+          <div className="pg-strip" aria-label="Your products">
+            {productTiles.map((p) => {
+              const cover = mediaUrl(p.cover)
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="pg-tile"
+                  aria-label={`Add ${p.title || 'product'} to this page, or drag it into the phone`}
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return
+                    const x0 = e.clientX, y0 = e.clientY
+                    let fired = false
+                    const mv = (ev: PointerEvent) => {
+                      if (fired || Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return
+                      fired = true
+                      draggedAt.current = Date.now()
+                      window.removeEventListener('pointermove', mv)
+                      onStartProduct(p.id, { ...e, clientX: ev.clientX, clientY: ev.clientY, button: 0, preventDefault: () => {} } as unknown as ReactPointerEvent)
+                    }
+                    window.addEventListener('pointermove', mv)
+                    window.addEventListener('pointerup', () => window.removeEventListener('pointermove', mv), { once: true })
+                  }}
+                  onClick={() => { if (Date.now() - draggedAt.current < 500) return; onAddProduct(p.id) }}
+                >
+                  <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-4 w-4" />}</span>
+                  <b>{p.title || 'Untitled'}</b>
+                  <small>{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}</small>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
+      <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
+      <ul className="bl-list" aria-label={`${pageLabel(pageIndex)} blocks`}>
+        {isHome && (
+          <>
+            <li className="bl-card bl-locked">
+              <span className="bl-grip bl-grip-off" aria-hidden="true" />
+              <Tile kind="header" />
+              <span className="bl-name"><b>Header</b><small>Your TikTok photo, name and username</small></span>
+              <span className="bl-lock" title="Always at the top"><Lock className="h-3.5 w-3.5" /></span>
+            </li>
+            <li className={cn('bl-card', open === BANNER_ID && 'on')} data-pinned={BANNER_ID}>
+              <span className="bl-grip bl-grip-off" aria-hidden="true" />
+              <button type="button" className="bl-main" onClick={openRow(BANNER_ID)}>
+                <Tile kind="banner" />
+                <span className="bl-name"><b>Banner</b><small>{page.banner ? (page.banner.kind === 'video' ? 'Video' : 'Image') : 'Add an image or video'}</small></span>
+              </button>
+            </li>
+          </>
+        )}
         {blocks.map((b, i) => {
           if (b.type === 'header') return null
           const pinned = b.type === 'footer'
@@ -1090,8 +1240,8 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
               {!pinned && (
                 <>
                   <span className="sr-only">
-                    <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= 1} onClick={() => move(i, i - 1)} />
-                    <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= blocks.length - 2} onClick={() => move(i, i + 1)} />
+                    <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= first} onClick={() => move(i, i - 1)} />
+                    <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= last} onClick={() => move(i, i + 1)} />
                   </span>
                   <button type="button" className="bl-more" aria-label={`More for ${blockLabel(b.type)}`} aria-expanded={menu === b.id} onClick={() => setMenu(menu === b.id ? null : b.id)}><MoreHorizontal className="h-4 w-4" /></button>
                   <button type="button" className="bl-eye" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
@@ -1107,6 +1257,9 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
                       <button type="button" role="menuitem" onClick={(e) => (setMenu(null), openRow(b.id)(e))}>Edit</button>
                       <button type="button" role="menuitem" onClick={() => (setMenu(null), duplicate(b))}>Duplicate</button>
                       <button type="button" role="menuitem" onClick={() => (setMenu(null), setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x))))}>{b.hidden ? 'Show' : 'Hide'}</button>
+                      {pages.filter((pg) => pg.index !== pageIndex).map((pg) => (
+                        <button key={pg.id} type="button" role="menuitem" onClick={() => (setMenu(null), onMoveBlock(b.id, pg.index))}>Move to {pageLabel(pg.index)}</button>
+                      ))}
                       <button type="button" role="menuitem" className="bl-del" onClick={() => (setMenu(null), setBlocks(blocks.filter((x) => x.id !== b.id)))}>Delete</button>
                     </div>
                   )}
@@ -1115,6 +1268,7 @@ function PageEditor({ page, onChange, products, open, setOpen, onStartInsert, on
             </li>
           )
         })}
+        {!isHome && !blocks.length && <li className="bl-locked"><span className="bl-name"><b>This page is empty</b><small>Add a block below, or drag a product into the phone.</small></span></li>}
       </ul>
       <ThemeEditor page={page} onChange={onChange} />
       {adding && <AddBlockDialog products={products} onClose={() => setAdding(false)} onAdd={(t, d) => (setAdding(false), t === 'banner' ? setOpen(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : onAdd(t, d))} onDragStart={(t, e, d) => { setAdding(false); onStartInsert(t, e, d) }} createProduct={createProduct} />}
@@ -1296,9 +1450,10 @@ function BannerEditor({ page, onChange }: { page: Page; onChange: (p: Page) => v
 }
 
 /** The editing panel for one section: floats above everything, never moves the layout. */
-function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { page: Page; onChange: (p: Page) => void; products: DraftProduct[]; id: string; anchor: DOMRect | null; onClose: () => void }) {
+function FloatingEditor({ page, pageIndex, onChange, products, id, anchor, onClose }: { page: Page; pageIndex: number; onChange: (p: Page) => void; products: DraftProduct[]; id: string; anchor: DOMRect | null; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
-  const blocks = pinEnds(page.blocks)
+  const safe = Math.min(pageIndex, storePages(page).length - 1)
+  const blocks = safe === 0 ? pinEnds(page.blocks) : (storePages(page)[safe]?.blocks ?? [])
   const i = blocks.findIndex((b) => b.id === id)
   const b = blocks[i]
   useEffect(() => {
@@ -1335,7 +1490,7 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
     )
   if (!b) return null
   const pinned = b.type === 'footer'
-  const setBlocks = (next: Block[]) => onChange({ ...page, blocks: pinEnds(next) })
+  const setBlocks = (next: Block[]) => onChange(withPageBlocks(page, safe, safe === 0 ? pinEnds(next) : next.filter((x) => x.type !== 'header' && x.type !== 'footer')))
   const update = (d: Record<string, unknown>) => setBlocks(blocks.map((x) => (x.id === id ? { ...x, data: { ...x.data, ...d } } : x)))
   const look = b.look ?? {}
   const setLook = (l: Partial<NonNullable<Block['look']>>) => {
@@ -1388,6 +1543,11 @@ function FloatingEditor({ page, onChange, products, id, anchor, onClose }: { pag
   )
 }
 
+/** Every block on every store page, for finding one by id. */
+function allBlocks(page: Page): Block[] {
+  return storePages(page).flatMap((pg) => pg.blocks)
+}
+
 /** Exactly one profile header, always first, and one footer, always last; both always shown. */
 function pinEnds(blocks: Block[]): Block[] {
   const head = blocks.find((b) => b.type === 'header') ?? newBlock('header')
@@ -1404,7 +1564,14 @@ function summary(b: Block, products: DraftProduct[]) {
     case 'text': return d.heading || (d.body ? String(d.body).slice(0, 40) : 'Empty')
     case 'image': return d.media ? d.caption || 'Image' : 'No image yet'
     case 'links': return `${(d.links ?? []).filter((l: { url: string }) => l.url).length} link(s)`
-    case 'featured': return d.productId ? title(d.productId) : 'No product chosen'
+    case 'featured': {
+      const slides = slidesOf(b)
+      if (!slides.length) return 'Empty — drag a product in'
+      if (slides.length > 1) return `${slides.length} slides (carousel)`
+      const one = slides[0]
+      if (one.kind === 'affiliate') return `Affiliate: ${one.affiliate.title || one.affiliate.url || 'no link yet'}`
+      return one.productId ? title(one.productId) : 'No product chosen'
+    }
     case 'grid': return `${(d.productIds ?? []).length} product(s)`
     case 'faq': return `${(d.items ?? []).length} question(s)`
     case 'tiktok': return `${(d.videos ?? []).length} video(s)`
@@ -1412,6 +1579,72 @@ function summary(b: Block, products: DraftProduct[]) {
     case 'divider': return d.style === 'dots' ? 'Dots' : d.style === 'space' ? 'Space' : 'Line'
     case 'footer': return d.text || 'Footer'
   }
+}
+
+/**
+ * Editor for a product block's slides. One slide shows on its own; two or more
+ * become a carousel. Digital and affiliate settings are kept side by side, so
+ * switching a slide's type never loses the product, file or cover.
+ */
+function SlidesEditor({ slides, products, onChange, onOpenProduct }: { slides: ProductSlide[]; products: DraftProduct[]; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void }) {
+  const set = (i: number, patch: Partial<ProductSlide>) => onChange(slides.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  const setAff = (i: number, patch: Partial<ProductSlide['affiliate']>) => onChange(slides.map((s, j) => (j === i ? { ...s, affiliate: { ...s.affiliate, ...patch } } : s)))
+  const digital = slides.find((s) => s.kind === 'digital' && s.productId)
+  return (
+    <div className="sb-edit">
+      <span className="ss-label">Product slides</span>
+      <div className="sld-list">
+        {slides.map((s, i) => {
+          const problem = s.kind === 'affiliate' ? affiliateUrlProblem(s.affiliate.url) : null
+          return (
+            <div className="sld-card" key={s.id}>
+              <div className="sld-head">
+                <span className="sld-num" aria-hidden="true">{i + 1}</span>
+                <div className="sld-kinds" role="group" aria-label={`Slide ${i + 1} type`}>
+                  <button type="button" aria-pressed={s.kind === 'digital'} className={s.kind === 'digital' ? 'on' : ''} onClick={() => set(i, { kind: 'digital' })}>Digital product</button>
+                  <button type="button" aria-pressed={s.kind === 'affiliate'} className={s.kind === 'affiliate' ? 'on' : ''} onClick={() => set(i, { kind: 'affiliate' })}>Affiliate</button>
+                </div>
+                <button type="button" className="ss-ghost" aria-label={`Remove slide ${i + 1}`} onClick={() => onChange(slides.filter((_, j) => j !== i))}><Trash2 className="h-3.5 w-3.5" /></button>
+              </div>
+              {s.kind === 'digital' ? (
+                <Field label="Product">
+                  {products.length === 0 ? (
+                    <p className="ss-muted">Create a product in the Products tab first.</p>
+                  ) : (
+                    <select className="ss-input" aria-label={`Product for slide ${i + 1}`} value={s.productId ?? ''} onChange={(e) => set(i, { productId: e.target.value || null })}>
+                      <option value="">Choose a product…</option>
+                      {products.map((p) => <option key={p.id} value={p.id}>{p.title.trim() || 'Untitled product'}</option>)}
+                    </select>
+                  )}
+                </Field>
+              ) : (
+                <>
+                  <Field label="Affiliate link" hint="The full https:// address on the partner site.">
+                    <input className="ss-input" inputMode="url" value={s.affiliate.url} onChange={(e) => setAff(i, { url: e.target.value })} placeholder="https://partner.example/product" />
+                  </Field>
+                  {problem && <span className="sld-err" role="alert">{problem}</span>}
+                  <Field label="Title"><input className="ss-input" maxLength={80} value={s.affiliate.title} onChange={(e) => setAff(i, { title: e.target.value })} /></Field>
+                  <Field label="Description (optional)"><textarea className="ss-input" rows={2} maxLength={500} value={s.affiliate.description} onChange={(e) => setAff(i, { description: e.target.value })} /></Field>
+                  <Field label="Cover image"><ImagePicker value={s.affiliate.cover} onChange={(v) => setAff(i, { cover: v })} label="Upload cover" /></Field>
+                  <Field label="Button text" hint="Empty hides the button; the cover still opens the link.">
+                    <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff(i, { cta: e.target.value })} placeholder="View product ↗" />
+                  </Field>
+                  <p className="sld-note">Payments and delivery are handled by the external website. Commission depends on your affiliate programme and tracking link.</p>
+                </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+      {slides.length < 8 && (
+        <button type="button" className="ss-ghost self-start" onClick={() => onChange([...slides, newSlide('digital', products[0]?.id ?? null)])}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+      )}
+      <p className="ss-muted">One slide shows on its own; two or more become a carousel. A carousel counts as one product block.</p>
+      {digital && onOpenProduct && (
+        <button type="button" className="ss-ghost self-start" onClick={() => onOpenProduct(digital.productId!)}>Edit this product</button>
+      )}
+    </div>
+  )
 }
 
 function BlockEditor({ block, products, update, onOpenProduct }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void }) {
@@ -1500,26 +1733,12 @@ function BlockEditor({ block, products, update, onOpenProduct }: { block: Block;
     }
     case 'featured':
       return (
-        <div className="sb-edit">
-          <Field label="Product">
-            {products.length === 0 ? (
-              <p className="ss-muted">Create a product in the Products tab first.</p>
-            ) : (
-              <div className="pp-row pp-pick" role="radiogroup" aria-label="Product">
-                {products.map((p) => {
-                  const cover = mediaUrl(p.cover)
-                  return (
-                    <button key={p.id} type="button" role="radio" aria-checked={d.productId === p.id} className={cn('pp-tile', d.productId === p.id && 'on')} onClick={() => { update({ productId: p.id }); onOpenProduct?.(p.id) }}>
-                      <span className="pp-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-5 w-5" />}</span>
-                      <span className="pp-name">{p.title.trim() || 'Untitled'}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-          </Field>
-          {!products.length && <p className="ss-muted">Add a product in the Products tab first.</p>}
-        </div>
+        <SlidesEditor
+          slides={slidesOf(block)}
+          products={products}
+          onChange={(slides) => update({ slides, productId: primaryProductId(slides) })}
+          onOpenProduct={onOpenProduct}
+        />
       )
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -1773,6 +1992,7 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
     fileType: product.file ? (product.file.name.split('.').pop() ?? '').toUpperCase() || null : null,
     bundle: x.bundle.length ? { items: x.bundle.map((id) => ({ id, title: store.products.find((q) => q.id === id)?.title ?? '' })), available: x.bundle.length >= 2 } : null,
     sample: product.sample ?? null,
+    affiliate: x.affiliate,
   }
 
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await flushSellerEdits(); await fn() } catch (e) { setState((e as Error).message) } setBusy(false) }
@@ -1810,6 +2030,17 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
             </Field>
           </>
         )}
+        </fieldset>
+        <fieldset className="pe2-v2" disabled={!v2}>
+          <Field label="Affiliate / External" hint="When set, shows an external link instead of Buy/Download. The product data is preserved.">
+            <div className="ss-grid2">
+              <Field label="Affiliate URL"><input className="ss-input" value={x.affiliate?.url ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, url: (e.target as HTMLInputElement).value as string } })} placeholder="https://" /></Field>
+              <Field label="Image URL"><input className="ss-input" value={x.affiliate?.image ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, image: (e.target as HTMLInputElement).value as string } })} placeholder="https://" /></Field>
+              <Field label="Title"><input className="ss-input" value={x.affiliate?.title ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, title: (e.target as HTMLInputElement).value as string } })} placeholder="Product name" /></Field>
+              <Field label="Description"><textarea className="ss-input" rows={2} value={x.affiliate?.description ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, description: (e.target as HTMLTextAreaElement).value as string } })} placeholder="Optional description" /></Field>
+              <Field label="Disclosure"><textarea className="ss-input" rows={2} value={x.affiliate?.disclosure ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, disclosure: (e.target as HTMLTextAreaElement).value as string } })} placeholder="e.g. As an affiliate, I earn from qualifying purchases" /></Field>
+            </div>
+          </Field>
         </fieldset>
         <div className="ss-field">
           <span className="ss-label">File buyers download</span>
