@@ -763,8 +763,8 @@ function Studio({
         <div className="ss-soonwrap">
         {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
-        {/* Style 2: the Page and Products tabs are empty for now */}
-        {tab === 'page' && slide === 0 && <>
+        {/* Style 2 reuses the same page + products data, so the Page and Products editors stay live for both styles. */}
+        {tab === 'page' && <>
           <div className="ss-undo">
             <button type="button" onClick={undo} disabled={!hist.current.past.length} aria-label="Undo"><span aria-hidden="true">↶</span> Undo</button>
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
