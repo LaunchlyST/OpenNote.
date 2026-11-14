@@ -373,18 +373,18 @@ try {
     const ordersNow = async () => (await dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "productId" = ? AND method = 'free'`, pid)).n
 
     check('the old instant free checkout is closed (email only)', (await req('POST', '/api/store/ava-makes/checkout', { productId: pid, checkoutKey: 'freekey_1234567890abc', email: 'mia@buyer.test' })).json?.code === 'use_claim')
-    check('malformed address: the exact message, nothing sent', (await claim({ email: 'mia@@buyer', clientRef: ref(1) })).json?.error === 'This email address couldn’t be verified. Please check it and try again.')
+    check('malformed address: the exact message, nothing sent', (await claim({ email: 'mia@@buyer', clientRef: ref(1) })).json?.error === 'Please check your email address and try again.')
     check('a domain that doesn’t exist is refused', (await claim({ email: 'mia@no-such-place-zq9x.invalid', clientRef: ref(1) })).status === 422)
     check('a domain that accepts no mail (null MX) is refused', (await claim({ email: 'someone@example.com', clientRef: ref(1) })).status === 422)
     const sug = await claim({ email: 'mia@gmail.con', clientRef: ref(1) })
     check('a typo gets a suggestion to confirm', sug.status === 409 && sug.json?.code === 'suggest' && sug.json?.suggestion === 'mia@gmail.com')
-    check('keeping the typo is checked as typed (and refused: .con doesn’t exist)', (await claim({ email: 'mia@gmail.con', clientRef: ref(1), acceptSuggestion: true })).status === 422)
+    check('keeping the typo is checked as typed (and refused: .con doesn’t resolve)', (await claim({ email: 'mia@gmail.con', clientRef: ref(1), acceptSuggestion: true })).status === 422)
     check('bots that fill the hidden field are refused', (await claim({ email: 'bot@buyer.test', clientRef: ref(1), website: 'http://spam' })).status === 400)
     check('nothing was mailed for refused addresses', mails('someone@example.com') === 0 && mails('bot@buyer.test') === 0)
 
     const before = await ordersNow()
     const ok = await claim({ email: 'Mia@Buyer.test', clientRef: ref(2) })
-    check('a valid address: “sent” after the provider accepted it', ok.status === 200 && ok.json?.status === 'sent' && ok.json?.cooldownSeconds > 0)
+    check('a valid address: “sent” once the built-in checks pass', ok.status === 200 && ok.json?.status === 'sent' && ok.json?.cooldownSeconds > 0)
     check('the response has no download link, no order and no key', !/download|accessKey|orderUrl|ord_/.test(ok.text))
     check('no order exists before the link is opened', (await ordersNow()) === before)
     const l1 = linkFor('mia@buyer.test')!

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, formatPrice, mediaUrl } from './model'
-import type { Block, Page, ShopProduct } from './model'
+import { FONTS, PRESETS, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages } from './model'
+import type { Block, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard } from './ProductCard'
 
 /**
@@ -43,6 +43,14 @@ export interface StorePageProps {
   /** Live store: saved products and the toggle. */
   savedIds?: string[]
   onToggleSave?: (p: ShopProduct) => void
+  /**
+   * Which store page is open (Home = 0). The editor controls it; a visitor
+   * starts on Home and switches with the tabs under the profile.
+   */
+  pageIndex?: number
+  onPageChange?: (index: number) => void
+  /** Editor: choose or add the product for an empty product block. */
+  onAddSlide?: (blockId: string) => void
 }
 
 /** The per-element look as inline style: alignment, size, colour, spacing, font. */
@@ -112,7 +120,23 @@ export function storeStyle(page: Page): CSSProperties {
 }
 
 export function StorePage(props: StorePageProps) {
-  const { page, only } = props
+  const { page, only, live } = props
+  // Home is `page.blocks`; Page 2 and Page 3 sit beside it. Visitors only get
+  // pages with something in them, while the editor shows every page it created
+  // so the seller can build an empty one.
+  const all = storePages(page)
+  const tabs = live ? all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks)) : all
+  const [own, setOwn] = useState(0)
+  const wanted = props.pageIndex ?? own
+  const index = tabs.some((pg) => pg.index === wanted) ? wanted : 0
+  const current = all.find((pg) => pg.index === index) ?? all[0]
+  const select = (i: number) => {
+    if (props.pageIndex === undefined) setOwn(i)
+    props.onPageChange?.(i)
+  }
+  const head = page.blocks.find((b) => b.type === 'header')
+  const foot = page.blocks.find((b) => b.type === 'footer')
+  const body = current.blocks.filter((b) => !b.hidden && b.type !== 'header' && b.type !== 'footer')
   return (
     <div className="sp" style={storeStyle(page)}>
       {only ? (
@@ -121,16 +145,69 @@ export function StorePage(props: StorePageProps) {
           <ProductDetail p={only} {...props} />
         </>
       ) : (
-        page.blocks.filter((b) => !b.hidden && b.type !== 'footer').map((b) => (
-          <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
-        ))
+        <>
+          {/* The profile (with its banner) is shared by every page and rendered once. */}
+          <Pickable block={head ?? { id: 'header', type: 'header', hidden: false, data: {} }} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}>
+            <Header page={page} handle={props.handle} showSocials={head?.data?.showSocials !== false} />
+          </Pickable>
+          {tabs.length > 1 && <PageTabs tabs={tabs.map((t) => t.index)} index={index} onSelect={select} />}
+          <div className="sp-page-panel" id="sp-page-panel" role="tabpanel" aria-labelledby={`sp-page-${index}`}>
+            {body.map((b) => (
+              <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
+            ))}
+            {!body.length && !live && props.onAddSlide && (
+              <div className="sp-block sp-drop sp-drop-page">
+                <span className="sp-drop-ico" aria-hidden="true">＋</span>
+                <b>This page is empty</b>
+                <p>Add a product, or drag one in from the left.</p>
+              </div>
+            )}
+          </div>
+        </>
       )}
       {/* Pinned to the bottom, centred: the store's footer line, then desknoty.com */}
       <div className="sp-end">
-        {!only && <BlockView block={page.blocks.find((b) => b.type === 'footer') ?? { id: 'footer', type: 'footer', hidden: false, data: { text: '' } }} {...props} />}
+        {!only && <BlockView block={foot ?? { id: 'footer', type: 'footer', hidden: false, data: { text: '' } }} {...props} />}
         <a className="sp-made" href="https://desknoty.com" target="_blank" rel="noopener">desknoty.com</a>
       </div>
     </div>
+  )
+}
+
+/**
+ * Store pages under the banner. Buttons, not a scrolling strip of links: arrow
+ * keys move between them and only the open page is in the tab order.
+ */
+function PageTabs({ tabs, index, onSelect }: { tabs: number[]; index: number; onSelect: (i: number) => void }) {
+  const refs = useRef<Array<HTMLButtonElement | null>>([])
+  const at = Math.max(0, tabs.indexOf(index))
+  const key = (e: ReactKeyboardEvent) => {
+    const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
+    if (!dir) return
+    e.preventDefault()
+    const next = (at + dir + tabs.length) % tabs.length
+    onSelect(tabs[next])
+    refs.current[next]?.focus()
+  }
+  return (
+    <nav className="sp-pages" role="tablist" aria-label="Store pages" onKeyDown={key}>
+      {tabs.map((n, i) => (
+        <button
+          key={n}
+          ref={(el) => { refs.current[i] = el }}
+          type="button"
+          role="tab"
+          id={`sp-page-${n}`}
+          aria-selected={n === index}
+          aria-controls="sp-page-panel"
+          tabIndex={n === index ? 0 : -1}
+          className={n === index ? 'sp-tab on' : 'sp-tab'}
+          onClick={() => onSelect(n)}
+        >
+          {pageLabel(n)}
+        </button>
+      ))}
+    </nav>
   )
 }
 
@@ -273,14 +350,17 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       )
     }
     case 'featured': {
-      const prod = p.products.find((x) => x.id === d.productId)
-      return prod ? (
-        <section className="sp-block sp-featured-v2">
-          <ProductCard p={prod} layout="featured" href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} />
-        </section>
-      ) : p.live ? null : (
-        <div className="sp-block sp-empty sp-feat-empty">Digital product: click to choose a product</div>
-      )
+      // One product, or a swipeable carousel of slides (digital or affiliate).
+      // Either way it is ONE product block on the page.
+      const usable = slidesOf(block).filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : Boolean(safeExternalUrl(s.affiliate.url))))
+      if (!usable.length) return <EmptyProduct block={block} {...p} />
+      if (usable.length === 1)
+        return (
+          <section className="sp-block sp-featured-v2">
+            {usable[0].kind === 'digital' ? <DigitalSlide slide={usable[0]} {...p} /> : <AffiliateSlide slide={usable[0]} {...p} />}
+          </section>
+        )
+      return <SlideCarousel slides={usable} {...p} />
     }
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -315,6 +395,134 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
     case 'footer':
       return <footer className="sp-block sp-foot">{d.text || `© ${p.page.name || p.handle}`}</footer>
   }
+}
+
+/** One digital product in a product block: cover, title, price and Buy/Get it free. */
+function DigitalSlide({ slide, ...p }: { slide: ProductSlide } & StorePageProps) {
+  const prod = p.products.find((x) => x.id === slide.productId)
+  if (!prod) return null
+  return (
+    <ProductCard
+      p={prod}
+      layout="featured"
+      href={p.live ? `/${p.handle}/p/${prod.id}` : undefined}
+      onOpen={p.live ? p.onOpenProduct : undefined}
+      buy={<BuyRow prod={prod} {...p} />}
+      saved={p.savedIds?.includes(prod.id)}
+      onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined}
+    />
+  )
+}
+
+/**
+ * An affiliate slide: a link off Desknoty, never a sale here. No price, Buy
+ * button, file or checkout is rendered, the cover and the optional button open
+ * the partner site in a new tab, and the destination keeps its tracking params.
+ */
+function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProps) {
+  const a = slide.affiliate
+  const href = safeExternalUrl(a.url)
+  const cover = mediaUrl(a.cover)
+  if (!href) return null
+  return (
+    <article className="sp-aff">
+      <a
+        className="sp-aff-cover"
+        href={href}
+        target="_blank"
+        rel="sponsored noopener noreferrer"
+        aria-label={a.title ? `${a.title} (opens the seller’s partner site)` : 'Open the affiliate product in a new tab'}
+        onClick={live ? undefined : (e) => e.preventDefault()}
+      >
+        {cover ? <img src={cover} alt="" loading="lazy" /> : <span className="sp-aff-blank" aria-hidden="true">↗</span>}
+      </a>
+      <div className="sp-aff-body">
+        <span className="sp-aff-tag">Affiliate</span>
+        {a.title && <h3>{a.title}</h3>}
+        {a.description && <p>{a.description}</p>}
+        {a.cta && (live
+          ? <a className="sp-btn sp-btn-sm sp-aff-cta" href={href} target="_blank" rel="sponsored noopener noreferrer">{a.cta}</a>
+          : <span className="sp-btn sp-btn-sm sp-aff-cta">{a.cta}</span>)}
+        <p className="sp-aff-note">Paid partnership · payment and delivery happen on the external website.</p>
+      </div>
+    </article>
+  )
+}
+
+/**
+ * A product block holding several slides. Mobile swipes, desktop arrows and
+ * dots; no autoplay, and a drag never counts as a tap on a product.
+ */
+function SlideCarousel({ slides, ...p }: { slides: ProductSlide[] } & StorePageProps) {
+  const track = useRef<HTMLDivElement>(null)
+  const [at, setAt] = useState(0)
+  const scrolledAt = useRef(0)
+  const goTo = (i: number) => {
+    const el = track.current
+    if (!el) return
+    const next = Math.min(slides.length - 1, Math.max(0, i))
+    el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
+    setAt(next)
+  }
+  const onScroll = () => {
+    const el = track.current
+    if (!el) return
+    scrolledAt.current = performance.now()
+    const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+    if (i !== at) setAt(i)
+  }
+  // A swipe that just moved the track must not also open a product.
+  const swallow = (e: ReactMouseEvent) => {
+    if (performance.now() - scrolledAt.current < 260) {
+      e.preventDefault()
+      e.stopPropagation()
+    }
+  }
+  return (
+    <section className="sp-block sp-carousel" aria-roledescription="carousel" aria-label={`${slides.length} products`}>
+      <div className="sp-track" ref={track} onScroll={onScroll} onClickCapture={swallow}>
+        {slides.map((s, i) => (
+          <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}`}>
+            {s.kind === 'digital' ? <DigitalSlide slide={s} {...p} /> : <AffiliateSlide slide={s} {...p} />}
+          </div>
+        ))}
+      </div>
+      {slides.length > 1 && (
+        <div className="sp-car-nav">
+          <button type="button" className="sp-arrow" aria-label="Previous product" disabled={at === 0} onClick={() => goTo(at - 1)}>‹</button>
+          <div className="sp-dots" role="tablist" aria-label="Choose a product">
+            {slides.map((s, i) => (
+              <button key={s.id} type="button" role="tab" aria-selected={i === at} aria-label={`Product ${i + 1}`} className={i === at ? 'sp-dot on' : 'sp-dot'} onClick={() => goTo(i)} />
+            ))}
+          </div>
+          <button type="button" className="sp-arrow" aria-label="Next product" disabled={at === slides.length - 1} onClick={() => goTo(at + 1)}>›</button>
+        </div>
+      )}
+    </section>
+  )
+}
+
+/**
+ * A product block with nothing in it. The seller gets a drop target; a visitor
+ * gets a finished "Coming soon" card with nothing to buy.
+ */
+function EmptyProduct({ block, ...p }: { block: Block } & StorePageProps) {
+  if (p.live || !p.onAddSlide)
+    return (
+      <section className="sp-block sp-soon">
+        <span aria-hidden="true">✦</span>
+        <h2>Coming soon</h2>
+        <p>Something new is on its way. Check back soon.</p>
+      </section>
+    )
+  return (
+    <div className="sp-block sp-drop">
+      <span className="sp-drop-ico" aria-hidden="true">＋</span>
+      <b>Drop your digital product here</b>
+      <p>Drag a product in from the left, or pick one to show it big.</p>
+      <button type="button" className="sp-btn sp-btn-sm" onClick={() => p.onAddSlide!(block.id)}>Add or select a product</button>
+    </div>
+  )
 }
 
 /** A TikTok video: a poster until tapped, then TikTok's own player (nothing loads from TikTok before that). */

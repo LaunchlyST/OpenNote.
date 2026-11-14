@@ -473,11 +473,11 @@ function FreeClaim({ handle, product, coupon, onClose }: { handle: string; produ
     } catch (e) {
       const err = e as Error & { body?: { code?: string; error?: string; suggestion?: string; cooldownSeconds?: number } }
       const body = (err as unknown as { data?: { code?: string; error?: string; suggestion?: string; cooldownSeconds?: number } }).data ?? err.body
+      // built-in email checks from the server: refused / temporary / send failed
       if (body?.code === 'suggest' && body.suggestion) { setSuggestion(body.suggestion); setBusy(false); return }
-      // mailbox validation outcomes from the server: blocked / inconclusive / provider unavailable
-      if (body?.code === 'invalid') { setError(body.error ?? 'This email address couldn’t be verified. Please check it and try again.'); setBusy(false); return }
-      if (body?.code === 'inconclusive') { setError(body.error ?? 'We couldn’t verify this email address yet. Please use another email address you check regularly and try again.'); setBusy(false); return }
-      if (body?.code === 'unavailable') { setError(body.error ?? 'Email verification is temporarily unavailable. Please try again.'); setBusy(false); return }
+      if (body?.code === 'invalid') { setError(body.error ?? 'Please check your email address and try again.'); setBusy(false); return }
+      if (body?.code === 'temporary') { setError(body.error ?? 'We couldn’t check your email right now. Please try again.'); setBusy(false); return }
+      if (body?.code === 'unavailable') { setError(body.error ?? 'We couldn’t send your email right now. Please try again.'); setBusy(false); return }
       if (typeof body?.cooldownSeconds === 'number') setWait(body.cooldownSeconds)
       setError(err.message)
     }
