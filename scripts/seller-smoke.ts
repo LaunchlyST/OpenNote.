@@ -229,6 +229,39 @@ try {
   check('public store never exposes file details', !live.text.includes('planner.pdf') && !live.text.includes('fil_'))
   check('checkout is off before payouts are ready', live.json.checkoutReady === false)
 
+  console.log('\n  Store pages, product slides and affiliate links')
+  const trackUrl = 'https://partner.example/item?ref=ava&utm_source=desknoty'
+  const pageDraft = {
+    ...store.draft,
+    blocks: between,
+    pages: [
+      { id: 'pg_page2', name: 'Page 2', blocks: [
+        { id: 'blk_feat2', type: 'featured', hidden: false, data: { productId: pid, slides: [
+          { id: 'sld_one', kind: 'digital', productId: pid, affiliate: { url: '' } },
+          { id: 'sld_two', kind: 'affiliate', productId: pid, affiliate: { url: trackUrl, title: 'Partner kit', cta: 'View product' } },
+          { id: 'sld_bad', kind: 'affiliate', affiliate: { url: 'javascript:alert(1)', title: 'Bad protocol' } },
+          { id: 'sld_bad2', kind: 'affiliate', affiliate: { url: 'https://user:pass@partner.example/x' } },
+        ] } },
+      ] },
+      { id: 'pg_three', name: 'Page 3', blocks: [{ id: 'blk_txt3', type: 'text', hidden: false, data: { heading: 'More', body: 'Third page.' } }] },
+      { id: 'pg_four', name: 'Page 4', blocks: [{ id: 'blk_txt4', type: 'text', hidden: false, data: { heading: 'Too far', body: 'Never stored.' } }] },
+    ],
+  }
+  const pgSaved = await req('PUT', '/api/seller/store/draft', { page: pageDraft }, A)
+  const pgDraft = pgSaved.json?.store?.draft
+  const p2 = pgDraft?.pages?.[0]
+  const slides = p2?.blocks?.[0]?.data?.slides ?? []
+  check('Page 2 saves as its own store page with its own blocks', pgSaved.status === 200 && pgDraft.pages.length === 2 && p2.id === 'pg_page2' && p2.blocks.length === 1)
+  check('extra pages never carry the shared header or footer', p2.blocks.every((b: { type: string }) => b.type !== 'header' && b.type !== 'footer'))
+  check('a digital slide keeps its product', slides[0]?.kind === 'digital' && slides[0]?.productId === pid)
+  check('an affiliate slide keeps its https link and tracking params', slides[1]?.affiliate?.url === trackUrl && slides[1]?.affiliate?.title === 'Partner kit')
+  check('unsafe affiliate protocols and credentials are dropped', slides[2]?.affiliate?.url === '' && slides[3]?.affiliate?.url === '')
+  check('the first digital slide still feeds productId for older renderers', p2.blocks[0].data.productId === pid)
+  await req('POST', '/api/seller/store/publish', undefined, A)
+  const livePages = (await req('GET', '/api/store/ava-makes')).json.page.pages
+  check('published Page 2 reaches the public store with its affiliate link', livePages?.[0]?.blocks?.[0]?.data?.slides?.[1]?.affiliate?.url === trackUrl)
+  check('a page past the third is not stored', !JSON.stringify(pgDraft.pages).includes('Too far'))
+
   console.log('\n  Product cards V2: layout, crop, gallery, text position')
   const png = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082', 'hex')
   const mineImg = (await req('POST', '/api/seller/media', png, A, { 'content-type': 'image/png' })).json?.id
@@ -255,6 +288,11 @@ try {
   const pub2 = (await req('GET', '/api/store/ava-makes')).json.products[0]
   check('published card settings reach the public store', pub2.layout === 'showcase' && pub2.subtitle === 'Plan a month in one afternoon' && pub2.textPos.title === 0.5 && pub2.gallery[0] === mineImg && pub2.badges.new === true)
   check('the public card shows a file type label, not the file name', pub2.fileType === 'PDF' && !JSON.stringify(pub2).includes('planner.pdf'))
+  const badAff = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, affiliate: { url: 'javascript:alert(1)', title: 'Bad' } } }, A)
+  check('a product affiliate link must be http(s)', badAff.json?.product?.extras?.affiliate === undefined)
+  const goodAff = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, affiliate: { url: 'https://partner.example/x?ref=1&utm_campaign=ava', title: 'Partner' } } }, A)
+  check('a product affiliate link keeps its tracking params', goodAff.json?.product?.extras?.affiliate?.url === 'https://partner.example/x?ref=1&utm_campaign=ava')
+  await req('PATCH', `/api/seller/products/${pid}`, { extras: vx }, A)
 
   await req('PATCH', `/api/seller/products/${pid}`, { title: 'Content planner v2', priceMinor: 99 }, A)
   await req('PUT', '/api/seller/store/draft', { page: { ...store.draft, blocks: between.filter((x: { type: string }) => x.type !== 'faq') } }, A)
@@ -543,9 +581,7 @@ try {
     check('an expired code is refused at checkout', (await buy({ coupon: 'OLD' })).status === 409)
     const off = await req('POST', '/api/seller/coupons', { code: 'PAUSED', kind: 'percent', value: 20, active: false }, A)
     check('a switched-off code is refused', off.status === 201 && (await buy({ coupon: 'PAUSED' })).status === 409)
-    const secondProductRes = await req('POST', '/api/seller/products', { title: 'Second product', priceMinor: 500, currency: 'gbp' }, A)
-    if (!secondProductRes.json?.product) throw new Error(`DEBUG ${secondProductRes.status} ${secondProductRes.text}`)
-    const other = secondProductRes.json.product.id
+    const other = (await req('POST', '/api/seller/products', { title: 'Second product', priceMinor: 500, currency: 'gbp' }, A)).json.product.id
     const scoped = await req('POST', '/api/seller/coupons', { code: 'OTHERONLY', kind: 'percent', value: 20, productIds: [other, 'prd_someone_else'] }, A)
     check('a code can be limited to the seller’s own products only', JSON.stringify(scoped.json.coupon.productIds) === JSON.stringify([other]))
     check('a code limited to other products doesn’t apply', (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'OTHERONLY' })).json.quote.coupon === null)

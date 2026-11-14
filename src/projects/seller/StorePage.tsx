@@ -572,6 +572,26 @@ export const ctaStyle = (prod: ShopProduct): CSSProperties | undefined => (prod.
 
 export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, claims, onClaimAgain, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id
+  // Affiliate / external mode: the product is bought on the partner's site, never
+  // here. No price, checkout or download is shown; the link keeps its tracking params.
+  const external = safeExternalUrl(prod.affiliate?.url ?? '')
+  if (external) {
+    return (
+      <div className="sp-buyrow sp-aff-row">
+        <span className="sp-aff-tag">Affiliate</span>
+        <a
+          className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'}
+          style={ctaStyle(prod)}
+          href={external}
+          target="_blank"
+          rel="sponsored noopener noreferrer"
+          onClick={live ? undefined : (e) => e.preventDefault()}
+        >
+          {prod.cta?.text || 'View product ↗'}
+        </a>
+      </div>
+    )
+  }
   // Already bought in this browser (the server confirmed the payment): Download instead of Buy now.
   // Free products never reach this branch: their file is only ever downloaded from the emailed link.
   if (live && owned?.[prod.id] && prod.priceMinor > 0)
@@ -630,6 +650,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
 }
 
 function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
+  const external = safeExternalUrl(p.affiliate?.url ?? '')
   return (
     <section className="sp-block sp-detail">
       <Gallery p={p} label={`${p.title} images`} />
@@ -652,7 +673,13 @@ function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
         </div>
       ) : null}
       {p.faq?.length ? <Faq heading="Questions" items={p.faq} /> : null}
-      <p className="sp-fine">{p.priceMinor === 0 ? 'A private link is emailed to you. Open it to download.' : 'Instant download after payment. A copy of the link is emailed to you.'}</p>
+      {external ? (
+        <p className="sp-aff-note">
+          {p.affiliate?.disclosure || 'Paid partnership · payment and delivery happen on the external website.'}
+        </p>
+      ) : (
+        <p className="sp-fine">{p.priceMinor === 0 ? 'A private link is emailed to you. Open it to download.' : 'Instant download after payment. A copy of the link is emailed to you.'}</p>
+      )}
     </section>
   )
 }

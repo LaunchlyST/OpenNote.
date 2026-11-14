@@ -739,22 +739,16 @@ export function cleanExtras(v: unknown): ProductExtras {
   value = kind === 'percent' ? Math.min(95, Math.max(0, value)) : Math.max(0, Math.min(99_999_99, value))
   const cta = (o.cta ?? {}) as Record<string, unknown>
   const affiliate = (o.affiliate ?? {}) as Record<string, unknown>
-  const affiliateUrl = String(affiliate.url ?? '').trim()
-  let safeUrl: string | null = null
-  if (affiliateUrl) {
-    try {
-      new URL(affiliateUrl)
-      safeUrl = affiliateUrl
-    } catch {
-      /* invalid URL */
-    }
-  }
+  // http(s) only, no credentials; the exact string (with tracking params) is kept.
+  const rawAffiliateUrl = String(affiliate.url ?? '').trim()
+  const safeUrl = affiliateUrl(rawAffiliateUrl) ? rawAffiliateUrl : null
+  const affiliateImage = affiliateUrl(affiliate.image) ? String(affiliate.image).trim() : ''
   return {
     offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48', ...offerSchedule(f) },
     cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
     hidden: Boolean(o.hidden),
     ...cleanCard(o),
-    affiliate: safeUrl ? { url: safeUrl, image: String(affiliate.image ?? '').trim() || undefined, title: String(affiliate.title ?? '').trim() || undefined, description: String(affiliate.description ?? '').trim() || undefined, disclosure: String(affiliate.disclosure ?? '').trim() || undefined } : undefined,
+    affiliate: safeUrl ? { url: safeUrl, image: affiliateImage || undefined, title: String(affiliate.title ?? '').trim() || undefined, description: String(affiliate.description ?? '').trim() || undefined, disclosure: String(affiliate.disclosure ?? '').trim() || undefined } : undefined,
   }
 }
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
@@ -1432,17 +1426,18 @@ export function sellerRouter() {
     if ('extras' in b) out.extras = JSON.stringify(cleanExtras(b.extras))
     if ('archived' in b) out.archived = b.archived ? 1 : 0
     if ('affiliate' in b) {
-      const affiliateBody = b as Record<string, unknown>
-      const a = affiliateBody.affiliate
-      if (!a || typeof a !== 'object') return
-      const url = String((a as { url?: string }).url ?? '').trim()
-      if (!url) return
-      // safe URL validation - only allow http/https and preserve query params
-      try {
-        new URL(url)
-        ;(out as Record<string, unknown>).affiliate = { url, image: String((a as { image?: string }).image ?? '').trim() || undefined, title: String((a as { title?: string }).title ?? '').trim() || undefined, description: String((a as { description?: string }).description ?? '').trim() || undefined, disclosure: String((a as { disclosure?: string }).disclosure ?? '').trim() || undefined }
-      } catch {
-        /* invalid URL — drop affiliate data */
+      const a = b.affiliate
+      if (a && typeof a === 'object') {
+        const url = affiliateUrl((a as { url?: unknown }).url)
+        if (url) {
+          ;(out as Record<string, unknown>).affiliate = {
+            url,
+            image: str((a as { image?: unknown }).image, 1000).trim() || undefined,
+            title: str((a as { title?: unknown }).title, 80).trim() || undefined,
+            description: str((a as { description?: unknown }).description, 500).trim() || undefined,
+            disclosure: str((a as { disclosure?: unknown }).disclosure, 500).trim() || undefined,
+          }
+        }
       }
     }
     return out
@@ -1454,12 +1449,11 @@ export function sellerRouter() {
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const count = (await q.products(s.id)).length
+    if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    // @ts-expect-error strict-null-check
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title!.toString(), fields.description!.toString(), fields.cover ?? null, fields.priceMinor ?? 900, fields.currency!.toString(), fields.listed ?? 1, count, t, t)
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
-    if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
   })
 
   me.patch('/products/:id', async (req: Authed, res) => {
@@ -1470,7 +1464,6 @@ export function sellerRouter() {
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
-    // @ts-expect-error strict-null-check
     if (fields.extras) fields.extras = await ownProductsOnly(s.id, p.id, await ownMediaOnly(s.id, fields.extras))
     const next = { ...p, ...fields, updatedAt: now() }
     const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, next.id, p.revision)
@@ -2194,6 +2187,9 @@ export function sellerRouter() {
     const found = await q.product(productId, s.id)
     const bundleIds = found ? readExtras(found.pubExtras).bundle : []
     if (!found || !found.pubAt || (!found.pubFileId && bundleIds.length < 2) || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    // Affiliate / external products are bought on the partner's site. Refuse a
+    // crafted checkout too, so no Desknoty order is ever created for them.
+    if (readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'This product is sold on the partner’s website.' })
     // A bundle can only be bought when the order will grant every item: each must be live with a file.
     let entitlements: Array<{ productId: string; title: string; fileId: string; fileName: string }> = []
     if (bundleIds.length >= 2) {

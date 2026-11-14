@@ -22,6 +22,7 @@
 .s2p-price { font-size: 14px; font-weight: 700; }
 .s2p-buy { height: 36px; border-radius: 10px; font-size: 13px; font-weight: 600; color: #fff; background: var(--s2-ac); }
 .s2p-buy:disabled { opacity: .55; cursor: not-allowed; }
+.s2p-aff-note { margin: 0; font-size: 11px; line-height: 1.4; color: #71717a; }
 .s2p-foot { display: flex; justify-content: center; gap: 10px; margin-top: auto; padding: 22px; font-size: 12px; color: #71717a; }
 .s2p-foot a { color: inherit; }
 
