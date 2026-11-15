@@ -886,32 +886,22 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
   if (order.status === 'paid')
     return (
       <div className="ps-order">
-        <header className="ps-order-head">
-          <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
-          <p className="ps-kicker">{(order.method as string) === 'free' ? 'Download ready' : 'Payment confirmed'}</p>
-          <h1>{(order.method as string) === 'free' ? 'Your download is ready' : 'Thanks for your order'}</h1>
-          <p>
-            {order.product}
-            {order.amountMinor > 0 && <> · {formatPrice(order.amountMinor, order.currency)}</>}
-            {order.receiptSent && order.email ? ` · receipt accepted for sending to ${order.email} (delivery unconfirmed)` : ''}
-          </p>
-        </header>
         <div className="ps-order-grid">
-          <section className="ps-order-product" aria-label="Product">
-            {order.cover ? (
-              <div className="ps-order-cover" style={{ backgroundImage: `url(${mediaUrl(order.cover)})` }}>
-                <img src={mediaUrl(order.cover) ?? ''} alt={order.product} />
-              </div>
-            ) : (
-              <div className="ps-order-cover ps-order-cover-empty" aria-hidden="true"><span>✦</span></div>
-            )}
-            <h2 className="ps-order-name">{order.product}</h2>
-            {order.description ? <p className="ps-order-desc">{order.description}</p> : null}
-          </section>
-          <section className="ps-order-side" aria-label="Download and feedback">
+          {/* Upper left: the complete download section — success icon, heading, product info, Download file, expiry, purchase link, resend. */}
+          <section className="ps-order-download" aria-label="Download">
             <div className="ps-card ps-download-card">
               <span className="ps-success" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></span>
               <h2 className="ps-download-title">Your download is ready</h2>
+              {order.cover ? (
+                <div className="ps-order-cover" style={{ backgroundImage: `url(${mediaUrl(order.cover)})` }}>
+                  <img src={mediaUrl(order.cover) ?? ''} alt={order.product} />
+                </div>
+              ) : (
+                <div className="ps-order-cover ps-order-cover-empty" aria-hidden="true"><span>✦</span></div>
+              )}
+              <h3 className="ps-order-name">{order.product}</h3>
+              {order.description ? <p className="ps-order-desc">{order.description}</p> : null}
+              {order.amountMinor > 0 && <p className="ps-fine">Payment confirmed · {formatPrice(order.amountMinor, order.currency)}.</p>}
               {order.downloadUrl ? (
                 <a className="sp-btn ps-download-btn" href={order.downloadUrl} download={order.fileName}>
                   <Download className="ps-dl-ico" aria-hidden="true" />
@@ -934,6 +924,8 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
               {(order.method as string) !== 'free' && <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>}
               {order.email && <ResendEmail handle={handle} orderId={order.id} />}
             </div>
+          </section>
+          <section className="ps-order-review" aria-label="Feedback">
             <div className="ps-card ps-review-card">
               <ReviewForm handle={handle} orderId={order.id} products={order.items && order.items.length ? order.items.map((i) => ({ id: i.productId, title: i.title })) : [{ id: order.productId ?? '', title: order.product }]} />
             </div>

@@ -7528,20 +7528,20 @@ select.ss-input option {
 .ps-msg a.sp-btn:disabled,
 .ps-msg button.sp-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 
-/* ---- Order / download page: product column, download card, feedback ---- */
-.ps-order { display: grid; gap: 26px; max-width: 720px; margin: 0 auto; padding: 8px 0 40px; }
-.ps-order-head { display: grid; justify-items: center; gap: 8px; text-align: center; }
-.ps-order-head h1 { font-size: 28px; font-weight: 750; letter-spacing: -0.02em; }
-.ps-order-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 22px; align-items: start; }
-.ps-order-product { display: grid; gap: 12px; justify-items: start; }
+/* ---- Order / download page: download section (upper left) + feedback (lower right) ---- */
+/* The storefront's narrow .ps-main column caps this page — widen it while the order page is mounted. */
+.ps-main:has(> .ps-order) { max-width: 1080px; }
+.ps-order { display: grid; gap: 30px; width: 100%; max-width: 1080px; margin: 0 auto; padding: 32px 20px 56px; }
+.ps-order-grid { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 28px; align-items: start; }
+.ps-order-download { display: grid; gap: 14px; min-width: 0; }
+.ps-order-review { display: grid; gap: 14px; min-width: 0; align-self: end; }
 .ps-order-cover { position: relative; width: 100%; aspect-ratio: 4 / 3; border-radius: 16px; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); background: color-mix(in srgb, currentColor 7%, transparent) center / cover; overflow: hidden; }
 .ps-order-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ps-order-cover-empty { display: grid; place-items: center; font-size: 34px; color: color-mix(in srgb, currentColor 40%, transparent); }
 .ps-order-name { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; }
 .ps-order-desc { font-size: 14.5px; line-height: 1.55; opacity: 0.8; }
-.ps-order-side { display: grid; gap: 18px; min-width: 0; }
-.ps-card { display: grid; gap: 12px; justify-items: start; width: 100%; text-align: left; padding: 22px; border-radius: 18px; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); background: #fff; box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.35); }
-.ps-download-card { display: grid; gap: 12px; justify-items: start; width: 100%; text-align: left; padding: 22px; border-radius: 18px; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); background: #fff; box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.35); }
+.ps-card { display: grid; gap: 12px; justify-items: start; width: 100%; text-align: left; box-sizing: border-box; padding: 26px; border-radius: 18px; border: 1px solid color-mix(in srgb, currentColor 14%, transparent); background: #fff; box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.35); }
+.ps-download-card { display: grid; gap: 12px; justify-items: start; width: 100%; text-align: left; box-sizing: border-box; }
 .ps-success { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 50%; background: #dcfce7; }
 .ps-success svg { width: 24px; height: 24px; stroke: #16a34a; fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
 .ps-download-title { font-size: 20px; font-weight: 750; letter-spacing: -0.01em; }
@@ -7550,7 +7550,7 @@ select.ss-input option {
 .ps-file { font-size: 13px; opacity: 0.75; overflow-wrap: anywhere; }
 .ps-save-link { color: inherit; font-size: 13.5px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 .ps-stars-desc { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-@media (max-width: 860px) { .ps-order-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 860px) { .ps-order-grid { grid-template-columns: minmax(0, 1fr); } .ps-order-review { align-self: start; } }
 
 /* Seller Studio single-panel states: a white panel on the page, not the dark studio frame */
 .ss-compact .ss-editor { min-height: 0; }
