@@ -99,3 +99,25 @@ validation (syntax + DNS domain check, typo suggestion, temporary-DNS handling,
 bounded timeouts/caching, no SMTP probing). All automated checks pass; API and
 frontend deployed and live-verified end-to-end up to Resend acceptance; buyer
 inbox confirmation remains the final manual step.
+
+## 8. Follow-up fix (2026-11-15): “Back to the store” after a review
+
+After submitting a review on an order page, the “Back to the store” link now uses
+the order’s current published store handle (`order.storeHandle`) instead of only
+the handle from the URL, so a stale receipt/thanks link lands on the live store
+rather than a 404 (“This page doesn’t exist”).
+
+- Changed: `src/store/PublicStore.tsx` — `OrderStatus` computes
+  `const back = order?.storeHandle ? `/${order.storeHandle}` : `/${handle}``.
+- Verified live: the freshly deployed frontend bundle (run `43706719953`, completed
+  success) contains the new `?.storeHandle` logic in the live
+  `PublicStore-B-F_KyJH.js` chunk.
+- Verified live: the saved review appears publicly via
+  `GET /api/store/x--x039/products/prd_4fa03ef1c2370c9aa6f7/reviews` — it is
+  returned as visible/verified (`rev_10da1a69d670468ab472`, 5★, “I love it”,
+  created 2026-11-15T10:51:41Z, edited).
+- Deployed: frontend Pages workflow run `43706719953` → success; commit
+  `d732d60` “Store: send the order page's Back to the store to the order's current store”
+  pushed (`d6fa6c5..d732d60 main -> main`).
+- API redeployed for this fix: not needed (frontend-only change); the live API was
+  already serving the built-in-validation build and the public reviews endpoint.
