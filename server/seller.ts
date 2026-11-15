@@ -894,7 +894,7 @@ function productPublicView(p: ProductRow) {
     currency: p.pubCurrency ?? 'gbp',
     ...(() => {
       const x = readExtras(p.pubExtras)
-      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle, affiliate: x.affiliate }
+      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, titleStyle: x.titleStyle, descStyle: x.descStyle, cardBg: x.cardBg, cardRadius: x.cardRadius, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle, affiliate: x.affiliate }
     })(),
   }
 }
