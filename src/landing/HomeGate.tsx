@@ -54,8 +54,10 @@ export function HomeGate() {
   if (!mode) return <div style={{ minHeight: '100vh', background: '#030a06' }} />
   if (mode === 'soon') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0a84c9' }} />}><AeroPage /></Suspense>
   if (mode === 'home') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#000' }} />}><NewHome mode="open" /></Suspense>
-  // Under construction now shows the maintenance page (the older treatments stay
-  // available at ?preview=aero, ?preview=soon and ?preview=coming-soon).
-  if (mode === 'construction') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0b1d2e' }} />}><MaintenancePage /></Suspense>
+  // Under construction shows the Frutiger Aero page. The maintenance page stays
+  // preview-only until it is approved (?preview=maintenance); the older
+  // treatments remain available at ?preview=aero, ?preview=soon and
+  // ?preview=coming-soon.
+  if (mode === 'construction') return <Suspense fallback={<div style={{ minHeight: '100vh', background: '#0a84c9' }} />}><AeroPage /></Suspense>
   return <ComingSoon />
 }
