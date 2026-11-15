@@ -261,7 +261,7 @@ function ReviewForm({ handle, orderId, products }: { handle: string; orderId: st
     } catch (e) { setState((s) => ({ ...s, busy: false, msg: (e as Error).message })) }
   }
   const submit = (e: FormEvent) => { e.preventDefault(); if (rating) void save() }
-  const pick = (n: number) => { setRating(n); setRated(true) }
+  const pick = (n: number) => { if (rating === n) { setRating(0); setRated(false); return } setRating(n); setRated(true) }
   return (
     <form className="ps-review" onSubmit={submit}>
       <h2>{state.had ? 'Your review' : 'How was your experience with this product?'}</h2>
