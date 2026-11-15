@@ -8575,6 +8575,12 @@ select.ss-input option {
 .sp-card-featured .sp-card-sub { font-size: 14.5px; }
 @media (min-width: 640px) {
   .sp-card-featured { display: grid; grid-template-columns: 1.1fr 1fr; align-items: center; gap: 20px; }
+  /* Desktop: the text column reads top to bottom in one straight line — title,
+     description, rating, facts, then the price and the button under them. */
+  .sp-card-featured .sp-card-body { align-items: stretch; justify-content: center; gap: 6px; }
+  .sp-card-featured .sp-buyrow { flex: 0 0 auto; align-items: stretch; gap: 8px; margin: 14px 0 0; width: 100%; }
+  .sp-card-featured .sp-buyrow .sp-price { align-self: flex-start; }
+  .sp-card-featured .sp-buyrow .sp-btn { width: 100%; }
 }
 .sp-incl { display: grid; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; font-size: 13.5px; }
 .sp-incl li { display: flex; gap: 8px; align-items: flex-start; }
@@ -8776,11 +8782,13 @@ select.ss-input option {
 .ps-review { display: grid; gap: 8px; width: 100%; max-width: 420px; margin: 8px auto 0; text-align: left; }
 .ps-review h2 { font-size: 17px; font-weight: 700; }
 .ps-review textarea, .ps-review input, .ps-review select { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, currentColor 18%, transparent); font: inherit; background: transparent; color: inherit; }
-.ps-stars { display: flex; gap: 4px; }
-.ps-stars button { font-size: 28px; line-height: 1; color: color-mix(in srgb, currentColor 22%, transparent); transition: transform 0.15s; }
-.ps-stars button.on { color: #191919; }
-.ps-stars button:hover { transform: scale(1.1); }
-.ps-stars button:focus-visible { outline: 2px solid var(--ac, #2563eb); outline-offset: 2px; border-radius: 4px; }
+.ps-stars { display: flex; gap: 6px; }
+.ps-stars button { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: transparent; border: none; border-radius: 12px; color: color-mix(in srgb, currentColor 22%, transparent); cursor: pointer; transition: transform 0.15s, background 0.15s; }
+.ps-stars button:hover { transform: scale(1.08); background: color-mix(in srgb, currentColor 6%, transparent); }
+.ps-stars button.on { color: #191919; background: color-mix(in srgb, currentColor 6%, transparent); }
+.ps-stars button.on svg { fill: #191919; }
+.ps-stars button:focus-visible { outline: 2px solid var(--ac, #2563eb); outline-offset: 2px; border-radius: 12px; }
+.ps-star { width: 30px; height: 30px; stroke-width: 1.5; display: block; }
 .pe2-sample { display: grid; gap: 6px; }
 .pe2-pick { display: grid; gap: 4px; max-height: 220px; overflow: auto; padding: 4px; border-radius: 10px; border: 1px solid #e3e5e9; }
 .pe2-pick label { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; font-size: 13.5px; }

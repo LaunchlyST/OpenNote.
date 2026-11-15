@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useMemo, type FormEvent } from 'react'
-import { Download } from 'lucide-react'
+import { Download, Star } from 'lucide-react'
 import { BuyRow, StorePage, storeStyle } from '../projects/seller/StorePage'
 import { ProductSheet } from '../projects/seller/ProductCard'
 import { Style2Page } from '../projects/seller/Style2'
@@ -270,7 +270,7 @@ function ReviewForm({ handle, orderId, products }: { handle: string; orderId: st
       )}
       <div className="ps-stars" role="radiogroup" aria-label="Rating" aria-describedby="ps-stars-desc">
         <span id="ps-stars-desc" className="sr-only">Rate your experience with this product from one to five stars.</span>
-        {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} stars`} className={n <= rating ? 'on' : undefined} onClick={() => pick(n)}>★</button>)}
+        {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} stars`} className={n <= rating ? 'on' : undefined} onClick={() => pick(n)}><Star className="ps-star" aria-hidden="true" fill={n <= rating ? 'currentColor' : 'none'} strokeWidth={1.5} /></button>)}
       </div>
       {state.removed ? <p className="ps-fine">Your review for this product was removed by Desknoty for breaking the review rules.</p> : rated ? (
         <>
