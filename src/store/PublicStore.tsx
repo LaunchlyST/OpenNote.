@@ -261,7 +261,7 @@ function ReviewForm({ handle, orderId, products }: { handle: string; orderId: st
     } catch (e) { setState((s) => ({ ...s, busy: false, msg: (e as Error).message })) }
   }
   const submit = (e: FormEvent) => { e.preventDefault(); if (rating) void save() }
-  const pick = (n: number) => { if (rating === n) { setRating(0); setRated(false); return } setRating(n); setRated(true) }
+  const pick = (n: number) => { const next = n === rating ? Math.max(0, n - 1) : n; setRating(next); setRated(next > 0) }
   return (
     <form className="ps-review" onSubmit={submit}>
       <h2>{state.had ? 'Your review' : 'How was your experience with this product?'}</h2>
@@ -270,7 +270,7 @@ function ReviewForm({ handle, orderId, products }: { handle: string; orderId: st
       )}
       <div className="ps-stars" role="radiogroup" aria-label="Rating" aria-describedby="ps-stars-desc">
         <span id="ps-stars-desc" className="sr-only">Rate your experience with this product from one to five stars.</span>
-        {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} stars`} className={rating > 0 && n === rating ? 'on' : undefined} onClick={() => pick(n)}><Star className="ps-star" aria-hidden="true" fill={rating > 0 && n === rating ? 'currentColor' : 'none'} strokeWidth={1.5} /></button>)}
+        {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} stars`} className={n <= rating ? 'on' : undefined} onClick={() => pick(n)}><Star className="ps-star" aria-hidden="true" fill={n <= rating ? 'currentColor' : 'none'} strokeWidth={1.5} /></button>)}
       </div>
       {state.removed ? <p className="ps-fine">Your review for this product was removed by Desknoty for breaking the review rules.</p> : rated ? (
         <>
