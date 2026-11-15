@@ -4,9 +4,7 @@ import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from
 import {
   Monitor,
   Star,
-  Redo2,
   Share2,
-  Undo2,
   Film,
   HelpCircle,
   Image as ImageIcon,
@@ -883,10 +881,6 @@ function Studio({
       <aside className="ss-preview" aria-label="Draft preview">
         {/* toolbar: undo/redo, save state, preview, share, publish */}
         <div className="pv-bar">
-          <span className="pv-group">
-            <button type="button" className="pv-icon" onClick={undo} disabled={!hist.current.past.length} aria-label="Undo"><Undo2 className="h-4 w-4" /></button>
-            <button type="button" className="pv-icon" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><Redo2 className="h-4 w-4" /></button>
-          </span>
           <span className={cn('pv-saved', (saving === 'saving' || pageSave.dirty) && 'busy', saving === 'error' && 'err')} aria-live="polite">
             <i />{saving === 'saving' || pageSave.dirty ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved ✓'}
           </span>

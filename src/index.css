@@ -7462,7 +7462,7 @@ select.ss-input option {
 .sp-feat-body p { margin-top: 4px; font-size: 14px; opacity: 0.8; }
 .sp-kicker { font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7 !important; }
 .sp-cover { display: block; width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: var(--r); background: color-mix(in srgb, var(--ac) 22%, transparent) center / cover; }
-.sp-cover-big { aspect-ratio: 16 / 10; }
+.sp-cover-big { aspect-ratio: 1 / 1; }
 .sp-grid-wrap { display: grid; gap: 12px; }
 .sp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .sp-card { flex-direction: column; gap: 10px; }
@@ -8683,8 +8683,9 @@ select.ss-input option {
 .pe2-stage .sp-grid { grid-template-columns: 1fr; }
 @media (max-width: 520px) { .pe2-layouts { grid-template-columns: 1fr; } .pe2-crop { grid-template-columns: 1fr; } }
 /* V2 fixes: showcase/featured covers fill the card; compact keeps the small square */
-.sp-card-showcase .sp-cover, .sp-card-featured .sp-cover { width: 100%; height: auto; aspect-ratio: 16 / 10; }
-.sp-card-compact .sp-card-media { width: 64px; overflow: visible; }
+.sp-card-showcase .sp-cover, .sp-card-featured .sp-cover { width: 100%; height: auto; aspect-ratio: 1 / 1; }
+.sp-card-compact .sp-card-media { width: 100%; overflow: hidden; }
+.sp-card-compact .sp-cover { width: 100%; height: auto; aspect-ratio: 1 / 1; }
 .sp-card-compact .sp-pbadges, .sp-card-compact .sp-badge-float { display: none; }
 .sp-sheet-scroll { grid-template-columns: minmax(0, 1fr); }
 .sp-sheet-scroll > * { min-width: 0; }
