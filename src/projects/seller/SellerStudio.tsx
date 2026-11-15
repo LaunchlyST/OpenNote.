@@ -45,6 +45,8 @@ import { cn } from '../../lib/id'
 import { BuyRow, StorePage, storeStyle } from './StorePage'
 import { CardAppearance, CouponsPanel, CoverEditor, FaqEditor, GalleryEditor, LinesEditor, OfferSchedule, ProductPicker, SampleEditor, SellerReviews } from './ProductEditorParts'
 import { Style2Page } from './Style2'
+import { ProductPartPanel } from './ProductPartPanel'
+import type { PartDraft } from './ProductPartPanel'
 import { bankIcon } from './bank-icons'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
@@ -83,7 +85,7 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, DraftProduct, ProductExtras, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, StoreView } from './model'
+import type { Block, BlockType, CardPart, DraftProduct, ProductExtras, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -489,6 +491,11 @@ function Studio({
   const [tab, setTab] = useState<Tab>('page')
   const [picked, setPicked] = useState<string | null>(null)
   const [openProduct, setOpenProduct] = useState<string | null>(null)
+  /** Click-to-edit: which product card part is open in the Page tab. */
+  const [editPart, setEditPart] = useState<{ productId: string; part: CardPart } | null>(null)
+  /** Unsaved change from that panel, so the phone shows it before the save lands. */
+  const [partPreview, setPartPreview] = useState<({ id: string } & PartDraft) | null>(null)
+  const closePart = useCallback(() => { setEditPart(null); setPartPreview(null) }, [])
   const view = 'mobile' as 'mobile' | 'desktop'
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
   const [publishing, setPublishing] = useState(false)
@@ -753,7 +760,7 @@ function Studio({
 
   const saving = pageSave.state === 'Saved' ? 'saved' : pageSave.state === 'Saving…' || pageSave.state === 'Unsaved changes' ? 'saving' : 'error'
   const navigate = async (id: Tab) => {
-    try { await flushSellerEdits(); setTab(id) } catch (e) { setErr((e as Error).message) }
+    try { await flushSellerEdits(); closePart(); setTab(id) } catch (e) { setErr((e as Error).message) }
   }
 
   const publish = async () => {
@@ -776,7 +783,19 @@ function Studio({
     setPublishing(false)
   }
 
-  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => { const ex = withExtras(p.extras); return { ...p, ...ex, offer: p.offer, fileType: p.file ? (p.file.name.split('.').pop() ?? '').toUpperCase() || null : null, bundle: ex.bundle.length ? { items: ex.bundle.map((id) => ({ id, title: store.products.find((q) => q.id === id)?.title ?? '' })), available: ex.bundle.length >= 2 } : null } })
+  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => {
+    // an open part panel shows its change straight away, before the save returns
+    const live = partPreview?.id === p.id ? partPreview : null
+    const ex = withExtras(live ? live.extras : p.extras)
+    return {
+      ...p,
+      ...(live ? { title: live.title, description: live.description, cover: live.cover } : null),
+      ...ex,
+      offer: p.offer,
+      fileType: p.file ? (p.file.name.split('.').pop() ?? '').toUpperCase() || null : null,
+      bundle: ex.bundle.length ? { items: ex.bundle.map((id) => ({ id, title: store.products.find((q) => q.id === id)?.title ?? '' })), available: ex.bundle.length >= 2 } : null,
+    }
+  })
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
@@ -844,6 +863,23 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
+          {(() => {
+            const prod = editPart ? store.products.find((p) => p.id === editPart.productId) : null
+            if (!editPart || !prod) return null
+            return (
+              <ProductPartPanel
+                key={prod.id}
+                product={prod}
+                store={store}
+                setStore={setStore}
+                part={editPart.part}
+                onPart={(part) => setEditPart({ productId: editPart.productId, part })}
+                onClose={closePart}
+                onFull={() => { closePart(); setOpenProduct(prod.id); void navigate('products') }}
+                onPreview={(value) => setPartPreview({ id: prod.id, ...value })}
+              />
+            )
+          })()}
           <PageEditor
             onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }}
             page={page}
@@ -930,8 +966,16 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onPick={(id, el) => {
-                  // picking a product block opens its slides editor; the product itself stays untouched
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' ? (editPart ? { productId: editPart.productId, part: editPart.part } : { productId: null, part: null }) : null} onPick={(id, el, pid, part) => {
+                  // clicking a product box opens that product's card editing; anything else opens its page section
+                  if (pid) {
+                    setTab('page')
+                    closeEditor()
+                    setEditPart({ productId: pid, part: part ?? 'card' })
+                    return
+                  }
+                  setEditPart(null)
+                  setPartPreview(null)
                   setTab('page'); openEditor(id, el)
                 }} />
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}

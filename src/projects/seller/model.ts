@@ -111,9 +111,57 @@ export interface ShopProduct {
   bundle?: { items: Array<{ id: string; title: string }>; available: boolean } | null
   /** Affiliate / external mode: when set, shows an external link instead of Buy/Download. */
   affiliate?: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
+  /** Per-product typography for the card title and description. */
+  titleStyle?: TextStyle
+  descStyle?: TextStyle
+  /** Card background tone and corner radius (empty/null = the store theme). */
+  cardBg?: CardBg
+  cardRadius?: number | null
 }
 
 export type CardLayout = 'compact' | 'showcase' | 'featured'
+
+/** The parts of a product card that can be edited by clicking them in the preview. */
+export type CardPart = 'cover' | 'title' | 'desc' | 'button' | 'card'
+
+/**
+ * Typography for one piece of card text. Every field is optional: an empty
+ * value means "use the store theme", so older products look exactly as before.
+ */
+export type TextStyle = {
+  /** A font id from FONT_CATALOG; '' keeps the store font. */
+  font: string
+  /** 0 keeps the theme weight. */
+  weight: number
+  /** Pixels; 0 keeps the theme size. */
+  size: number
+  /** Multiplier; 0 keeps the theme line height. */
+  lineHeight: number
+  /** Pixels, may be negative; 0 keeps the theme spacing. */
+  letterSpacing: number
+  align: '' | 'left' | 'center' | 'right'
+  /** #rrggbb; '' keeps the theme colour. */
+  color: string
+}
+
+export const DEFAULT_TEXT_STYLE: TextStyle = { font: '', weight: 0, size: 0, lineHeight: 0, letterSpacing: 0, align: '', color: '' }
+
+/** What the editor lets a seller pick, and what the server accepts. */
+export const TEXT_STYLE_LIMITS = {
+  titleSize: [12, 34] as [number, number],
+  descSize: [10, 22] as [number, number],
+  lineHeight: [0.9, 2] as [number, number],
+  letterSpacing: [-2, 6] as [number, number],
+}
+
+export const CARD_BACKGROUNDS = [
+  { id: '', label: 'Theme' },
+  { id: 'plain', label: 'Plain' },
+  { id: 'soft', label: 'Soft' },
+  { id: 'tint', label: 'Tinted' },
+  { id: 'outline', label: 'Outline' },
+] as const
+export type CardBg = '' | 'plain' | 'soft' | 'tint' | 'outline'
 
 export type ProductExtras = {
   offer: { on: boolean; kind: 'percent' | 'amount'; value: number; starts: string | null; ends: string | null; badge: string; badgeColor: string; tz?: string; startsLocal?: string | null; endsLocal?: string | null; startsAt?: string | null; endsAt?: string | null; countdown?: boolean }
@@ -133,6 +181,10 @@ export type ProductExtras = {
   related: string[]
   bundle: string[]
   affiliate: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
+  titleStyle: TextStyle
+  descStyle: TextStyle
+  cardBg: CardBg
+  cardRadius: number | null
 }
 export const DEFAULT_EXTRAS: ProductExtras = {
   offer: { on: false, kind: 'percent', value: 20, starts: null, ends: null, badge: 'PERCENT', badgeColor: '#e11d48' },
@@ -152,6 +204,10 @@ export const DEFAULT_EXTRAS: ProductExtras = {
   related: [],
   bundle: [],
   affiliate: { url: '', image: '', title: '', description: '', disclosure: '' },
+  titleStyle: { ...DEFAULT_TEXT_STYLE },
+  descStyle: { ...DEFAULT_TEXT_STYLE },
+  cardBg: '',
+  cardRadius: null,
 }
 
 /** Fill any missing V2 fields so older products keep working. */
@@ -173,6 +229,10 @@ export function withExtras(x: Partial<ProductExtras> | undefined): ProductExtras
     related: x?.related ?? [],
     bundle: x?.bundle ?? [],
     affiliate: x?.affiliate ?? DEFAULT_EXTRAS.affiliate,
+    titleStyle: { ...DEFAULT_TEXT_STYLE, ...x?.titleStyle },
+    descStyle: { ...DEFAULT_TEXT_STYLE, ...x?.descStyle },
+    cardBg: x?.cardBg ?? '',
+    cardRadius: x?.cardRadius ?? null,
   }
 }
 
@@ -418,6 +478,114 @@ export const FONTS = [
   { id: 'grotesque', label: 'Bricolage', css: "'Bricolage Grotesque', system-ui, sans-serif" },
   { id: 'serif', label: 'Instrument Serif', css: "'Instrument Serif', Georgia, serif" },
 ]
+
+/* ------------------------------------------------ product card typography --- */
+
+export type FontCategory = 'Sans' | 'Serif' | 'Display' | 'Handwriting' | 'Mono'
+export type FontEntry = {
+  id: string
+  label: string
+  css: string
+  category: FontCategory
+  /** Weights this family really ships. */
+  weights: number[]
+  /** Google Fonts CSS2 family spec, loaded only when the font is used or shown. */
+  google: string
+}
+
+/**
+ * Curated, freely licensed (SIL OFL / Apache) Google Fonts. The list is data
+ * only: a family's stylesheet is fetched the first time it is used or shown in
+ * the picker, never all at once. The three store-theme fonts come first so a
+ * product can always match the store.
+ */
+export const FONT_CATALOG: FontEntry[] = [
+  { id: 'geist', label: 'Geist', css: "'Geist', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Geist:wght@400;500;600;700' },
+  { id: 'grotesque', label: 'Bricolage Grotesque', css: "'Bricolage Grotesque', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700, 800], google: 'Bricolage+Grotesque:opsz,wght@12..96,400..800' },
+  { id: 'serif', label: 'Instrument Serif', css: "'Instrument Serif', Georgia, serif", category: 'Serif', weights: [400], google: 'Instrument+Serif:ital@0;1' },
+  { id: 'inter', label: 'Inter', css: "'Inter', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Inter:wght@400;500;600;700' },
+  { id: 'nunito', label: 'Nunito', css: "'Nunito', system-ui, sans-serif", category: 'Sans', weights: [400, 600, 700, 800, 900], google: 'Nunito:wght@400;600;700;800;900' },
+  { id: 'space-grotesk', label: 'Space Grotesk', css: "'Space Grotesk', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Space+Grotesk:wght@400;500;600;700' },
+  { id: 'manrope', label: 'Manrope', css: "'Manrope', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700, 800], google: 'Manrope:wght@400;500;600;700;800' },
+  { id: 'work-sans', label: 'Work Sans', css: "'Work Sans', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Work+Sans:wght@400;500;600;700' },
+  { id: 'dm-sans', label: 'DM Sans', css: "'DM Sans', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'DM+Sans:wght@400;500;600;700' },
+  { id: 'poppins', label: 'Poppins', css: "'Poppins', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Poppins:wght@400;500;600;700' },
+  { id: 'outfit', label: 'Outfit', css: "'Outfit', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700, 800], google: 'Outfit:wght@400;500;600;700;800' },
+  { id: 'sora', label: 'Sora', css: "'Sora', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Sora:wght@400;500;600;700' },
+  { id: 'rubik', label: 'Rubik', css: "'Rubik', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Rubik:wght@400;500;600;700' },
+  { id: 'archivo', label: 'Archivo', css: "'Archivo', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Archivo:wght@400;500;600;700' },
+  { id: 'figtree', label: 'Figtree', css: "'Figtree', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700, 800], google: 'Figtree:wght@400;500;600;700;800' },
+  { id: 'karla', label: 'Karla', css: "'Karla', system-ui, sans-serif", category: 'Sans', weights: [400, 500, 600, 700], google: 'Karla:wght@400;500;600;700' },
+  { id: 'playfair', label: 'Playfair Display', css: "'Playfair Display', Georgia, serif", category: 'Serif', weights: [400, 500, 600, 700], google: 'Playfair+Display:wght@400;500;600;700' },
+  { id: 'dm-serif', label: 'DM Serif Display', css: "'DM Serif Display', Georgia, serif", category: 'Serif', weights: [400], google: 'DM+Serif+Display:ital@0;1' },
+  { id: 'lora', label: 'Lora', css: "'Lora', Georgia, serif", category: 'Serif', weights: [400, 500, 600, 700], google: 'Lora:wght@400;500;600;700' },
+  { id: 'merriweather', label: 'Merriweather', css: "'Merriweather', Georgia, serif", category: 'Serif', weights: [400, 700, 900], google: 'Merriweather:wght@400;700;900' },
+  { id: 'libre-baskerville', label: 'Libre Baskerville', css: "'Libre Baskerville', Georgia, serif", category: 'Serif', weights: [400, 700], google: 'Libre+Baskerville:wght@400;700' },
+  { id: 'fraunces', label: 'Fraunces', css: "'Fraunces', Georgia, serif", category: 'Serif', weights: [400, 500, 600, 700], google: 'Fraunces:opsz,wght@9..144,400..700' },
+  { id: 'cormorant', label: 'Cormorant Garamond', css: "'Cormorant Garamond', Georgia, serif", category: 'Serif', weights: [400, 500, 600, 700], google: 'Cormorant+Garamond:wght@400;500;600;700' },
+  { id: 'bebas', label: 'Bebas Neue', css: "'Bebas Neue', Impact, sans-serif", category: 'Display', weights: [400], google: 'Bebas+Neue' },
+  { id: 'anton', label: 'Anton', css: "'Anton', Impact, sans-serif", category: 'Display', weights: [400], google: 'Anton' },
+  { id: 'oswald', label: 'Oswald', css: "'Oswald', Impact, sans-serif", category: 'Display', weights: [400, 500, 600, 700], google: 'Oswald:wght@400;500;600;700' },
+  { id: 'righteous', label: 'Righteous', css: "'Righteous', system-ui, sans-serif", category: 'Display', weights: [400], google: 'Righteous' },
+  { id: 'comfortaa', label: 'Comfortaa', css: "'Comfortaa', system-ui, sans-serif", category: 'Display', weights: [400, 500, 600, 700], google: 'Comfortaa:wght@400;500;600;700' },
+  { id: 'lobster', label: 'Lobster', css: "'Lobster', cursive", category: 'Display', weights: [400], google: 'Lobster' },
+  { id: 'unbounded', label: 'Unbounded', css: "'Unbounded', system-ui, sans-serif", category: 'Display', weights: [400, 500, 600, 700], google: 'Unbounded:wght@400;500;600;700' },
+  { id: 'syne', label: 'Syne', css: "'Syne', system-ui, sans-serif", category: 'Display', weights: [400, 500, 600, 700, 800], google: 'Syne:wght@400;500;600;700;800' },
+  { id: 'archivo-black', label: 'Archivo Black', css: "'Archivo Black', Impact, sans-serif", category: 'Display', weights: [400], google: 'Archivo+Black' },
+  { id: 'caveat', label: 'Caveat', css: "'Caveat', cursive", category: 'Handwriting', weights: [400, 500, 600, 700], google: 'Caveat:wght@400;500;600;700' },
+  { id: 'pacifico', label: 'Pacifico', css: "'Pacifico', cursive", category: 'Handwriting', weights: [400], google: 'Pacifico' },
+  { id: 'dancing-script', label: 'Dancing Script', css: "'Dancing Script', cursive", category: 'Handwriting', weights: [400, 500, 600, 700], google: 'Dancing+Script:wght@400;500;600;700' },
+  { id: 'great-vibes', label: 'Great Vibes', css: "'Great Vibes', cursive", category: 'Handwriting', weights: [400], google: 'Great+Vibes' },
+  { id: 'kalam', label: 'Kalam', css: "'Kalam', cursive", category: 'Handwriting', weights: [400, 700], google: 'Kalam:wght@400;700' },
+  { id: 'patrick-hand', label: 'Patrick Hand', css: "'Patrick Hand', cursive", category: 'Handwriting', weights: [400], google: 'Patrick+Hand' },
+  { id: 'satisfy', label: 'Satisfy', css: "'Satisfy', cursive", category: 'Handwriting', weights: [400], google: 'Satisfy' },
+  { id: 'jetbrains-mono', label: 'JetBrains Mono', css: "'JetBrains Mono', ui-monospace, monospace", category: 'Mono', weights: [400, 500, 600, 700], google: 'JetBrains+Mono:wght@400;500;600;700' },
+  { id: 'space-mono', label: 'Space Mono', css: "'Space Mono', ui-monospace, monospace", category: 'Mono', weights: [400, 700], google: 'Space+Mono:wght@400;700' },
+  { id: 'ibm-plex-mono', label: 'IBM Plex Mono', css: "'IBM Plex Mono', ui-monospace, monospace", category: 'Mono', weights: [400, 500, 600, 700], google: 'IBM+Plex+Mono:wght@400;500;600;700' },
+]
+
+export const FONT_CATEGORIES: FontCategory[] = ['Sans', 'Serif', 'Display', 'Handwriting', 'Mono']
+
+export const fontById = (id: string) => FONT_CATALOG.find((f) => f.id === id) ?? null
+
+/** Every family whose stylesheet has been requested in this page. Not downloaded all at once. */
+const fontLinks = new Set<string>()
+/**
+ * Load one Google Fonts family the first time it is needed (the picker showing
+ * it, or a card using it). Repeat calls are free and synchronous.
+ */
+export function ensureFont(id: string): void {
+  const f = fontById(id)
+  if (!f || fontLinks.has(f.id) || typeof document === 'undefined') return
+  fontLinks.add(f.id)
+  const link = document.createElement('link')
+  link.rel = 'stylesheet'
+  link.href = `https://fonts.googleapis.com/css2?family=${f.google}&display=swap`
+  link.dataset.desknotyFont = f.id
+  link.crossOrigin = 'anonymous'
+  document.head.appendChild(link)
+}
+export function ensureFonts(ids: Array<string | null | undefined>): void {
+  for (const id of ids) if (id) ensureFont(id)
+}
+
+/** The inline CSS for a card's title or description, or {} while it follows the theme. */
+export function textStyleCss(s: TextStyle | undefined): Record<string, string | number> {
+  if (!s) return {}
+  const out: Record<string, string | number> = {}
+  const f = s.font ? fontById(s.font) : null
+  if (f) out.fontFamily = f.css
+  if (s.weight) out.fontWeight = s.weight
+  if (s.size) out.fontSize = `${s.size}px`
+  if (s.lineHeight) out.lineHeight = s.lineHeight
+  if (s.letterSpacing) out.letterSpacing = `${s.letterSpacing}px`
+  if (s.align) out.textAlign = s.align
+  if (s.color) out.color = s.color
+  return out
+}
+
+/** True when a style sets nothing, i.e. it follows the store theme. */
+export const isThemeStyle = (s: TextStyle | undefined) => !s || Object.values(s).every((v) => v === '' || v === 0)
 
 export const BUTTON_STYLES = ['rounded', 'pill', 'sharp'] as const
 

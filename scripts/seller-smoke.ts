@@ -282,11 +282,27 @@ try {
   const badLayout = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, layout: 'mega' } }, A)
   check('an unknown layout falls back to compact', badLayout.json?.product?.extras?.layout === 'compact')
   await req('PATCH', `/api/seller/products/${pid}`, { extras: vx }, A)
+  // typography and card styling: save, sanitise and publish
+  const v2t = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, titleStyle: { font: 'playfair', weight: 700, size: 24, lineHeight: 1.1, letterSpacing: 1, align: 'center', color: '#111114' }, descStyle: { font: 'caveat', weight: 400, size: 18, lineHeight: 1.4, letterSpacing: 0, align: '', color: '' }, cardBg: 'tint', cardRadius: 24 } }, A)
+  const vxt = v2t.json?.product?.extras
+  check('typography and card styling save', v2t.status === 200 && vxt?.titleStyle?.font === 'playfair' && vxt?.titleStyle?.weight === 700 && vxt?.titleStyle?.size === 24 && vxt?.titleStyle?.align === 'center' && vxt?.descStyle?.font === 'caveat' && vxt?.cardBg === 'tint' && vxt?.cardRadius === 24)
+  const badStyle = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vxt, titleStyle: { font: 'nope', weight: 999, size: 999, lineHeight: 9, letterSpacing: 99, align: 'middle', color: 'red' }, cardBg: 'rainbow', cardRadius: 999 } }, A)
+  const vxb = badStyle.json?.product?.extras
+  check('an unknown font is dropped', vxb?.titleStyle?.font === '')
+  check('an unsupported weight is dropped', vxb?.titleStyle?.weight === 0)
+  check('font size is clamped', vxb?.titleStyle?.size === 48)
+  check('line height is clamped', vxb?.titleStyle?.lineHeight === 2)
+  check('letter spacing is clamped', vxb?.titleStyle?.letterSpacing === 6)
+  check('an unknown alignment is dropped', vxb?.titleStyle?.align === '')
+  check('a bad colour is dropped', vxb?.titleStyle?.color === '')
+  check('an unknown card background is dropped', vxb?.cardBg === '')
+  check('card radius is clamped', vxb?.cardRadius === 40)
+  await req('PATCH', `/api/seller/products/${pid}`, { extras: vxt }, A)
   const notYet = (await req('GET', '/api/store/ava-makes')).json.products[0]
   check('card changes stay in the draft until Publish', (notYet.layout ?? 'compact') === 'compact' && !notYet.subtitle)
   await req('POST', '/api/seller/store/publish', undefined, A)
   const pub2 = (await req('GET', '/api/store/ava-makes')).json.products[0]
-  check('published card settings reach the public store', pub2.layout === 'showcase' && pub2.subtitle === 'Plan a month in one afternoon' && pub2.textPos.title === 0.5 && pub2.gallery[0] === mineImg && pub2.badges.new === true)
+  check('published card settings reach the public store', pub2.layout === 'showcase' && pub2.subtitle === 'Plan a month in one afternoon' && pub2.textPos.title === 0.5 && pub2.gallery[0] === mineImg && pub2.badges.new === true && pub2.titleStyle?.font === 'playfair' && pub2.cardBg === 'tint' && pub2.cardRadius === 24)
   check('the public card shows a file type label, not the file name', pub2.fileType === 'PDF' && !JSON.stringify(pub2).includes('planner.pdf'))
   const badAff = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, affiliate: { url: 'javascript:alert(1)', title: 'Bad' } } }, A)
   check('a product affiliate link must be http(s)', badAff.json?.product?.extras?.affiliate === undefined)

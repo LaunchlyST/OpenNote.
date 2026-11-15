@@ -3,8 +3,8 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent a
 import { Check, ChevronLeft, ChevronRight, Download, Flag, Heart, Share2, X as XIcon } from 'lucide-react'
 import { storeApi } from './api'
 import type { PublicReview } from './api'
-import { mediaUrl } from './model'
-import type { ShopProduct } from './model'
+import { CARD_BACKGROUNDS, ensureFonts, mediaUrl, textStyleCss } from './model'
+import type { CardBg, CardPart, ShopProduct } from './model'
 
 /**
  * Product presentation shared by the editor previews and the live store:
@@ -121,14 +121,19 @@ export function FactLine({ p }: { p: ShopProduct }) {
  * snapping to left, centre and right guides. The position is a 0 to 1 fraction of
  * the free space, so it holds at every card width and the text never leaves the card.
  */
-export function MovableText({ pos, onMove, label, as: Tag = 'span', className, children }: { pos: number; onMove?: (pos: number) => void; label: string; as?: 'span' | 'h3' | 'p'; className?: string; children: ReactNode }) {
+/** When a text drag ends, the click that follows must not count as an editing click. */
+let draggedAt = 0
+export const wasTextDragged = () => performance.now() - draggedAt < 400
+
+export function MovableText({ pos, onMove, label, as: Tag = 'span', className, style: extra, children }: { pos: number; onMove?: (pos: number) => void; label: string; as?: 'span' | 'h3' | 'p'; className?: string; style?: CSSProperties; children: ReactNode }) {
   const el = useRef<HTMLElement | null>(null)
   const drag = useRef<{ startX: number; startPos: number; free: number } | null>(null)
+  const moved = useRef(false)
   const [live, setLive] = useState<number | null>(null)
   const [guide, setGuide] = useState<number | null>(null)
   const shown = live ?? pos
   const align = shown < 0.25 ? 'left' : shown > 0.75 ? 'right' : 'center'
-  const style = { '--tx': shown, textAlign: align } as CSSProperties
+  const style = { '--tx': shown, textAlign: align, ...extra } as CSSProperties
 
   if (!onMove)
     return <Tag className={cn('sp-move', className)} style={style}>{children}</Tag>
@@ -148,15 +153,22 @@ export function MovableText({ pos, onMove, label, as: Tag = 'span', className, c
     e.currentTarget.setPointerCapture(e.pointerId)
     e.currentTarget.focus({ preventScroll: true })
     drag.current = { startX: e.clientX, startPos: pos, free: freeSpace() }
+    moved.current = false
     setLive(pos)
   }
   const move = (e: ReactPointerEvent<HTMLElement>) => {
     const d = drag.current
     if (!d) return
+    if (Math.abs(e.clientX - d.startX) > 3) moved.current = true
     setLive(snap(clamp01(d.startPos + (e.clientX - d.startX) / d.free)))
   }
   const up = () => {
-    if (drag.current && live != null) onMove(Math.round(live * 1000) / 1000)
+    const d = drag.current
+    if (d && moved.current) {
+      // a drag is not a click: the click that follows must not open settings
+      draggedAt = performance.now()
+      if (live != null) onMove(Math.round(live * 1000) / 1000)
+    }
     drag.current = null; setLive(null); setGuide(null)
   }
   const key = (e: ReactKeyboardEvent<HTMLElement>) => {
@@ -203,13 +215,40 @@ export type CardProps = {
   layout?: ShopProduct['layout']
   saved?: boolean
   onToggleSave?: () => void
+  /**
+   * Editor only. Passing this switches the card into editing mode: outlines and
+   * labels while hovering, and `data-edit-part` markers the preview uses to open
+   * that part's settings. Public cards never pass it, so buyers see no trace.
+   */
+  edit?: { part?: CardPart | null }
 }
 
+const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', title: 'Title', desc: 'Description', button: 'Button', card: 'Card background' }
+const CARD_TONES = CARD_BACKGROUNDS.map((c) => c.id).filter((id): id is CardBg => Boolean(id))
+
 /** One product card in the seller's chosen layout. Unused fields are simply not rendered. */
-export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, onToggleSave }: CardProps) {
+export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, onToggleSave, edit }: CardProps) {
   const kind = layout ?? p.layout ?? 'compact'
   const tp = p.textPos ?? { title: 0, desc: 0 }
   const sub = p.subtitle || (p.description ? p.description.split('\n')[0] : '')
+  const card = useRef<HTMLElement | null>(null)
+  const [hover, setHover] = useState<CardPart | null>(null)
+  const titleStyle = textStyleCss(p.titleStyle)
+  const descStyle = textStyleCss(p.descStyle)
+  // a font is fetched the first time a card actually uses it
+  const titleFont = p.titleStyle?.font
+  const descFont = p.descStyle?.font
+  useEffect(() => { ensureFonts([titleFont, descFont]) }, [titleFont, descFont])
+  const bg = p.cardBg && CARD_TONES.includes(p.cardBg) ? p.cardBg : ''
+  const radius = typeof p.cardRadius === 'number' && p.cardRadius >= 0 ? { borderRadius: `${p.cardRadius}px` } : undefined
+  /** Editor: which part the pointer is over, so only that one is outlined. */
+  const over = (e: ReactPointerEvent<HTMLElement>) => {
+    if (!edit || e.pointerType === 'touch') return
+    const hit = (e.target as HTMLElement).closest<HTMLElement>('[data-edit-part]')
+    setHover(hit && card.current?.contains(hit) ? (hit.dataset.editPart as CardPart) : null)
+  }
+  const part = (which: CardPart) => (edit ? cn('sp-part', hover === which && 'hot', edit.part === which && 'sel') : undefined)
+  const mark = (which: CardPart) => (edit ? { 'data-edit-part': which, 'data-label': PART_LABEL[which] } : {})
   const open = (e: React.MouseEvent) => {
     if (!onOpen) return
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return
@@ -219,24 +258,32 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
   const Link = ({ children, className, label }: { children: ReactNode; className?: string; label?: string }) =>
     href || onOpen ? <a className={cn('sp-card-open', className)} href={href ?? '#'} onClick={open} aria-label={label}>{children}</a> : <span className={cn('sp-card-open', className)}>{children}</span>
   return (
-    <article className={cn('sp-card', `sp-card-${kind}`)}>
-      <div className="sp-card-media">
+    <article
+      ref={(n) => { card.current = n }}
+      className={cn('sp-card', `sp-card-${kind}`, bg && `sp-card-bg-${bg}`, edit && 'sp-card-edit', part('card'))}
+      style={radius}
+      data-product-id={p.id}
+      {...mark('card')}
+      onPointerOver={edit ? over : undefined}
+      onPointerLeave={edit ? () => setHover(null) : undefined}
+    >
+      <div className={cn('sp-card-media', part('cover'))} {...mark('cover')}>
         <Link label={`Open ${p.title}`}>{kind === 'compact' ? <CoverImage p={p} /> : <CoverImage p={p} className="sp-cover-big" />}</Link>
         <Badges p={p} />
         {p.offer && <em className="sp-badge sp-badge-float" style={{ background: p.offer.badgeColor }}>{p.offer.badge}</em>}
         {onToggleSave && <SaveButton saved={Boolean(saved)} onToggle={onToggleSave} label={p.title} />}
       </div>
       <div className="sp-card-body">
-        <div className="sp-move-box">
+        <div className={cn('sp-move-box', part('title'))} {...mark('title')}>
           {onMoveText ? (
-            <MovableText as="h3" pos={tp.title} onMove={(v) => onMoveText('title', v)} label="Title">{p.title}</MovableText>
+            <MovableText as="h3" pos={tp.title} onMove={(v) => onMoveText('title', v)} label="Title" style={titleStyle}>{p.title}</MovableText>
           ) : (
-            <MovableText as="h3" pos={tp.title} label="Title"><Link>{p.title}</Link></MovableText>
+            <MovableText as="h3" pos={tp.title} label="Title" style={titleStyle}><Link>{p.title}</Link></MovableText>
           )}
         </div>
         {sub && (
-          <div className="sp-move-box">
-            <MovableText as="p" pos={tp.desc} onMove={onMoveText ? (v) => onMoveText('desc', v) : undefined} label="Description" className="sp-card-sub">{sub}</MovableText>
+          <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
+            <MovableText as="p" pos={tp.desc} onMove={onMoveText ? (v) => onMoveText('desc', v) : undefined} label="Description" className="sp-card-sub" style={descStyle}>{sub}</MovableText>
           </div>
         )}
         {p.rating && p.rating.count > 0 && <Stars value={p.rating.average} count={p.rating.count} />}
@@ -244,7 +291,7 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
         {kind === 'featured' && p.included?.length ? (
           <ul className="sp-incl sp-incl-card">{p.included.slice(0, 3).map((x, i) => <li key={i}><Check className="h-3.5 w-3.5" aria-hidden="true" />{x}</li>)}</ul>
         ) : null}
-        {buy}
+        {edit ? <div className={cn('sp-part-btn', part('button'))} {...mark('button')}>{buy}</div> : buy}
       </div>
     </article>
   )

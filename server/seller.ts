@@ -727,9 +727,46 @@ export type ProductExtras = {
   bundle: string[]
   /** Affiliate / external mode: when set, shows an external link instead of Buy/Download. */
   affiliate?: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
+  /** Typography for the card title and description; empty values follow the store theme. */
+  titleStyle: TextStyle
+  descStyle: TextStyle
+  /** Card background tone and corner radius; '' and null follow the store theme. */
+  cardBg: CardBg
+  cardRadius: number | null
 }
 const BADGES = ['SALE', 'PERCENT', 'Limited Offer', 'Launch Special']
 const HEX = /^#[0-9a-f]{6}$/i
+/* Product card typography: the font ids the storefront can render. Kept in step
+   with FONT_CATALOG in src/projects/seller/model.ts (the server cannot import the
+   browser bundle). A font not on this list is dropped, never stored. */
+const TEXT_FONT_IDS = new Set([
+  'geist', 'grotesque', 'serif', 'inter', 'nunito', 'space-grotesk', 'manrope', 'work-sans', 'dm-sans', 'poppins',
+  'outfit', 'sora', 'rubik', 'archivo', 'figtree', 'karla', 'playfair', 'dm-serif', 'lora', 'merriweather',
+  'libre-baskerville', 'fraunces', 'cormorant', 'bebas', 'anton', 'oswald', 'righteous', 'comfortaa', 'lobster',
+  'unbounded', 'syne', 'archivo-black', 'caveat', 'pacifico', 'dancing-script', 'great-vibes', 'kalam',
+  'patrick-hand', 'satisfy', 'jetbrains-mono', 'space-mono', 'ibm-plex-mono',
+])
+export type TextStyle = { font: string; weight: number; size: number; lineHeight: number; letterSpacing: number; align: '' | 'left' | 'center' | 'right'; color: string }
+export type CardBg = '' | 'plain' | 'soft' | 'tint' | 'outline'
+const CARD_BGS = ['plain', 'soft', 'tint', 'outline']
+/** One text style, bounded. Empty or 0 means "use the store theme". */
+function cleanTextStyle(v: unknown): TextStyle {
+  const s = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  const font = String(s.font ?? '')
+  const weight = Math.round(Number(s.weight) || 0)
+  const size = Math.round(Number(s.size) || 0)
+  const lh = Math.round((Number(s.lineHeight) || 0) * 100) / 100
+  const ls = Math.round((Number(s.letterSpacing) || 0) * 10) / 10
+  return {
+    font: TEXT_FONT_IDS.has(font) ? font : '',
+    weight: weight >= 100 && weight <= 900 && weight % 100 === 0 ? weight : 0,
+    size: size > 0 ? Math.min(48, Math.max(8, size)) : 0,
+    lineHeight: lh > 0 ? Math.min(2, Math.max(0.9, lh)) : 0,
+    letterSpacing: ls ? Math.min(6, Math.max(-2, ls)) : 0,
+    align: s.align === 'left' || s.align === 'center' || s.align === 'right' ? s.align : '',
+    color: HEX.test(String(s.color)) ? String(s.color) : '',
+  }
+}
 const isoDay = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null)
 export function cleanExtras(v: unknown): ProductExtras {
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, any>
@@ -790,6 +827,10 @@ function cleanCard(o: Record<string, any>) {
     textPos: { title: unit(tp.title, 0), desc: unit(tp.desc, 0) },
     related: ids(o.related, 6),
     bundle: ids(o.bundle, 20),
+    titleStyle: cleanTextStyle(o.titleStyle),
+    descStyle: cleanTextStyle(o.descStyle),
+    cardBg: CARD_BGS.includes(String(o.cardBg)) ? (String(o.cardBg) as CardBg) : '',
+    cardRadius: o.cardRadius === null || o.cardRadius === undefined || o.cardRadius === '' ? null : Math.min(40, Math.max(0, Math.round(Number(o.cardRadius) || 0))),
   }
 }
 const ids = (v: unknown, max: number) => [...new Set((Array.isArray(v) ? v : []).map(String).filter((x) => /^prd_[a-f0-9]{20}$/.test(x)))].slice(0, max)

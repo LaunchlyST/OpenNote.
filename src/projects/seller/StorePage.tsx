@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages } from './model'
-import type { Block, Page, ProductSlide, ShopProduct } from './model'
-import { Badges, FactLine, Gallery, ProductCard } from './ProductCard'
+import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
+import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
 /**
  * The storefront. The editor's mobile and desktop previews and the public
@@ -21,9 +21,16 @@ export interface StorePageProps {
   buying?: string | null
   /** Only one product (the product page). */
   only?: ShopProduct
-  /** Editor preview: clicking a section selects it for editing. */
-  onPick?: (blockId: string, el: HTMLElement) => void
+  /**
+   * Editor preview: clicking a section selects it for editing. When the click
+   * lands on a product card, its product id comes along so the product editor
+   * can open instead of the page section; `part` says which part of the card
+   * (cover, title, description, button or the card itself) was clicked.
+   */
+  onPick?: (blockId: string, el: HTMLElement, productId?: string, part?: CardPart) => void
   picked?: string | null
+  /** Editor preview: which card part is selected, so it stays highlighted. */
+  editCard?: { productId: string | null; part: CardPart | null } | null
   /** Editor preview: pressing the grip starts dragging that section. */
   onGrab?: (blockId: string, e: ReactPointerEvent) => void
   /** Live store: products this browser has paid for (product id → order page with the download). */
@@ -82,7 +89,13 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
         if ((e.target as HTMLElement).closest('.sp-grip')) return
         e.preventDefault()
         e.stopPropagation()
-        onPick(block.id, e.currentTarget)
+        // dragging the title or description sideways is not a click on it
+        if (wasTextDragged()) return
+        // a product card inside the section opens that product, not the section
+        const target = e.target as HTMLElement
+        const hit = target.closest<HTMLElement>('[data-product-id]')
+        const part = target.closest<HTMLElement>('[data-edit-part]')?.dataset.editPart as CardPart | undefined
+        onPick(block.id, e.currentTarget, hit?.dataset.productId, part)
       }}
     >
       {onGrab && (
@@ -383,7 +396,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           {(
             <div className="sp-grid">
               {list.map((prod) => (
-                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} />
+                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} edit={cardEdit(p, prod.id)} />
               ))}
             </div>
           )}
@@ -395,6 +408,11 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
     case 'footer':
       return <footer className="sp-block sp-foot">{d.text || `© ${p.page.name || p.handle}`}</footer>
   }
+}
+
+/** Editor: every card is marked editable; the picked part stays highlighted. */
+function cardEdit(p: StorePageProps, id: string) {
+  return p.editCard ? { part: p.editCard.productId === id ? p.editCard.part : null } : undefined
 }
 
 /** One digital product in a product block: cover, title, price and Buy/Get it free. */
@@ -410,6 +428,7 @@ function DigitalSlide({ slide, ...p }: { slide: ProductSlide } & StorePageProps)
       buy={<BuyRow prod={prod} {...p} />}
       saved={p.savedIds?.includes(prod.id)}
       onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined}
+      edit={cardEdit(p, prod.id)}
     />
   )
 }

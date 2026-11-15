@@ -180,7 +180,7 @@ export function FaqEditor({ items, onChange }: { items: ProductExtras['faq']; on
   )
 }
 
-const LAYOUTS: Array<{ id: CardLayout; name: string; text: string }> = [
+export const LAYOUTS: Array<{ id: CardLayout; name: string; text: string }> = [
   { id: 'compact', name: 'Compact', text: 'Small and tidy' },
   { id: 'showcase', name: 'Showcase', text: 'Bigger picture, more detail' },
   { id: 'featured', name: 'Featured', text: 'Full width, the star product' },
