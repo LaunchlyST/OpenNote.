@@ -99,6 +99,9 @@ export interface PublicStore {
 export interface PublicOrder {
   id: string
   storeHandle?: string
+  /** Product cover (media id) and description for the download/order page layout. */
+  cover?: string | null
+  description?: string | null
   /** Stage C: a bundle's items, each with its own download. */
   items?: Array<{ productId: string; title: string; fileName: string; downloadUrl: string }>
   status: 'pending' | 'paid' | 'failed' | 'cancelled' | 'refunded' | 'disputed'

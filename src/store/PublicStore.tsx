@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useRef, useMemo, type FormEvent } from 'react'
+import { Download } from 'lucide-react'
 import { BuyRow, StorePage, storeStyle } from '../projects/seller/StorePage'
 import { ProductSheet } from '../projects/seller/ProductCard'
 import { Style2Page } from '../projects/seller/Style2'
@@ -242,11 +243,13 @@ function ReviewForm({ handle, orderId, products }: { handle: string; orderId: st
   const [body, setBody] = useState('')
   const [name, setName] = useState('')
   const [state, setState] = useState<{ busy: boolean; msg: string | null; removed: boolean; had: boolean }>({ busy: false, msg: null, removed: false, had: false })
+  // Two-step feedback: step 1 is the star rating, step 2 (the optional comment) is revealed once a rating is picked.
+  const [rated, setRated] = useState(false)
   useEffect(() => {
     if (!k || !pid) return
     storeApi.myReview(handle, orderId, k, pid).then((r) => {
-      if (r.review) { setRating(r.review.rating); setBody(r.review.body); setName(r.review.name); setState((s) => ({ ...s, had: true, removed: r.review!.status === 'removed' })) }
-      else { setRating(0); setBody(''); setState((s) => ({ ...s, had: false, removed: false })) }
+      if (r.review) { setRating(r.review.rating); setBody(r.review.body); setName(r.review.name); setRated(true); setState((s) => ({ ...s, had: true, removed: r.review!.status === 'removed' })) }
+      else { setRating(0); setBody(''); setName(''); setRated(false); setState((s) => ({ ...s, had: false, removed: false })) }
     }).catch(() => {})
   }, [handle, orderId, k, pid])
   if (!k) return null
@@ -254,26 +257,32 @@ function ReviewForm({ handle, orderId, products }: { handle: string; orderId: st
     setState((s) => ({ ...s, busy: true, msg: null }))
     try {
       await storeApi.saveReview(handle, orderId, k, { rating, body, name, productId: pid })
-      setState((s) => ({ ...s, busy: false, had: true, msg: 'Thanks. Your review is live.' }))
+      setState((s) => ({ ...s, busy: false, had: true, msg: 'Thanks! Your review is live.' }))
     } catch (e) { setState((s) => ({ ...s, busy: false, msg: (e as Error).message })) }
   }
+  const submit = (e: FormEvent) => { e.preventDefault(); if (rating) void save() }
+  const pick = (n: number) => { setRating(n); setRated(true) }
   return (
-    <form className="ps-review" onSubmit={(e) => { e.preventDefault(); if (rating) void save() }}>
-      <h2>{state.had ? 'Your review' : 'Rate this product'}</h2>
+    <form className="ps-review" onSubmit={submit}>
+      <h2>{state.had ? 'Your review' : 'How was your experience with this product?'}</h2>
       {products.length > 1 && (
         <select value={pid} onChange={(e) => setPid(e.target.value)} aria-label="Product to review">{products.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}</select>
       )}
-      {state.removed ? <p className="ps-fine">Your review for this product was removed by Desknoty for breaking the review rules.</p> : (
+      <div className="ps-stars" role="radiogroup" aria-label="Rating" aria-describedby="ps-stars-desc">
+        <span id="ps-stars-desc" className="sr-only">Rate your experience with this product from one to five stars.</span>
+        {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} stars`} className={n <= rating ? 'on' : undefined} onClick={() => pick(n)}>★</button>)}
+      </div>
+      {state.removed ? <p className="ps-fine">Your review for this product was removed by Desknoty for breaking the review rules.</p> : rated ? (
         <>
-          <div className="ps-stars" role="radiogroup" aria-label="Rating">
-            {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" role="radio" aria-checked={rating === n} aria-label={`${n} star${n === 1 ? '' : 's'}`} className={n <= rating ? 'on' : undefined} onClick={() => setRating(n)}>★</button>)}
-          </div>
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={3} placeholder="What did you think? (optional)" aria-label="Your review" />
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="Name to show (optional)" aria-label="Name to show" />
+          <label className="ps-review-label" htmlFor="ps-review-body">Anything you’d like to share?</label>
+          <textarea id="ps-review-body" value={body} onChange={(e) => setBody(e.target.value)} maxLength={2000} rows={3} placeholder="What did you think? (optional)" aria-label="Your review" />
+          <input id="ps-review-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={40} placeholder="Name to show (optional)" aria-label="Name to show" />
           <button type="submit" className="sp-btn" disabled={!rating || state.busy}>{state.busy ? 'Saving…' : state.had ? 'Update review' : 'Post review'}</button>
-          <p className="ps-fine">Shown as a verified buyer review. You can edit it any time from this page.</p>
         </>
+      ) : (
+        <p className="ps-fine">Choose a rating to continue. This feedback is public — once you post it, it appears on the product as a verified buyer review.</p>
       )}
+      <p className="ps-fine">This feedback is public and will be shown on the product as a verified buyer review. You can edit it any time from this page.</p>
       {state.msg && <p className="ps-fine" role="status">{state.msg}</p>}
     </form>
   )
@@ -876,36 +885,61 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
   if (!order) return <Message title="Checking your payment…" text="" />
   if (order.status === 'paid')
     return (
-      <div className="ps-msg ps-paid">
-        <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
-        <p className="ps-kicker">{(order.method as string) === 'free' ? 'Download ready' : 'Payment confirmed'}</p>
-        <h1>{(order.method as string) === 'free' ? 'Your download is ready' : 'Thanks for your order'}</h1>
-        <p>
-          {order.product}
-          {order.amountMinor > 0 && <> · {formatPrice(order.amountMinor, order.currency)}</>}
-          {order.receiptSent && order.email ? ` · receipt accepted for sending to ${order.email} (delivery unconfirmed)` : ''}
-        </p>
-        {order.downloadUrl && (
-          <a className="sp-btn ps-download" href={order.downloadUrl} download>
-            Download {order.fileName}
-          </a>
-        )}
-        {order.items && order.items.length > 0 && (
-          <ul className="ps-items" aria-label="Products in this bundle">
-            {order.items.map((i) => <li key={i.productId}><span>{i.title}</span><a className="sp-btn sp-btn-sm" href={i.downloadUrl} download>Download</a></li>)}
-          </ul>
-        )}
-        <p className="ps-fine">
-          {order.downloadExpiresAt
-            ? `This download link works until ${new Date(order.downloadExpiresAt).toLocaleString()}.`
-            : 'This download link works for 24 hours.'}
-          {' Save your permanent purchase link below to get a new download link later.'}
-        </p>
-        {order.retrievalUrl && <a href={order.retrievalUrl}>Permanent purchase link</a>}
-        {(order.method as string) !== 'free' && <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>}
-        {order.email && <ResendEmail handle={handle} orderId={order.id} />}
-        <ReviewForm handle={handle} orderId={order.id} products={order.items && order.items.length ? order.items.map((i) => ({ id: i.productId, title: i.title })) : [{ id: order.productId ?? '', title: order.product }]} />
-        <a href={back}>Back to the store</a>
+      <div className="ps-order">
+        <header className="ps-order-head">
+          <div className="ps-tick" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></div>
+          <p className="ps-kicker">{(order.method as string) === 'free' ? 'Download ready' : 'Payment confirmed'}</p>
+          <h1>{(order.method as string) === 'free' ? 'Your download is ready' : 'Thanks for your order'}</h1>
+          <p>
+            {order.product}
+            {order.amountMinor > 0 && <> · {formatPrice(order.amountMinor, order.currency)}</>}
+            {order.receiptSent && order.email ? ` · receipt accepted for sending to ${order.email} (delivery unconfirmed)` : ''}
+          </p>
+        </header>
+        <div className="ps-order-grid">
+          <section className="ps-order-product" aria-label="Product">
+            {order.cover ? (
+              <div className="ps-order-cover" style={{ backgroundImage: `url(${mediaUrl(order.cover)})` }}>
+                <img src={mediaUrl(order.cover) ?? ''} alt={order.product} />
+              </div>
+            ) : (
+              <div className="ps-order-cover ps-order-cover-empty" aria-hidden="true"><span>✦</span></div>
+            )}
+            <h2 className="ps-order-name">{order.product}</h2>
+            {order.description ? <p className="ps-order-desc">{order.description}</p> : null}
+          </section>
+          <section className="ps-order-side" aria-label="Download and feedback">
+            <div className="ps-card ps-download-card">
+              <span className="ps-success" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="24" /><path d="M15 27l7 7 15-16" /></svg></span>
+              <h2 className="ps-download-title">Your download is ready</h2>
+              {order.downloadUrl ? (
+                <a className="sp-btn ps-download-btn" href={order.downloadUrl} download={order.fileName}>
+                  <Download className="ps-dl-ico" aria-hidden="true" />
+                  Download file
+                </a>
+              ) : null}
+              {order.fileName ? <p className="ps-file">File: {order.fileName}</p> : null}
+              {order.items && order.items.length > 0 && (
+                <ul className="ps-items" aria-label="Products in this bundle">
+                  {order.items.map((i) => <li key={i.productId}><span>{i.title}</span><a className="sp-btn sp-btn-sm" href={i.downloadUrl} download>Download</a></li>)}
+                </ul>
+              )}
+              <p className="ps-fine">
+                {order.downloadExpiresAt
+                  ? `This download link works until ${new Date(order.downloadExpiresAt).toLocaleString()}.`
+                  : 'This download link works for 24 hours.'}
+                {' Save your permanent purchase link below to get a new download link later.'}
+              </p>
+              {order.retrievalUrl && <a className="ps-save-link" href={order.retrievalUrl}>Save purchase link</a>}
+              {(order.method as string) !== 'free' && <p className="ps-fine">Receipt email: {order.receiptStatus === 'accepted' ? 'accepted by our email provider' : order.receiptStatus.replaceAll('_', ' ')}.</p>}
+              {order.email && <ResendEmail handle={handle} orderId={order.id} />}
+            </div>
+            <div className="ps-card ps-review-card">
+              <ReviewForm handle={handle} orderId={order.id} products={order.items && order.items.length ? order.items.map((i) => ({ id: i.productId, title: i.title })) : [{ id: order.productId ?? '', title: order.product }]} />
+            </div>
+          </section>
+        </div>
+        <a className="ps-back" href={back}>Back to the store</a>
       </div>
     )
   if (order.status === 'pending' && order.bank) return <BankPending order={order} claim={claim} />

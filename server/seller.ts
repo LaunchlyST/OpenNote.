@@ -2336,12 +2336,15 @@ export function sellerRouter() {
   async function orderView(o: OrderRow, s: StoreRow) {
     const downloadExpiresAt = Date.now() + DOWNLOAD_TTL
     const receipt = o.receiptId ? await sql.get<{status: string}>('SELECT status FROM email_outbox WHERE id = ?', o.receiptId) : null
+    const p = o.productId ? await q.product(o.productId, s.id) : undefined
     return {
       id: o.id,
       storeHandle: s.handle,
       status: o.status,
       product: o.productTitle,
       productId: o.productId,
+      cover: p?.cover ?? null,
+      description: p?.description ?? null,
       amountMinor: o.amountMinor,
       currency: o.currency,
       email: o.buyerEmail,
