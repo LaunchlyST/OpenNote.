@@ -169,3 +169,33 @@ Verified: `npx tsc -b`, `npm test`, `npm run test:deploy`, `npm run test:email-c
 (e2e-store-v2) not runnable here (playwright not installed) — e2e expectations were
 updated to the new copy.
 
+## 10. Layout fix (2026-11-15): download upper-left, feedback lower-right
+
+Following the latest design feedback (red-circle placement guidance), the paid-order
+page was restructured:
+
+- The complete download section now lives in the **upper-left**: success icon,
+  “Your download is ready”, product information (cover/name/description — grouped
+  with the download), “Payment confirmed · …” for paid orders, “Download file” button
+  (download icon, filename/expiry kept out of the button), expiry/purchase-link info,
+  “Save purchase link” + “Resend download email”.
+- The complete feedback form now lives in the **lower-right** of the same grid
+  (review card bottom-aligned to the download column).
+- The duplicate centred success icon + heading (`.ps-order-head`) was removed — the
+  download card now owns the single success icon + heading.
+- The page is no longer squeezed into the narrow storefront column: the order page
+  widens its container via `.ps-main:has(> .ps-order)` (max-width 1080px) and the grid
+  is a spacious two-column layout (7fr/5fr, 28px gap, comfortable card padding).
+- Mobile: single-column stack, download first then review; no horizontal overflow.
+
+Verified: `npx tsc -b`, `npm test`, `npm run test:deploy`, `npm run test:email-check`,
+`npm run test:seller`, `npx oxlint` (no new issues), `npm run build` all pass.
+
+DOM-verified in the browser on a paid dev order:
+- download card at upper-left (x≈20, y≈60), feedback card lower-right (y≈666, bottom-aligned) ✓
+- no horizontal overflow (scrollWidth == clientWidth) ✓
+- “Back to the store” visible below ✓
+- deployed frontend bundle markers confirmed live (run `43712799055` success): `ps-order-download`, `ps-order-review`, `ps-order-grid`, `ps-order-cover`, `ps-success`, `ps-download-card`, `ps-review-card`, `Save purchase link`, `Back to the store` all present; no Kickbox.
+
+Next: visual sign-off on desktop + mobile, then live order-page check after deploy.
+
