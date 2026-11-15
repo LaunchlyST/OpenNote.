@@ -121,3 +121,51 @@ rather than a 404 (“This page doesn’t exist”).
   pushed (`d6fa6c5..d732d60 main -> main`).
 - API redeployed for this fix: not needed (frontend-only change); the live API was
   already serving the built-in-validation build and the public reviews endpoint.
+
+## 8. Follow-up fix (2026-11-15): “Back to the store” after a review
+
+After submitting a review on an order page, the “Back to the store” link now uses
+the order’s current published store handle (`order.storeHandle`) instead of only
+the handle from the URL, so a stale receipt/thanks link lands on the live store
+rather than a 404 (“This page doesn’t exist”).
+
+- Changed: `src/store/PublicStore.tsx` — `OrderStatus` computes
+  `const back = order?.storeHandle ? `/${order.storeHandle}` : `/${handle}`.
+- Verified live: the freshly deployed frontend bundle (run `43706719953`, completed
+  success) contains the new `?.storeHandle` logic in the live
+  `PublicStore-B-F_KyJH.js` chunk.
+- Verified live: the saved review appears publicly via
+  `GET /api/store/x--x039/products/prd_4fa03ef1c2370c9aa6f7/reviews` — it is
+  returned as visible/verified (`rev_10da1a69d670468ab472`, 5★, “I love it”,
+  created 2026-11-15T10:51:41Z, edited).
+- Deployed: frontend Pages workflow run `43706719953` → success; commit
+  `d732d60` “Store: send the order page's Back to the store to the order's current store”
+  pushed (`d6fa6c5..d732d60 main -> main`).
+- API redeployed for this fix: not needed (frontend-only change); the live API was
+  already serving the built-in-validation build and the public reviews endpoint.
+
+## 9. Redesign (2026-11-15): order / download page layout
+
+Redesigned the paid-order page (`OrderStatus` in `src/store/PublicStore.tsx`) per
+the attached screenshots/spec:
+
+- Two-column layout (desktop): left column = product cover, product name and
+  description; right column = download card (top) + feedback card (bottom).
+- Download card: small green success icon + heading “Your download is ready”;
+  “Download file” button (download icon) — filename and expiry shown separately,
+  not inside the button; secondary actions “Save purchase link” and “Resend
+  download email”; secure expiry/retrieval info preserved.
+- Feedback: compact two-step — “How was your experience with this product?” with
+  five labelled 1–5 star buttons (accessible description), then, after choosing a
+  rating, the optional comment + name + submit (“Post review” / “Update review”);
+  success “Thanks! Your review is live.”.
+- Public feedback wording added (“This feedback is public and will be shown on the
+  product as a verified buyer review.”).
+- Order API now returns the product `cover` and `description` for this layout.
+- Back-to-store link kept, still pointing at the order’s current store handle.
+
+Verified: `npx tsc -b`, `npm test`, `npm run test:deploy`, `npm run test:email-check`,
+`npm run test:seller`, `npx oxlint` (clean), `npm run build` all pass; playwright
+(e2e-store-v2) not runnable here (playwright not installed) — e2e expectations were
+updated to the new copy.
+
