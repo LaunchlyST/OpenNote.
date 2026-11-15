@@ -12,7 +12,7 @@ import { createRequire } from 'node:module'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 
 const require = createRequire(import.meta.url)
@@ -50,7 +50,7 @@ const api = await run([process.execPath, '--import', 'tsx', 'server/index.ts'], 
   API_PORT: String(API_PORT), SMTP_HOST: '', SMTP_PRESET: '', REQUIRE_EMAIL_VERIFICATION: 'false', EMAIL_ALLOW_TEST_DOMAINS: '1',
   STRIPE_SECRET_KEY: '', TIKTOK_CLIENT_KEY: '', TIKTOK_CLIENT_SECRET: '',
 }, 'listening')
-const web = await run(['npx', 'vite', 'preview', '--port', String(WEB_PORT), '--strictPort'], { API_PORT: String(API_PORT) }, 'Local')
+const web = await run([process.execPath, resolve('node_modules/vite/bin/vite.js'), 'preview', '--port', String(WEB_PORT), '--strictPort'], { API_PORT: String(API_PORT) }, 'Local')
 
 const browser = await chromium.launch()
 try {

@@ -49,6 +49,7 @@ const server: ChildProcess = spawn(process.execPath, ['--import', 'tsx', 'server
     API_PORT: String(PORT),
     SMTP_HOST: '', SMTP_PRESET: '',
     REQUIRE_EMAIL_VERIFICATION: 'false',
+    EMAIL_ALLOW_TEST_DOMAINS: '1',
     STRIPE_SECRET_KEY: 'sk_test_fake',
     STRIPE_WEBHOOK_SECRET: 'whsec_pay',
     STRIPE_API_BASE: fake.url,
@@ -117,16 +118,18 @@ try {
   await req('POST', '/api/seller/store/publish', {}, A)
   const freePub = (await req('GET', '/api/store/ava-pay')).json.products.find((x: { id: string }) => x.id === freeId)
   check('a price of 0 is allowed and the free product goes on sale', freePub?.priceMinor === 0)
-  const fk = key()
-  check('a free product needs the buyer’s email', (await req('POST', '/api/store/ava-pay/checkout', { productId: freeId, checkoutKey: key() })).status === 400)
-  const free1 = await req('POST', '/api/store/ava-pay/checkout', { productId: freeId, checkoutKey: fk, email: 'free-buyer@example.com' })
-  const free2 = await req('POST', '/api/store/ava-pay/checkout', { productId: freeId, checkoutKey: fk, email: 'free-buyer@example.com' })
-  check('getting a free product needs no payment and sends it by email', free1.status === 200 && free1.json.emailed === true && !JSON.stringify(free1.json).includes('/api/store-download/'))
+  // Free products are delivered by email: checkout never asks for money.
+  const viaCheckout = await req('POST', '/api/store/ava-pay/checkout', { productId: freeId, checkoutKey: key(), email: 'free-buyer@buyer.test' })
+  check('a free product is never paid for: it is sent by email', viaCheckout.status === 409 && viaCheckout.json?.code === 'use_claim')
+  const claimBody = { productId: freeId, email: 'free-buyer@buyer.test', name: 'Free Buyer', clientRef: 'ref_free_00000000000001' }
+  const free1 = await req('POST', '/api/store/ava-pay/claim', claimBody)
+  check('getting a free product needs no payment and sends it by email', free1.status === 200 && free1.json?.status === 'sent' && !JSON.stringify(free1.json).includes('/api/store-download/'))
+  const free2 = await req('POST', '/api/store/ava-pay/claim', claimBody)
   await new Promise((r) => setTimeout(r, 1500))
-  const mails = receipts('free-buyer@example.com')
-  check('pressing it twice sends one email', free2.status === 200 && mails.length === 1)
-  const link = mails[0]?.text.match(/https?:\/\/\S+\/order\/\S+/)?.[0]
-  check('the email holds the download link', Boolean(link))
+  const mails = receipts('free-buyer@buyer.test')
+  check('pressing it twice sends one email', free2.status === 429 && mails.length === 1, `${free2.status} / ${mails.length}`)
+  const link = mails[0]?.text.match(/https?:\/\/\S+\/claim\/clm_[a-f0-9]+\?t=[A-Za-z0-9_-]+/)?.[0]
+  check('the email holds the private link, not a download link', Boolean(link) && !mails[0]?.text.includes('/api/store-download/'))
 
   console.log('\n  Payment settings stay private and per seller')
   check('turning bank transfer on without details is refused', (await req('PUT', '/api/seller/payments', { bank: { enabled: true } }, A)).status === 400)

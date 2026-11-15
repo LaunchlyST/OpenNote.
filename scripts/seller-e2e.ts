@@ -141,6 +141,97 @@ try {
       await page.waitForTimeout(2500)
       const live = (await api('GET', `/api/store/${handle}`)).json
       check(`${tag}: edit typed right before Publish goes live`, live?.products?.[0]?.title === 'Typed then publish', JSON.stringify(live?.products?.map((p: { title: string }) => p.title)))
+      // 4. A refresh in the middle of an edit: the edit survives and saving keeps working.
+      //    (The draft is still being written when the page goes away: the editor must
+      //     recover it and must not be told the product "changed elsewhere" afterwards.)
+      await page.getByText(/^Products \(/).first().click()
+      await page.getByRole('button', { name: /Typed then publish/ }).first().click()
+      await title.fill('Typed then refresh')
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await page.getByText(/^Products \(/).first().click()
+      await page.getByRole('button', { name: /Typed then refresh|Typed then publish/ }).first().click()
+      await page.waitForTimeout(1500)
+      const recovered = await title.inputValue()
+      check(`${tag}: an edit interrupted by a refresh is kept`, recovered === 'Typed then refresh', recovered)
+      // the store is in the state the editor expects: saving again works
+      await title.fill('Typed after refresh')
+      await page.waitForTimeout(2000)
+      const afterRefresh = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === prod.id)
+      check(`${tag}: saving after a refresh is not refused as "changed elsewhere"`, afterRefresh?.title === 'Typed after refresh', afterRefresh?.title)
+      check(`${tag}: no "changed elsewhere" notice after a refresh`, (await page.getByText(/changed elsewhere/i).count()) === 0)
+
+      // 4b. The save reaches the server but its reply is lost (a dropped connection):
+      //      the editor still holds the old revision, and must not be told the
+      //      product "changed elsewhere" when it saves again.
+      let dropped = false
+      await page.route('**/api/seller/products/**', async (route) => {
+        if (!dropped && route.request().method() === 'PATCH') {
+          dropped = true
+          const sent = await route.fetch()
+          await sent.body()
+          await route.abort('failed')
+          return
+        }
+        await route.continue()
+      })
+      await title.fill('Reply lost')
+      await page.waitForTimeout(2000)
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await page.getByText(/^Products \(/).first().click()
+      await page.getByRole('button', { name: /Reply lost|Typed after refresh/ }).first().click()
+      await page.waitForTimeout(1500)
+      check(`${tag}: the edit whose reply was lost is kept`, (await title.inputValue()) === 'Reply lost', await title.inputValue())
+      await title.fill('Saved after a lost reply')
+      await page.waitForTimeout(2500)
+      const afterLost = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === prod.id)
+      check(`${tag}: saving after a lost reply is not refused as "changed elsewhere"`, afterLost?.title === 'Saved after a lost reply', afterLost?.title)
+      check(`${tag}: no "changed elsewhere" notice after a lost reply`, (await page.getByText(/changed elsewhere/i).count()) === 0)
+      await page.unroute('**/api/seller/products/**')
+
+      // 5. Undo must never swap the store's style.
+      await page.getByRole('tab', { name: 'Page' }).click()
+      await page.getByRole('button', { name: 'Add block' }).click()
+      const addDialog = page.getByRole('dialog', { name: 'Add a block' })
+      await addDialog.locator('.ab-q', { hasText: 'Text' }).click()
+      await page.waitForTimeout(500)
+      const textEditor = page.getByRole('dialog', { name: 'Edit Text' })
+      if (await textEditor.count()) {
+        await textEditor.getByLabel('Heading').fill('A text block')
+        await textEditor.getByRole('button', { name: 'Close' }).click()
+      }
+      await page.waitForTimeout(1200)
+      await page.getByRole('tab', { name: 'Style 2' }).click()
+      await page.getByRole('button', { name: /Publish/ }).first().click()
+      await page.waitForTimeout(2500)
+      const styled = (await api('GET', '/api/seller/store', undefined, C)).json.store
+      check(`${tag}: publishing Style 2 makes Style 2 the store's style`, styled.draft.use === 2, JSON.stringify(styled.draft.use))
+      await page.getByRole('button', { name: 'Undo' }).click()
+      await page.waitForTimeout(2000)
+      const undone = (await api('GET', '/api/seller/store', undefined, C)).json.store
+      check(`${tag}: undo does not switch the store's style back`, undone.draft.use === 2, JSON.stringify(undone.draft.use))
+
+      // 6. Archive a product, bring it back, and keep editing it: the editor and
+      //    the server must stay on the same revision.
+      await page.getByText(/^Products \(/).first().click()
+      await page.getByRole('button', { name: /Saved after a lost reply|Typed after refresh/ }).first().click()
+      await page.getByRole('button', { name: 'Archive', exact: true }).click()
+      await page.waitForTimeout(1500)
+      const archived = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === prod.id)
+      check(`${tag}: the product is archived`, archived?.archived === true, JSON.stringify(archived?.archived))
+      if (archived?.archived) {
+        await page.getByText(/^Archived \(1\)/).click()
+        await page.getByRole('button', { name: /Saved after a lost reply|Typed after refresh/ }).first().click()
+        await page.getByRole('button', { name: 'Unarchive', exact: true }).click()
+        await page.waitForTimeout(1500)
+        await title.fill('Edited after unarchive')
+        await page.waitForTimeout(2500)
+        const afterUnarchive = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === prod.id)
+        check(`${tag}: editing after Unarchive is saved`, afterUnarchive?.title === 'Edited after unarchive', afterUnarchive?.title)
+        check(`${tag}: no "changed elsewhere" notice after Unarchive`, (await page.getByText(/changed elsewhere/i).count()) === 0)
+      }
+
       check(`${tag}: no page errors`, errors.length === 0, errors.join(' | '))
       check(`${tag}: no horizontal overflow`, !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)))
       await page.screenshot({ path: join(tmp, `${name}-${viewport.label}.png`) })
@@ -150,7 +241,9 @@ try {
 } finally {
   server.kill('SIGTERM')
   await fake.close()
-  rmSync(tmp, { recursive: true, force: true })
+  // Windows may still hold a handle on the temp folder: a leftover folder must
+  // not turn a passing run into a failing one.
+  try { rmSync(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }) } catch { /* keep the folder */ }
 }
 console.log(failures ? `\n${failures} e2e check(s) failed.` : '\nAll Seller Studio e2e checks passed.')
 process.exit(failures ? 1 : 0)

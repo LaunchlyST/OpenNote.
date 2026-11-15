@@ -656,6 +656,91 @@ try {
     const seller = (await req('GET', '/api/seller/orders', undefined, A)).json.orders.find((o: any) => o.id === o1.id)
     check('the seller’s order list shows list price, discount and code', seller.listMinor === 1200 && seller.discountMinor === 120 && seller.couponCode === 'SAVE10')
 
+    console.log('\n  Draft recovery, code scope, affiliates and images')
+    // A code limited to products must never widen to the whole store.
+    const goneScope = await req('POST', '/api/seller/coupons', { code: 'GONE', kind: 'percent', value: 10, productIds: ['prd_not_here_at_all'] }, A)
+    check('a code limited to products that are not there is refused', goneScope.status === 400 && /products/i.test(goneScope.json?.error ?? ''))
+    check('…and no such code was created', !(await req('GET', '/api/seller/coupons', undefined, A)).json.coupons.some((c: any) => c.code === 'GONE'))
+    const scopedProduct = (await req('POST', '/api/seller/products', { title: 'Scoped product', priceMinor: 500, currency: 'gbp' }, A)).json.product.id
+    const scopedCode = await req('POST', '/api/seller/coupons', { code: 'SCOPED', kind: 'percent', value: 10, productIds: [scopedProduct] }, A)
+    check('a code can be limited to one of the seller’s own products', scopedCode.status === 201 && JSON.stringify(scopedCode.json.coupon.productIds) === JSON.stringify([scopedProduct]))
+    await req('DELETE', `/api/seller/products/${scopedProduct}`, undefined, A)
+    const widen = await req('PATCH', `/api/seller/coupons/${scopedCode.json.coupon.id}`, { productIds: [scopedProduct] }, A)
+    check('a code whose product is gone is refused, not widened to the whole store', widen.status === 400)
+    const stillScoped = (await req('GET', '/api/seller/coupons', undefined, A)).json.coupons.find((c: any) => c.code === 'SCOPED')
+    check('…and the code keeps the scope it had', JSON.stringify(stillScoped?.productIds) === JSON.stringify([scopedProduct]))
+    check('…so it still applies to that product only', (await req('POST', '/api/store/ava-makes/quote', { productId: pid, coupon: 'SCOPED' })).json.quote.coupon === null)
+
+    // A save that is behind the server is only accepted when it is our own.
+    const rev = (await req('GET', '/api/seller/store', undefined, A)).json.store
+    const token = 'recover-token-000000000000'
+    const first = await req('PUT', '/api/seller/store/draft', { page: rev.draft, revision: rev.revision, token }, A)
+    check('a draft save with the current revision works', first.status === 200)
+    const replay = await req('PUT', '/api/seller/store/draft', { page: rev.draft, revision: rev.revision, token }, A)
+    check('the same editor may save again after its reply was lost', replay.status === 200 && replay.json.store.revision === rev.revision + 2)
+    const otherEditor = await req('PUT', '/api/seller/store/draft', { page: rev.draft, revision: rev.revision, token: 'someone-else-token-000' }, A)
+    check('an edit from somewhere else is still refused', otherEditor.status === 409)
+    check('…and the newer draft is untouched', (await req('GET', '/api/seller/store', undefined, A)).json.store.revision === rev.revision + 2)
+    const prod = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((p: any) => p.id === pid)
+    const pToken = 'product-token-000000000000'
+    const pSave = await req('PATCH', `/api/seller/products/${pid}`, { title: 'Content planner', revision: prod.revision, token: pToken }, A)
+    check('a product save with the current revision works', pSave.status === 200)
+    const pReplay = await req('PATCH', `/api/seller/products/${pid}`, { title: 'Content planner', revision: prod.revision, token: pToken }, A)
+    check('the same editor may save the product again after its reply was lost', pReplay.status === 200)
+    const pOther = await req('PATCH', `/api/seller/products/${pid}`, { title: 'Taken over', revision: prod.revision, token: 'other-product-token-00' }, A)
+    check('a product edit from somewhere else is still refused', pOther.status === 409)
+    check('…and the product keeps its title', (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((p: any) => p.id === pid).title === 'Content planner')
+
+    // An affiliate product is bought elsewhere: no file is needed, and it cannot be claimed.
+    const affProduct = (await req('POST', '/api/seller/products', { title: 'Partner plan', priceMinor: 1500, currency: 'gbp' }, A)).json.product.id
+    const affExtras = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((p: any) => p.id === affProduct).extras
+    const aff = await req('PATCH', `/api/seller/products/${affProduct}`, { extras: { ...affExtras, affiliate: { url: 'https://partner.example/plan', title: 'T'.repeat(200), description: 'D'.repeat(900), disclosure: 'X'.repeat(900) } } }, A)
+    check('an affiliate product needs no file', aff.status === 200 && aff.json.product.problem === null)
+    check('the affiliate text is bounded', aff.json.product.extras.affiliate.title.length === 80 && aff.json.product.extras.affiliate.description.length === 500 && aff.json.product.extras.affiliate.disclosure.length === 500)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const affLive = (await req('GET', '/api/store/ava-makes')).json.products.find((p: any) => p.id === affProduct)
+    check('an affiliate product goes on sale', affLive?.affiliate?.url === 'https://partner.example/plan')
+    check('…and no Desknoty order is started for it', (await req('POST', '/api/store/ava-makes/checkout', { productId: affProduct, checkoutKey: key() })).status === 409)
+    const freeAff = (await req('POST', '/api/seller/products', { title: 'Free partner', priceMinor: 0, currency: 'gbp' }, A)).json.product.id
+    await req('PATCH', `/api/seller/products/${freeAff}`, { extras: { affiliate: { url: 'https://partner.example/free' } } }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const claimAff = await req('POST', '/api/store/ava-makes/claim', { productId: freeAff, email: 'mia@buyer.test', name: 'Mia', clientRef: 'ref_affiliate_00000001' })
+    check('an affiliate product cannot be claimed as a free download', claimAff.status === 409 && /affiliate/i.test(claimAff.json?.error ?? ''))
+
+    // Duplicating a product keeps its free sample, never its paid file.
+    const dupSrc = (await req('POST', '/api/seller/products', { title: 'Planner with a sample', priceMinor: 900, currency: 'gbp' }, A)).json.product.id
+    await req('PUT', `/api/seller/products/${dupSrc}/file`, Buffer.from('DUPLICATE-PAID-FILE'), A, { 'content-type': 'application/pdf', 'x-file-name': 'dup.pdf' })
+    await req('PUT', `/api/seller/products/${dupSrc}/sample`, Buffer.from('DUPLICATE-SAMPLE'), A, { 'content-type': 'application/pdf', 'x-file-name': 'dup-sample.pdf' })
+    const dup = await req('POST', `/api/seller/products/${dupSrc}/duplicate`, undefined, A)
+    const dupId = dup.json?.product?.id as string
+    check('a duplicate keeps the free sample', dup.status === 201 && dup.json.product.sample?.name === 'dup-sample.pdf')
+    check('…and the same sample file', (await dbGet<any>('SELECT "sampleFileId" FROM seller_product WHERE id = ?', dupId)).sampleFileId === (await dbGet<any>('SELECT "sampleFileId" FROM seller_product WHERE id = ?', dupSrc)).sampleFileId)
+    await req('PATCH', `/api/seller/products/${dupId}`, { listed: true }, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+    const dupSample = await fetch(`${BASE}/api/store-sample/${dupId}`)
+    check('the copy’s public sample is the sample, never the paid file', dupSample.status === 200 && (await dupSample.text()) === 'DUPLICATE-SAMPLE')
+    await req('DELETE', `/api/seller/products/${dupId}`, undefined, A)
+    await req('DELETE', `/api/seller/products/${dupSrc}`, undefined, A)
+    await req('POST', '/api/seller/store/publish', undefined, A)
+
+    // Store images are public; paid files and free samples are not.
+    const media = await req('POST', '/api/seller/media', Buffer.from('PNG-BYTES'), A, { 'content-type': 'image/png' })
+    check('a seller uploads a public image', media.status === 201 && /^med_[a-f0-9]{24}$/.test(media.json?.id ?? ''))
+    const anon = await fetch(`${BASE}/api/store-media/${media.json.id}`)
+    check('a visitor who is not signed in can load a store image', anon.status === 200 && (await anon.text()) === 'PNG-BYTES')
+    check('a paid file id is never served as an image', (await fetch(`${BASE}/api/store-media/fil_${'a'.repeat(32)}`)).status === 404)
+    check('a free sample id is never served as an image', (await fetch(`${BASE}/api/store-media/smp_${'a'.repeat(32)}`)).status === 404)
+
+    // A payment page that cannot be created gives the reserved code back.
+    await req('POST', '/api/seller/coupons', { code: 'ONCEONLY', kind: 'percent', value: 10, maxRedemptions: 1 }, A)
+    fake.failSessions(true)
+    const broke = await buy({ coupon: 'ONCEONLY', email: 'unlucky@buyer.test' })
+    fake.failSessions(false)
+    check('a checkout that cannot be started is refused', broke.status === 502)
+    check('…and the code it held is free again', (await dbGet<any>(`SELECT used FROM seller_coupon WHERE code = 'ONCEONLY'`)).used === 0)
+    const retry = await buy({ coupon: 'ONCEONLY', email: 'unlucky@buyer.test' })
+    check('the buyer can try again with the same code', retry.status === 200 && unit(sidOf(retry)) === '1080')
+
     console.log('\n  Reviews, samples and favourites (Stage C)')
     const giftOrder = await dbGet<any>(`SELECT id, "accessKey" FROM seller_order WHERE "couponCode" = 'GIFT'`)
     const empty = (await req('GET', `/api/store/ava-makes/products/${pid}/reviews`)).json

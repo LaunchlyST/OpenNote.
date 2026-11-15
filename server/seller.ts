@@ -120,7 +120,8 @@ export async function ensureSellerTables() {
       "stripeStatus" TEXT NOT NULL DEFAULT 'not_connected',
       "chargesReady" INTEGER NOT NULL DEFAULT 0,
       "createdAt" TEXT NOT NULL,
-      "updatedAt" TEXT NOT NULL
+      "updatedAt" TEXT NOT NULL,
+      draftToken TEXT
     );
     CREATE INDEX IF NOT EXISTS seller_store_account ON seller_store ("stripeAccountId");
 
@@ -147,7 +148,8 @@ export async function ensureSellerTables() {
       "pubAt" TEXT,
       sort INTEGER NOT NULL DEFAULT 0,
       "createdAt" TEXT NOT NULL,
-      "updatedAt" TEXT NOT NULL
+      "updatedAt" TEXT NOT NULL,
+      "lastToken" TEXT
     );
     CREATE INDEX IF NOT EXISTS seller_product_store ON seller_product ("storeId");
 
@@ -315,6 +317,8 @@ interface StoreRow {
   chargesReady: number
   createdAt: string
   updatedAt: string
+  /** Who wrote the draft last (see the writer token in the save handlers). */
+  draftToken?: string | null
 }
 interface ProductRow {
   sampleFileId?: string | null
@@ -349,6 +353,8 @@ interface ProductRow {
   sort: number
   createdAt: string
   updatedAt: string
+  /** Who wrote the product last (see the writer token in the save handlers). */
+  lastToken?: string | null
 }
 interface OrderRow {
   receiptError?: string | null
@@ -436,6 +442,17 @@ const affiliateUrl = (v: unknown) => {
   }
 }
 const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.test(v) ? v : null)
+
+/**
+ * The writer token: an opaque id for the editor that sent a save. The server
+ * remembers the last writer, so a save that arrives with an old revision can
+ * be recognised as *our own* earlier request whose reply was lost, instead of
+ * being refused as "changed elsewhere".
+ */
+const writerToken = (v: unknown): string | null => {
+  const s = typeof v === 'string' ? v.trim() : ''
+  return /^[A-Za-z0-9_-]{8,64}$/.test(s) ? s : null
+}
 
 /* ------------------------------------------------------- page schema --- */
 
@@ -768,6 +785,8 @@ function cleanTextStyle(v: unknown): TextStyle {
   }
 }
 const isoDay = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v)) ? v : null)
+/** One line of text, trimmed and bounded. */
+const line = (v: unknown, max: number) => String(v ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max)
 export function cleanExtras(v: unknown): ProductExtras {
   const o = (v && typeof v === 'object' ? v : {}) as Record<string, any>
   const f = (o.offer ?? {}) as Record<string, unknown>
@@ -779,13 +798,13 @@ export function cleanExtras(v: unknown): ProductExtras {
   // http(s) only, no credentials; the exact string (with tracking params) is kept.
   const rawAffiliateUrl = String(affiliate.url ?? '').trim()
   const safeUrl = affiliateUrl(rawAffiliateUrl) ? rawAffiliateUrl : null
-  const affiliateImage = affiliateUrl(affiliate.image) ? String(affiliate.image).trim() : ''
+  const affiliateImage = affiliateUrl(affiliate.image) ? line(affiliate.image, 1000) : ''
   return {
     offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48', ...offerSchedule(f) },
     cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
     hidden: Boolean(o.hidden),
     ...cleanCard(o),
-    affiliate: safeUrl ? { url: safeUrl, image: affiliateImage || undefined, title: String(affiliate.title ?? '').trim() || undefined, description: String(affiliate.description ?? '').trim() || undefined, disclosure: String(affiliate.disclosure ?? '').trim() || undefined } : undefined,
+    affiliate: safeUrl ? { url: safeUrl, image: affiliateImage || undefined, title: line(affiliate.title, 80) || undefined, description: line(affiliate.description, 500) || undefined, disclosure: line(affiliate.disclosure, 500) || undefined } : undefined,
   }
 }
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
@@ -800,7 +819,6 @@ function offerSchedule(f: Record<string, unknown>) {
   if (startsAt && endsAt && Date.parse(endsAt) <= Date.parse(startsAt)) endsAt = null
   return { tz, startsLocal, endsLocal: endsAt ? endsLocal : null, startsAt, endsAt, countdown: Boolean(f.countdown) && Boolean(endsAt) }
 }
-const line = (v: unknown, max: number) => String(v ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, max)
 const unit = (v: unknown, d: number) => { const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, Math.round(n * 1000) / 1000)) : d }
 const pct = (v: unknown) => { const n = Number(v); return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : 50 }
 /** Card presentation fields: trimmed, bounded and defaulted, never trusted from the browser. */
@@ -905,6 +923,8 @@ function productProblem(p: ProductRow): string | null {
   const bundle = readExtras(p.extras).bundle
   if (bundle.length === 1) return 'A bundle needs at least 2 products.'
   if (bundle.length >= 2) return null
+  // An affiliate product is bought on the partner's site: it needs no file here.
+  if (readExtras(p.extras).affiliate?.url) return null
   if (!p.fileId) return 'Upload the file buyers will download.'
   return null
 }
@@ -1420,11 +1440,16 @@ export function sellerRouter() {
   me.put('/store/draft', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
-    if (req.body?.revision !== s.revision) return void res.status(409).json({ error: 'This page changed elsewhere. Reload before saving; your edits are kept locally.' })
+    const token = writerToken(req.body?.token)
+    // A save that is behind the server is only accepted when the server's
+    // newer draft was written by this same editor: that is our own request
+    // whose reply was lost (a refresh, a dropped connection). Anything else
+    // is a real edit from somewhere else and is never overwritten silently.
+    if (req.body?.revision !== s.revision && !(token && s.draftToken === token)) return void res.status(409).json({ error: 'This page changed elsewhere. Reload before saving; your edits are kept locally.' })
     const ids = new Set((await q.products(s.id)).map((p) => p.id))
     const page = cleanPage((req.body as { page?: unknown })?.page, ids)
     if (typeof page === 'string') return void res.status(400).json({ error: page })
-    const saved = await sql.run(`UPDATE seller_store SET draft = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, JSON.stringify(page), now(), s.id, s.revision)
+    const saved = await sql.run(`UPDATE seller_store SET draft = ?, "updatedAt" = ?, revision = revision + 1, "draftToken" = ? WHERE id = ? AND revision = ?`, JSON.stringify(page), now(), token, s.id, s.revision)
     if (!saved.changes) return void res.status(409).json({ error: 'Page changed elsewhere. Your edits are kept locally.' })
     res.json({ store: await storeView((await q.storeById(s.id))!) })
   })
@@ -1504,10 +1529,13 @@ export function sellerRouter() {
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
-    if (req.body?.revision !== p.revision) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
+    const token = writerToken(req.body?.token)
+    // Behind the server? Only this editor's own lost request is accepted here;
+    // an edit made somewhere else is never overwritten silently.
+    if (req.body?.revision !== p.revision && !(token && p.lastToken === token)) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
     if (fields.extras) fields.extras = await ownProductsOnly(s.id, p.id, await ownMediaOnly(s.id, fields.extras))
     const next = { ...p, ...fields, updatedAt: now() }
-    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1 WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, next.id, p.revision)
+    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1, "lastToken" = ? WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, token, next.id, p.revision)
     if (!saved.changes) return void res.status(409).json({ error: 'Product changed elsewhere. Your edits are kept locally.' })
     res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
@@ -1545,7 +1573,12 @@ export function sellerRouter() {
     if ('productIds' in b || !existing) {
       const ids = Array.isArray(b.productIds) ? b.productIds.map(String) : []
       const own = ids.length ? (await q.products(storeId)).map((p) => p.id) : []
-      out.productIds = ids.length ? JSON.stringify([...new Set(ids.filter((i) => own.includes(i)))]) : null
+      const filtered = [...new Set(ids.filter((i) => own.includes(i)))]
+      // A code limited to products must never end up covering the whole store:
+      // if none of the chosen products is left, the code is refused instead.
+      if (ids.length && !filtered.length) return 'None of the products you chose is in your store any more. Pick the products again.'
+      // No products chosen means the code applies to the whole store.
+      out.productIds = ids.length ? JSON.stringify(filtered) : null
     }
     for (const k of ['startsAt', 'endsAt'] as const) {
       if (!(k in b) && existing) continue
@@ -1627,7 +1660,7 @@ export function sellerRouter() {
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, t, t)
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "sampleFileId", "sampleName", "sampleSize", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, p.sampleFileId, p.sampleName, p.sampleSize, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -2082,6 +2115,8 @@ export function sellerRouter() {
     if (!/^[A-Za-z0-9_-]{16,64}$/.test(clientRef)) return void res.status(400).json({ error: 'Please reload the page and try again.' })
     const found = await q.product(String(b.productId ?? ''), s.id)
     if (!found || !found.pubAt || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t available.' })
+    // An affiliate product is bought on the partner's site: there is no file to send.
+    if (readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'Affiliate products are not available as free products.' })
     const bundle = readExtras(found.pubExtras).bundle
     if (!found.pubFileId && bundle.length < 2) return void res.status(404).json({ error: 'This product isn’t available.' })
     const priced = await pricePurchase(s, found, b.coupon)
@@ -2168,6 +2203,8 @@ export function sellerRouter() {
     const s = await q.storeById(c.storeId)
     const found = s ? await q.product(c.productId, s.id) : undefined
     if (!s || !found || !found.pubAt) return void res.status(404).json({ error: 'This product isn’t available any more.' })
+    // The product may have become an affiliate product since the link was sent.
+    if (readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'This product isn’t available as a free download any more.' })
     // the same address already has this product: hand back that order instead of a duplicate
     let order = c.orderId ? await q.order(c.orderId) : await sql.get<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? AND "productId" = ? AND method = 'free' AND status = 'paid' AND "buyerEmail" = ? ORDER BY "createdAt" LIMIT 1`, s.id, found.id, c.email)
     if (!order) {
@@ -2227,10 +2264,10 @@ export function sellerRouter() {
     const productId = String((req.body as { productId?: unknown })?.productId ?? '')
     const found = await q.product(productId, s.id)
     const bundleIds = found ? readExtras(found.pubExtras).bundle : []
-    if (!found || !found.pubAt || (!found.pubFileId && bundleIds.length < 2) || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
     // Affiliate / external products are bought on the partner's site. Refuse a
     // crafted checkout too, so no Desknoty order is ever created for them.
-    if (readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'This product is sold on the partner’s website.' })
+    if (found && readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'This product is sold on the partner’s website.' })
+    if (!found || !found.pubAt || (!found.pubFileId && bundleIds.length < 2) || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
     // A bundle can only be bought when the order will grant every item: each must be live with a file.
     let entitlements: Array<{ productId: string; title: string; fileId: string; fileName: string }> = []
     if (bundleIds.length >= 2) {
@@ -2289,19 +2326,29 @@ export function sellerRouter() {
     if (!samePurchase(order, 'stripe') || order.stripeMode !== stripeMode) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     if (Date.now() - Date.parse(order.createdAt) > 23 * 60 * 60 * 1000) return void res.status(409).json({ error: 'This checkout attempt expired. Start a new purchase.' })
-    const session = await st.checkout.sessions.create({
-      mode: 'payment', adaptive_pricing: { enabled: false },
-      line_items: [{ quantity: 1, price_data: { currency: order.currency, unit_amount: order.amountMinor, product_data: { name: order.productTitle } } }],
-      success_url: `${seller.siteUrl}/store/${s.id}/thanks?session_id={CHECKOUT_SESSION_ID}`,
-      // back to the product being bought, at the store's public address (not its internal id)
-      cancel_url: `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`,
-      metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
-      // Direct charge on the seller's connected account; Desknoty's fee (if any) comes off through Stripe.
-      payment_intent_data: {
-        metadata: { desknotyOrderId: order.id },
-        ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
-      },
-    }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}` })
+    let session: Stripe.Checkout.Session
+    try {
+      session = await st.checkout.sessions.create({
+        mode: 'payment', adaptive_pricing: { enabled: false },
+        line_items: [{ quantity: 1, price_data: { currency: order.currency, unit_amount: order.amountMinor, product_data: { name: order.productTitle } } }],
+        success_url: `${seller.siteUrl}/store/${s.id}/thanks?session_id={CHECKOUT_SESSION_ID}`,
+        // back to the product being bought, at the store's public address (not its internal id)
+        cancel_url: `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`,
+        metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
+        // Direct charge on the seller's connected account; Desknoty's fee (if any) comes off through Stripe.
+        payment_intent_data: {
+          metadata: { desknotyOrderId: order.id },
+          ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
+        },
+      }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}` })
+    } catch (err) {
+      // No payment page was created, so this purchase never happened: the code
+      // it reserved goes back now instead of being held for a day.
+      console.error('[seller] Stripe checkout could not be started', order.id, err)
+      await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, order.id)
+      await releaseCoupon(order.id)
+      return void res.status(502).json({ error: 'We could not start the payment. Please try again.' })
+    }
     await sql.run('UPDATE seller_order SET "sessionId" = ?, "checkoutUrl" = ? WHERE id = ?', session.id, session.url, order.id)
     res.json({ url: session.url })
   })
@@ -2346,8 +2393,17 @@ export function sellerRouter() {
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     const payee = order.accountId.replace(/^paypal:/, '')
     const back = `${seller.siteUrl}/store/${s.id}/thanks?paypal_order=${order.id}&k=${encodeURIComponent(order.accessKey)}`
-    const { paypalOrderId, approveUrl } = await createPaypalOrder({ id: order.id, amountMinor: order.amountMinor, currency: order.currency, title: order.productTitle }, payee, back, `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`)
-    await sql.run('UPDATE seller_order SET "providerOrderId" = ?, "checkoutUrl" = ? WHERE id = ? AND "providerOrderId" IS NULL', paypalOrderId, approveUrl, order.id)
+    let paypal: { paypalOrderId: string; approveUrl: string }
+    try {
+      paypal = await createPaypalOrder({ id: order.id, amountMinor: order.amountMinor, currency: order.currency, title: order.productTitle }, payee, back, `${seller.siteUrl}/${s.handle}/p/${p.id}?checkout=cancelled`)
+    } catch (err) {
+      // No approval page was created: give the reserved code back now.
+      console.error('[seller] PayPal checkout could not be started', order.id, err)
+      await sql.run(`UPDATE seller_order SET status = 'cancelled' WHERE id = ? AND status = 'pending'`, order.id)
+      await releaseCoupon(order.id)
+      return void res.status(502).json({ error: 'We could not start the payment. Please try again.' })
+    }
+    await sql.run('UPDATE seller_order SET "providerOrderId" = ?, "checkoutUrl" = ? WHERE id = ? AND "providerOrderId" IS NULL', paypal.paypalOrderId, paypal.approveUrl, order.id)
     const saved = (await q.order(order.id))!
     res.json({ url: saved.checkoutUrl })
   }
@@ -2634,9 +2690,15 @@ export function sellerRouter() {
     res.json({ status: action })
   })
 
+  /**
+   * A seller's public images (avatar, banner, covers, gallery). These are
+   * public on purpose: every visitor of a store loads them, signed in or not.
+   * Only ids in `med_...` that the seller actually uploaded are served, so a
+   * paid file (fil_...) or a free sample (smp_...) can never be reached here.
+   */
   r.get('/api/store-media/:id', async (req, res) => {
     const id = String(req.params.id)
-    const m = /^med_[a-f0-9]{24}$/.test(id) ? await sql.get(`SELECT type FROM seller_media WHERE id = ?`, id) : undefined
+    const m = /^med_[a-f0-9]{24}$/.test(id) ? await sql.get<{ type: string }>(`SELECT type FROM seller_media WHERE id = ?`, id) : undefined
     if (!m || !(await blobs().exists('media', id))) return void res.status(404).end()
     await blobs().send('media', id, res, { type: String(m.type), cache: 'public, max-age=31536000, immutable' })
   })

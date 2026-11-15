@@ -32,6 +32,7 @@
     "mail:test": "tsx scripts/mail-test.ts",
     "serve": "NODE_ENV=production tsx server/index.ts",
     "test:seller": "tsx scripts/seller-smoke.ts",
+    "test:seller-save": "tsx scripts/seller-save-smoke.ts",
     "test:e2e:seller": "tsx scripts/e2e-seller.ts",
     "test:e2e:store": "tsx scripts/e2e-store-v2.ts",
     "test:pricing": "tsx scripts/pricing-smoke.ts",

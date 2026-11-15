@@ -49,11 +49,11 @@ export const sellerApi = {
   /** Delete the store to set it up again (only without orders). */
   startOver: (confirm: string) => call<{ store: null }>('DELETE', '/api/seller/store', { confirm }),
   changeHandle: (handle: string) => call<{ store: StoreView }>('PUT', '/api/seller/handle', { handle }),
-  saveDraft: (page: Page, revision: number) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision }),
+  saveDraft: (page: Page, revision: number, token?: string) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision, token }),
   publish: () => call<{ store: StoreView }>('POST', '/api/seller/store/publish'),
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
-  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number) =>
-    call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision }),
+  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number, token?: string) =>
+    call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision, token }),
   coupons: () => call<{ coupons: Coupon[] }>('GET', '/api/seller/coupons'),
   createCoupon: (c: CouponInput) => call<{ coupon: Coupon }>('POST', '/api/seller/coupons', c),
   updateCoupon: (id: string, c: Partial<CouponInput>) => call<{ coupon: Coupon }>('PATCH', `/api/seller/coupons/${id}`, c),

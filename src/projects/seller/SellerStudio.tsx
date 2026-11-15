@@ -500,10 +500,16 @@ function Studio({
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
-  const pageSave = useSellerSave(`desknoty.seller.recovery.${store.id}.page`, store.draft, store.revision, async (value, revision) => {
-    const r = await sellerApi.saveDraft(value, revision)
+  const pageSave = useSellerSave(`desknoty.seller.recovery.${store.id}.page`, store.draft, store.revision, async (value, revision, token) => {
+    const r = await sellerApi.saveDraft(value, revision, token)
     setStore(r.store)
     return r.store.revision
+  }, async () => {
+    // The server's own page, used to settle a clash without losing the newer edit.
+    const r = await sellerApi.store(true)
+    if (!r?.store) throw new Error('The store could not be reloaded.')
+    setStore(r.store)
+    return { value: r.store.draft, revision: r.store.revision }
   })
   const full = pageSave.value
   // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
@@ -524,28 +530,31 @@ function Studio({
     } catch { /* cancelled */ }
   }
   // Undo / redo over the draft (every change still autosaves as the draft only).
+  // The chosen style is not part of an edit: undoing a change must never swap
+  // the store's style, so `use` and `style2` are always taken from the current page.
   const hist = useRef<{ past: Page[]; future: Page[] }>({ past: [], future: [] })
   const [, rerender] = useState(0)
+  const keepStyle = (p: Page): Page => ({ ...p, style2: full.style2, use: full.use })
   const edit = (p: Page) => {
     hist.current.past.push(full)
     if (hist.current.past.length > 60) hist.current.past.shift()
     hist.current.future = []
     rerender((n) => n + 1)
-    pageSave.edit({ ...p, style2: full.style2, use: full.use })
+    pageSave.edit(keepStyle(p))
   }
   const undo = () => {
     const prev = hist.current.past.pop()
     if (!prev) return
     hist.current.future.push(full)
     rerender((n) => n + 1)
-    pageSave.edit(prev)
+    pageSave.edit(keepStyle(prev))
   }
   const redo = () => {
     const next = hist.current.future.pop()
     if (!next) return
     hist.current.past.push(full)
     rerender((n) => n + 1)
-    pageSave.edit(next)
+    pageSave.edit(keepStyle(next))
   }
   const undoRef = useRef({ undo, redo })
   undoRef.current = { undo, redo }
@@ -854,7 +863,14 @@ function Studio({
         </header>}
 
         <div className="ss-soonwrap">
-        {saving === 'error' && <p className="ss-s2note" role="alert">Your draft couldn’t be saved. <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button></p>}
+        {saving === 'error' && (
+          <p className="ss-s2note" role="alert">
+            Your draft couldn’t be saved.{' '}
+            {pageSave.conflict ? 'This page changed somewhere else, so it was not overwritten. Your edits are still here. ' : ''}
+            <button type="button" className="underline" onClick={() => void pageSave.flush().catch(() => {})}>Retry save</button>
+            {pageSave.conflict && <>{' '}<button type="button" className="underline" onClick={() => void pageSave.discard().catch((e: Error) => setErr(e.message))}>Take the newer version</button></>}
+          </p>
+        )}
         {readLegacyDraft() && <button type="button" onClick={() => void flushSellerEdits().then(() => importLegacy(store)).then(() => window.location.reload()).catch((e: Error) => setErr(e.message))}>Resume importing browser draft (original kept until complete)</button>}
         {/* Style 2 reuses the same page + products data, so the Page and Products editors stay live for both styles. */}
         {tab === 'page' && <>
@@ -1981,15 +1997,33 @@ function Switch({ on, onChange, label }: { on: boolean; onChange: (v: boolean) =
 const BADGE_COLOURS = ['#e11d48', '#f97316', '#16a34a', '#2563eb', '#7c3aed', '#111114']
 const CTA_TEXTS = ['Buy now', 'Get Instant Access', 'Download Now']
 
+/** The editable shape of a product: the fields the seller can change. */
+const productForm = (p: DraftProduct) => ({
+  title: p.title,
+  description: p.description,
+  price: (p.priceMinor / 100).toFixed(2),
+  currency: p.currency,
+  cover: p.cover,
+  listed: p.listed,
+  extras: p.extras ?? DEFAULT_EXTRAS,
+})
+
 function ProductForm({ product, store, setStore, onDeleted }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void }) {
   const [state, setState] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
-  const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, { title: product.title, description: product.description, price: (product.priceMinor / 100).toFixed(2), currency: product.currency, cover: product.cover, listed: product.listed, extras: product.extras ?? DEFAULT_EXTRAS }, product.revision, async (value, revision) => {
-    const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price || 0) * 100) }, revision)
+  const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, productForm(product), product.revision, async (value, revision, token) => {
+    const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price || 0) * 100) }, revision, token)
     setStore(r.store)
     return r.product.revision
+  }, async () => {
+    // The server's own product, used to settle a clash without losing the newer edit.
+    const r = await sellerApi.store(true)
+    const p = r?.store?.products.find((x) => x.id === product.id)
+    if (!r?.store || !p) throw new Error('The product could not be reloaded.')
+    setStore(r.store)
+    return { value: productForm(p), revision: p.revision }
   })
   const form = saved.value
   const setForm = saved.edit
@@ -2045,6 +2079,13 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         </div>
         <span className="pe-saved" aria-live="polite">{state ?? saved.state}</span>
       </div>
+      {saved.conflict && (
+        <p className="ss-s2note" role="alert">
+          This product changed somewhere else, so it was not overwritten. Your edits are still here.{' '}
+          <button type="button" className="underline" onClick={() => void saved.flush().catch(() => {})}>Try again</button>{' '}
+          <button type="button" className="underline" onClick={() => void saved.discard().catch((e: Error) => setState(e.message))}>Take the newer version</button>
+        </p>
+      )}
 
       <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub="Title, description, what’s included and file" open>
         <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
@@ -2245,7 +2286,14 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         <div className="pe-actions">
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void saved.flush().then(() => setState('Saved ✓')).catch((e: Error) => setState(e.message))}>Save changes</button>
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.duplicateProduct(product.id); setStore(r.store) })}>Duplicate</button>
-          <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.updateProduct(product.id, { archived: !product.archived, listed: false }, product.revision); setStore(r.store); if (!product.archived) onDeleted() })}>{product.archived ? 'Unarchive' : 'Archive'}</button>
+          <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => {
+            // The queue's own revision and token: the save that just flushed may
+            // have moved the product on, and this is the same editor either way.
+            const b = saved.base()
+            const r = await sellerApi.updateProduct(product.id, { archived: !product.archived, listed: false }, b.revision, b.token)
+            setStore(r.store)
+            if (!product.archived) onDeleted()
+          })}>{product.archived ? 'Unarchive' : 'Archive'}</button>
           <button
             type="button"
             className="ss-danger"

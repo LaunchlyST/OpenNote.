@@ -25,8 +25,8 @@ export async function migrateSeller() {
   }
   for (const [table, columns] of Object.entries({
     email_outbox: { providerId: 'TEXT', deliveredAt: 'BIGINT', bouncedAt: 'BIGINT' },
-    seller_store: { revision: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", payments: 'TEXT' },
-    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0', extras: 'TEXT', pubExtras: 'TEXT', archived: 'INTEGER NOT NULL DEFAULT 0', sampleFileId: 'TEXT', sampleName: 'TEXT', sampleSize: 'INTEGER', pubSampleFileId: 'TEXT', pubSampleName: 'TEXT' },
+    seller_store: { revision: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", payments: 'TEXT', draftToken: 'TEXT' },
+    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0', extras: 'TEXT', pubExtras: 'TEXT', archived: 'INTEGER NOT NULL DEFAULT 0', sampleFileId: 'TEXT', sampleName: 'TEXT', sampleSize: 'INTEGER', pubSampleFileId: 'TEXT', pubSampleName: 'TEXT', lastToken: 'TEXT' },
     seller_order: { checkoutKey: 'TEXT', checkoutUrl: 'TEXT', receiptId: 'INTEGER', paymentIntent: 'TEXT', refunded: 'INTEGER NOT NULL DEFAULT 0', disputed: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", method: "TEXT NOT NULL DEFAULT 'stripe'", reference: 'TEXT', providerOrderId: 'TEXT', buyerClaimedAt: 'TEXT', payerName: 'TEXT', payerBank: 'TEXT', payTo: 'TEXT', sellerHidden: 'INTEGER NOT NULL DEFAULT 0', listMinor: 'INTEGER', discountMinor: 'INTEGER NOT NULL DEFAULT 0', couponCode: 'TEXT', couponId: 'TEXT', resendCount: 'INTEGER NOT NULL DEFAULT 0', resendAt: 'TEXT', receiptError: 'TEXT' },
   })) {
     const existing = sql.dialect === 'sqlite'

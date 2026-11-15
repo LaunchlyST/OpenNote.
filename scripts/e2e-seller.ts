@@ -19,7 +19,7 @@ import { createRequire } from 'node:module'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
 
@@ -83,7 +83,7 @@ const api = await run(
   },
   'listening',
 )
-const web = await run(['npx', 'vite', 'preview', '--port', String(WEB_PORT), '--strictPort'], { API_PORT: String(API_PORT) }, 'Local')
+const web = await run([process.execPath, resolve('node_modules/vite/bin/vite.js'), 'preview', '--port', String(WEB_PORT), '--strictPort'], { API_PORT: String(API_PORT) }, 'Local')
 
 const browser = await chromium.launch()
 try {
@@ -160,7 +160,11 @@ try {
   await textEditor.getByRole('button', { name: 'Close' }).click()
   await page.waitForTimeout(1200)
   const order = await page.locator('.ss-slide .sp > *').evaluateAll((els) => els.map((e) => (e.classList.contains('sp-pick') ? e.querySelector(':scope > :not(.sp-grip)')! : e).className.split(' ').filter((c) => c.startsWith('sp-')).pop()))
-  check('preview order: header, text, footer (no product grid)', JSON.stringify(order.slice(0, 3)) === JSON.stringify(['sp-head', 'sp-text', 'sp-end']), order.join(','))
+  // The store page grew a page panel (Home, Page 2, Page 3): the blocks live
+  // inside it now, so the dragged-in Text is checked there, not at the top level.
+  const panelBlocks = await page.locator('.ss-slide .sp-page-panel > *').evaluateAll((els) => els.map((e) => (e.classList.contains('sp-pick') ? e.querySelector(':scope > :not(.sp-grip)')! : e).className.split(' ').filter((c) => c.startsWith('sp-')).pop()))
+  const noGrid = (await page.locator('.ss-slide .sp-grid-wrap').count()) === 0
+  check('preview order: header, text, footer (no product grid)', order[0] === 'sp-head' && order[order.length - 1] === 'sp-end' && panelBlocks.includes('sp-text') && noGrid, `${order.join(',')} / ${panelBlocks.join(',')}`)
   await page.screenshot({ path: join(SHOTS, 'studio-page.png') })
 
   // 4. Publish
@@ -203,7 +207,8 @@ try {
   await m.goto(bio)
   await m.getByRole('heading', { name: 'Ava Makes' }).waitFor()
   const live = await m.locator('.ps .sp > *').evaluateAll((els) => els.map((e) => e.className))
-  check('live page: header then the dragged-in text, no product grid', live[0].includes('sp-head') && live[1].includes('sp-text') && !live.some((c: string) => c.includes('sp-grid-wrap')), live.join(','))
+  const liveBlocks = await m.locator('.ps .sp-page-panel > *').evaluateAll((els) => els.map((e) => (e.classList.contains('sp-pick') ? e.querySelector(':scope > :not(.sp-grip)')! : e).className))
+  check('live page: header then the dragged-in text, no product grid', live[0].includes('sp-head') && liveBlocks.some((c: string) => c.includes('sp-text')) && !live.some((c: string) => c.includes('sp-grid-wrap')), `${live.join(',')} / ${liveBlocks.join(',')}`)
   await m.screenshot({ path: join(SHOTS, 'mobile-store.png') })
 
   // no product grid on the store page any more: buyers reach a product from its own link
@@ -303,7 +308,9 @@ try {
   if (retrieval) {
     await m.goto(retrieval.replace(/&amp;/g, '&'))
     await m.getByText('Payment confirmed').waitFor()
-    check('the retrieval link opens the order with a fresh download', await m.getByRole('link', { name: /Download planner\.pdf/ }).isVisible())
+    // The order page shows one "Download file" link and names the file next to it.
+    const dl = m.getByRole('link', { name: /Download file/ })
+    check('the retrieval link opens the order with a fresh download', await dl.isVisible() && (await dl.getAttribute('href'))?.includes('/api/store-download/') && (await m.getByText('File: planner.pdf').count()) === 1)
   }
 
   // An unpaid visitor

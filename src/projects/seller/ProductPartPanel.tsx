@@ -64,8 +64,8 @@ export function ProductPartPanel({
     `desknoty.seller.recovery.${store.id}.${product.id}.part`,
     { title: product.title, description: product.description, cover: product.cover, extras: withExtras(product.extras) },
     product.revision,
-    async (value, revision) => {
-      const r = await sellerApi.updateProduct(product.id, { title: value.title, description: value.description, cover: value.cover, extras: value.extras }, revision)
+    async (value, revision, token) => {
+      const r = await sellerApi.updateProduct(product.id, { title: value.title, description: value.description, cover: value.cover, extras: value.extras }, revision, token)
       setStore(r.store)
       return r.product.revision
     },

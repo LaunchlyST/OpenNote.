@@ -42,6 +42,8 @@ export interface FakeStripe {
   sent: Array<{ payload: string; header: string }>
   /** Seller finishes onboarding: 'ready' | 'pending' (verification) | 'incomplete'. */
   setAccount(id: string, state: 'ready' | 'pending' | 'incomplete'): Obj
+  /** Makes Checkout Session creation fail, as a real outage would. */
+  failSessions(on: boolean): void
   /** Buyer pays: marks the session paid and returns the signed webhook it would send. */
   pay(sessionId: string, email?: string): { payload: string; header: string }
   event(type: string, object: Obj, account?: string): { payload: string; header: string }
@@ -57,6 +59,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
   const payouts: Obj[] = []
   const calls: FakeStripe['calls'] = []
   const sent: FakeStripe['sent'] = []
+  let failSession = false
   const signer = new Stripe('sk_test_fake')
   let n = 0
   let base = ''
@@ -127,6 +130,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
       return json(res, 200, { object: 'account_link', url: `${base}/onboard/${form.account}?return=${encodeURIComponent(String(form.return_url))}&refresh=${encodeURIComponent(String(form.refresh_url))}` })
     }
     if (req.method === 'POST' && p === '/v1/checkout/sessions') {
+      if (failSession) return json(res, 500, { error: { message: 'The payment service is unavailable.' } })
       if (!account || !accounts.has(account)) return json(res, 400, { error: { message: 'Missing or unknown Stripe-Account' } })
       const item = ((form.line_items as Obj)['0'] as Obj).price_data as Obj
       const id = `cs_test_${++n}${Date.now()}`
@@ -225,7 +229,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     srv.listen(0, '127.0.0.1', () => {
       const addr = srv.address() as { port: number }
       base = `http://127.0.0.1:${addr.port}`
-      resolve({ url: base, charges, disputes, accounts, sessions, calls, sent, setAccount, pay, event, close: () => new Promise((r) => srv.close(() => r())) })
+      resolve({ url: base, charges, disputes, accounts, sessions, calls, sent, setAccount, failSessions: (on) => { failSession = on }, pay, event, close: () => new Promise((r) => srv.close(() => r())) })
     })
   })
 }
