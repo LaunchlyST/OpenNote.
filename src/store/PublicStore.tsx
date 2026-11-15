@@ -868,7 +868,10 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
     return () => window.clearTimeout(t)
   }, [order, tries])
 
-  const back = `/${handle}`
+  // Back to the store: prefer the order's own current published store handle, so a
+  // receipt/thanks link whose handle has since been renamed or re-published still
+  // lands on the live store instead of a stale address.
+  const back = order?.storeHandle ? `/${order.storeHandle}` : `/${handle}`
   if (err) return <Message title="Order not found" text={err} back={back} />
   if (!order) return <Message title="Checking your payment…" text="" />
   if (order.status === 'paid')
