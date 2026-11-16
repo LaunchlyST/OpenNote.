@@ -345,3 +345,8 @@ element (title) opens the focused settings, clicking the product opens the editi
 (head `27a94b1`) → success, and the live bundle at `desknoty.com` serves this
 build (new markers present: focused part labels, full font picker, hidden pages).
 
+**Deployment (carousel rework):** commit `5a73c08` pushed; frontend Pages workflow
+run `204` (head `5a73c08`) → success, and the live bundle at `desknoty.com`
+serves this build (new markers present: `Add product below`, `Add product slide`,
+`Placement`, `hiddenPages`).
+
