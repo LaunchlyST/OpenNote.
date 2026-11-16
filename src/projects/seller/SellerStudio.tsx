@@ -99,6 +99,9 @@ import type { Block, BlockType, CardPart, DraftProduct, ProductExtras, Page, Pay
 
 type Tab = 'page' | 'products' | 'payouts' | 'link' | 'orders'
 
+/** Where the "add a product" picker should put the product the owner picks. */
+export type AddReq = { kind: 'block' } | { kind: 'slide'; blockId: string; slideIndex: number } | { kind: 'below'; blockId: string }
+
 /** Single-panel states (loading, errors, start, TikTok): one white panel on the page background. */
 function Solo({ compact = false, children }: { compact?: boolean; children: ReactNode }) {
   return (
@@ -498,6 +501,9 @@ function Studio({
   const [partPreview, setPartPreview] = useState<({ id: string } & PartDraft) | null>(null)
   /** Store pages the owner hid in the phone preview (Page 2 and Page 3). */
   const [hiddenPages, setHiddenPages] = useState<number[]>([])
+  /** The add-product picker request: which kind of add is in progress. */
+  const [addReq, setAddReq] = useState<AddReq | null>(null)
+  const requestAdd = (req: AddReq) => setAddReq(req)
   const closePart = useCallback(() => { setEditPart(null); setPartPreview(null) }, [])
   /** Double-tapping a page tab hides that page; the add-page button brings a page back. */
   const toggleHiddenPage = useCallback((i: number) => {
@@ -505,6 +511,16 @@ function Studio({
     if (i <= 0) return
     setHiddenPages((h) => (h.includes(i) ? h.filter((x) => x !== i) : [...h, i]))
   }, [])
+  /** Where the product picker should place the product it chooses: into a slide, or as a new block below. */
+  const pendingAdd = useRef<{ kind: 'slide'; blockId: string; slideIndex: number } | { kind: 'below'; blockId: string } | null>(null)
+  /** The picker chose a product: place it where the owner asked for it. */
+  const onPickProduct = (productId: string) => {
+    const p = pendingAdd.current
+    pendingAdd.current = null
+    if (!p) return
+    if (p.kind === 'slide') void addProductToSlide(p.blockId, p.slideIndex, productId)
+    else void addProductBlockBelow(p.blockId, productId)
+  }
   const view = 'mobile' as 'mobile' | 'desktop'
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
   const [publishing, setPublishing] = useState(false)
@@ -613,6 +629,48 @@ function Studio({
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       openEditor(nb.id, el ?? undefined)
     }, 140)
+  }
+
+  /**
+   * Add a product to slide `slideIndex` of the product block `blockId` — the
+   * "add product slide" flow. The chosen product lands in that slide; the others
+   * keep theirs.
+   */
+  const addProductToSlide = (blockId: string, slideIndex: number, productId: string) => {
+    const from = storePages(page).findIndex((pg) => pg.blocks.some((b) => b.id === blockId))
+    const base = blocksOf(page, from)
+    const bi = base.findIndex((b) => b.id === blockId)
+    const b = bi >= 0 ? base[bi] : null
+    if (!b || b.type !== 'featured') return
+    const slides = slidesOf(b)
+    const nextSlides = slideIndex < slides.length
+      ? slides.map((s, i) => (i === slideIndex ? { ...newSlide('digital', productId), id: s.id } : s))
+      : [...slides, { ...newSlide('digital', productId) }]
+    const next = [...base]
+    next[bi] = { ...b, data: { ...b.data, slides: nextSlides, productId: primaryProductId(nextSlides) } }
+    edit(withPageBlocks(page, from, cleanFor(from, next)))
+    setPageIndex(from)
+  }
+
+  /** Add a new, independent product block directly below the product block `blockId`. */
+  const addProductBlockBelow = (blockId: string, productId: string) => {
+    const nb = { ...newBlock('featured'), data: { ...newBlock('featured').data, productId } } as Block
+    const from = storePages(page).findIndex((pg) => pg.blocks.some((b) => b.id === blockId))
+    const base = blocksOf(page, from)
+    const bi = base.findIndex((b) => b.id === blockId)
+    if (bi < 0) return
+    if (isProductBlock(base[bi]) && productBlockCount(blocksOf(page, from)) >= MAX_PRODUCT_BLOCKS_PER_PAGE) {
+      setErr(`${pageLabel(from)} already has ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks. Move one away first.`)
+      return
+    }
+    const next = insertAt(base, nb, bi + 1)
+    edit(withPageBlocks(page, from, cleanFor(from, next)))
+    setPageIndex(from)
+    window.setTimeout(() => {
+      const el = slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${nb.id}"]`)
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      openEditor(nb.id, el ?? undefined)
+    }, 120)
   }
   // Drag a new section (or a product) from the editor into the phone; a click adds it without dragging.
   const dragNewBlock = (e: ReactPointerEvent, make: () => Block) => {
@@ -893,11 +951,20 @@ function Studio({
             products={store.products}
             open={picked}
             setOpen={openEditor}
-            onStartInsert={startInsert}
-            onAdd={addBlock}
             onMoveBlock={moveBlockToPage}
-            createProduct={createProduct}
+            onRequestAdd={requestAdd}
           />
+          {addReq && (
+            <AddBlockDialog
+              products={store.products}
+              pickReq={addReq.kind === 'block' ? null : addReq}
+              onClose={() => setAddReq(null)}
+              onAdd={(t, d) => (setAddReq(null), t === 'banner' ? openEditor(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : addBlock(t, d))}
+              onDragStart={(t, e, d) => { setAddReq(null); startInsert(t, e, d) }}
+              createProduct={createProduct}
+              onPickProduct={onPickProduct}
+            />
+          )}
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {tab === 'products' && (
@@ -978,7 +1045,7 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' ? { productId: editPart?.productId ?? null, part: editPart?.part ?? null } : null} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} editCard={tab === 'page' ? { productId: editPart?.productId ?? null, part: editPart?.part ?? null } : null} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
@@ -1166,7 +1233,7 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onStartInsert, onAdd, onMoveBlock, createProduct, onOpenProduct }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; onMoveBlock: (id: string, to: number) => void; createProduct: (f: NewProduct) => Promise<string> }) {
+function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onRequestAdd }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void }) {
   const pages = storePages(page)
   const isHome = pageIndex === 0
   // Home keeps its pinned profile and footer; Page 2/3 hold content only.
@@ -1174,7 +1241,6 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
   const first = isHome ? 1 : 0
   const last = isHome ? blocks.length - 2 : blocks.length - 1
   const setBlocks = (b: Block[]) => onChange(withPageBlocks(page, pageIndex, isHome ? pinEnds(b) : b.filter((x) => x.type !== 'header' && x.type !== 'footer')))
-  const [adding, setAdding] = useState(false)
   const [menu, setMenu] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
@@ -1205,13 +1271,24 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
   }
   return (
     <div className="ss-stack">
-      {/* Add block (and the next page, when the store needs one). The page switcher lives in the phone preview. */}      <div className="pg-addrow">
-        <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
-        {pages.length < MAX_STORE_PAGES && (
-          <button type="button" className="pg-addpage" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => { onChange(ensurePage(page, pages.length)); onSelectPage(pages.length) }}>
-            <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
-          </button>
-        )}
+      {/* Page selector: Home / Page 2 / Page 3. The phone preview mirrors this. */}
+      <div className="pg-addrow" style={{ flexWrap: 'wrap' }}>
+        {pages.map((pg) => (
+          <button key={pg.id} type="button" className={cn('bl-add', pg.index === pageIndex && 'on')} onClick={() => onSelectPage(pg.index)}>{pageLabel(pg.index)}</button>
+        ))}
+        {(() => {
+          const canAddNextPage = pages.length === 1
+            ? productBlockCount(storePages(page)[0]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
+            : pages.length === 2
+            ? productBlockCount(storePages(page)[1]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
+            : false
+          return canAddNextPage && pages.length < MAX_STORE_PAGES ? (
+            <button type="button" className="pg-addpage" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => { onChange(ensurePage(page, pages.length)); onSelectPage(pages.length) }}>
+              <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
+            </button>
+          ) : null
+        })()}
+        <button type="button" className="bl-add" onClick={() => onRequestAdd({ kind: 'block' })}><Plus className="h-4 w-4" /> Add block</button>
       </div>
       <ul className="bl-list" aria-label={`${pageLabel(pageIndex)} blocks`}>
         {isHome && (
@@ -1263,7 +1340,7 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
                   </button>
                   {open === b.id && b.type === 'featured' && (
                     <div className="bl-inline" role="region" aria-label="Edit Digital product">
-                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} />
+                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} onAddBelow={(id) => onRequestAdd({ kind: 'below', blockId: id })} onAddSlide={(id, i) => onRequestAdd({ kind: 'slide', blockId: id, slideIndex: i })} />
                     </div>
                   )}
                   {menu === b.id && (
@@ -1285,7 +1362,6 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
         {!isHome && !blocks.length && <li className="bl-locked"><span className="bl-name"><b>This page is empty</b><small>Add a block below, or drag a product into the phone.</small></span></li>}
       </ul>
       <ThemeEditor page={page} onChange={onChange} />
-      {adding && <AddBlockDialog products={products} onClose={() => setAdding(false)} onAdd={(t, d) => (setAdding(false), t === 'banner' ? setOpen(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : onAdd(t, d))} onDragStart={(t, e, d) => { setAdding(false); onStartInsert(t, e, d) }} createProduct={createProduct} />}
     </div>
   )
 }
@@ -1293,7 +1369,7 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
 export type NewProduct = { title: string; headline: string; priceMinor: number; currency: string; cover: File | null; file: File | null }
 
 /** The Add block popup: search, categories, quick add, recommended; Digital product opens a small creator. */
-function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }: { products: DraftProduct[]; onClose: () => void; onAdd: (t: BlockType | 'banner', d?: Record<string, unknown>) => void; onDragStart: (t: BlockType, e: ReactPointerEvent, d?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
+function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct, pickReq, onPickProduct }: { products: DraftProduct[]; onClose: () => void; onAdd: (t: BlockType | 'banner', d?: Record<string, unknown>) => void; onDragStart: (t: BlockType, e: ReactPointerEvent, d?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string>; pickReq?: AddReq | null; onPickProduct?: (productId: string) => void }) {
   const [cat, setCat] = useState('Quick add')
   const [q, setQ] = useState('')
   const [making, setMaking] = useState(false)
@@ -1304,6 +1380,7 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }
   }, [onClose])
   const all = Object.values(CATALOG).flat().filter((x, i, arr) => arr.findIndex((y) => y.name === x.name) === i)
   const list = q.trim() ? all.filter((x) => `${x.name} ${x.text}`.toLowerCase().includes(q.trim().toLowerCase())) : CATALOG[cat]
+  const picking = pickReq?.kind === 'slide' || pickReq?.kind === 'below'
   const pick = (it: CatalogItem) => (it.kind === 'featured' ? setMaking(true) : onAdd(it.kind))
   // pointer-drag an item straight out of the popup onto the phone
   const drag = (it: CatalogItem) => (e: ReactPointerEvent) => {
@@ -1320,9 +1397,9 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }
   return (
     <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ab" role="dialog" aria-modal="true" aria-label="Add a block">
-        <header className="ab-head"><h2>{making ? 'New digital product' : 'Add a block'}</h2><button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button></header>
+        <header className="ab-head"><h2>{making ? 'New digital product' : picking ? 'Add a product' : 'Add a block'}</h2><button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button></header>
         {making ? (
-          <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={(id) => onAdd('featured', { productId: id })} createProduct={async (f) => { const id = await createProduct(f); onAdd('featured', { productId: id }) }} />
+          <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={(id) => { setMaking(false); if (pickReq?.kind && pickReq.kind !== 'block') onPickProduct?.(id); else onAdd('featured', { productId: id }) }} createProduct={async (f) => { const id = await createProduct(f); setMaking(false); if (pickReq?.kind && pickReq.kind !== 'block') onPickProduct?.(id); else onAdd('featured', { productId: id }) }} />
         ) : (
           <div className="ab-body">
             <nav className="ab-nav" aria-label="Block categories">
@@ -1608,10 +1685,9 @@ function summary(b: Block, products: DraftProduct[]) {
  * become a carousel. Digital and affiliate settings are kept side by side, so
  * switching a slide's type never loses the product, file or cover.
  */
-function SlidesEditor({ slides, products, onChange, onOpenProduct }: { slides: ProductSlide[]; products: DraftProduct[]; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void }) {
+function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAddSlide }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void }) {
   const set = (i: number, patch: Partial<ProductSlide>) => onChange(slides.map((s, j) => (j === i ? { ...s, ...patch } : s)))
   const setAff = (i: number, patch: Partial<ProductSlide['affiliate']>) => onChange(slides.map((s, j) => (j === i ? { ...s, affiliate: { ...s.affiliate, ...patch } } : s)))
-  const digital = slides.find((s) => s.kind === 'digital' && s.productId)
   return (
     <div className="sb-edit">
       <span className="ss-label">Product slides</span>
@@ -1658,18 +1734,18 @@ function SlidesEditor({ slides, products, onChange, onOpenProduct }: { slides: P
           )
         })}
       </div>
-      {slides.length < 8 && (
-        <button type="button" className="ss-ghost self-start" onClick={() => onChange([...slides, newSlide('digital', products[0]?.id ?? null)])}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+      {slides.length < 3 && (
+        <button type="button" className="ss-ghost self-start" onClick={() => (onAddSlide ? onAddSlide(blockId, slides.length) : onChange([...slides, newSlide('digital', products[0]?.id ?? null)]))}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
       )}
       <p className="ss-muted">One slide shows on its own; two or more become a carousel. A carousel counts as one product block.</p>
-      {digital && onOpenProduct && (
-        <button type="button" className="ss-ghost self-start" onClick={() => onOpenProduct(digital.productId!)}>Edit this product</button>
-      )}
+      {slides.filter((s) => s.kind === 'digital' && s.productId && onOpenProduct).map((s) => (
+        <button key={s.id} type="button" className="ss-ghost self-start" onClick={() => onOpenProduct!(s.productId!)}>Edit this product</button>
+      ))}
     </div>
   )
 }
 
-function BlockEditor({ block, products, update, onOpenProduct }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void }) {
+function BlockEditor({ block, products, update, onOpenProduct, onAddBelow, onAddSlide }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void }) {
   const d = block.data
   switch (block.type) {
     case 'header':
@@ -1755,12 +1831,19 @@ function BlockEditor({ block, products, update, onOpenProduct }: { block: Block;
     }
     case 'featured':
       return (
-        <SlidesEditor
-          slides={slidesOf(block)}
-          products={products}
-          onChange={(slides) => update({ slides, productId: primaryProductId(slides) })}
-          onOpenProduct={onOpenProduct}
-        />
+        <>
+          {onAddBelow && (
+            <button type="button" className="ss-ghost self-start" onClick={() => onAddBelow(block.id)}><Plus className="h-3.5 w-3.5" /> Add product below</button>
+          )}
+          <SlidesEditor
+            slides={slidesOf(block)}
+            products={products}
+            blockId={block.id}
+            onChange={(slides) => update({ slides, productId: primaryProductId(slides) })}
+            onOpenProduct={onOpenProduct}
+            onAddSlide={onAddSlide}
+          />
+        </>
       )
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -1888,6 +1971,46 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
+function PlacementOverview({ page, products }: { page: Page; products: DraftProduct[] }) {
+  const pages = storePages(page)
+  return (
+    <div className="ss-stack" style={{ marginBottom: 16 }}>
+      <h3 className="ss-label">Placement</h3>
+      {pages.map((pg) => {
+        const productBlocks = pg.blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
+        if (pg.index > 0 && !productBlocks.length) return null
+        return (
+          <div key={pg.id} className="sb-block" style={{ marginBottom: 8 }}>
+            <b>{pageLabel(pg.index)}</b>
+            {productBlocks.length === 0 && <p className="ss-muted" style={{ margin: '4px 0 0' }}>No product blocks yet.</p>}
+            {productBlocks.map((b, bi) => {
+              const slides = slidesOf(b)
+              return (
+                <div key={b.id} style={{ marginLeft: 12, marginTop: 6 }}>
+                  <small>Product {bi + 1}</small>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
+                    {[0, 1, 2].map((i) => {
+                      const s = slides[i]
+                      const populated = !!s && (s.kind === 'digital' ? Boolean(s.productId) : Boolean(s.affiliate.url))
+                      const prod = s?.kind === 'digital' ? products.find((p) => p.id === s.productId) : null
+                      const thumb = populated && s?.kind === 'digital' ? mediaUrl(prod?.cover) : (s?.kind === 'affiliate' ? mediaUrl(s.affiliate.cover) : null)
+                      return (
+                        <div key={i} style={{ width: 44, height: 44, border: '1px solid #ddd', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#888', background: '#f7f7f7' }}>
+                          {populated ? (thumb ? <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>#{i + 1}</span>) : <span>Empty</span>}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
@@ -1914,6 +2037,7 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
         <button type="button" className="pg-addbtn" onClick={() => void add()}><Plus className="h-4 w-4" /> Add Product</button>
       </div>
       {err && <div className="ss-note" role="alert">{err}</div>}
+      <PlacementOverview page={store.draft} products={store.products} />
       {store.products.filter((p) => !p.archived).length === 0 && <p className="ss-muted pg-empty">No products yet. Press <b>Add Product</b> to create your first one.</p>}
       <div className="pg-grid">
         {store.products.filter((p) => !p.archived || p.id === open).map((p) => {

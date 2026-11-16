@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages } from './model'
+import { AtSign, ChevronDown, Globe, Play, Plus, X as XIcon } from 'lucide-react'
+import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -59,6 +59,12 @@ export interface StorePageProps {
   /** Editor: choose or add the product for an empty product block. */
   onAddSlide?: (blockId: string) => void
   /**
+   * Editor: add a product to slide `slideIndex` of the product block `blockId`
+   * (an empty slide in a carousel). Opens the product picker; the chosen product
+   * lands in that slide without touching the others.
+   */
+  onAddSlideProduct?: (blockId: string, slideIndex: number) => void
+  /**
    * Editor: double-tapping a store page tab (Page 2 and Page 3) hides that page.
    * Hidden pages leave the tab row and the content, so the preview only shows
    * what should be shown. Home (0) is never hidden.
@@ -86,6 +92,9 @@ export function lookStyle(look: Block['look']): CSSProperties | undefined {
   } as CSSProperties
 }
 
+/** Timestamp of the last carousel swipe, so a click after a drag doesn't open anything. */
+const lastSwipeAt = { current: 0 }
+
 /** In the editor preview, each section is clickable and shows an outline with its name. */
 function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; onPick?: StorePageProps['onPick']; picked?: string | null; onGrab?: StorePageProps['onGrab']; children: ReactNode }) {
   const style = lookStyle(block.look)
@@ -106,6 +115,8 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
         e.stopPropagation()
         // dragging the title or description sideways is not a click on it
         if (wasTextDragged()) return
+        // a swipe that just moved the carousel must not open the block or a product
+        if (performance.now() - lastSwipeAt.current < 260) return
         // a product card inside the section opens that product, not the section
         const target = e.target as HTMLElement
         const hit = target.closest<HTMLElement>('[data-product-id]')
@@ -391,16 +402,35 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
     }
     case 'featured': {
       // One product, or a swipeable carousel of slides (digital or affiliate).
-      // Either way it is ONE product block on the page.
-      const usable = slidesOf(block).filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : Boolean(safeExternalUrl(s.affiliate.url))))
-      if (!usable.length) return <EmptyProduct block={block} {...p} />
-      if (usable.length === 1)
+      // Either way it is ONE product block on the page. In the editor every slide
+      // is shown (an empty one waits to be filled); on the public store only the
+      // populated slides are.
+      const slides = slidesOf(block)
+      const usable = slides.filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : Boolean(safeExternalUrl(s.affiliate.url))))
+      const shown = p.live ? usable : slides
+      // In the editor, after a populated slide, offer one empty slide: swiping
+      // next then shows the "Add product slide" action the owner fills.
+      const editorShown = !p.live && shown.length > 0 && shown.length < 3 && shown[shown.length - 1] && (shown[shown.length - 1].kind === 'digital' ? Boolean(shown[shown.length - 1].productId) : Boolean(safeExternalUrl(shown[shown.length - 1].affiliate.url))) ? [...shown, { ...newSlide('digital'), id: `sld_${block.id}_add` }] : shown
+      const list = editorShown.length ? editorShown : shown
+      if (!list.length) return <EmptyProduct block={block} {...p} />
+      if (list.length === 1) {
+        const one = list[0]
+        const oneEmpty = !one.productId && !safeExternalUrl(one.affiliate.url)
+        if (oneEmpty) {
+          // The owner is building this first slide: offer the picker.
+          return (
+            <div className="sp-block sp-featured-v2">
+              <button type="button" className="sp-btn sp-btn-sm" onClick={() => p.onAddSlideProduct?.(block.id, 0)}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+            </div>
+          )
+        }
         return (
           <section className="sp-block sp-featured-v2">
-            {usable[0].kind === 'digital' ? <DigitalSlide slide={usable[0]} {...p} /> : <AffiliateSlide slide={usable[0]} {...p} />}
+            {one.kind === 'digital' ? <DigitalSlide slide={one} {...p} /> : <AffiliateSlide slide={one} {...p} />}
           </section>
         )
-      return <SlideCarousel slides={usable} {...p} />
+      }
+      return <SlideCarousel slides={list} blockId={block.id} interactive={!p.live} {...p} />
     }
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -497,9 +527,11 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
 
 /**
  * A product block holding several slides. Mobile swipes, desktop arrows and
- * dots; no autoplay, and a drag never counts as a tap on a product.
+ * dots; no autoplay, and a drag never counts as a tap on a product. In the
+ * editor an empty slide shows the "Add product slide" action; on the public
+ * store only populated slides are shown.
  */
-function SlideCarousel({ slides, ...p }: { slides: ProductSlide[] } & StorePageProps) {
+function SlideCarousel({ slides, blockId, interactive, ...p }: { slides: ProductSlide[]; blockId?: string; interactive?: boolean } & StorePageProps) {
   const track = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState(0)
   const scrolledAt = useRef(0)
@@ -514,6 +546,7 @@ function SlideCarousel({ slides, ...p }: { slides: ProductSlide[] } & StorePageP
     const el = track.current
     if (!el) return
     scrolledAt.current = performance.now()
+    lastSwipeAt.current = performance.now()
     const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
     if (i !== at) setAt(i)
   }
@@ -524,12 +557,24 @@ function SlideCarousel({ slides, ...p }: { slides: ProductSlide[] } & StorePageP
       e.stopPropagation()
     }
   }
+  const onKey = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
+    e.preventDefault()
+    goTo(e.key === 'ArrowRight' ? at + 1 : at - 1)
+  }
+  const isEmpty = (s: ProductSlide) => (s.kind === 'digital' ? !s.productId : !safeExternalUrl(s.affiliate.url))
   return (
-    <section className="sp-block sp-carousel" aria-roledescription="carousel" aria-label={`${slides.length} products`}>
+    <section className="sp-block sp-carousel" aria-roledescription="carousel" aria-label={`${slides.length} products`} tabIndex={interactive ? 0 : undefined} onKeyDown={interactive ? onKey : undefined}>
       <div className="sp-track" ref={track} onScroll={onScroll} onClickCapture={swallow}>
         {slides.map((s, i) => (
           <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}`}>
-            {s.kind === 'digital' ? <DigitalSlide slide={s} {...p} /> : <AffiliateSlide slide={s} {...p} />}
+            {isEmpty(s) ? (
+              !p.live && p.onAddSlideProduct && blockId ? (
+                <div className="sp-block sp-featured-v2 sp-slide-empty">
+                  <button type="button" className="sp-btn sp-btn-sm" onClick={() => p.onAddSlideProduct!(blockId, i)}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+                </div>
+              ) : null
+            ) : s.kind === 'digital' ? <DigitalSlide slide={s} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
         ))}
       </div>
