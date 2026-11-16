@@ -199,3 +199,44 @@ DOM-verified in the browser on a paid dev order:
 
 Next: visual sign-off on desktop + mobile, then live order-page check after deploy.
 
+## 11. Seller-section audit (2026-11-16): autosave, coupon scope, affiliate, refunds
+
+Commit `bf616b7` (“Seller Studio: fix stuck autosave, coupon scope, affiliate rules and
+refund hold”) carries the fixes; this pass re-verified each one by running the suites
+and by probing production with controlled test data (no charges, no refunds).
+
+### Confirmed and fixed
+
+| Finding | Evidence | Fix | Live check |
+| --- | --- | --- | --- |
+| Autosave stuck after refresh/interruption (“changed elsewhere”) | `server/seller.ts` refused any save whose `revision` was behind the server | Draft and product saves now carry a **writer token**; the server remembers the last writer (`seller_store.draftToken`, `seller_product.lastToken`), so a save whose reply was lost is accepted, while a genuine edit from elsewhere still gets `409`. The editors offer “Take the newer version”. | **Live:** first save `200`, replay with the same token at the stale revision `200`, another editor’s token `409` (“This page changed elsewhere…”) — draft content unchanged |
+| Product-restricted coupon could become store-wide | coupon PATCH filtered invalid ids to an empty list and wrote `productIds = null` (whole store) | A code limited to products is **refused** when none of the chosen products is left | **Live:** `POST /api/seller/coupons` with a non-existent product → `400` “None of the products you chose is in your store any more.” and no code created |
+| Editing after Unarchive failed (stale revision) | Archive/Unarchive sent `product.revision` from the render, not the queue | Archive/Unarchive now uses the queue’s own revision + token, and the response refreshes the editor | **Live:** archive `200` → unarchive `200` → edit `200`, title changed |
+| Product duplication lost the free sample | duplicate INSERT did not copy `sampleFileId`/`sampleName`/`sampleSize` | The copy keeps the sample association; the paid file stays private behind the download gate | **Live:** duplicate `201` with sample `zz-sample.pdf`; public sample endpoint serves the sample bytes (not the paid file) — local test publishes the copy and asserts the bytes |
+| Outdated payments/seller browser tests | assertions predated the store-page panel, the order-page “Download file” link and the new save flow | assertions updated to the intended behaviour (not weakened) | `npm run test:payments`, `npm run test:e2e:seller`, `npm run test:e2e:store` all pass |
+| Affiliate text unbounded; affiliate products needed a file | `cleanExtras` trimmed but did not bound affiliate text; `productProblem` demanded a file | affiliate title ≤ 80, description/disclosure ≤ 500 chars, and an affiliate product needs no file to publish | **Live:** patch with 200/900/900-char text → stored 80/500/500, `problem: null`, no file id |
+| Free claims could claim an affiliate product | claim and free-checkout paths did not exclude affiliate products | affiliate products are refused for free claims and free checkout (`409`) | local regression test (no live affiliate product is published, so not exercised in production) |
+| Failed Stripe/PayPal checkout kept the coupon reserved | the order stayed `pending` with the code reserved for 24h | the order is cancelled and the code released immediately, and the buyer can retry | local test with the Stripe stand-in (`502`, code free again, retry succeeds) |
+| Undo after switching store styles switched the style | undo restored a page snapshot that carried the old `use` | undo/redo always keep the current `style2`/`use` | browser test in `scripts/e2e-seller.ts` passes |
+| Store images vs private files | `/api/store-media/:id` served any stored blob | only `med_` ids are served; paid files (`fil_`) and samples (`smp_`) are unreachable | **Live:** `fil_…` → `404`, `smp_…` → `404` |
+
+### Left as-is on purpose (policy, not a defect)
+
+- **Partial refunds** revoke every download and take the whole sale out of earnings.
+  The access policy is asserted by an existing test (“partial refund revokes access and
+  late payment cannot restore it”), and `/api/seller/earnings` counts only orders with
+  `refunded = 0`, so a refunded sale is not counted. That is one consistent policy
+  (“any refund reverses the sale”), but the intended policy was not stated anywhere, so
+  it was **not** changed — flagged for the owner.
+
+### Deployment
+
+- Frontend: Pages workflow run `43741871304` (head `bf616b7`) → success.
+- API: rebuilt with the deno bundle + esbuild recipe and deployed to
+  `mrcnonqrgrumxyvgpfqr` (bundle 3,025,680 bytes). `migrateSeller()` adds
+  `draftToken` / `lastToken` to existing tables on boot.
+- Production checks above were run against the deployed API with temporary test
+  products, which were deleted again (the live draft and published page were left
+  untouched: the live draft still differs from the published page, and nothing was
+  published).
+
