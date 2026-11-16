@@ -290,3 +290,28 @@ mobile. `npm run test:e2e:studio` passes, along with `tsc -b`, `npm run build`,
 
 **Deployment:** commit `e4f8aa9` pushed; frontend Pages workflow dispatched.
 
+### Follow-up (commit `39b495d`): the Page column, and every product click
+
+The Page column had grown two rows with the multi-page feature — a “Home / Page 2”
+switcher and a strip of product tiles — and the block list was pushed down. Those
+rows are gone; the column is back to **“Add block” + the block list**, so the
+content moves up again. A compact **“+ Page 2”** button sits beside “Add block” so
+new pages can still be created (the phone preview carries the Home/Page 2 tabs, as
+the public store does).
+
+Clicking a product is now the same everywhere on the card — cover, title,
+description or button all open that product’s **editing page**; the card-part
+panel is only reachable through the new “Card look” button in the product editor.
+The whole product shows the pointer cursor in the editor preview.
+
+**Verified live (production Studio):** the page switcher row and the product-tile
+row are gone (0 elements), the column starts with “Add block” + “Page 2”, the
+card, title and description all report `cursor: pointer`, and clicking the title
+opened the product editor (Products tab selected, editor open, no card-part
+panel). `npm run test:e2e:studio` passes on desktop and mobile, with
+`tsc -b`, `npm run build`, `npm test`, `npm run test:deploy` and
+`npm run test:seller` green.
+
+**Deployment:** commit `39b495d` pushed; frontend Pages workflow run `43946498630`
+→ success.
+
