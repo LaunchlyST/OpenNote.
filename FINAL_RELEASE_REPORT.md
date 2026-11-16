@@ -315,3 +315,31 @@ panel). `npm run test:e2e:studio` passes on desktop and mobile, with
 **Deployment:** commit `39b495d` pushed; frontend Pages workflow run `43946498630`
 → success.
 
+## 13. Seller Studio: focused card-element edits, full font library, page hide (2026-11-16)
+
+Three follow-ups to the click-to-edit work, finished this session:
+
+1. **Focused settings per clicked element.** Clicking a product card in the owner’s
+   phone preview now opens the product’s **editing page** when the click lands on the
+   card background, and the focused element’s settings (image / title / description /
+   button / card background) when it lands on an element — the click carries the part.
+   The focused panel lives in the Products tab (`focus` / `onFocus` on `ProductsEditor`);
+   “All product settings” switches back to the complete editor.
+
+2. **The font library is now the full CapCut-style picker everywhere.** The store-theme
+   font (Theme editor) and the block font (floating editor) are buttons that open the
+   searchable, category-grouped `FontPicker` (all curated Google fonts + store theme) —
+   no more three-option selects. The server accepts any catalog font id
+   (`TEXT_FONT_IDS`) for theme and block looks.
+
+3. **Hide a store page.** Double-tapping a page tab under the store banner in the phone
+   preview (Home / Page 2 / Page 3) hides that page; the tab row and the content drop it.
+   The **“Add page”** button next to “Add block” creates and selects the next page, so the
+   page you hid is followed by a page that appears.
+
+**Verified:** `npm run test:e2e:studio` passes on desktop and mobile — clicking a card
+element (title) opens the focused settings, clicking the product opens the editing page;
+`tsc -b`, `npm run build`, `npm test`, `npm run test:deploy` and `npm run test:seller` green.
+
+**Deployment:** pending this session’s commit.
+

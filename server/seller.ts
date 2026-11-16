@@ -640,7 +640,7 @@ function cleanPage(input: unknown, productIds: Set<string>, nested = false): Pag
     theme: {
       preset: str(t.preset, 20) || 'clean',
       accent: /^#[0-9a-f]{6}$/i.test(String(t.accent)) ? String(t.accent) : '#111114',
-      font: str(t.font, 20) || 'geist',
+      font: TEXT_FONT_IDS.has(String(t.font)) ? String(t.font) : 'geist',
       button: ['rounded', 'pill', 'sharp'].includes(String(t.button)) ? String(t.button) : 'rounded',
       background: t.background === 'gradient' ? 'gradient' : 'solid',
     },
@@ -666,7 +666,7 @@ function cleanLook(input: unknown): Record<string, string> | null {
   if (['s', 'm', 'l', 'xl'].includes(String(l.size))) out.size = String(l.size)
   if (/^#[0-9a-f]{6}$/i.test(String(l.color))) out.color = String(l.color)
   if (['tight', 'normal', 'roomy'].includes(String(l.space))) out.space = String(l.space)
-  if (['geist', 'grotesque', 'serif'].includes(String(l.font))) out.font = String(l.font)
+  if (TEXT_FONT_IDS.has(String(l.font))) out.font = String(l.font)
   return Object.keys(out).length ? out : null
 }
 

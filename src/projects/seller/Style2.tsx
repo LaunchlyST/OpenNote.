@@ -1,6 +1,7 @@
+import { useEffect } from 'react'
 import { PriceTag, accentOf, ctaStyle } from './StorePage'
 import type { StorePageProps } from './StorePage'
-import { FONTS, mediaUrl, safeExternalUrl } from './model'
+import { FONTS, ensureFont, fontById, mediaUrl, safeExternalUrl } from './model'
 import type { ShopProduct } from './model'
 import './style2.css'
 
@@ -28,7 +29,9 @@ import './style2.css'
  */
 export function Style2Page(props: StorePageProps) {
   const { page, products, handle, only } = props
-  const font = FONTS.find((f) => f.id === page.theme.font)?.css ?? FONTS[0].css
+  const font = fontById(page.theme.font)?.css ?? FONTS[0].css
+  // the store font must be downloaded before it renders
+  useEffect(() => { ensureFont(page.theme.font) }, [page.theme.font])
   const accent = accentOf(page)
   const avatar = mediaUrl(page.avatar)
   const list = only ? [only] : products.filter((p) => !p.hidden)

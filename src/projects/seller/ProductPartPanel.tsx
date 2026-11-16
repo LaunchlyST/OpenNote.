@@ -253,7 +253,7 @@ export function TypographyEditor({ store, kind, value, onChange }: { store: Stor
  * category. A family's stylesheet is requested only when its row is drawn, so
  * the whole library is never downloaded at once.
  */
-function FontPicker({ value, theme, onPick, onClose }: { value: string; theme: string; onPick: (id: string) => void; onClose: () => void }) {
+export function FontPicker({ value, theme, onPick, onClose }: { value: string; theme: string; onPick: (id: string) => void; onClose: () => void }) {
   const current = fontById(value)
   const [q, setQ] = useState('')
   const [cat, setCat] = useState<FontCategory | 'All'>(current?.category ?? 'Sans')

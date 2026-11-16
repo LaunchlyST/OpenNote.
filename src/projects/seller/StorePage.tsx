@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages } from './model'
+import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -58,6 +58,18 @@ export interface StorePageProps {
   onPageChange?: (index: number) => void
   /** Editor: choose or add the product for an empty product block. */
   onAddSlide?: (blockId: string) => void
+  /**
+   * Editor: double-tapping a store page tab (Page 2 and Page 3) hides that page.
+   * Hidden pages leave the tab row and the content, so the preview only shows
+   * what should be shown. Home (0) is never hidden.
+   */
+  onHide?: (i: number) => void
+  /**
+   * Editor: store pages the owner hid (Page 2 and Page 3). Hidden pages leave
+   * the tab row and the content, so the preview only shows what should be shown.
+   * Home (0) is never hidden.
+   */
+  hiddenPages?: number[]
 }
 
 /** The per-element look as inline style: alignment, size, colour, spacing, font. */
@@ -70,7 +82,7 @@ export function lookStyle(look: Block['look']): CSSProperties | undefined {
     ...(size !== 1 ? { fontSize: `${size}em`, ['--sz' as string]: size } : {}),
     ...(look.color ? { color: look.color } : {}),
     ...(space ? { paddingBlock: space } : {}),
-    ...(look.font ? { fontFamily: FONTS.find((f) => f.id === look.font)?.css } : {}),
+    ...(look.font ? { fontFamily: fontById(look.font)?.css } : {}),
   } as CSSProperties
 }
 
@@ -123,7 +135,7 @@ export function accentOf(page: Page): string {
 
 export function storeStyle(page: Page): CSSProperties {
   const preset = PRESETS.find((p) => p.id === page.theme.preset) ?? PRESETS[0]
-  const font = FONTS.find((f) => f.id === page.theme.font)?.css ?? FONTS[0].css
+  const font = fontById(page.theme.font)?.css ?? FONTS[0].css
   const radius = page.theme.button === 'pill' ? 999 : page.theme.button === 'sharp' ? 4 : 12
   const bg =
     page.theme.background === 'gradient'
@@ -138,7 +150,8 @@ export function StorePage(props: StorePageProps) {
   // pages with something in them, while the editor shows every page it created
   // so the seller can build an empty one.
   const all = storePages(page)
-  const tabs = live ? all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks)) : all
+  const hidden = props.hiddenPages ?? []
+  const tabs = (live ? all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks)) : all).filter((pg) => !hidden.includes(pg.index))
   const [own, setOwn] = useState(0)
   const wanted = props.pageIndex ?? own
   const index = tabs.some((pg) => pg.index === wanted) ? wanted : 0
@@ -147,6 +160,8 @@ export function StorePage(props: StorePageProps) {
     if (props.pageIndex === undefined) setOwn(i)
     props.onPageChange?.(i)
   }
+  // the store font and any per-block font must be downloaded before they render
+  useEffect(() => { ensureFonts([page.theme.font, ...storePages(page).flatMap((pg) => pg.blocks.map((b) => b.look?.font))]) }, [page])
   const head = page.blocks.find((b) => b.type === 'header')
   const foot = page.blocks.find((b) => b.type === 'footer')
   const body = current.blocks.filter((b) => !b.hidden && b.type !== 'header' && b.type !== 'footer')
@@ -191,9 +206,10 @@ export function StorePage(props: StorePageProps) {
  * Store pages under the banner. Buttons, not a scrolling strip of links: arrow
  * keys move between them and only the open page is in the tab order.
  */
-function PageTabs({ tabs, index, onSelect }: { tabs: number[]; index: number; onSelect: (i: number) => void }) {
+function PageTabs({ tabs, index, onSelect, onHide }: { tabs: number[]; index: number; onSelect: (i: number) => void; onHide?: (i: number) => void }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([])
   const at = Math.max(0, tabs.indexOf(index))
+  const lastTap = useRef<{ t: number; n: number } | null>(null)
   const key = (e: ReactKeyboardEvent) => {
     const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
     if (!dir) return
@@ -201,6 +217,14 @@ function PageTabs({ tabs, index, onSelect }: { tabs: number[]; index: number; on
     const next = (at + dir + tabs.length) % tabs.length
     onSelect(tabs[next])
     refs.current[next]?.focus()
+  }
+  const tap = (n: number) => {
+    const now = Date.now()
+    const last = lastTap.current
+    // a double tap (two quick taps, or a double click) hides that page
+    if (last && now - last.t < 280 && last.n === n) { lastTap.current = null; onHide?.(n); return }
+    lastTap.current = { t: now, n }
+    onSelect(n)
   }
   return (
     <nav className="sp-pages" role="tablist" aria-label="Store pages" onKeyDown={key}>
@@ -215,7 +239,7 @@ function PageTabs({ tabs, index, onSelect }: { tabs: number[]; index: number; on
           aria-controls="sp-page-panel"
           tabIndex={n === index ? 0 : -1}
           className={n === index ? 'sp-tab on' : 'sp-tab'}
-          onClick={() => onSelect(n)}
+          onClick={() => tap(n)}
         >
           {pageLabel(n)}
         </button>

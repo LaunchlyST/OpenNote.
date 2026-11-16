@@ -45,7 +45,7 @@ import { cn } from '../../lib/id'
 import { BuyRow, StorePage, storeStyle } from './StorePage'
 import { CardAppearance, CouponsPanel, CoverEditor, FaqEditor, GalleryEditor, LinesEditor, OfferSchedule, ProductPicker, SampleEditor, SellerReviews } from './ProductEditorParts'
 import { Style2Page } from './Style2'
-import { ProductPartPanel } from './ProductPartPanel'
+import { FontPicker, ProductPartPanel } from './ProductPartPanel'
 import type { PartDraft } from './ProductPartPanel'
 import { bankIcon } from './bank-icons'
 import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-save'
@@ -81,6 +81,7 @@ import {
   PLATFORM_FEE_PERCENT,
   PRESETS,
   blockLabel,
+  fontById,
 } from './model'
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
@@ -495,7 +496,15 @@ function Studio({
   const [editPart, setEditPart] = useState<{ productId: string; part: CardPart } | null>(null)
   /** Unsaved change from that panel, so the phone shows it before the save lands. */
   const [partPreview, setPartPreview] = useState<({ id: string } & PartDraft) | null>(null)
+  /** Store pages the owner hid in the phone preview (Page 2 and Page 3). */
+  const [hiddenPages, setHiddenPages] = useState<number[]>([])
   const closePart = useCallback(() => { setEditPart(null); setPartPreview(null) }, [])
+  /** Double-tapping a page tab hides that page; the add-page button brings a page back. */
+  const toggleHiddenPage = useCallback((i: number) => {
+    // Home (0) is never hidden.
+    if (i <= 0) return
+    setHiddenPages((h) => (h.includes(i) ? h.filter((x) => x !== i) : [...h, i]))
+  }, [])
   const view = 'mobile' as 'mobile' | 'desktop'
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
   const [publishing, setPublishing] = useState(false)
@@ -875,23 +884,6 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
-          {(() => {
-            const prod = editPart ? store.products.find((p) => p.id === editPart.productId) : null
-            if (!editPart || !prod) return null
-            return (
-              <ProductPartPanel
-                key={prod.id}
-                product={prod}
-                store={store}
-                setStore={setStore}
-                part={editPart.part}
-                onPart={(part) => setEditPart({ productId: editPart.productId, part })}
-                onClose={closePart}
-                onFull={() => { closePart(); setOpenProduct(prod.id); void navigate('products') }}
-                onPreview={(value) => setPartPreview({ id: prod.id, ...value })}
-              />
-            )
-          })()}
           <PageEditor
             onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }}
             page={page}
@@ -908,7 +900,17 @@ function Studio({
           />
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
-        {tab === 'products' && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} onEditParts={(pid) => { void navigate('page').then(() => setEditPart({ productId: pid, part: 'card' })) }} />}
+        {tab === 'products' && (
+          <ProductsEditor
+            store={store}
+            setStore={setStore}
+            open={openProduct}
+            setOpen={setOpenProduct}
+            focus={editPart}
+            onFocus={setEditPart}
+            onPreview={(id, value) => setPartPreview({ id, ...value })}
+          />
+        )}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
@@ -976,12 +978,21 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' && editPart ? { productId: editPart.productId, part: editPart.part } : null} onPick={(id, el, pid) => {
-                  // Clicking a product — its cover, title, description or button —
-                  // takes the seller straight to that product's editing page.
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' ? { productId: editPart?.productId ?? null, part: editPart?.part ?? null } : null} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
+                  // Clicking a product in the owner's preview:
+                  //  - one of its elements (image, title, description, button) opens
+                  //    just that element's settings, in place;
+                  //  - the card's own background opens the product's full editor.
                   if (pid) {
                     closeEditor()
                     setOpenProduct(pid)
+                    if (part && part !== 'card') {
+                      // Focused settings for that element: the tab switch clears the
+                      // focus, so set it once the Products tab is open.
+                      void navigate('products').then(() => setEditPart({ productId: pid, part }))
+                      return
+                    }
+                    setEditPart(null)
                     void navigate('products')
                     return
                   }
@@ -992,7 +1003,7 @@ function Studio({
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
               </div>
               <div className="ss-slide" aria-label="Style 2 preview" aria-hidden={slide !== 1}>
-                <Style2Page page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} />
+                <Style2Page page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} hiddenPages={hiddenPages} />
               </div>
             </div>
           </div>
@@ -1455,6 +1466,7 @@ function BannerEditor({ page, onChange }: { page: Page; onChange: (p: Page) => v
 /** The editing panel for one section: floats above everything, never moves the layout. */
 function FloatingEditor({ page, pageIndex, onChange, products, id, anchor, onClose }: { page: Page; pageIndex: number; onChange: (p: Page) => void; products: DraftProduct[]; id: string; anchor: DOMRect | null; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [pickingFont, setPickingFont] = useState(false)
   const safe = Math.min(pageIndex, storePages(page).length - 1)
   const blocks = safe === 0 ? pinEnds(page.blocks) : (storePages(page)[safe]?.blocks ?? [])
   const i = blocks.findIndex((b) => b.id === id)
@@ -1524,10 +1536,9 @@ function FloatingEditor({ page, pageIndex, onChange, products, id, anchor, onClo
           <div className="fe-row">
             <label className="fe-color">Text colour <input type="color" value={look.color ?? '#111114'} onChange={(e) => setLook({ color: e.target.value })} aria-label="Text colour" /></label>
             {look.color && <button type="button" className="fe-link" onClick={() => setLook({ color: undefined })}>Reset</button>}
-            <select className="ss-input fe-font" aria-label="Font" value={look.font ?? ''} onChange={(e) => setLook({ font: (e.target.value || undefined) as NonNullable<Block['look']>['font'] })}>
-              <option value="">Theme font</option>
-              {FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-            </select>
+            <button type="button" className="ss-input fe-font" aria-label="Font" onClick={() => setPickingFont(true)}>
+              {look.font ? <span style={{ fontFamily: fontById(look.font)?.css }}>{fontById(look.font)?.label ?? 'Font'}</span> : 'Theme font'}
+            </button>
           </div>
         </div>
       </div>
@@ -1541,6 +1552,14 @@ function FloatingEditor({ page, pageIndex, onChange, products, id, anchor, onClo
           }}><Copy className="h-3.5 w-3.5" /> Duplicate</button>
           <button type="button" className="fe-del" onClick={() => (setBlocks(blocks.filter((x) => x.id !== id)), onClose())}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
         </footer>
+      )}
+      {pickingFont && (
+        <FontPicker
+          value={look.font ?? ''}
+          theme={fontById(page.theme.font)?.css ?? FONTS[0].css}
+          onPick={(id) => { setLook({ font: (id || undefined) as NonNullable<Block['look']>['font'] }); setPickingFont(false) }}
+          onClose={() => setPickingFont(false)}
+        />
       )}
     </div>
   )
@@ -1801,8 +1820,10 @@ function BlockEditor({ block, products, update, onOpenProduct }: { block: Block;
 
 function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => void }) {
   const [open, setOpen] = useState(false)
+  const [pickingFont, setPickingFont] = useState(false)
   const theme = page.theme
   const setTheme = (t: Partial<Page['theme']>) => onChange({ ...page, theme: { ...theme, ...t } })
+  const themeFont = fontById(theme.font) ?? FONTS[0]
   return (
     <div className="sb-block">
       <div className="sb-row">
@@ -1828,9 +1849,9 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
           <div className="ss-grid3">
             <Field label="Accent"><input type="color" className="ss-color" value={theme.accent} onChange={(e) => setTheme({ accent: e.target.value })} /></Field>
             <Field label="Font">
-              <select className="ss-input" value={theme.font} onChange={(e) => setTheme({ font: e.target.value })}>
-                {FONTS.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}
-              </select>
+              <button type="button" className="ss-input ss-fontpick" aria-label="Store font" onClick={() => setPickingFont(true)}>
+                <span style={{ fontFamily: themeFont.css }}>{themeFont.label}</span>
+              </button>
             </Field>
             <Field label="Buttons">
               <select className="ss-input" value={theme.button} onChange={(e) => setTheme({ button: e.target.value as Page['theme']['button'] })}>
@@ -1853,13 +1874,21 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
           </div>
         </div>
       )}
+      {pickingFont && (
+        <FontPicker
+          value={theme.font}
+          theme={FONTS[0].css}
+          onPick={(id) => { setTheme({ font: id || theme.font || 'geist' }); setPickingFont(false) }}
+          onClose={() => setPickingFont(false)}
+        />
+      )}
     </div>
   )
 }
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, onEditParts }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; onEditParts?: (productId: string) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   // the opened card scrolls into view (e.g. after clicking it in the phone)
@@ -1892,7 +1921,22 @@ function ProductsEditor({ store, setStore, open, setOpen, onEditParts }: { store
           return p.id === open ? (
             <div key={p.id} ref={panel} className="pg-panel" role="region" aria-label={`Edit ${p.title.trim() || 'product'}`}>
               <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
-              <ProductForm product={p} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={onEditParts} />
+              {focus?.productId === p.id ? (
+                /* Focused settings for one element of the card (image, title, description, button). */
+                <ProductPartPanel
+                  key={`${p.id}.${focus.part}`}
+                  product={p}
+                  store={store}
+                  setStore={setStore}
+                  part={focus.part}
+                  onPart={(part) => onFocus?.({ productId: p.id, part })}
+                  onClose={() => choose(null)}
+                  onFull={() => onFocus?.(null)}
+                  onPreview={(value) => onPreview?.(p.id, value)}
+                />
+              ) : (
+                <ProductForm product={p} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={() => onFocus?.({ productId: p.id, part: 'card' })} />
+              )}
             </div>
           ) : (
             <button key={p.id} type="button" className="pg-card" onClick={() => choose(p.id)} aria-label={`Edit ${p.title.trim() || 'Untitled product'}`}>
@@ -1957,7 +2001,7 @@ const productForm = (p: DraftProduct) => ({
   extras: p.extras ?? DEFAULT_EXTRAS,
 })
 
-function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void; onEditParts?: (productId: string) => void }) {
+function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void; onEditParts?: () => void }) {
   const [state, setState] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -2236,7 +2280,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void saved.flush().then(() => setState('Saved ✓')).catch((e: Error) => setState(e.message))}>Save changes</button>
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.duplicateProduct(product.id); setStore(r.store) })}>Duplicate</button>
           {onEditParts && (
-            <button type="button" className="ss-ghost" disabled={busy} onClick={() => onEditParts(product.id)}>
+            <button type="button" className="ss-ghost" disabled={busy} onClick={() => onEditParts()}>
               <LayoutGrid className="h-3.5 w-3.5" /> Card look
             </button>
           )}
