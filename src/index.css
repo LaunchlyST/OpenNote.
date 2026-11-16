@@ -7661,17 +7661,11 @@ select.ss-input option {
 .sp-drop p { max-width: 30ch; font-size: 12.5px; opacity: 0.65; }
 .sp-drop .sp-btn { margin-top: 6px; }
 
-/* ---- page switcher and product strip in the Page editor ---- */
-.pg-hint { margin: 2px 0 6px; font-size: 12px; color: #6b6a66; }
-.pg-pages { display: flex; flex-wrap: wrap; gap: 6px; }
-.pg-pages button { padding: 7px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 650; color: #555; background: #f2f1ee; }
-.pg-pages button.on { color: #fff; background: #111114; }
-.pg-strip { display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; }
-.pg-tile { flex: 0 0 auto; width: 82px; display: grid; gap: 4px; justify-items: center; padding: 7px; border-radius: 12px; border: 1px solid #e6e4df; background: #fff; text-align: center; color: #3f3f46; cursor: grab; touch-action: none; user-select: none; }
-.pg-tile:active { cursor: grabbing; }
-.pg-tile .pg-img { display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: 8px; background: #f2f1ee center/cover no-repeat; color: #a1a1aa; }
-.pg-tile b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 11px; font-weight: 650; line-height: 1.2; }
-.pg-tile small { font-size: 10px; color: #8a8985; }
+/* ---- the Page editor column: add a block (and the next page) ---- */
+.pg-addrow { display: flex; gap: 10px; align-items: stretch; }
+.pg-addrow .bl-add { flex: 1 1 auto; }
+.pg-addpage { display: inline-flex; align-items: center; gap: 6px; padding: 0 15px; border-radius: 14px; font-size: 13.5px; font-weight: 650; color: #555; background: #f2f1ee; white-space: nowrap; transition: background .15s; }
+.pg-addpage:hover { background: #e7e6e2; }
 
 /* ---- product slides in the block editor ---- */
 .sld-list { display: grid; gap: 10px; }
@@ -8831,7 +8825,8 @@ select.ss-input option {
 .sp-card-featured .sp-part-btn { margin-top: 0; }
 @media (min-width: 640px) { .sp-card-featured .sp-part-btn { width: 100%; } }
 /* In the editor's phone preview a product card is a shortcut to its editing page. */
-.ss-slide .sp-card[data-product-id] { cursor: pointer; }
+.ss-slide .sp-card[data-product-id],
+.ss-slide .sp-card[data-product-id] * { cursor: pointer; }
 /* card background tones (only when the seller picks one) */
 .sp-card-bg-plain { background: transparent; border-color: transparent; }
 .sp-card-bg-soft { background: color-mix(in srgb, currentColor 5%, transparent); }

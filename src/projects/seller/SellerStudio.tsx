@@ -605,8 +605,6 @@ function Studio({
       openEditor(nb.id, el ?? undefined)
     }, 140)
   }
-  const productBlock = (productId: string): Block => ({ ...newBlock('featured'), data: { productId, note: '', slides: [newSlide('digital', productId)] } })
-
   // Drag a new section (or a product) from the editor into the phone; a click adds it without dragging.
   const dragNewBlock = (e: ReactPointerEvent, make: () => Block) => {
     if (e.button !== 0) return
@@ -674,8 +672,6 @@ function Studio({
   }
   const startInsert = (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) =>
     dragNewBlock(e, () => (data ? { ...newBlock(type), data: { ...newBlock(type).data, ...data } } : newBlock(type)))
-  /** Drag one of the seller's products into the phone (or tap it to add a block). */
-  const startProductInsert = (productId: string, e: ReactPointerEvent) => dragNewBlock(e, () => productBlock(productId))
 
   // Add a block at the bottom of the page on screen (above the footer on Home) and open its editor
   const addBlock = (type: BlockType, data?: Record<string, unknown>) => {
@@ -907,8 +903,6 @@ function Studio({
             setOpen={openEditor}
             onStartInsert={startInsert}
             onAdd={addBlock}
-            onStartProduct={startProductInsert}
-            onAddProduct={(id) => placeProductBlock(productBlock(id))}
             onMoveBlock={moveBlockToPage}
             createProduct={createProduct}
           />
@@ -982,12 +976,10 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' && editPart ? { productId: editPart.productId, part: editPart.part } : null} onPick={(id, el, pid, part) => {
-                  // Clicking a product takes the seller straight to that product's
-                  // editing page. While the card-part panel is open for that same
-                  // product, a click on one of its parts moves the panel to it.
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' && editPart ? { productId: editPart.productId, part: editPart.part } : null} onPick={(id, el, pid) => {
+                  // Clicking a product — its cover, title, description or button —
+                  // takes the seller straight to that product's editing page.
                   if (pid) {
-                    if (editPart?.productId === pid) { setEditPart({ productId: pid, part: part ?? 'card' }); return }
                     closeEditor()
                     setOpenProduct(pid)
                     void navigate('products')
@@ -1163,7 +1155,7 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onStartInsert, onAdd, onStartProduct, onAddProduct, onMoveBlock, createProduct, onOpenProduct }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; onStartProduct: (id: string, e: ReactPointerEvent) => void; onAddProduct: (id: string) => void; onMoveBlock: (id: string, to: number) => void; createProduct: (f: NewProduct) => Promise<string> }) {
+function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onStartInsert, onAdd, onMoveBlock, createProduct, onOpenProduct }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onStartInsert: (type: BlockType, e: ReactPointerEvent, data?: Record<string, unknown>) => void; onAdd: (type: BlockType, data?: Record<string, unknown>) => void; onMoveBlock: (id: string, to: number) => void; createProduct: (f: NewProduct) => Promise<string> }) {
   const pages = storePages(page)
   const isHome = pageIndex === 0
   // Home keeps its pinned profile and footer; Page 2/3 hold content only.
@@ -1175,8 +1167,6 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
   const [menu, setMenu] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
-  // a product tile that was just dragged must not also count as a tap
-  const draggedAt = useRef(0)
   useEffect(() => {
     if (!menu) return
     const close = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest('.bl-menu, .bl-more')) setMenu(null) }
@@ -1202,60 +1192,16 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
     if (blocks.find((x) => x.id === id)?.type === 'featured' && open === id) return setOpen(null)
     setOpen(id, e.currentTarget.closest('.bl-card') as HTMLElement)
   }
-  const productTiles = products.filter((p) => p.title.trim() && !p.archived)
   return (
     <div className="ss-stack">
-      {/* Store pages: Home, then Page 2 and Page 3 as the seller needs them */}
-      <div className="pg-pages" role="tablist" aria-label="Store pages">
-        {pages.map((pg) => (
-          <button key={pg.id} type="button" role="tab" aria-selected={pg.index === pageIndex} className={pg.index === pageIndex ? 'on' : ''} onClick={() => onSelectPage(pg.index)}>
-            {pageLabel(pg.index)}
-          </button>
-        ))}
+      {/* Add block (and the next page, when the store needs one). The page switcher lives in the phone preview. */}      <div className="pg-addrow">
+        <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
         {pages.length < MAX_STORE_PAGES && (
-          <button type="button" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => { onChange(ensurePage(page, pages.length)); onSelectPage(pages.length) }}>
+          <button type="button" className="pg-addpage" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => { onChange(ensurePage(page, pages.length)); onSelectPage(pages.length) }}>
             <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
           </button>
         )}
       </div>
-      {productTiles.length > 0 && (
-        <>
-          <p className="pg-hint">Drag a product into the phone to place it, or tap to add it to this page. {MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks fit per page; a carousel counts as one.</p>
-          <div className="pg-strip" aria-label="Your products">
-            {productTiles.map((p) => {
-              const cover = mediaUrl(p.cover)
-              return (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="pg-tile"
-                  aria-label={`Add ${p.title || 'product'} to this page, or drag it into the phone`}
-                  onPointerDown={(e) => {
-                    if (e.button !== 0) return
-                    const x0 = e.clientX, y0 = e.clientY
-                    let fired = false
-                    const mv = (ev: PointerEvent) => {
-                      if (fired || Math.hypot(ev.clientX - x0, ev.clientY - y0) < 8) return
-                      fired = true
-                      draggedAt.current = Date.now()
-                      window.removeEventListener('pointermove', mv)
-                      onStartProduct(p.id, { ...e, clientX: ev.clientX, clientY: ev.clientY, button: 0, preventDefault: () => {} } as unknown as ReactPointerEvent)
-                    }
-                    window.addEventListener('pointermove', mv)
-                    window.addEventListener('pointerup', () => window.removeEventListener('pointermove', mv), { once: true })
-                  }}
-                  onClick={() => { if (Date.now() - draggedAt.current < 500) return; onAddProduct(p.id) }}
-                >
-                  <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-4 w-4" />}</span>
-                  <b>{p.title || 'Untitled'}</b>
-                  <small>{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}</small>
-                </button>
-              )
-            })}
-          </div>
-        </>
-      )}
-      <button type="button" className="bl-add" onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add block</button>
       <ul className="bl-list" aria-label={`${pageLabel(pageIndex)} blocks`}>
         {isHome && (
           <>
