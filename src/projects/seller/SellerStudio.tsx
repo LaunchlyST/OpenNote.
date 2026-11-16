@@ -914,7 +914,7 @@ function Studio({
           />
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
-        {tab === 'products' && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} />}
+        {tab === 'products' && <ProductsEditor store={store} setStore={setStore} open={openProduct} setOpen={setOpenProduct} onEditParts={(pid) => { void navigate('page').then(() => setEditPart({ productId: pid, part: 'card' })) }} />}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
         {tab === 'link' && <LinkPanel store={store} setStore={setStore} />}
         {tab === 'orders' && <OrdersPanel />}
@@ -982,12 +982,15 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' ? (editPart ? { productId: editPart.productId, part: editPart.part } : { productId: null, part: null }) : null} onPick={(id, el, pid, part) => {
-                  // clicking a product box opens that product's card editing; anything else opens its page section
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} editCard={tab === 'page' && editPart ? { productId: editPart.productId, part: editPart.part } : null} onPick={(id, el, pid, part) => {
+                  // Clicking a product takes the seller straight to that product's
+                  // editing page. While the card-part panel is open for that same
+                  // product, a click on one of its parts moves the panel to it.
                   if (pid) {
-                    setTab('page')
+                    if (editPart?.productId === pid) { setEditPart({ productId: pid, part: part ?? 'card' }); return }
                     closeEditor()
-                    setEditPart({ productId: pid, part: part ?? 'card' })
+                    setOpenProduct(pid)
+                    void navigate('products')
                     return
                   }
                   setEditPart(null)
@@ -1910,7 +1913,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, onEditParts }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; onEditParts?: (productId: string) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   // the opened card scrolls into view (e.g. after clicking it in the phone)
@@ -1943,7 +1946,7 @@ function ProductsEditor({ store, setStore, open, setOpen }: { store: StoreView; 
           return p.id === open ? (
             <div key={p.id} ref={panel} className="pg-panel" role="region" aria-label={`Edit ${p.title.trim() || 'product'}`}>
               <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
-              <ProductForm product={p} store={store} setStore={setStore} onDeleted={() => setOpen(null)} />
+              <ProductForm product={p} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={onEditParts} />
             </div>
           ) : (
             <button key={p.id} type="button" className="pg-card" onClick={() => choose(p.id)} aria-label={`Edit ${p.title.trim() || 'Untitled product'}`}>
@@ -2008,7 +2011,7 @@ const productForm = (p: DraftProduct) => ({
   extras: p.extras ?? DEFAULT_EXTRAS,
 })
 
-function ProductForm({ product, store, setStore, onDeleted }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void }) {
+function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void; onDeleted: () => void; onEditParts?: (productId: string) => void }) {
   const [state, setState] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -2286,6 +2289,11 @@ function ProductForm({ product, store, setStore, onDeleted }: { product: DraftPr
         <div className="pe-actions">
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void saved.flush().then(() => setState('Saved ✓')).catch((e: Error) => setState(e.message))}>Save changes</button>
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.duplicateProduct(product.id); setStore(r.store) })}>Duplicate</button>
+          {onEditParts && (
+            <button type="button" className="ss-ghost" disabled={busy} onClick={() => onEditParts(product.id)}>
+              <LayoutGrid className="h-3.5 w-3.5" /> Card look
+            </button>
+          )}
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => {
             // The queue's own revision and token: the save that just flushed may
             // have moved the product on, and this is the same editor either way.

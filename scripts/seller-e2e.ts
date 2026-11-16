@@ -141,6 +141,28 @@ try {
       await page.waitForTimeout(2500)
       const live = (await api('GET', `/api/store/${handle}`)).json
       check(`${tag}: edit typed right before Publish goes live`, live?.products?.[0]?.title === 'Typed then publish', JSON.stringify(live?.products?.map((p: { title: string }) => p.title)))
+
+      // 3b. Clicking the product in the phone preview opens that product's editing page.
+      const cur = (await api('GET', '/api/seller/store', undefined, C)).json.store
+      const feat = { id: 'blk_e2e_featured', type: 'featured', hidden: false, data: { productId: prod.id, note: '', slides: [{ kind: 'digital', productId: prod.id }] } }
+      const blocks = cur.draft.blocks.filter((b: { id: string }) => b.id !== feat.id)
+      const foot = blocks.findIndex((b: { type: string }) => b.type === 'footer')
+      blocks.splice(foot < 0 ? blocks.length : foot, 0, feat)
+      await api('PUT', '/api/seller/store/draft', { page: { ...cur.draft, blocks }, revision: cur.revision }, C)
+      await page.reload()
+      await page.getByText(/^Page$/).first().waitFor({ timeout: 20000 })
+      await page.waitForTimeout(1500)
+      const card = page.locator('.ss-slide [data-product-id]').first()
+      const cardCount = await card.count()
+      // the preview card animates in, so click it without waiting for it to settle
+      if (cardCount) await card.click({ force: true })
+      await page.waitForTimeout(1500)
+      const productsTab = await page.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')
+      const editorOpen = (await page.locator('.pg-panel').count()) > 0
+      const partPanel = (await page.locator('.pe-part').count()) > 0
+      check(`${tag}: clicking the product in the preview opens its editing page`, cardCount > 0 && productsTab === 'true' && editorOpen, `card=${cardCount} tab=${productsTab} editor=${editorOpen}`)
+      check(`${tag}: clicking the product does not open the card-part panel`, !partPanel)
+
       // 4. A refresh in the middle of an edit: the edit survives and saving keeps working.
       //    (The draft is still being written when the page goes away: the editor must
       //     recover it and must not be told the product "changed elsewhere" afterwards.)

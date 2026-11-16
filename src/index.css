@@ -8830,6 +8830,8 @@ select.ss-input option {
 .sp-card .sp-part-btn { flex: 0 0 auto; margin-top: auto; min-width: 0; }
 .sp-card-featured .sp-part-btn { margin-top: 0; }
 @media (min-width: 640px) { .sp-card-featured .sp-part-btn { width: 100%; } }
+/* In the editor's phone preview a product card is a shortcut to its editing page. */
+.ss-slide .sp-card[data-product-id] { cursor: pointer; }
 /* card background tones (only when the seller picks one) */
 .sp-card-bg-plain { background: transparent; border-color: transparent; }
 .sp-card-bg-soft { background: color-mix(in srgb, currentColor 5%, transparent); }
