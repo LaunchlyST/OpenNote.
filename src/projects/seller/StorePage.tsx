@@ -99,6 +99,9 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
       style={style}
       onClickCapture={(e) => {
         if ((e.target as HTMLElement).closest('.sp-grip')) return
+        // the carousel's own controls (previous / next arrows, dots) navigate the
+        // slides instead of opening the block — let their click through
+        if ((e.target as HTMLElement).closest('.sp-car-nav')) return
         e.preventDefault()
         e.stopPropagation()
         // dragging the title or description sideways is not a click on it
@@ -178,7 +181,7 @@ export function StorePage(props: StorePageProps) {
           <Pickable block={head ?? { id: 'header', type: 'header', hidden: false, data: {} }} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}>
             <Header page={page} handle={props.handle} showSocials={head?.data?.showSocials !== false} />
           </Pickable>
-          {tabs.length > 1 && <PageTabs tabs={tabs.map((t) => t.index)} index={index} onSelect={select} />}
+          {tabs.length > 1 && <PageTabs tabs={tabs.map((t) => t.index)} index={index} onSelect={select} onHide={props.onHide} />}
           <div className="sp-page-panel" id="sp-page-panel" role="tabpanel" aria-labelledby={`sp-page-${index}`}>
             {body.map((b) => (
               <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
