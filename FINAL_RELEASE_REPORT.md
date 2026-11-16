@@ -266,3 +266,27 @@ In the live Seller Studio, with a temporary product:
 4. The temporary product was deleted; the live store is back to its two original
    products and nothing was published.
 
+## 12. Seller Studio: clicking a product opens its editing page (2026-11-16)
+
+**Confirmed bug (reproduced on the live site):** clicking a product card in the
+Studio’s phone preview opened the small “Editing card” part panel (Cover / Title /
+Description / Button / Card background) instead of the product’s editing page. The
+click-to-edit feature added in `712f9bb` had taken over the card click.
+
+**Fix** (`src/projects/seller/SellerStudio.tsx`):
+- A click on a product card in the preview now opens that product’s editing page
+  (Products tab, that product’s editor) — the same route the “All product settings”
+  button already used.
+- The card-part editor is still reachable: the product editor has a **“Card look”**
+  button that opens the part panel for that product; while it is open, clicking a
+  part in the preview moves the panel to that part.
+- The preview only draws part outlines while the panel is open, and product cards in
+  the preview show a pointer cursor (`src/index.css`).
+
+**Regression test** (`scripts/seller-e2e.ts`): clicking the product in the preview
+opens its editing page and does **not** open the card-part panel — on desktop and
+mobile. `npm run test:e2e:studio` passes, along with `tsc -b`, `npm run build`,
+`npm test` and `npm run test:deploy`.
+
+**Deployment:** commit `e4f8aa9` pushed; frontend Pages workflow dispatched.
+
