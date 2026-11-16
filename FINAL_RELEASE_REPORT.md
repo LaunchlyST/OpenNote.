@@ -240,3 +240,29 @@ and by probing production with controlled test data (no charges, no refunds).
   untouched: the live draft still differs from the published page, and nothing was
   published).
 
+### Browser coverage (local, Playwright)
+
+- `npm run test:e2e:seller` — all checks passed (store front-to-back: sign-in, publish,
+  checkout, download, receipt, refunds, second seller).
+- `npm run test:e2e:store` — all checks passed (storefront, free claim, reviews, codes).
+- `npm run test:e2e:studio` — all checks passed, including the new regression checks on
+  desktop **and** mobile: “an edit interrupted by a refresh is kept”, “saving after a
+  refresh is not refused as ‘changed elsewhere’”, “saving after a lost reply is not
+  refused as ‘changed elsewhere’”, “undo does not switch the store’s style back”,
+  “editing after Unarchive is saved”.
+- `npm run test:seller`, `test:seller-save`, `test:payments`, `test:deploy`,
+  `test:email-check`, `npm test` — all pass.
+
+### Live UI check of the conflict path (production)
+
+In the live Seller Studio, with a temporary product:
+
+1. Another editor moved the product on (a save with a different writer token) → `200`.
+2. Typing in the studio did **not** overwrite it — the server kept the other editor’s
+   title, the studio showed “This product changed somewhere else, so it was not
+   overwritten. Your edits are still here.”, the “Take the newer version” button was
+   offered, and the typed text was still on screen.
+3. “Take the newer version” adopted the server’s version and cleared the notice.
+4. The temporary product was deleted; the live store is back to its two original
+   products and nothing was published.
+
