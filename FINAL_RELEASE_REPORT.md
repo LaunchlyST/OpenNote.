@@ -341,5 +341,7 @@ Three follow-ups to the click-to-edit work, finished this session:
 element (title) opens the focused settings, clicking the product opens the editing page;
 `tsc -b`, `npm run build`, `npm test`, `npm run test:deploy` and `npm run test:seller` green.
 
-**Deployment:** pending this session’s commit.
+**Deployment:** commit `27a94b1` pushed; frontend Pages workflow run `202`
+(head `27a94b1`) → success, and the live bundle at `desknoty.com` serves this
+build (new markers present: focused part labels, full font picker, hidden pages).
 
