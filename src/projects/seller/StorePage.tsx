@@ -571,14 +571,16 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
     if (lastScrollLeft.current === null) { lastScrollLeft.current = el.scrollLeft; return }
     if (el.scrollLeft === lastScrollLeft.current) return
     lastScrollLeft.current = el.scrollLeft
-    if (performance.now() - mountedAt.current < 400) return
-    scrolledAt.current = performance.now()
-    lastSwipeAt.current = performance.now()
     const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
     if (i !== at) {
       setAt(i)
       onCarouselSlideChange?.(i)
     }
+    // Don't let a swipe that just happened swallow the next tap, but ignore
+    // scrolls during the first 400ms after mount (initial layout).
+    if (performance.now() - mountedAt.current < 400) return
+    scrolledAt.current = performance.now()
+    lastSwipeAt.current = performance.now()
   }
   // A swipe that just moved the track must not also open a product.
   const swallow = (e: ReactMouseEvent) => {
