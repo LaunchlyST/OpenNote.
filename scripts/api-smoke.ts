@@ -112,6 +112,12 @@ const workspace = (tag: string) => ({
 
 let server = await boot()
 try {
+  const crossSite = await fetch(BASE + '/api/workspace', {
+    method: 'PUT', headers: { Origin: 'https://untrusted.example' },
+  })
+  check('foreign browser origins are rejected before workspace writes', crossSite.status === 403)
+  check('API responses prevent MIME sniffing', crossSite.headers.get('x-content-type-options') === 'nosniff')
+
   console.log('\n  Two accounts, fully separate')
   const a = await req('POST', '/api/auth/sign-up/email', { name: 'Alice', email: 'alice@opennote.test', password: PASSWORD })
   const b = await req('POST', '/api/auth/sign-up/email', { name: 'Bob', email: 'bob@opennote.test', password: PASSWORD })

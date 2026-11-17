@@ -65,7 +65,7 @@ const { applyMigrations } = await import('../server/schema.ts')
 await applyMigrations({ quiet: true })
 const { toNodeHandler } = await import('better-auth/node')
 const { auth } = await import('../server/auth.ts')
-const { sql } = await import('../server/db.ts')
+const { sql, closeDatabase } = await import('../server/db.ts')
 const { verifyEmail } = await import('../server/roles.ts')
 
 const app = express()
@@ -248,6 +248,8 @@ try {
 } finally {
   globalThis.fetch = realFetch
   server.close()
+  raw.close()
+  await closeDatabase()
   rmSync(tmp, { recursive: true, force: true })
 }
 

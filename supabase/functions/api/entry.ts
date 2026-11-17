@@ -23,7 +23,6 @@ try {
   // Startup failed: log it, and answer every request with a plain 503 so the
   // cause shows up in the function logs instead of a bare WORKER_ERROR.
   console.error('[api] startup failed:', e)
-  const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e)
   // @ts-ignore Deno global in the edge runtime
-  Deno.serve(() => new Response(JSON.stringify({ error: 'API failed to start', detail: msg.slice(0, 300) }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
+  Deno.serve(() => new Response(JSON.stringify({ error: 'API failed to start' }), { status: 503, headers: { 'Content-Type': 'application/json' } }))
 }

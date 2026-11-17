@@ -25,9 +25,6 @@ export default defineConfig({
     port: PORT,
     // Fail loudly instead of silently moving to 5174.
     strictPort: true,
-    // Accept forwarded Host headers, or Vite answers 403 "Blocked request"
-    // when reached through a proxy or tunnel.
-    allowedHosts: true,
     watch: {
       // inotify is unreliable in some containers and on network filesystems;
       // poll instead so hot reload actually fires.
@@ -41,7 +38,6 @@ export default defineConfig({
     host: true,
     port: PORT,
     strictPort: true,
-    allowedHosts: true,
     proxy,
   },
 })
