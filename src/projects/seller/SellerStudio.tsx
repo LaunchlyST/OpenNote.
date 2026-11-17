@@ -2061,12 +2061,6 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
   const selPage = pages[selIdx] ?? pages[0]
   const productBlocks = (selPage?.blocks ?? []).filter((b) => b.type === 'featured' || b.type === 'grid')
 
-  const availablePage = (pg: { index: number }) => {
-    if (pg.index === 0) return true
-    const prev = storePages(store.draft)[pg.index - 1]?.blocks ?? []
-    return productBlockCount(prev) >= MAX_PRODUCT_BLOCKS_PER_PAGE
-  }
-
   const unplaced = store.products.filter((p) => !p.archived && !pages.some((pg) => pg.blocks.some((b) => (b.type === 'featured' || b.type === 'grid') && slidesOf(b).some((sl) => sl.kind === 'digital' && sl.productId === p.id))))
 
   return (
@@ -2079,19 +2073,18 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
 
       {/* Page selector: Home / Page 2 / Page 3 (store pages, not styles). */}
       <div className="pg-addrow" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
-        {pages.map((pg) => {
-          const avail = availablePage(pg)
-          return (
-            <button key={pg.id} type="button" className={cn('bl-add', pg.index === selIdx && 'on')} disabled={!avail} onClick={() => avail && onPageChange?.(pg.index)} title={!avail ? `Available once ${pageLabel(pg.index - 1)} has ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks.` : undefined}>
-              {pageLabel(pg.index)}
-            </button>
-          )
-        })}
+        {pages.map((pg) => (
+          <button key={pg.id} type="button" className={cn('bl-add', pg.index === selIdx && 'on')} onClick={() => onPageChange?.(pg.index)}>
+            {pageLabel(pg.index)}
+          </button>
+        ))}
       </div>
 
       {/* Product blocks on the selected page. */}
       {[0, 1, 2].map((bi) => {
         const block = productBlocks[bi]
+        // Only show blocks that exist, plus one empty slot to add the next one.
+        if (bi > productBlocks.length) return null
         const slides = block ? slidesOf(block) : []
         return (
           <section key={bi} className="sb-block" style={{ marginBottom: 10 }}>
