@@ -115,6 +115,8 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
       style={style}
       onClickCapture={(e) => {
         if ((e.target as HTMLElement).closest('.sp-grip')) return
+        // the empty "add product" placeholder opens the picker itself
+        if ((e.target as HTMLElement).closest('.sp-slide-empty')) return
         // the carousel's own controls (previous / next arrows, dots) navigate the
         // slides instead of opening the block — let their click through
         if ((e.target as HTMLElement).closest('.sp-car-nav')) return

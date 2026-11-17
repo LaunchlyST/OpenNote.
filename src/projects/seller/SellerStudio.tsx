@@ -2054,7 +2054,7 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
       setErr((e as Error).message)
     }
   }
-  const choose = (id: string | null) => void flushSellerEdits().then(() => setOpen(id)).catch((e: Error) => setErr(e.message))
+  const choose = (id: string | null) => { onFocus?.(null); void flushSellerEdits().then(() => setOpen(id)).catch((e: Error) => setErr(e.message)) }
 
   const pages = storePages(store.draft)
   const selIdx = pageIndex ?? 0
