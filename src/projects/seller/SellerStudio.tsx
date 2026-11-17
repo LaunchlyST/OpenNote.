@@ -58,7 +58,6 @@ import {
   MAX_PRODUCT_BLOCKS_PER_PAGE,
   MAX_STORE_PAGES,
   affiliateUrlProblem,
-  ensurePage,
   findProductBlockPage,
   forgetLegacyDraft,
   formatPrice,
@@ -959,7 +958,6 @@ function Studio({
             onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }}
             page={page}
             pageIndex={safePageIndex}
-            onSelectPage={setPageIndex}
             onChange={edit}
             products={store.products}
             open={picked}
@@ -1248,7 +1246,7 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onRequestAdd, activeSlide, onActiveSlideChange }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
+function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onRequestAdd, activeSlide, onActiveSlideChange }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const pages = storePages(page)
   const isHome = pageIndex === 0
   // Home keeps its pinned profile and footer; Page 2/3 hold content only.
@@ -1286,23 +1284,8 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
   }
   return (
     <div className="ss-stack">
-      {/* Page selector: Home / Page 2 / Page 3. The phone preview mirrors this. */}
-      <div className="pg-addrow" style={{ flexWrap: 'wrap' }}>
-        {pages.map((pg) => (
-          <button key={pg.id} type="button" className={cn('bl-add', pg.index === pageIndex && 'on')} onClick={() => onSelectPage(pg.index)}>{pageLabel(pg.index)}</button>
-        ))}
-        {(() => {
-          const canAddNextPage = pages.length === 1
-            ? productBlockCount(storePages(page)[0]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
-            : pages.length === 2
-            ? productBlockCount(storePages(page)[1]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
-            : false
-          return canAddNextPage && pages.length < MAX_STORE_PAGES ? (
-            <button type="button" className="pg-addpage" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => { onChange(ensurePage(page, pages.length)); onSelectPage(pages.length) }}>
-              <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
-            </button>
-          ) : null
-        })()}
+      {/* Add a block to the current page. Page switching happens in the phone preview. */}
+      <div className="pg-addrow">
         <button type="button" className="bl-add" onClick={() => onRequestAdd({ kind: 'block' })}><Plus className="h-4 w-4" /> Add block</button>
       </div>
       <ul className="bl-list" aria-label={`${pageLabel(pageIndex)} blocks`}>
