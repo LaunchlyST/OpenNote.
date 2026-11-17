@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { AtSign, ChevronDown, Globe, Play, Plus, X as XIcon } from 'lucide-react'
+import { AtSign, ChevronDown, Globe, Layers, Play, Plus, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
@@ -64,6 +64,13 @@ export interface StorePageProps {
    * lands in that slide without touching the others.
    */
   onAddSlideProduct?: (blockId: string, slideIndex: number) => void
+  /**
+   * Editor: which slide of the focused product block is currently selected, so the
+   * phone preview scrolls to it and stays in sync with the left-hand editor.
+   */
+  activeSlide?: number
+  /** Editor: called when the owner swipes/clicks to a different slide in the phone preview. */
+  onSlideChange?: (blockId: string, slideIndex: number) => void
   /**
    * Editor: double-tapping a store page tab (Page 2 and Page 3) hides that page.
    * Hidden pages leave the tab row and the content, so the preview only shows
@@ -419,8 +426,11 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
         if (oneEmpty) {
           // The owner is building this first slide: offer the picker.
           return (
-            <div className="sp-block sp-featured-v2">
-              <button type="button" className="sp-btn sp-btn-sm" onClick={() => p.onAddSlideProduct?.(block.id, 0)}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+            <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct?.(block.id, 0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct?.(block.id, 0) } }}>
+              <span className="sp-slide-empty-icon" aria-hidden="true"><Layers className="h-5 w-5" /></span>
+              <span className="sp-slide-empty-title">Your next product goes here</span>
+              <span className="sp-slide-empty-sub">Add a digital product or affiliate link.</span>
+              <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct?.(block.id, 0) }}><Plus className="h-3.5 w-3.5" /> Add product</button>
             </div>
           )
         }
@@ -430,7 +440,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           </section>
         )
       }
-      return <SlideCarousel slides={list} blockId={block.id} interactive={!p.live} {...p} />
+      return <SlideCarousel slides={list} blockId={block.id} interactive={!p.live} activeSlide={p.picked === block.id ? p.activeSlide : undefined} onCarouselSlideChange={p.picked === block.id ? (i) => p.onSlideChange?.(block.id, i) : undefined} {...p} />
     }
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -531,10 +541,20 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
  * editor an empty slide shows the "Add product slide" action; on the public
  * store only populated slides are shown.
  */
-function SlideCarousel({ slides, blockId, interactive, ...p }: { slides: ProductSlide[]; blockId?: string; interactive?: boolean } & StorePageProps) {
+function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSlideChange, ...p }: { slides: ProductSlide[]; blockId?: string; interactive?: boolean; activeSlide?: number; onCarouselSlideChange?: (i: number) => void } & StorePageProps) {
   const track = useRef<HTMLDivElement>(null)
-  const [at, setAt] = useState(0)
+  const [at, setAt] = useState(activeSlide ?? 0)
   const scrolledAt = useRef(0)
+  useEffect(() => {
+    if (activeSlide !== undefined && activeSlide !== at) {
+      const el = track.current
+      if (el) {
+        const next = Math.min(slides.length - 1, Math.max(0, activeSlide))
+        el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
+      }
+      setAt(activeSlide)
+    }
+  }, [activeSlide])
   const goTo = (i: number) => {
     const el = track.current
     if (!el) return
@@ -548,7 +568,10 @@ function SlideCarousel({ slides, blockId, interactive, ...p }: { slides: Product
     scrolledAt.current = performance.now()
     lastSwipeAt.current = performance.now()
     const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
-    if (i !== at) setAt(i)
+    if (i !== at) {
+      setAt(i)
+      onCarouselSlideChange?.(i)
+    }
   }
   // A swipe that just moved the track must not also open a product.
   const swallow = (e: ReactMouseEvent) => {
@@ -570,8 +593,11 @@ function SlideCarousel({ slides, blockId, interactive, ...p }: { slides: Product
           <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}`}>
             {isEmpty(s) ? (
               !p.live && p.onAddSlideProduct && blockId ? (
-                <div className="sp-block sp-featured-v2 sp-slide-empty">
-                  <button type="button" className="sp-btn sp-btn-sm" onClick={() => p.onAddSlideProduct!(blockId, i)}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+                <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct!(blockId, i)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct!(blockId, i) } }}>
+                  <span className="sp-slide-empty-icon" aria-hidden="true"><Layers className="h-5 w-5" /></span>
+                  <span className="sp-slide-empty-title">Your next product goes here</span>
+                  <span className="sp-slide-empty-sub">Add a digital product or affiliate link.</span>
+                  <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct!(blockId, i) }}><Plus className="h-3.5 w-3.5" /> Add product</button>
                 </div>
               ) : null
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} {...p} /> : <AffiliateSlide slide={s} {...p} />}

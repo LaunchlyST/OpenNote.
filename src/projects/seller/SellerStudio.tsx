@@ -503,7 +503,11 @@ function Studio({
   const [hiddenPages, setHiddenPages] = useState<number[]>([])
   /** The add-product picker request: which kind of add is in progress. */
   const [addReq, setAddReq] = useState<AddReq | null>(null)
-  const requestAdd = (req: AddReq) => setAddReq(req)
+  const requestAdd = (req: AddReq) => { setAddReq(req); if (req.kind !== 'block') pendingAdd.current = req }
+  /** Which slide of the focused product block is selected, for phone/preview sync. */
+  const [activeSlide, setActiveSlide] = useState(0)
+  const [activeSlideBlock, setActiveSlideBlock] = useState<string | null>(null)
+  useEffect(() => { setActiveSlide(0); setActiveSlideBlock(picked) }, [picked])
   const closePart = useCallback(() => { setEditPart(null); setPartPreview(null) }, [])
   /** Double-tapping a page tab hides that page; the add-page button brings a page back. */
   const toggleHiddenPage = useCallback((i: number) => {
@@ -518,8 +522,17 @@ function Studio({
     const p = pendingAdd.current
     pendingAdd.current = null
     if (!p) return
-    if (p.kind === 'slide') void addProductToSlide(p.blockId, p.slideIndex, productId)
-    else void addProductBlockBelow(p.blockId, productId)
+    if (p.kind === 'slide') {
+      void addProductToSlide(p.blockId, p.slideIndex, productId)
+      setActiveSlideBlock(p.blockId)
+      setActiveSlide(p.slideIndex)
+      closeEditor()
+      setOpenProduct(productId)
+      setTab('products')
+      void navigate('products').then(() => setEditPart({ productId, part: 'card' }))
+    } else if (p.kind === 'below') {
+      void addProductBlockBelow(p.blockId, productId)
+    }
   }
   const view = 'mobile' as 'mobile' | 'desktop'
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
@@ -953,12 +966,14 @@ function Studio({
             setOpen={openEditor}
             onMoveBlock={moveBlockToPage}
             onRequestAdd={requestAdd}
+            activeSlide={activeSlide}
+            onActiveSlideChange={setActiveSlide}
           />
           {addReq && (
             <AddBlockDialog
               products={store.products}
               pickReq={addReq.kind === 'block' ? null : addReq}
-              onClose={() => setAddReq(null)}
+              onClose={() => { setAddReq(null); pendingAdd.current = null }}
               onAdd={(t, d) => (setAddReq(null), t === 'banner' ? openEditor(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : addBlock(t, d))}
               onDragStart={(t, e, d) => { setAddReq(null); startInsert(t, e, d) }}
               createProduct={createProduct}
@@ -1045,7 +1060,7 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} editCard={tab === 'page' ? { productId: editPart?.productId ?? null, part: editPart?.part ?? null } : null} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={tab === 'page' ? { productId: editPart?.productId ?? null, part: editPart?.part ?? null } : null} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
@@ -1233,7 +1248,7 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onRequestAdd }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void }) {
+function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onRequestAdd, activeSlide, onActiveSlideChange }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onSelectPage: (i: number) => void; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const pages = storePages(page)
   const isHome = pageIndex === 0
   // Home keeps its pinned profile and footer; Page 2/3 hold content only.
@@ -1340,7 +1355,7 @@ function PageEditor({ page, pageIndex, onSelectPage, onChange, products, open, s
                   </button>
                   {open === b.id && b.type === 'featured' && (
                     <div className="bl-inline" role="region" aria-label="Edit Digital product">
-                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} onAddBelow={(id) => onRequestAdd({ kind: 'below', blockId: id })} onAddSlide={(id, i) => onRequestAdd({ kind: 'slide', blockId: id, slideIndex: i })} />
+                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} onAddBelow={(id) => onRequestAdd({ kind: 'below', blockId: id })} onAddSlide={(id, i) => onRequestAdd({ kind: 'slide', blockId: id, slideIndex: i })} activeSlide={activeSlide} onActiveSlideChange={onActiveSlideChange} />
                     </div>
                   )}
                   {menu === b.id && (
@@ -1685,67 +1700,79 @@ function summary(b: Block, products: DraftProduct[]) {
  * become a carousel. Digital and affiliate settings are kept side by side, so
  * switching a slide's type never loses the product, file or cover.
  */
-function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAddSlide }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void }) {
+function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAddSlide, activeSlide, onActiveSlideChange }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const set = (i: number, patch: Partial<ProductSlide>) => onChange(slides.map((s, j) => (j === i ? { ...s, ...patch } : s)))
   const setAff = (i: number, patch: Partial<ProductSlide['affiliate']>) => onChange(slides.map((s, j) => (j === i ? { ...s, affiliate: { ...s.affiliate, ...patch } } : s)))
+  const [active, setActive] = useState(0)
+  useEffect(() => {
+    if (activeSlide !== undefined && activeSlide >= 0 && activeSlide < slides.length) setActive(activeSlide)
+    else if (active >= slides.length) setActive(Math.max(0, slides.length - 1))
+  }, [activeSlide, slides.length])
+  const setActiveIdx = (i: number) => { setActive(i); onActiveSlideChange?.(i) }
+  const a = Math.min(Math.max(0, active), Math.max(0, slides.length - 1))
+  const s = slides.length ? slides[a] : null
+  const problem = s && s.kind === 'affiliate' ? affiliateUrlProblem(s.affiliate.url) : null
   return (
     <div className="sb-edit">
       <span className="ss-label">Product slides</span>
-      <div className="sld-list">
-        {slides.map((s, i) => {
-          const problem = s.kind === 'affiliate' ? affiliateUrlProblem(s.affiliate.url) : null
-          return (
-            <div className="sld-card" key={s.id}>
-              <div className="sld-head">
-                <span className="sld-num" aria-hidden="true">{i + 1}</span>
-                <div className="sld-kinds" role="group" aria-label={`Slide ${i + 1} type`}>
-                  <button type="button" aria-pressed={s.kind === 'digital'} className={s.kind === 'digital' ? 'on' : ''} onClick={() => set(i, { kind: 'digital' })}>Digital product</button>
-                  <button type="button" aria-pressed={s.kind === 'affiliate'} className={s.kind === 'affiliate' ? 'on' : ''} onClick={() => set(i, { kind: 'affiliate' })}>Affiliate</button>
-                </div>
-                <button type="button" className="ss-ghost" aria-label={`Remove slide ${i + 1}`} onClick={() => onChange(slides.filter((_, j) => j !== i))}><Trash2 className="h-3.5 w-3.5" /></button>
-              </div>
-              {s.kind === 'digital' ? (
-                <Field label="Product">
-                  {products.length === 0 ? (
-                    <p className="ss-muted">Create a product in the Products tab first.</p>
-                  ) : (
-                    <select className="ss-input" aria-label={`Product for slide ${i + 1}`} value={s.productId ?? ''} onChange={(e) => set(i, { productId: e.target.value || null })}>
-                      <option value="">Choose a product…</option>
-                      {products.map((p) => <option key={p.id} value={p.id}>{p.title.trim() || 'Untitled product'}</option>)}
-                    </select>
-                  )}
-                </Field>
-              ) : (
-                <>
-                  <Field label="Affiliate link" hint="The full https:// address on the partner site.">
-                    <input className="ss-input" inputMode="url" value={s.affiliate.url} onChange={(e) => setAff(i, { url: e.target.value })} placeholder="https://partner.example/product" />
-                  </Field>
-                  {problem && <span className="sld-err" role="alert">{problem}</span>}
-                  <Field label="Title"><input className="ss-input" maxLength={80} value={s.affiliate.title} onChange={(e) => setAff(i, { title: e.target.value })} /></Field>
-                  <Field label="Description (optional)"><textarea className="ss-input" rows={2} maxLength={500} value={s.affiliate.description} onChange={(e) => setAff(i, { description: e.target.value })} /></Field>
-                  <Field label="Cover image"><ImagePicker value={s.affiliate.cover} onChange={(v) => setAff(i, { cover: v })} label="Upload cover" /></Field>
-                  <Field label="Button text" hint="Empty hides the button; the cover still opens the link.">
-                    <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff(i, { cta: e.target.value })} placeholder="View product ↗" />
-                  </Field>
-                  <p className="sld-note">Payments and delivery are handled by the external website. Commission depends on your affiliate programme and tracking link.</p>
-                </>
-              )}
-            </div>
-          )
-        })}
+      <div role="tablist" aria-label="Slides" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {slides.map((sl, i) => (
+          <button key={sl.id} type="button" role="tab" aria-selected={i === a} className={cn('ss-ghost', i === a && 'on')} onClick={() => setActiveIdx(i)}>
+            Slide {i + 1}
+          </button>
+        ))}
+        {slides.length < 3 && onAddSlide && (
+          <button type="button" className="ss-ghost" onClick={() => onAddSlide(blockId, slides.length)}>+ Add product slide</button>
+        )}
       </div>
-      {slides.length < 3 && (
-        <button type="button" className="ss-ghost self-start" onClick={() => (onAddSlide ? onAddSlide(blockId, slides.length) : onChange([...slides, newSlide('digital', products[0]?.id ?? null)]))}><Plus className="h-3.5 w-3.5" /> Add product slide</button>
+      {s && (
+        <div className="sld-card" key={s.id}>
+          <div className="sld-head">
+            <span className="sld-num" aria-hidden="true">{a + 1}</span>
+            <div className="sld-kinds" role="group" aria-label={`Slide ${a + 1} type`}>
+              <button type="button" aria-pressed={s.kind === 'digital'} className={s.kind === 'digital' ? 'on' : ''} onClick={() => set(a, { kind: 'digital' })}>Digital product</button>
+              <button type="button" aria-pressed={s.kind === 'affiliate'} className={s.kind === 'affiliate' ? 'on' : ''} onClick={() => set(a, { kind: 'affiliate' })}>Affiliate</button>
+            </div>
+            <button type="button" className="ss-ghost" aria-label={`Remove slide ${a + 1}`} onClick={() => { onChange(slides.filter((_, j) => j !== a)); setActive(0); onActiveSlideChange?.(0) }}><Trash2 className="h-3.5 w-3.5" /></button>
+          </div>
+          {s.kind === 'digital' ? (
+            <Field label="Product">
+              {products.length === 0 ? (
+                <p className="ss-muted">Create a product in the Products tab first.</p>
+              ) : (
+                <select className="ss-input" aria-label={`Product for slide ${a + 1}`} value={s.productId ?? ''} onChange={(e) => set(a, { productId: e.target.value || null })}>
+                  <option value="">Choose a product…</option>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.title.trim() || 'Untitled product'}</option>)}
+                </select>
+              )}
+            </Field>
+          ) : (
+            <>
+              <Field label="Affiliate link" hint="The full https:// address on the partner site.">
+                <input className="ss-input" inputMode="url" value={s.affiliate.url} onChange={(e) => setAff(a, { url: e.target.value })} placeholder="https://partner.example/product" />
+              </Field>
+              {problem && <span className="sld-err" role="alert">{problem}</span>}
+              <Field label="Title"><input className="ss-input" maxLength={80} value={s.affiliate.title} onChange={(e) => setAff(a, { title: e.target.value })} /></Field>
+              <Field label="Description (optional)"><textarea className="ss-input" rows={2} maxLength={500} value={s.affiliate.description} onChange={(e) => setAff(a, { description: e.target.value })} /></Field>
+              <Field label="Cover image"><ImagePicker value={s.affiliate.cover} onChange={(v) => setAff(a, { cover: v })} label="Upload cover" /></Field>
+              <Field label="Button text" hint="Empty hides the button; the cover still opens the link.">
+                <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff(a, { cta: e.target.value })} placeholder="View product ↗" />
+              </Field>
+              <p className="sld-note">Payments and delivery are handled by the external website. Commission depends on your affiliate programme and tracking link.</p>
+            </>
+          )}
+          {s.kind === 'digital' && s.productId && onOpenProduct && (
+            <button type="button" className="ss-ghost self-start" onClick={() => onOpenProduct(s.productId!)}>Edit this product</button>
+          )}
+        </div>
       )}
       <p className="ss-muted">One slide shows on its own; two or more become a carousel. A carousel counts as one product block.</p>
-      {slides.filter((s) => s.kind === 'digital' && s.productId && onOpenProduct).map((s) => (
-        <button key={s.id} type="button" className="ss-ghost self-start" onClick={() => onOpenProduct!(s.productId!)}>Edit this product</button>
-      ))}
     </div>
   )
 }
 
-function BlockEditor({ block, products, update, onOpenProduct, onAddBelow, onAddSlide }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void }) {
+
+function BlockEditor({ block, products, update, onOpenProduct, onAddBelow, onAddSlide, activeSlide, onActiveSlideChange }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const d = block.data
   switch (block.type) {
     case 'header':
@@ -1842,6 +1869,8 @@ function BlockEditor({ block, products, update, onOpenProduct, onAddBelow, onAdd
             onChange={(slides) => update({ slides, productId: primaryProductId(slides) })}
             onOpenProduct={onOpenProduct}
             onAddSlide={onAddSlide}
+            activeSlide={activeSlide}
+            onActiveSlideChange={onActiveSlideChange}
           />
         </>
       )
