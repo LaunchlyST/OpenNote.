@@ -648,6 +648,47 @@ function Studio({
    * "add product slide" flow. The chosen product lands in that slide; the others
    * keep theirs.
    */
+  const ensureProductBlock = (pageIndex: number, blockIndex: number): string | null => {
+    const blocks = blocksOf(page, pageIndex)
+    const productBlocks = blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
+    if (productBlocks[blockIndex]) return productBlocks[blockIndex].id
+    if (productBlockCount(blocks) >= MAX_PRODUCT_BLOCKS_PER_PAGE) {
+      setErr(`${pageLabel(pageIndex)} already has ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks. Move one away first.`)
+      return null
+    }
+    const nb = newBlock('featured')
+    const lastProductIdx = blocks.reduce((acc, b, i) => (b.type === 'featured' || b.type === 'grid') ? i : acc, -1)
+    const insertAtIdx = lastProductIdx >= 0 ? lastProductIdx + 1 : (pageIndex === 0 ? Math.max(0, blocks.length - 1) : blocks.length)
+    const next = insertAt(blocks, nb, insertAtIdx)
+    edit(withPageBlocks(page, pageIndex, cleanFor(pageIndex, next)))
+    setPageIndex(pageIndex)
+    return nb.id
+  }
+  const requestAddSlot = (pageIndex: number, blockIndex: number) => {
+    const blockId = ensureProductBlock(pageIndex, blockIndex)
+    if (!blockId) return
+    const blk = storePages(page)[pageIndex]?.blocks.find((b) => b.id === blockId)
+    const slides = blk ? slidesOf(blk) : []
+    pendingAdd.current = { kind: 'slide', blockId, slideIndex: slides.length }
+    requestAdd({ kind: 'slide', blockId, slideIndex: slides.length })
+  }
+  const removePlacement = (pageIndex: number, blockId: string, slideIndex: number) => {
+    const blocks = blocksOf(page, pageIndex)
+    const bi = blocks.findIndex((b) => b.id === blockId)
+    if (bi < 0) return
+    const b = blocks[bi]
+    if (b.type !== 'featured') return
+    const slides = slidesOf(b)
+    const nextSlides = slides.filter((_, i) => i !== slideIndex)
+    const next = [...blocks]
+    if (nextSlides.length === 0) {
+      next.splice(bi, 1)
+    } else {
+      next[bi] = { ...b, data: { ...b.data, slides: nextSlides, productId: primaryProductId(nextSlides) } }
+    }
+    edit(withPageBlocks(page, pageIndex, cleanFor(pageIndex, next)))
+    setPageIndex(pageIndex)
+  }
   const addProductToSlide = (blockId: string, slideIndex: number, productId: string) => {
     const from = storePages(page).findIndex((pg) => pg.blocks.some((b) => b.id === blockId))
     const base = blocksOf(page, from)
@@ -967,19 +1008,19 @@ function Studio({
             activeSlide={activeSlide}
             onActiveSlideChange={setActiveSlide}
           />
-          {addReq && (
-            <AddBlockDialog
-              products={store.products}
-              pickReq={addReq.kind === 'block' ? null : addReq}
-              onClose={() => { setAddReq(null); pendingAdd.current = null }}
-              onAdd={(t, d) => (setAddReq(null), t === 'banner' ? openEditor(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : addBlock(t, d))}
-              onDragStart={(t, e, d) => { setAddReq(null); startInsert(t, e, d) }}
-              createProduct={createProduct}
-              onPickProduct={onPickProduct}
-            />
-          )}
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
+        {addReq && (
+          <AddBlockDialog
+            products={store.products}
+            pickReq={addReq.kind === 'block' ? null : addReq}
+            onClose={() => { setAddReq(null); pendingAdd.current = null }}
+            onAdd={(t, d) => (setAddReq(null), t === 'banner' ? openEditor(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : addBlock(t, d))}
+            onDragStart={(t, e, d) => { setAddReq(null); startInsert(t, e, d) }}
+            createProduct={createProduct}
+            onPickProduct={onPickProduct}
+          />
+        )}
         {tab === 'products' && (
           <ProductsEditor
             store={store}
@@ -989,6 +1030,10 @@ function Studio({
             focus={editPart}
             onFocus={setEditPart}
             onPreview={(id, value) => setPartPreview({ id, ...value })}
+            pageIndex={safePageIndex}
+            onPageChange={setPageIndex}
+            onAddSlot={requestAddSlot}
+            onRemoveSlide={removePlacement}
           />
         )}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -1983,50 +2028,9 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function PlacementOverview({ page, products }: { page: Page; products: DraftProduct[] }) {
-  const pages = storePages(page)
-  return (
-    <div className="ss-stack" style={{ marginBottom: 16 }}>
-      <h3 className="ss-label">Placement</h3>
-      {pages.map((pg) => {
-        const productBlocks = pg.blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
-        if (pg.index > 0 && !productBlocks.length) return null
-        return (
-          <div key={pg.id} className="sb-block" style={{ marginBottom: 8 }}>
-            <b>{pageLabel(pg.index)}</b>
-            {productBlocks.length === 0 && <p className="ss-muted" style={{ margin: '4px 0 0' }}>No product blocks yet.</p>}
-            {productBlocks.map((b, bi) => {
-              const slides = slidesOf(b)
-              return (
-                <div key={b.id} style={{ marginLeft: 12, marginTop: 6 }}>
-                  <small>Product {bi + 1}</small>
-                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                    {[0, 1, 2].map((i) => {
-                      const s = slides[i]
-                      const populated = !!s && (s.kind === 'digital' ? Boolean(s.productId) : Boolean(s.affiliate.url))
-                      const prod = s?.kind === 'digital' ? products.find((p) => p.id === s.productId) : null
-                      const thumb = populated && s?.kind === 'digital' ? mediaUrl(prod?.cover) : (s?.kind === 'affiliate' ? mediaUrl(s.affiliate.cover) : null)
-                      return (
-                        <div key={i} style={{ width: 44, height: 44, border: '1px solid #ddd', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: '#888', background: '#f7f7f7' }}>
-                          {populated ? (thumb ? <img src={thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span>#{i + 1}</span>) : <span>Empty</span>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, pageIndex, onPageChange, onAddSlot, onRemoveSlide }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; pageIndex?: number; onPageChange?: (i: number) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
-  // the opened card scrolls into view (e.g. after clicking it in the phone)
   useEffect(() => { if (open) window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60) }, [open])
 
   const add = async () => {
@@ -2039,8 +2043,20 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
       setErr((e as Error).message)
     }
   }
-  // only one panel open at a time; save what's typed before switching
   const choose = (id: string | null) => void flushSellerEdits().then(() => setOpen(id)).catch((e: Error) => setErr(e.message))
+
+  const pages = storePages(store.draft)
+  const selIdx = pageIndex ?? 0
+  const selPage = pages[selIdx] ?? pages[0]
+  const productBlocks = (selPage?.blocks ?? []).filter((b) => b.type === 'featured' || b.type === 'grid')
+
+  const availablePage = (pg: { index: number }) => {
+    if (pg.index === 0) return true
+    const prev = storePages(store.draft)[pg.index - 1]?.blocks ?? []
+    return productBlockCount(prev) >= MAX_PRODUCT_BLOCKS_PER_PAGE
+  }
+
+  const unplaced = store.products.filter((p) => !p.archived && !pages.some((pg) => pg.blocks.some((b) => (b.type === 'featured' || b.type === 'grid') && slidesOf(b).some((sl) => sl.kind === 'digital' && sl.productId === p.id))))
 
   return (
     <div className="ss-stack">
@@ -2049,42 +2065,84 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
         <button type="button" className="pg-addbtn" onClick={() => void add()}><Plus className="h-4 w-4" /> Add Product</button>
       </div>
       {err && <div className="ss-note" role="alert">{err}</div>}
-      <PlacementOverview page={store.draft} products={store.products} />
-      {store.products.filter((p) => !p.archived).length === 0 && <p className="ss-muted pg-empty">No products yet. Press <b>Add Product</b> to create your first one.</p>}
-      <div className="pg-grid">
-        {store.products.filter((p) => !p.archived || p.id === open).map((p) => {
-          const cover = mediaUrl(p.cover)
-          return p.id === open ? (
-            <div key={p.id} ref={panel} className="pg-panel" role="region" aria-label={`Edit ${p.title.trim() || 'product'}`}>
-              <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
-              {focus?.productId === p.id ? (
-                /* Focused settings for one element of the card (image, title, description, button). */
-                <ProductPartPanel
-                  key={`${p.id}.${focus.part}`}
-                  product={p}
-                  store={store}
-                  setStore={setStore}
-                  part={focus.part}
-                  onPart={(part) => onFocus?.({ productId: p.id, part })}
-                  onClose={() => choose(null)}
-                  onFull={() => onFocus?.(null)}
-                  onPreview={(value) => onPreview?.(p.id, value)}
-                />
-              ) : (
-                <ProductForm product={p} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={() => onFocus?.({ productId: p.id, part: 'card' })} />
-              )}
-            </div>
-          ) : (
-            <button key={p.id} type="button" className="pg-card" onClick={() => choose(p.id)} aria-label={`Edit ${p.title.trim() || 'Untitled product'}`}>
-              <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-6 w-6" />}</span>
-              <span className="pg-name">{p.title.trim() || 'Untitled product'}</span>
-              <span className="pg-meta">{p.priceMinor === 0 ? 'Free' : p.offer ? <><s>{formatPrice(p.priceMinor, p.currency)}</s> {formatPrice(p.offer.priceMinor, p.currency)}</> : formatPrice(p.priceMinor, p.currency)}{p.published ? ' · Live' : ' · Draft'}</span>
-              {p.offer && <span className="pg-badge" style={{ background: p.offer.badgeColor }}>{p.offer.badge}</span>}
-              <span className="pg-hint">Tap to edit</span>
+
+      {/* Page selector: Home / Page 2 / Page 3 (store pages, not styles). */}
+      <div className="pg-addrow" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+        {pages.map((pg) => {
+          const avail = availablePage(pg)
+          return (
+            <button key={pg.id} type="button" className={cn('bl-add', pg.index === selIdx && 'on')} disabled={!avail} onClick={() => avail && onPageChange?.(pg.index)} title={!avail ? `Available once ${pageLabel(pg.index - 1)} has ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks.` : undefined}>
+              {pageLabel(pg.index)}
             </button>
           )
         })}
       </div>
+
+      {/* Product blocks on the selected page. */}
+      {[0, 1, 2].map((bi) => {
+        const block = productBlocks[bi]
+        const slides = block ? slidesOf(block) : []
+        return (
+          <section key={bi} className="sb-block" style={{ marginBottom: 10 }}>
+            <div className="sb-row">
+              <span className="sb-ico" aria-hidden="true">{bi + 1}</span>
+              <span className="sb-title"><b>Product {bi + 1}</b><small>{block ? `${slides.length} slide${slides.length === 1 ? '' : 's'}` : 'Empty slot'}</small></span>
+            </div>
+            <div className="pg-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+              {[0, 1, 2].map((si) => {
+                const slide = slides[si]
+                const populated = !!slide && (slide.kind === 'digital' ? Boolean(slide.productId) : Boolean(slide.affiliate.url))
+                if (populated) {
+                  const prod = slide.kind === 'digital' ? store.products.find((p) => p.id === slide.productId) : null
+                  const cover = slide.kind === 'digital' ? mediaUrl(prod?.cover) : mediaUrl(slide.affiliate.cover)
+                  const title = slide.kind === 'digital' ? (prod?.title?.trim() || 'Untitled product') : (slide.affiliate.title?.trim() || 'Affiliate product')
+                  const price = slide.kind === 'digital' ? (prod ? (prod.priceMinor === 0 ? 'Free' : formatPrice(prod.priceMinor, prod.currency)) : '') : 'Affiliate'
+                  return (
+                    <div key={slide.id} className="pg-card" style={{ cursor: 'default' }}>
+                      <button type="button" className="pg-card" style={{ width: '100%', border: 0, background: 'transparent', padding: 0 }} onClick={() => slide.kind === 'digital' && slide.productId ? choose(slide.productId) : undefined} aria-label={`Edit ${title}`}>
+                        <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-6 w-6" />}</span>
+                        <span className="pg-name">{title}</span>
+                        <span className="pg-meta">{slide.kind === 'affiliate' ? 'Affiliate' : 'Digital'} · {price}</span>
+                      </button>
+                      {block && (
+                        <div style={{ display: 'flex', gap: 4, padding: '4px 6px 6px' }}>
+                          <button type="button" className="ss-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => slide.kind === 'digital' && slide.productId ? choose(slide.productId) : undefined}>Edit</button>
+                          <button type="button" className="ss-ghost" style={{ fontSize: 11, padding: '2px 8px' }} onClick={() => onRemoveSlide?.(selIdx, block.id, si)}>Remove</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                }
+                return (
+                  <button key={`empty-${bi}-${si}`} type="button" className="pg-card" style={{ display: 'grid', placeItems: 'center', minHeight: 120, border: '1.5px dashed #d6d4cf', background: '#fafaf8' }} onClick={() => onAddSlot?.(selIdx, bi)} aria-label="Add product">
+                    <span style={{ fontSize: 22, opacity: 0.5 }}>+</span>
+                    <span style={{ fontSize: 12, opacity: 0.6 }}>Add product</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )
+      })}
+
+      {/* Product library: unplaced products. */}
+      <details className="pg-archived" open={unplaced.length > 0 && store.products.filter((p) => !p.archived).length <= 6}>
+        <summary>Product library ({unplaced.length} unplaced)</summary>
+        <div className="pg-grid">
+          {unplaced.map((p) => {
+            const cover = mediaUrl(p.cover)
+            return (
+              <button key={p.id} type="button" className="pg-card" onClick={() => choose(p.id)} aria-label={`Edit ${p.title.trim() || 'Untitled product'}`}>
+                <span className="pg-img" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && <Package className="h-6 w-6" />}</span>
+                <span className="pg-name">{p.title.trim() || 'Untitled product'}</span>
+                <span className="pg-meta">{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}{p.published ? ' · Live' : ' · Draft'}</span>
+              </button>
+            )
+          })}
+          {unplaced.length === 0 && <p className="ss-muted" style={{ gridColumn: '1 / -1' }}>All products are placed.</p>}
+        </div>
+      </details>
+
       {store.products.some((p) => p.archived && p.id !== open) && (
         <details className="pg-archived">
           <summary>Archived ({store.products.filter((p) => p.archived).length})</summary>
@@ -2099,9 +2157,31 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
           </div>
         </details>
       )}
+
+      {open && store.products.find((p) => p.id === open) && (
+        <div ref={panel} className="pg-panel" role="region" aria-label={`Edit ${store.products.find((p) => p.id === open)?.title?.trim() || 'product'}`}>
+          <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
+          {focus?.productId === open ? (
+            <ProductPartPanel
+              key={`${open}.${focus.part}`}
+              product={store.products.find((p) => p.id === open)!}
+              store={store}
+              setStore={setStore}
+              part={focus.part}
+              onPart={(part) => onFocus?.({ productId: open, part })}
+              onClose={() => choose(null)}
+              onFull={() => onFocus?.(null)}
+              onPreview={(value) => onPreview?.(open, value)}
+            />
+          ) : (
+            <ProductForm product={store.products.find((p) => p.id === open)!} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={() => onFocus?.({ productId: open, part: 'card' })} />
+          )}
+        </div>
+      )}
     </div>
   )
 }
+
 
 function PSection({ icon, title, sub, children, open: start = false }: { icon: ReactNode; title: string; sub?: string; children: ReactNode; open?: boolean }) {
   const [open, setOpen] = useState(start)
