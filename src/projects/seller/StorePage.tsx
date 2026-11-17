@@ -428,8 +428,8 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           return (
             <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct?.(block.id, 0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct?.(block.id, 0) } }}>
               <span className="sp-slide-empty-icon" aria-hidden="true"><Layers className="h-5 w-5" /></span>
-              <span className="sp-slide-empty-title">Your next product goes here</span>
-              <span className="sp-slide-empty-sub">Add a digital product or affiliate link.</span>
+              <span className="sp-slide-empty-title">Add your next product</span>
+              <span className="sp-slide-empty-sub">Digital product or affiliate link</span>
               <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct?.(block.id, 0) }}><Plus className="h-3.5 w-3.5" /> Add product</button>
             </div>
           )
@@ -545,6 +545,8 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
   const track = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState(activeSlide ?? 0)
   const scrolledAt = useRef(0)
+  const lastScrollLeft = useRef<number | null>(null)
+  const mountedAt = useRef(performance.now())
   useEffect(() => {
     if (activeSlide !== undefined && activeSlide !== at) {
       const el = track.current
@@ -560,11 +562,20 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
     if (!el) return
     const next = Math.min(slides.length - 1, Math.max(0, i))
     el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
-    setAt(next)
+    if (next !== at) {
+      setAt(next)
+      onCarouselSlideChange?.(next)
+    }
   }
   const onScroll = () => {
     const el = track.current
     if (!el) return
+    // Only treat it as a swipe when the position actually changed; ignore the
+    // initial layout scroll so it can't swallow the first tap.
+    if (lastScrollLeft.current === null) { lastScrollLeft.current = el.scrollLeft; return }
+    if (el.scrollLeft === lastScrollLeft.current) return
+    lastScrollLeft.current = el.scrollLeft
+    if (performance.now() - mountedAt.current < 400) return
     scrolledAt.current = performance.now()
     lastSwipeAt.current = performance.now()
     const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
@@ -575,7 +586,7 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
   }
   // A swipe that just moved the track must not also open a product.
   const swallow = (e: ReactMouseEvent) => {
-    if (performance.now() - scrolledAt.current < 260) {
+    if (performance.now() - lastSwipeAt.current < 260) {
       e.preventDefault()
       e.stopPropagation()
     }
@@ -595,8 +606,8 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
               !p.live && p.onAddSlideProduct && blockId ? (
                 <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct!(blockId, i)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct!(blockId, i) } }}>
                   <span className="sp-slide-empty-icon" aria-hidden="true"><Layers className="h-5 w-5" /></span>
-                  <span className="sp-slide-empty-title">Your next product goes here</span>
-                  <span className="sp-slide-empty-sub">Add a digital product or affiliate link.</span>
+                  <span className="sp-slide-empty-title">Add your next product</span>
+                  <span className="sp-slide-empty-sub">Digital product or affiliate link</span>
                   <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct!(blockId, i) }}><Plus className="h-3.5 w-3.5" /> Add product</button>
                 </div>
               ) : null

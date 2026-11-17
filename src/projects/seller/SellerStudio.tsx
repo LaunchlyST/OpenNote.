@@ -507,6 +507,17 @@ function Studio({
   const [activeSlide, setActiveSlide] = useState(0)
   const [activeSlideBlock, setActiveSlideBlock] = useState<string | null>(null)
   useEffect(() => { setActiveSlide(0); setActiveSlideBlock(picked) }, [picked])
+  useEffect(() => {
+    if (!editPart || !activeSlideBlock) return
+    const block = allBlocks(page).find((b) => b.id === activeSlideBlock)
+    if (!block || block.type !== 'featured') return
+    const slides = slidesOf(block)
+    const slide = slides[activeSlide]
+    if (!slide || slide.kind !== 'digital' || !slide.productId) return
+    if (slide.productId !== editPart.productId) {
+      setEditPart({ productId: slide.productId, part: editPart.part })
+    }
+  }, [activeSlide, activeSlideBlock])
   const closePart = useCallback(() => { setEditPart(null); setPartPreview(null) }, [])
   /** Double-tapping a page tab hides that page; the add-page button brings a page back. */
   const toggleHiddenPage = useCallback((i: number) => {
@@ -1103,7 +1114,7 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={tab === 'page' ? { productId: editPart?.productId ?? null, part: editPart?.part ?? null } : null} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
