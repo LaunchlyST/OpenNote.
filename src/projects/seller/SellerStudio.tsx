@@ -2064,11 +2064,8 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
       {err && <div className="ss-note" role="alert">{err}</div>}
 
       {/* Product blocks on the selected page. */}
-      {[0, 1, 2].map((bi) => {
-        const block = productBlocks[bi]
-        // Only show blocks that exist, plus one empty slot to add the next one.
-        if (bi > productBlocks.length) return null
-        const slides = block ? slidesOf(block) : []
+      {productBlocks.map((block, bi) => {
+        const slides = slidesOf(block)
         return (
           <section key={bi} className="sb-block" style={{ marginBottom: 10 }}>
             <div className="sb-row">
@@ -2100,17 +2097,24 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
                     </div>
                   )
                 }
-                return (
-                  <button key={`empty-${bi}-${si}`} type="button" className="pg-card" style={{ display: 'grid', placeItems: 'center', minHeight: 120, border: '1.5px dashed #d6d4cf', background: '#fafaf8' }} onClick={() => onAddSlot?.(selIdx, bi)} aria-label="Add product">
-                    <span style={{ fontSize: 22, opacity: 0.5 }}>+</span>
-                    <span style={{ fontSize: 12, opacity: 0.6 }}>Add product</span>
-                  </button>
-                )
+                if (si > slides.length) return null
+                if (si === slides.length && slides.length < 3) {
+                  return (
+                    <button key={`empty-${block.id}-${si}`} type="button" className="pg-card" style={{ display: 'grid', placeItems: 'center', minHeight: 120, border: '1.5px dashed #d6d4cf', background: '#fafaf8' }} onClick={() => onAddSlot?.(0, bi)} aria-label="Add product">
+                      <span style={{ fontSize: 22, opacity: 0.5 }}>+</span>
+                      <span style={{ fontSize: 12, opacity: 0.6 }}>Add product</span>
+                    </button>
+                  )
+                }
+                return null
               })}
             </div>
           </section>
         )
       })}
+      {productBlocks.length < MAX_PRODUCT_BLOCKS_PER_PAGE && (
+        <button type="button" className="bl-add" style={{ width: '100%', marginTop: 6 }} onClick={() => onAddSlot?.(0, productBlocks.length)}><Plus className="h-4 w-4" /> Add product block</button>
+      )}
 
       {/* Product library: unplaced products. */}
       <details className="pg-archived" open={unplaced.length > 0 && store.products.filter((p) => !p.archived).length <= 6}>
