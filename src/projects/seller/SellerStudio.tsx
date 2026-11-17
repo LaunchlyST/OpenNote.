@@ -2509,7 +2509,19 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
             disabled={busy}
             onClick={() => {
               if (!window.confirm(`Delete “${product.title || 'Untitled product'}”? This can’t be undone. Buyers who already paid keep their downloads.`)) return
-              void run(async () => { const r = await sellerApi.deleteProduct(product.id); setStore(r.store); onDeleted() })
+              void (async () => {
+                setBusy(true)
+                try {
+                  try { await flushSellerEdits() } catch { /* ignore unfinished edits */ }
+                  const r = await sellerApi.deleteProduct(product.id)
+                  setStore(r.store)
+                  onDeleted()
+                } catch (e) {
+                  setState((e as Error).message)
+                } finally {
+                  setBusy(false)
+                }
+              })()
             }}
           >
             Delete
