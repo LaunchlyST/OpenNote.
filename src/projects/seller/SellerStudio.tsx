@@ -58,7 +58,6 @@ import {
   MAX_PRODUCT_BLOCKS_PER_PAGE,
   MAX_STORE_PAGES,
   affiliateUrlProblem,
-  ensurePage,
   findProductBlockPage,
   forgetLegacyDraft,
   formatPrice,
@@ -660,12 +659,6 @@ function Studio({
    * "add product slide" flow. The chosen product lands in that slide; the others
    * keep theirs.
    */
-  const addPage = () => {
-    const pages = storePages(page)
-    if (pages.length >= MAX_STORE_PAGES) return
-    edit(ensurePage(page, pages.length))
-    setPageIndex(pages.length)
-  }
   const ensureProductBlock = (pageIndex: number, blockIndex: number): string | null => {
     const blocks = blocksOf(page, pageIndex)
     const productBlocks = blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
@@ -1048,11 +1041,8 @@ function Studio({
             focus={editPart}
             onFocus={setEditPart}
             onPreview={(id, value) => setPartPreview({ id, ...value })}
-            pageIndex={safePageIndex}
-            onPageChange={setPageIndex}
             onAddSlot={requestAddSlot}
             onRemoveSlide={removePlacement}
-            onAddPage={addPage}
           />
         )}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -2041,7 +2031,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, pageIndex, onPageChange, onAddSlot, onRemoveSlide, onAddPage }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; pageIndex?: number; onPageChange?: (i: number) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onAddPage?: () => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onRemoveSlide }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   useEffect(() => { if (open) window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60) }, [open])
@@ -2059,8 +2049,8 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
   const choose = (id: string | null) => { onFocus?.(null); void flushSellerEdits().then(() => setOpen(id)).catch((e: Error) => setErr(e.message)) }
 
   const pages = storePages(store.draft)
-  const selIdx = pageIndex ?? 0
-  const selPage = pages[selIdx] ?? pages[0]
+  const selIdx = 0
+  const selPage = pages[0]
   const productBlocks = (selPage?.blocks ?? []).filter((b) => b.type === 'featured' || b.type === 'grid')
 
   const unplaced = store.products.filter((p) => !p.archived && !pages.some((pg) => pg.blocks.some((b) => (b.type === 'featured' || b.type === 'grid') && slidesOf(b).some((sl) => sl.kind === 'digital' && sl.productId === p.id))))
@@ -2072,27 +2062,6 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
         <button type="button" className="pg-addbtn" onClick={() => void add()}><Plus className="h-4 w-4" /> Add Product</button>
       </div>
       {err && <div className="ss-note" role="alert">{err}</div>}
-
-      {/* Page selector: Home / Page 2 / Page 3 (store pages, not styles). */}
-      <div className="pg-addrow" style={{ flexWrap: 'wrap', marginBottom: 8 }}>
-        {pages.map((pg) => (
-          <button key={pg.id} type="button" className={cn('bl-add', pg.index === selIdx && 'on')} onClick={() => onPageChange?.(pg.index)}>
-            {pageLabel(pg.index)}
-          </button>
-        ))}
-        {(() => {
-          const canAddNextPage = pages.length === 1
-            ? productBlockCount(storePages(store.draft)[0]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
-            : pages.length === 2
-            ? productBlockCount(storePages(store.draft)[1]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
-            : false
-          return canAddNextPage && pages.length < MAX_STORE_PAGES ? (
-            <button type="button" className="pg-addpage" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => onAddPage?.()}>
-              <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
-            </button>
-          ) : null
-        })()}
-      </div>
 
       {/* Product blocks on the selected page. */}
       {[0, 1, 2].map((bi) => {

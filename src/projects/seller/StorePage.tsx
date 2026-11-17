@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Layers, Play, Plus, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageHasContent, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
+import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -173,16 +173,10 @@ export function StorePage(props: StorePageProps) {
   // pages with something in them, while the editor shows every page it created
   // so the seller can build an empty one.
   const all = storePages(page)
-  const hidden = props.hiddenPages ?? []
-  const [own, setOwn] = useState(0)
-  const wanted = props.pageIndex ?? own
-  const tabs = (live ? all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks)) : all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks) || pg.index === wanted)).filter((pg) => !hidden.includes(pg.index))
-  const index = tabs.some((pg) => pg.index === wanted) ? wanted : 0
-  const current = all.find((pg) => pg.index === index) ?? all[0]
-  const select = (i: number) => {
-    if (props.pageIndex === undefined) setOwn(i)
-    props.onPageChange?.(i)
-  }
+  const tabs: typeof all = []
+  const index = 0
+  const current = all[0]
+  const select = (_i: number) => {}
   // the store font and any per-block font must be downloaded before they render
   useEffect(() => { ensureFonts([page.theme.font, ...storePages(page).flatMap((pg) => pg.blocks.map((b) => b.look?.font))]) }, [page])
   const head = page.blocks.find((b) => b.type === 'header')
