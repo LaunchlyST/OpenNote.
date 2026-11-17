@@ -58,6 +58,7 @@ import {
   MAX_PRODUCT_BLOCKS_PER_PAGE,
   MAX_STORE_PAGES,
   affiliateUrlProblem,
+  ensurePage,
   findProductBlockPage,
   forgetLegacyDraft,
   formatPrice,
@@ -659,6 +660,12 @@ function Studio({
    * "add product slide" flow. The chosen product lands in that slide; the others
    * keep theirs.
    */
+  const addPage = () => {
+    const pages = storePages(page)
+    if (pages.length >= MAX_STORE_PAGES) return
+    edit(ensurePage(page, pages.length))
+    setPageIndex(pages.length)
+  }
   const ensureProductBlock = (pageIndex: number, blockIndex: number): string | null => {
     const blocks = blocksOf(page, pageIndex)
     const productBlocks = blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
@@ -1007,7 +1014,7 @@ function Studio({
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
           <PageEditor
-            onOpenProduct={(pid) => { closeEditor(); setOpenProduct(pid); setTab('products') }}
+            onOpenProduct={(pid) => { closeEditor(); setEditPart(null); setOpenProduct(pid); setTab('products') }}
             page={page}
             pageIndex={safePageIndex}
             onChange={edit}
@@ -1045,6 +1052,7 @@ function Studio({
             onPageChange={setPageIndex}
             onAddSlot={requestAddSlot}
             onRemoveSlide={removePlacement}
+            onAddPage={addPage}
           />
         )}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -1114,7 +1122,7 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
@@ -1122,12 +1130,6 @@ function Studio({
                   if (pid) {
                     closeEditor()
                     setOpenProduct(pid)
-                    if (part && part !== 'card') {
-                      // Focused settings for that element: the tab switch clears the
-                      // focus, so set it once the Products tab is open.
-                      void navigate('products').then(() => setEditPart({ productId: pid, part }))
-                      return
-                    }
                     setEditPart(null)
                     void navigate('products')
                     return
@@ -2039,7 +2041,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, pageIndex, onPageChange, onAddSlot, onRemoveSlide }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; pageIndex?: number; onPageChange?: (i: number) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, pageIndex, onPageChange, onAddSlot, onRemoveSlide, onAddPage }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; pageIndex?: number; onPageChange?: (i: number) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onAddPage?: () => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   useEffect(() => { if (open) window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60) }, [open])
@@ -2078,6 +2080,18 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
             {pageLabel(pg.index)}
           </button>
         ))}
+        {(() => {
+          const canAddNextPage = pages.length === 1
+            ? productBlockCount(storePages(store.draft)[0]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
+            : pages.length === 2
+            ? productBlockCount(storePages(store.draft)[1]?.blocks ?? []) >= MAX_PRODUCT_BLOCKS_PER_PAGE
+            : false
+          return canAddNextPage && pages.length < MAX_STORE_PAGES ? (
+            <button type="button" className="pg-addpage" aria-label={`Add ${pageLabel(pages.length)}`} onClick={() => onAddPage?.()}>
+              <Plus className="h-3.5 w-3.5" /> {pageLabel(pages.length)}
+            </button>
+          ) : null
+        })()}
       </div>
 
       {/* Product blocks on the selected page. */}

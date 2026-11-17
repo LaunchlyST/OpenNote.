@@ -161,11 +161,8 @@ try {
       const editorOpen = (await page.locator('.pg-panel').count()) > 0
       check(`${tag}: clicking the product in the preview opens its editing page`, cardCount > 0 && productsTab === 'true' && editorOpen, `card=${cardCount} tab=${productsTab} editor=${editorOpen}`)
 
-      // Clicking a product card opens its editing page; when the click lands on
-      // one of the card's elements (image, title, description, button) that
-      // element's focused settings open instead, when it lands on the card
-      // background the full product editor opens. Tapping on mobile does the same
-      // as a click, so a tap on an element is a focused edit too.
+      // Clicking a product card (or any of its elements) opens its full product
+      // editor. Tapping on mobile does the same.
       await page.getByText(/^Page$/).first().click()
       await page.waitForTimeout(1500)
       const titleEl = page.locator('.ss-slide [data-product-id] h3').first()
@@ -173,7 +170,7 @@ try {
       if (hadTitle) {
         await titleEl.click({ force: true })
         await page.waitForTimeout(1500)
-        check(`${tag}: clicking a card element opens its focused settings`, (await page.locator('.pe-part').count()) > 0, 'no focused part panel after clicking the title')
+        check(`${tag}: clicking a product opens its full editor`, (await page.locator('.pg-panel').count()) > 0, 'no product editor after clicking the title')
       }
 
       // 4. A refresh in the middle of an edit: the edit survives and saving keeps working.
