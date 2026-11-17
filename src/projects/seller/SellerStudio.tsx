@@ -2223,7 +2223,10 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, productForm(product), product.revision, async (value, revision, token) => {
-    const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price || 0) * 100) }, revision, token)
+    if (value.price.trim() === '' || isNaN(Number(value.price))) {
+      throw new Error('Enter a price')
+    }
+    const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price) * 100) }, revision, token)
     setStore(r.store)
     return r.product.revision
   }, async () => {
@@ -2249,7 +2252,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
 
   const sym = CURRENCIES.find((c) => c.code === form.currency)?.symbol ?? '£'
   const shareUrl = `${store.url}/p/${product.id}`
-  const price = Math.round(Number(form.price || 0) * 100)
+  const price = form.price.trim() === '' ? product.priceMinor : (isNaN(Number(form.price)) ? product.priceMinor : Math.round(Number(form.price) * 100))
   const free = price === 0
   // live preview of the offer (the server works out the real price at checkout)
   // same rounding as the server: half up to the nearest penny, integers only
@@ -2383,6 +2386,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           <div className="ss-grid2">
             <Field label="Regular price">
               <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} /></div>
+              {form.price.trim() === '' && <span className="sld-err" role="alert">Enter a price</span>}
             </Field>
             <Field label="Currency">
               <select className="ss-input" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
