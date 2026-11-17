@@ -350,3 +350,8 @@ run `204` (head `5a73c08`) → success, and the live bundle at `desknoty.com`
 serves this build (new markers present: `Add product below`, `Add product slide`,
 `Placement`, `hiddenPages`).
 
+**Deployment (slide polish + tabbed slides):** commit `52df1f1` pushed; frontend
+Pages workflow run `205` (head `52df1f1`) → success, and the live bundle at
+`desknoty.com` serves this build (new markers present: `Add product slide`,
+`Your next product goes here`).
+
