@@ -174,9 +174,9 @@ export function StorePage(props: StorePageProps) {
   // so the seller can build an empty one.
   const all = storePages(page)
   const hidden = props.hiddenPages ?? []
-  const tabs = (live ? all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks)) : all).filter((pg) => !hidden.includes(pg.index))
   const [own, setOwn] = useState(0)
   const wanted = props.pageIndex ?? own
+  const tabs = (live ? all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks)) : all.filter((pg) => pg.index === 0 || pageHasContent(pg.blocks) || pg.index === wanted)).filter((pg) => !hidden.includes(pg.index))
   const index = tabs.some((pg) => pg.index === wanted) ? wanted : 0
   const current = all.find((pg) => pg.index === index) ?? all[0]
   const select = (i: number) => {
