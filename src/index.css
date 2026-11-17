@@ -7840,35 +7840,45 @@ select.ss-input option {
   display: grid;
   justify-items: center;
   align-content: center;
-  gap: 10px;
-  min-height: 240px;
-  padding: 24px 20px;
+  gap: 12px;
+  min-height: 260px;
+  padding: 28px 22px;
   border-radius: calc(var(--r) + 8px);
   text-align: center;
   cursor: pointer;
-  border: 1.5px dashed color-mix(in srgb, var(--ac) 40%, transparent);
-  background: color-mix(in srgb, var(--ac) 6%, var(--on, #fff));
-  transition: border-color .18s, background .18s, transform .18s;
+  border: 1px solid color-mix(in srgb, #ffffff 40%, transparent);
+  background: color-mix(in srgb, var(--ac) 12%, rgba(255,255,255,0.5));
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  box-shadow: 0 8px 32px -12px rgba(0,0,0,0.2), inset 0 1px 0 color-mix(in srgb, #ffffff 55%, transparent);
+  transition: border-color .18s, background .18s, box-shadow .18s;
+  color: var(--fg, #111114);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .ss-slide-empty {
+    background: color-mix(in srgb, var(--ac) 14%, #f4f3ef);
+  }
 }
 .ss-slide-empty:hover, .ss-slide-empty:focus-visible {
-  border-color: color-mix(in srgb, var(--ac) 65%, transparent);
-  background: color-mix(in srgb, var(--ac) 9%, var(--on, #fff));
+  border-color: color-mix(in srgb, #ffffff 60%, transparent);
+  background: color-mix(in srgb, var(--ac) 16%, rgba(255,255,255,0.6));
+  box-shadow: 0 10px 36px -12px rgba(0,0,0,0.24), inset 0 1px 0 color-mix(in srgb, #ffffff 65%, transparent);
   outline: none;
 }
-.ss-slide-empty:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac) 25%, transparent); }
+.ss-slide-empty:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac) 25%, transparent), 0 10px 36px -12px rgba(0,0,0,0.24); }
 .ss-slide-empty-icon {
   display: grid;
   place-items: center;
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   border-radius: 999px;
   color: var(--ac);
-  background: color-mix(in srgb, var(--ac) 14%, var(--on, #fff));
+  background: color-mix(in srgb, var(--ac) 18%, rgba(255,255,255,0.65));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 45%, transparent);
 }
 .ss-slide-empty-icon svg { width: 20px; height: 20px; }
-.ss-slide-empty-title { font-size: 15px; font-weight: 700; line-height: 1.25; }
-.ss-slide-empty-sub { max-width: 28ch; font-size: 12.5px; opacity: 0.62; line-height: 1.4; }
-.ss-slide-empty-btn { margin-top: 2px; }
+.ss-slide-empty-title { font-size: 16px; font-weight: 700; line-height: 1.25; letter-spacing: -0.01em; }
+.ss-slide-empty-sub { max-width: 26ch; font-size: 13px; opacity: 0.68; line-height: 1.4; }
 .ss-slide-empty .sp-btn:hover:not(:disabled) { transform: none; }
 /* carousel: subtle slide transition + controls beneath, no overlap */
 .sp-carousel { display: grid; gap: 8px; }
