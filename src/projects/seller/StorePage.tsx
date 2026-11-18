@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { AtSign, ChevronDown, Globe, Layers, Play, Plus, X as XIcon } from 'lucide-react'
+import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
@@ -422,11 +422,8 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
         if (oneEmpty) {
           // The owner is building this first slide: offer the picker.
           return (
-            <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct?.(block.id, 0)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct?.(block.id, 0) } }}>
-              <span className="sp-slide-empty-icon" aria-hidden="true"><Layers className="h-5 w-5" /></span>
-              <span className="sp-slide-empty-title">Add your next product</span>
-              <span className="sp-slide-empty-sub">Digital product or affiliate link</span>
-              <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct?.(block.id, 0) }}><Plus className="h-3.5 w-3.5" /> Add product</button>
+            <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlide?.(block.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlide?.(block.id) } }}>
+              <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlide?.(block.id) }}>+ Add product</button>
             </div>
           )
         }
@@ -602,11 +599,8 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
           <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}`}>
             {isEmpty(s) ? (
               !p.live && p.onAddSlideProduct && blockId ? (
-                <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct!(blockId, i)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct!(blockId, i) } }}>
-                  <span className="sp-slide-empty-icon" aria-hidden="true"><Layers className="h-5 w-5" /></span>
-                  <span className="sp-slide-empty-title">Add your next product</span>
-                  <span className="sp-slide-empty-sub">Digital product or affiliate link</span>
-                  <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct!(blockId, i) }}><Plus className="h-3.5 w-3.5" /> Add product</button>
+                <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlide?.(blockId)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlide?.(blockId) } }}>
+                  <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlide?.(blockId) }}>+ Add product</button>
                 </div>
               ) : null
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} {...p} /> : <AffiliateSlide slide={s} {...p} />}
