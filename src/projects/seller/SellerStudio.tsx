@@ -2109,6 +2109,26 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
                 return null
               })}
             </div>
+            {open && block && slides.some((sl) => sl.kind == 'digital' && sl.productId === open) && (
+              <div ref={panel} className="pg-panel" role="region" aria-label={`Edit ${store.products.find((p) => p.id === open)?.title?.trim() || 'product'}`} style={{ marginTop: 8 }}>
+                <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
+                {focus?.productId === open ? (
+                  <ProductPartPanel
+                    key={`${open}.${focus.part}`}
+                    product={store.products.find((p) => p.id === open)!}
+                    store={store}
+                    setStore={setStore}
+                    part={focus.part}
+                    onPart={(part) => onFocus?.({ productId: open, part })}
+                    onClose={() => choose(null)}
+                    onFull={() => onFocus?.(null)}
+                    onPreview={(value) => onPreview?.(open, value)}
+                  />
+                ) : (
+                  <ProductForm product={store.products.find((p) => p.id === open)!} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={() => onFocus?.({ productId: open, part: 'card' })} />
+                )}
+              </div>
+            )}
           </section>
         )
       })}
@@ -2149,7 +2169,7 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
         </details>
       )}
 
-      {open && store.products.find((p) => p.id === open) && (
+      {open && !productBlocks.some((b) => slidesOf(b).some((sl) => sl.kind == 'digital' && sl.productId === open)) && store.products.find((p) => p.id === open) && (
         <div ref={panel} className="pg-panel" role="region" aria-label={`Edit ${store.products.find((p) => p.id === open)?.title?.trim() || 'product'}`}>
           <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
           {focus?.productId === open ? (
