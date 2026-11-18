@@ -503,9 +503,14 @@ function Studio({
   const [partPreview, setPartPreview] = useState<({ id: string } & PartDraft) | null>(null)
   /** Store pages the owner hid in the phone preview (Page 2 and Page 3). */
   const [hiddenPages, setHiddenPages] = useState<number[]>([])
-  /** The add-product picker request: which kind of add is in progress. */
+  /** The add-block popup, and separately the add-product picker. Never the same state. */
   const [addReq, setAddReq] = useState<AddReq | null>(null)
-  const requestAdd = (req: AddReq) => { setAddReq(req); if (req.kind !== 'block') pendingAdd.current = req }
+  const [pickReq, setPickReq] = useState<Extract<AddReq, { kind: 'slide' } | { kind: 'below' }> | null>(null)
+  const requestAdd = (req: AddReq) => {
+    if (req.kind === 'block') { setAddReq(req); return }
+    setPickReq(req)
+    pendingAdd.current = req
+  }
   /** Which slide of the focused product block is selected, for phone/preview sync. */
   const [activeSlide, setActiveSlide] = useState(0)
   const [activeSlideBlock, setActiveSlideBlock] = useState<string | null>(null)
@@ -1032,15 +1037,23 @@ function Studio({
           />
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
+        {/* Add block: the only way to open the block library popup. */}
         {addReq && (
           <AddBlockDialog
             products={store.products}
-            pickReq={addReq.kind === 'block' ? null : addReq}
-            onClose={() => { setAddReq(null); pendingAdd.current = null }}
+            onClose={() => setAddReq(null)}
             onAdd={(t, d) => (setAddReq(null), t === 'banner' ? openEditor(BANNER_ID, document.querySelector<HTMLElement>(`[data-pinned="${BANNER_ID}"]`) ?? undefined) : addBlock(t, d))}
             onDragStart={(t, e, d) => { setAddReq(null); startInsert(t, e, d) }}
             createProduct={createProduct}
-            onPickProduct={onPickProduct}
+          />
+        )}
+        {/* Add product: its own picker, with no block library in sight. */}
+        {pickReq && (
+          <AddProductDialog
+            products={store.products}
+            onClose={() => { setPickReq(null); pendingAdd.current = null }}
+            onPickExisting={(productId) => { setPickReq(null); onPickProduct(productId) }}
+            createProduct={(f) => createProduct(f).then(() => undefined)}
           />
         )}
         {tab === 'products' && (
@@ -1431,7 +1444,7 @@ function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMove
 export type NewProduct = { title: string; headline: string; priceMinor: number; currency: string; cover: File | null; file: File | null }
 
 /** The Add block popup: search, categories, quick add, recommended; Digital product opens a small creator. */
-function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct, pickReq, onPickProduct }: { products: DraftProduct[]; onClose: () => void; onAdd: (t: BlockType | 'banner', d?: Record<string, unknown>) => void; onDragStart: (t: BlockType, e: ReactPointerEvent, d?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string>; pickReq?: AddReq | null; onPickProduct?: (productId: string) => void }) {
+function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }: { products: DraftProduct[]; onClose: () => void; onAdd: (t: BlockType | 'banner', d?: Record<string, unknown>) => void; onDragStart: (t: BlockType, e: ReactPointerEvent, d?: Record<string, unknown>) => void; createProduct: (f: NewProduct) => Promise<string> }) {
   const [cat, setCat] = useState('Quick add')
   const [q, setQ] = useState('')
   const [making, setMaking] = useState(false)
@@ -1442,7 +1455,6 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct, 
   }, [onClose])
   const all = Object.values(CATALOG).flat().filter((x, i, arr) => arr.findIndex((y) => y.name === x.name) === i)
   const list = q.trim() ? all.filter((x) => `${x.name} ${x.text}`.toLowerCase().includes(q.trim().toLowerCase())) : CATALOG[cat]
-  const picking = pickReq?.kind === 'slide' || pickReq?.kind === 'below'
   const pick = (it: CatalogItem) => (it.kind === 'featured' ? setMaking(true) : onAdd(it.kind))
   // pointer-drag an item straight out of the popup onto the phone
   const drag = (it: CatalogItem) => (e: ReactPointerEvent) => {
@@ -1459,9 +1471,9 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct, 
   return (
     <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ab" role="dialog" aria-modal="true" aria-label="Add a block">
-        <header className="ab-head"><h2>{making ? 'New digital product' : picking ? 'Add a product' : 'Add a block'}</h2><button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button></header>
+        <header className="ab-head"><h2>{making ? 'New digital product' : 'Add a block'}</h2><button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button></header>
         {making ? (
-          <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={(id) => { setMaking(false); if (pickReq?.kind && pickReq.kind !== 'block') onPickProduct?.(id); else onAdd('featured', { productId: id }) }} createProduct={async (f) => { const id = await createProduct(f); setMaking(false); if (pickReq?.kind && pickReq.kind !== 'block') onPickProduct?.(id); else onAdd('featured', { productId: id }) }} />
+          <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={(id) => { setMaking(false); onAdd('featured', { productId: id }) }} createProduct={async (f) => { const id = await createProduct(f); setMaking(false); onAdd('featured', { productId: id }) }} />
         ) : (
           <div className="ab-body">
             <nav className="ab-nav" aria-label="Block categories">
@@ -1505,6 +1517,48 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct, 
                 </div>
               )}
               <p className="ab-tip">Tip: click to add at the bottom, or drag a block straight onto the phone.</p>
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** The add-product picker: choose an existing product or make a new one.
+    Deliberately its own dialog — the block library must not appear here. */
+function AddProductDialog({ products, onClose, onPickExisting, createProduct }: { products: DraftProduct[]; onClose: () => void; onPickExisting: (productId: string) => void; createProduct: (f: NewProduct) => Promise<void> }) {
+  const [making, setMaking] = useState(false)
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    document.addEventListener('keydown', k)
+    return () => document.removeEventListener('keydown', k)
+  }, [onClose])
+  const available = products.filter((p) => !p.archived)
+  return (
+    <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="ab ab-slim" role="dialog" aria-modal="true" aria-label="Add a product">
+        <header className="ab-head">
+          <h2>{making ? 'New digital product' : 'Add a product'}</h2>
+          <button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
+        </header>
+        {making ? (
+          <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={onPickExisting} createProduct={createProduct} />
+        ) : (
+          <div className="ab-body ab-body-pick">
+            <section className="ab-main">
+              <div className="ab-grid ab-grid-pick">
+                {available.map((p) => (
+                  <button key={p.id} type="button" className="ab-item" onClick={() => onPickExisting(p.id)}>
+                    <span className="ab-thumb">{p.cover ? <img src={mediaUrl(p.cover) ?? ''} alt="" /> : <Package className="h-5 w-5" />}</span>
+                    <span><b>{p.title.trim() || 'Untitled product'}</b><small>{p.priceMinor === 0 ? 'Free' : formatPrice(p.priceMinor, p.currency)}</small></span>
+                  </button>
+                ))}
+                {available.length === 0 && <p className="ss-muted">No products yet — create your first one.</p>}
+              </div>
+              <button type="button" className="ss-ghost" style={{ marginTop: 10, alignSelf: 'flex-start' }} onClick={() => setMaking(true)}>
+                <Plus className="h-3.5 w-3.5" /> New product
+              </button>
             </section>
           </div>
         )}

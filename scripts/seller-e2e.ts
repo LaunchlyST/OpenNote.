@@ -173,7 +173,9 @@ try {
         const editorOpen = (await page.locator('.pg-back').count()) > 0
         // The editor replaces the list: no product cards, no Add Product button.
         const listGone = (await page.locator('.pg-addbtn').count()) === 0
-        check(`${tag}: clicking a product opens its full editor`, editorOpen && listGone, `editor=${editorOpen} listGone=${listGone}`)
+        // ...and it is the product editor, never the Add block popup.
+        const notBlockPopup = (await page.getByRole('dialog', { name: 'Add a block' }).count()) === 0
+        check(`${tag}: clicking a product opens its full editor`, editorOpen && listGone && notBlockPopup, `editor=${editorOpen} listGone=${listGone} popup=${!notBlockPopup}`)
 
         // Back returns to the untouched product list.
         await page.getByRole('button', { name: /Back to Products/ }).first().click()
@@ -181,6 +183,46 @@ try {
         const backToList = (await page.locator('.pg-addbtn').count()) === 1 && (await page.locator('.pg-back').count()) === 0
         check(`${tag}: Back to Products returns to the list`, backToList, 'list did not come back')
       }
+
+      // 3c. The Add block popup belongs to the Add block button only. Add Product
+      //     and product cards must never open it.
+      await page.getByText(/^Products \(/).first().click()
+      await page.waitForTimeout(800)
+      await page.getByRole('button', { name: /Add Product/ }).first().click()
+      await page.waitForTimeout(1200)
+      const blockPopupAfterAddProduct = await page.getByRole('dialog', { name: 'Add a block' }).count()
+      check(`${tag}: Add Product does not open the Add block popup`, blockPopupAfterAddProduct === 0, `popup=${blockPopupAfterAddProduct}`)
+
+      await page.getByText(/^Page$/).first().click()
+      await page.waitForTimeout(1000)
+      const blocksBefore = await page.locator('.ss-slide .sp-pick').count()
+      await page.locator('.bl-add').first().click()
+      await page.waitForTimeout(500)
+      const blockPopup = await page.getByRole('dialog', { name: 'Add a block' }).count()
+      check(`${tag}: Add block opens the block popup`, blockPopup === 1, `popup=${blockPopup}`)
+
+      // Quick add tile: the block is created, added to the page and the popup closes.
+      await page.locator('.ab-quick').getByRole('button', { name: /^Text$/ }).first().click()
+      await page.waitForTimeout(1500)
+      const blocksAfter = await page.locator('.ss-slide .sp-pick').count()
+      const blockPopupClosed = await page.getByRole('dialog', { name: 'Add a block' }).count()
+      check(
+        `${tag}: choosing Text adds a block and closes the popup`,
+        blocksAfter > blocksBefore && blockPopupClosed === 0,
+        `before=${blocksBefore} after=${blocksAfter} popup=${blockPopupClosed}`,
+      )
+
+      // Quick add icon for another type: Images.
+      await page.locator('.bl-add').first().click()
+      await page.waitForTimeout(500)
+      await page.locator('.ab-quick').getByRole('button', { name: /^Images$/ }).first().click()
+      await page.waitForTimeout(1500)
+      const blocksAfterImages = await page.locator('.ss-slide .sp-pick').count()
+      check(
+        `${tag}: choosing Images adds a block and closes the popup`,
+        blocksAfterImages > blocksAfter && (await page.getByRole('dialog', { name: 'Add a block' }).count()) === 0,
+        `before=${blocksAfter} after=${blocksAfterImages}`,
+      )
 
       // 4. A refresh in the middle of an edit: the edit survives and saving keeps working.
       //    (The draft is still being written when the page goes away: the editor must
