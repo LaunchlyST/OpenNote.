@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { PriceTag, accentOf, ctaStyle } from './StorePage'
 import type { StorePageProps } from './StorePage'
-import { FONTS, ensureFont, fontById, mediaUrl, safeExternalUrl } from './model'
+import { FONTS, ensureFont, fontById, isFreeProduct, mediaUrl, safeExternalUrl } from './model'
 import type { ShopProduct } from './model'
 import './style2.css'
 
@@ -69,6 +69,7 @@ export function Style2Page(props: StorePageProps) {
 }
 
 function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
+  const free = isFreeProduct(p)
   const src = mediaUrl(p.cover)
   const disabled = !props.live || !props.checkoutReady || props.buying === p.id
   const Img = (
@@ -121,9 +122,9 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
           </>
         ) : (
           <>
-            {p.priceMinor === 0 ? <span className="s2p-price">Free</span> : <PriceTag prod={p} />}
-            <button type="button" className="s2p-buy" style={ctaStyle(p)} disabled={p.priceMinor === 0 ? !props.live || props.buying === p.id : disabled} onClick={() => (p.priceMinor === 0 && props.claims?.[p.id] ? props.onClaimAgain?.(p) : props.onBuy?.(p))} title={props.claims?.[p.id] ? `We emailed a private link to ${props.claims[p.id].email}. Open it to download.` : undefined}>
-              {props.buying === p.id ? 'Opening checkout…' : props.claims?.[p.id] ? (props.claims[p.id].waitSeconds > 0 ? `Send again (${props.claims[p.id].waitSeconds}s)` : 'Send again') : (p.cta?.text || (p.priceMinor === 0 ? 'Get it free' : 'Buy now'))}
+            {free ? <span className="s2p-price">Free</span> : <PriceTag prod={p} />}
+            <button type="button" className="s2p-buy" style={ctaStyle(p)} disabled={free ? !props.live || props.buying === p.id : disabled} onClick={() => (free && props.claims?.[p.id] ? props.onClaimAgain?.(p) : props.onBuy?.(p))} title={props.claims?.[p.id] ? `We emailed a private link to ${props.claims[p.id].email}. Open it to download.` : undefined}>
+              {props.buying === p.id ? 'Opening checkout…' : props.claims?.[p.id] ? (props.claims[p.id].waitSeconds > 0 ? `Send again (${props.claims[p.id].waitSeconds}s)` : 'Send again') : (p.cta?.text || (free ? 'Get it free' : 'Buy now'))}
             </button>
           </>
         )}

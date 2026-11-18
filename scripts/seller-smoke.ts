@@ -198,6 +198,17 @@ try {
   const benFile = await req('PUT', `/api/seller/products/${pid}/file`, Buffer.from('x'), B, { 'x-file-name': 'x' })
   check('Ben can’t replace Ava’s file', benFile.status === 404)
 
+  console.log('\n  Explicit payment mode')
+  check('a new product is paid, not inferred from a typed price', p1.json?.product?.paymentType === 'paid')
+  const zeroPaid = await req('PATCH', `/api/seller/products/${pid}`, { paymentType: 'paid', priceMinor: 0 }, A)
+  check('the API refuses to save a paid product at zero', zeroPaid.status === 400, JSON.stringify(zeroPaid.json?.error))
+  const stillPaid = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((p: { id: string }) => p.id === pid)
+  check('a refused zero keeps the last valid paid price', stillPaid?.paymentType === 'paid' && stillPaid.priceMinor === 1200, JSON.stringify(stillPaid && { mode: stillPaid.paymentType, price: stillPaid.priceMinor }))
+  const madeFree = await req('PATCH', `/api/seller/products/${pid}`, { paymentType: 'free' }, A)
+  check('only an explicit free choice makes it free', madeFree.json?.product?.paymentType === 'free' && madeFree.json?.product?.priceMinor === 0, JSON.stringify(madeFree.json?.product?.paymentType))
+  const madePaid = await req('PATCH', `/api/seller/products/${pid}`, { paymentType: 'paid', priceMinor: 1200 }, A)
+  check('an explicit paid choice restores the paid price', madePaid.json?.product?.paymentType === 'paid' && madePaid.json?.product?.priceMinor === 1200, JSON.stringify(madePaid.json?.product?.paymentType))
+
   console.log('\n  Page: product block between two blocks, draft vs published')
   const store = (await req('GET', '/api/seller/store', undefined, A)).json.store
   const blocks = store.draft.blocks

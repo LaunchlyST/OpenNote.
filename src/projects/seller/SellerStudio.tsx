@@ -64,11 +64,13 @@ import {
   formatPrice,
   handleProblem,
   insertAt,
+  isFreeProduct,
   isProductBlock,
   mediaUrl,
   newBlock,
   newSlide,
   pageLabel,
+  parsePriceInput,
   primaryProductId,
   productBlockCount,
   readLegacyDraft,
@@ -86,7 +88,7 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, CardPart, DraftProduct, ProductExtras, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, StoreView } from './model'
+import type { Block, BlockType, CardPart, DraftProduct, PaymentType, ProductExtras, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, ShopProduct, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -919,6 +921,11 @@ function Studio({
     setPublishing(true)
     setErr(null)
     try {
+      // A paid product with no valid price must never be published as Free.
+      // The editor's unfinished price never reaches the server, so this also
+      // catches products left invalid by an older build.
+      const unpaid = store.products.find((p) => p.listed && !p.archived && !isFreeProduct(p) && p.priceMinor <= 0)
+      if (unpaid) throw new Error(`“${unpaid.title || 'Untitled product'}” is paid but has no price. Enter a price above 0 or switch it to free before publishing.`)
       // Publishing from a style puts that style live (same content, its own layout).
       const use = slide === 1 ? 2 : 1
       if ((full.use ?? 1) !== use) pageSave.edit({ ...full, use })
@@ -943,6 +950,9 @@ function Studio({
       ...p,
       ...(live ? { title: live.title, description: live.description, cover: live.cover } : null),
       ...ex,
+      // The phone preview follows the seller's explicit choice. Older data
+      // without it falls back to the saved (last valid) price.
+      paymentType: p.paymentType ?? (p.priceMinor === 0 ? 'free' : 'paid'),
       offer: p.offer,
       fileType: p.file ? (p.file.name.split('.').pop() ?? '').toUpperCase() || null : null,
       bundle: ex.bundle.length ? { items: ex.bundle.map((id) => ({ id, title: store.products.find((q) => q.id === id)?.title ?? '' })), available: ex.bundle.length >= 2 } : null,
@@ -2164,6 +2174,7 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
           />
         ) : (
           <ProductForm
+            key={selected.id}
             product={selected}
             store={store}
             setStore={setStore}
@@ -2310,10 +2321,31 @@ const BADGE_COLOURS = ['#e11d48', '#f97316', '#16a34a', '#2563eb', '#7c3aed', '#
 const CTA_TEXTS = ['Buy now', 'Get Instant Access', 'Download Now']
 
 /** The editable shape of a product: the fields the seller can change. */
-const productForm = (p: DraftProduct) => ({
+type ProductFormState = {
+  title: string
+  description: string
+  /**
+   * The price exactly as the seller typed it. It stays a string while editing,
+   * so "" / "0" / "0." / "0.1" are never quietly turned into a price — or into
+   * a payment mode — behind the seller's back.
+   */
+  price: string
+  /** The seller's explicit choice; only the Free/Paid selector changes it. */
+  paymentType: PaymentType
+  currency: string
+  cover: string | null
+  listed: boolean
+  extras: ProductExtras
+}
+
+/** The saved payment mode. Older rows only carry a price, and a saved price is a valid one. */
+const paymentModeOf = (p: DraftProduct): PaymentType => (p.paymentType === 'free' ? 'free' : p.paymentType === 'paid' ? 'paid' : p.priceMinor === 0 ? 'free' : 'paid')
+
+const productForm = (p: DraftProduct): ProductFormState => ({
   title: p.title,
   description: p.description,
   price: (p.priceMinor / 100).toFixed(2),
+  paymentType: paymentModeOf(p),
   currency: p.currency,
   cover: p.cover,
   listed: p.listed,
@@ -2326,10 +2358,17 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
   const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, productForm(product), product.revision, async (value, revision, token) => {
-    if (value.price.trim() === '' || isNaN(Number(value.price))) {
-      throw new Error('Enter a price')
+    // The mode comes from the selector, never from the typed digits. A paid
+    // product with an unfinished price is a validation error: nothing is saved,
+    // so the last valid price stays on the server instead of becoming Free.
+    // A recovery value written by an older build has no mode: the saved
+    // product's explicit choice is the only safe one to carry forward.
+    const mode: PaymentType = value.paymentType === 'free' ? 'free' : value.paymentType === 'paid' ? 'paid' : paymentModeOf(product)
+    const typed = parsePriceInput(value.price)
+    if (mode === 'paid' && (typed === null || typed <= 0)) {
+      throw new Error(typed === null ? 'Enter a price for this paid product, or switch it to free.' : 'A paid product needs a price above 0. Switch it to free if it is free.')
     }
-    const r = await sellerApi.updateProduct(product.id, { ...value, priceMinor: Math.round(Number(value.price) * 100) }, revision, token)
+    const r = await sellerApi.updateProduct(product.id, { ...value, paymentType: mode, priceMinor: mode === 'free' ? 0 : (typed as number) }, revision, token)
     setStore(r.store)
     return r.product.revision
   }, async () => {
@@ -2355,25 +2394,37 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
 
   const sym = CURRENCIES.find((c) => c.code === form.currency)?.symbol ?? '£'
   const shareUrl = `${store.url}/p/${product.id}`
-  const price = form.price.trim() === '' ? product.priceMinor : (isNaN(Number(form.price)) ? product.priceMinor : Math.round(Number(form.price) * 100))
-  const free = price === 0
+  // The mode is explicit: typing 0 (or clearing the field) never flips it.
+  // A recovered value from an older build has no mode; the saved product's mode
+  // wins there, because its price is a valid saved price.
+  const mode: PaymentType = form.paymentType === 'free' ? 'free' : form.paymentType === 'paid' ? 'paid' : paymentModeOf(product)
+  const free = mode === 'free'
+  const typedMinor = parsePriceInput(form.price)
+  // Until a valid price is typed, keep showing/saving the last valid saved one.
+  const priceMinor = typedMinor ?? product.priceMinor
+  const priceError = free || (typedMinor !== null && typedMinor > 0)
+    ? null
+    : typedMinor === null
+      ? 'Enter a price'
+      : 'A paid product needs a price above 0'
   // live preview of the offer (the server works out the real price at checkout)
   // same rounding as the server: half up to the nearest penny, integers only
-  const off = x.offer.kind === 'percent' ? Math.floor((price * Math.min(95, x.offer.value) + 50) / 100) : Math.min(price, x.offer.value)
-  const sale = Math.max(0, price - off)
-  const pct = price > 0 ? Math.round((1 - sale / price) * 100) : 0
-  const offerLive = x.offer.on && !free && sale < price
+  const off = x.offer.kind === 'percent' ? Math.floor((priceMinor * Math.min(95, x.offer.value) + 50) / 100) : Math.min(priceMinor, x.offer.value)
+  const sale = Math.max(0, priceMinor - off)
+  const pct = priceMinor > 0 ? Math.round((1 - sale / priceMinor) * 100) : 0
+  const offerLive = x.offer.on && !free && priceMinor > 0 && sale < priceMinor
   const badgeText = x.offer.badge === 'PERCENT' ? `${pct}% OFF` : x.offer.badge
   const vis: 'draft' | 'published' | 'hidden' = !form.listed ? 'draft' : x.hidden ? 'hidden' : 'published'
   const setVis = (v: typeof vis) => setForm({ ...form, listed: v !== 'draft', extras: { ...x, hidden: v === 'hidden' } })
   const fmt = (m: number) => formatPrice(m, form.currency)
-  const cardPreview = {
+  const cardPreview: ShopProduct = {
     ...x,
     id: product.id,
     title: form.title.trim() || 'Untitled product',
     description: form.description,
     cover: form.cover,
-    priceMinor: price,
+    priceMinor,
+    paymentType: mode,
     currency: form.currency,
     offer: offerLive ? { priceMinor: sale, percent: pct, badge: badgeText, badgeColor: x.offer.badgeColor, ends: x.offer.ends } : null,
     fileType: product.file ? (product.file.name.split('.').pop() ?? '').toUpperCase() || null : null,
@@ -2480,16 +2531,26 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
         )}
       </PSection>
 
-      <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(price)} open>
+      <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(priceMinor)} open>
         <div className="pe-row">
           <span className="pe-lbl">Free product</span>
-          <Switch label="Free product" on={free} onChange={(v) => setForm({ ...form, price: v ? '0.00' : '9.00' })} />
+          <Switch
+            label="Free product"
+            on={free}
+            onChange={(on) => {
+              // Only this switch changes the mode. Turning Free off with no valid
+              // price starts from a normal paid price, never from a zero.
+              if (on) return setForm({ ...form, paymentType: 'free' })
+              const typed = parsePriceInput(form.price)
+              setForm({ ...form, paymentType: 'paid', ...(typed === null || typed <= 0 ? { price: '9.00' } : {}) })
+            }}
+          />
         </div>
         {!free && (
           <div className="ss-grid2">
             <Field label="Regular price">
-              <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} /></div>
-              {form.price.trim() === '' && <span className="sld-err" role="alert">Enter a price</span>}
+              <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Price" aria-invalid={priceError ? true : undefined} value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value.replace(/[^0-9.]/g, '') })} /></div>
+              {priceError && <span className="sld-err" role="alert">{priceError}</span>}
             </Field>
             <Field label="Currency">
               <select className="ss-input" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}>
@@ -2508,18 +2569,18 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
               <>
                 <div className="pe-seg" role="radiogroup" aria-label="Discount type">
                   <button type="button" role="radio" aria-checked={x.offer.kind === 'percent'} onClick={() => setOffer({ kind: 'percent', value: 20 })}>% off</button>
-                  <button type="button" role="radio" aria-checked={x.offer.kind === 'amount'} onClick={() => setOffer({ kind: 'amount', value: Math.round(price / 4) })}>{sym} off</button>
+                  <button type="button" role="radio" aria-checked={x.offer.kind === 'amount'} onClick={() => setOffer({ kind: 'amount', value: Math.round(priceMinor / 4) })}>{sym} off</button>
                 </div>
                 <div className="ss-grid2">
                   <Field label={x.offer.kind === 'percent' ? 'Percent off' : 'Amount off'}>
                     <div className={cn('ss-affix', x.offer.kind === 'percent' ? 'ss-affix-r' : 'ss-affix-l')}>
                       {x.offer.kind === 'amount' && <span>{sym}</span>}
-                      <input className="ss-input" inputMode="decimal" aria-label="Discount amount" value={x.offer.kind === 'percent' ? String(x.offer.value) : (x.offer.value / 100).toFixed(2)} onChange={(e) => { const v = Number(e.target.value.replace(/[^0-9.]/g, '')) || 0; setOffer({ value: x.offer.kind === 'percent' ? Math.min(95, Math.round(v)) : Math.min(price, Math.round(v * 100)) }) }} />
+                      <input className="ss-input" inputMode="decimal" aria-label="Discount amount" value={x.offer.kind === 'percent' ? String(x.offer.value) : (x.offer.value / 100).toFixed(2)} onChange={(e) => { const v = Number(e.target.value.replace(/[^0-9.]/g, '')) || 0; setOffer({ value: x.offer.kind === 'percent' ? Math.min(95, Math.round(v)) : Math.min(priceMinor, Math.round(v * 100)) }) }} />
                       {x.offer.kind === 'percent' && <span>%</span>}
                     </div>
                   </Field>
                   <Field label="Sale price">
-                    <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Sale price" value={(sale / 100).toFixed(2)} onChange={(e) => { const v = Math.round((Number(e.target.value.replace(/[^0-9.]/g, '')) || 0) * 100); setOffer({ kind: 'amount', value: Math.max(0, Math.min(price, price - v)) }) }} /></div>
+                    <div className="ss-affix ss-affix-l"><span>{sym}</span><input className="ss-input" inputMode="decimal" aria-label="Sale price" value={(sale / 100).toFixed(2)} onChange={(e) => { const v = Math.round((Number(e.target.value.replace(/[^0-9.]/g, '')) || 0) * 100); setOffer({ kind: 'amount', value: Math.max(0, Math.min(priceMinor, priceMinor - v)) }) }} /></div>
                   </Field>
                 </div>
                 {v2b ? <OfferSchedule offer={x.offer} setOffer={setOffer} /> : (
@@ -2546,13 +2607,13 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
               <div className="pe-prev-row">
                 {offerLive ? (
                   <>
-                    <s>{fmt(price)}</s>
+                    <s>{fmt(priceMinor)}</s>
                     <b key={sale}>{fmt(sale)}</b>
                     <em key={badgeText + x.offer.badgeColor} style={{ background: x.offer.badgeColor }}>{badgeText}</em>
                   </>
-                ) : <b>{fmt(price)}</b>}
+                ) : <b>{fmt(priceMinor)}</b>}
               </div>
-              {offerLive && <small>Buyers save {fmt(price - sale)}.{(x.offer.startsLocal || x.offer.endsLocal || x.offer.starts || x.offer.ends) ? ' Runs only inside its dates.' : ''}</small>}
+              {offerLive && <small>Buyers save {fmt(priceMinor - sale)}.{(x.offer.startsLocal || x.offer.endsLocal || x.offer.starts || x.offer.ends) ? ' Runs only inside its dates.' : ''}</small>}
             </div>
           </div>
         )}

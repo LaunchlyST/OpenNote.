@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
+import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -738,7 +738,8 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
         <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled title="One of this bundle’s products isn’t available">Unavailable</button>
       </div>
     )
-  if (prod.priceMinor === 0) {
+  // The seller's explicit Free/Paid choice decides this, never a half-typed 0.
+  if (isFreeProduct(prod)) {
     // This browser already asked for it: "Send again" reopens the form (the address prefilled),
     // and the button shows the server's resend cooldown while it runs. No link is ever shown here.
     const claim = live ? claims?.[prod.id] : undefined
@@ -802,7 +803,7 @@ function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
           {p.affiliate?.disclosure || 'Paid partnership · payment and delivery happen on the external website.'}
         </p>
       ) : (
-        <p className="sp-fine">{p.priceMinor === 0 ? 'A private link is emailed to you. Open it to download.' : 'Instant download after payment. A copy of the link is emailed to you.'}</p>
+        <p className="sp-fine">{isFreeProduct(p) ? 'A private link is emailed to you. Open it to download.' : 'Instant download after payment. A copy of the link is emailed to you.'}</p>
       )}
     </section>
   )

@@ -52,7 +52,7 @@ export const sellerApi = {
   saveDraft: (page: Page, revision: number, token?: string) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision, token }),
   publish: () => call<{ store: StoreView }>('POST', '/api/seller/store/publish'),
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
-  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number, token?: string) =>
+  updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'paymentType' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number, token?: string) =>
     call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision, token }),
   coupons: () => call<{ coupons: Coupon[] }>('GET', '/api/seller/coupons'),
   createCoupon: (c: CouponInput) => call<{ coupon: Coupon }>('POST', '/api/seller/coupons', c),

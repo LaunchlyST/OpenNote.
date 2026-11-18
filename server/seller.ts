@@ -333,6 +333,8 @@ interface ProductRow {
   description: string
   cover: string | null
   priceMinor: number
+  /** The seller's explicit Free/Paid choice. Null only on rows written by an older API. */
+  paymentType?: string | null
   currency: string
   fileId: string | null
   fileName: string | null
@@ -695,6 +697,9 @@ export function defaultPage(name: string): Page {
 
 /* -------------------------------------------------------------- views --- */
 
+/** The stored mode, with the old price-only data as a fallback. Never derived from a typed value. */
+const paymentOf = (p: ProductRow): 'paid' | 'free' => (p.paymentType === 'free' ? 'free' : p.paymentType === 'paid' ? 'paid' : p.priceMinor === 0 ? 'free' : 'paid')
+
 function productDraftView(p: ProductRow) {
   return {
     id: p.id,
@@ -703,6 +708,7 @@ function productDraftView(p: ProductRow) {
     description: p.description,
     cover: p.cover,
     priceMinor: p.priceMinor,
+    paymentType: paymentOf(p),
     currency: p.currency,
     file: p.fileId ? { name: p.fileName, size: p.fileSize, type: p.fileType } : null,
     sample: p.sampleFileId ? { name: p.sampleName, size: p.sampleSize } : null,
@@ -880,6 +886,9 @@ export function salePrice(priceMinor: number, x: ProductExtras, at = new Date())
   return offerPrice(priceMinor, x.offer, at.getTime())
 }
 function offerView(priceMinor: number, x: ProductExtras) {
+  // A paid product with no valid price has no discount to show, and dividing
+  // by 0 would produce a nonsense percentage.
+  if (priceMinor <= 0) return null
   const sale = salePrice(priceMinor, x)
   if (sale == null) return null
   const pct = Math.round((1 - sale / priceMinor) * 100)
@@ -909,6 +918,9 @@ function productPublicView(p: ProductRow) {
     description: p.pubDescription ?? '',
     cover: p.pubCover,
     priceMinor: p.pubPriceMinor ?? 0,
+    // The live page always matches the published price, never an unpublished
+    // mode change the seller has not shipped yet.
+    paymentType: (p.pubPriceMinor ?? 0) === 0 ? 'free' : 'paid',
     currency: p.pubCurrency ?? 'gbp',
     ...(() => {
       const x = readExtras(p.pubExtras)
@@ -920,6 +932,7 @@ function productProblem(p: ProductRow): string | null {
   if (!p.title.trim()) return 'Add a title.'
   if (!CURRENCIES.has(p.currency)) return 'Choose a currency.'
   if (p.priceMinor < 0) return 'The price can’t be negative.'
+  if (paymentOf(p) === 'paid' && p.priceMinor <= 0) return 'Add a price above 0, or switch this product to free.'
   const bundle = readExtras(p.extras).bundle
   if (bundle.length === 1) return 'A bundle needs at least 2 products.'
   if (bundle.length >= 2) return null
@@ -1462,7 +1475,11 @@ export function sellerRouter() {
     await sql.tx(async (tx) => {
       for (const p of await q.products(s.id, tx)) {
         if (p.listed && !p.archived && !productProblem(p)) {
-          await tx.run(`UPDATE seller_product SET "pubExtras" = extras, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = "priceMinor", "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubSampleFileId" = "sampleFileId", "pubSampleName" = "sampleName", "pubAt" = ? WHERE id = ?`, t, p.id)
+          // A free product is always published at 0, whatever price an older
+          // draft still carries. A paid product was checked above, so its price
+          // is a complete, positive one here.
+          const publishPrice = paymentOf(p) === 'free' ? 0 : p.priceMinor
+          await tx.run(`UPDATE seller_product SET "pubExtras" = extras, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = ?, "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubSampleFileId" = "sampleFileId", "pubSampleName" = "sampleName", "pubAt" = ? WHERE id = ?`, publishPrice, t, p.id)
         } else {
           await tx.run(`UPDATE seller_product SET "pubAt" = NULL WHERE id = ?`, p.id)
         }
@@ -1482,6 +1499,17 @@ export function sellerRouter() {
       const n = Number(b.priceMinor)
       if (!Number.isInteger(n) || n < 0 || n > 99_999_99) return 'Price must be between 0 and 99,999.99.'
       out.priceMinor = n
+      // An older editor doesn't send a mode: the saved price is a complete
+      // price, so it is still safe to infer the mode from it here.
+      if (!('paymentType' in b)) out.paymentType = n === 0 ? 'free' : 'paid'
+    }
+    if ('paymentType' in b) {
+      const t = b.paymentType
+      if (t !== 'paid' && t !== 'free') return 'Unknown payment type.'
+      out.paymentType = t
+      // Free means free at checkout: the stored draft price follows the mode,
+      // not the other way round. A later explicit paid choice supplies a price.
+      if (t === 'free') out.priceMinor = 0
     }
     if ('currency' in b) {
       const c = String(b.currency).toLowerCase()
@@ -1516,9 +1544,13 @@ export function sellerRouter() {
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const count = (await q.products(s.id)).length
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
+    // No half-written price may create a FREE product. Only an explicit free
+    // mode (or an old client sending only a zero price) can start at zero.
+    const mode = fields.paymentType ?? (fields.priceMinor === 0 ? 'free' : 'paid')
+    if (mode === 'paid' && (fields.priceMinor ?? 900) <= 0) return void res.status(400).json({ error: 'A paid product needs a price above 0.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, mode, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -1535,7 +1567,11 @@ export function sellerRouter() {
     if (req.body?.revision !== p.revision && !(token && p.lastToken === token)) return void res.status(409).json({ error: 'Product changed elsewhere. Reload before saving; your edits are kept locally.' })
     if (fields.extras) fields.extras = await ownProductsOnly(s.id, p.id, await ownMediaOnly(s.id, fields.extras))
     const next = { ...p, ...fields, updatedAt: now() }
-    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1, "lastToken" = ? WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, token, next.id, p.revision)
+    // Defense in depth: the editor already refuses to save an unfinished paid
+    // price, but a direct API call must not be able to turn it into "free".
+    if (paymentOf(next) === 'paid' && next.priceMinor <= 0) return void res.status(400).json({ error: 'A paid product needs a price above 0. Switch it to free instead.' })
+    const mode = paymentOf(next)
+    const saved = await sql.run(`UPDATE seller_product SET title = ?, description = ?, cover = ?, "priceMinor" = ?, "paymentType" = ?, currency = ?, listed = ?, extras = ?, archived = ?, "updatedAt" = ?, revision = revision + 1, "lastToken" = ? WHERE id = ? AND revision = ?`, next.title, next.description, next.cover, next.priceMinor, mode, next.currency, next.listed, next.extras ?? null, next.archived ?? 0, next.updatedAt, token, next.id, p.revision)
     if (!saved.changes) return void res.status(409).json({ error: 'Product changed elsewhere. Your edits are kept locally.' })
     res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
@@ -1660,7 +1696,7 @@ export function sellerRouter() {
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "sampleFileId", "sampleName", "sampleSize", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, p.sampleFileId, p.sampleName, p.sampleSize, t, t)
+    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "sampleFileId", "sampleName", "sampleSize", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, paymentOf(p), p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, p.sampleFileId, p.sampleName, p.sampleSize, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 

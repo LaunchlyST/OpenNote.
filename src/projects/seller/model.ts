@@ -76,6 +76,15 @@ export interface Page {
   layout?: 'style2'
 }
 
+/**
+ * How a product is sold. This is a deliberate choice of the seller, not a
+ * consequence of the price field: a paid product whose price is still being
+ * typed (empty, "0", "0.") stays paid until the seller flips this selector.
+ * Older rows without the field fall back to the saved price (see
+ * `isFreeProduct`), which is the last valid price, never a half-typed one.
+ */
+export type PaymentType = 'paid' | 'free'
+
 /** What the storefront renderer needs to know about a product. */
 export interface ShopProduct {
   id: string
@@ -84,6 +93,8 @@ export interface ShopProduct {
   cover: string | null
   priceMinor: number
   currency: string
+  /** Explicit free/paid mode. Absent on older data; use `isFreeProduct`. */
+  paymentType?: PaymentType
   /** A running discount, worked out by the server (null when none is live). */
   offer?: { priceMinor: number; percent: number; badge: string; badgeColor: string; ends: string | null; savedMinor?: number; endsAt?: string | null; countdown?: boolean } | null
   cta?: { text: string; color: string }
@@ -599,6 +610,31 @@ export function formatPrice(minor: number, currency: string) {
   const sym = CURRENCIES.find((c) => c.code === currency)?.symbol ?? ''
   const v = minor / 100
   return `${sym}${v.toFixed(v % 1 ? 2 : 0)}`
+}
+
+/**
+ * Whether a product is free. The explicit payment mode always wins; only data
+ * saved before the field existed falls back to the stored price. The stored
+ * price is the last *valid* price, so a half-typed "0" never reaches this.
+ */
+export function isFreeProduct(p: { paymentType?: PaymentType | null; priceMinor: number }): boolean {
+  if (p.paymentType === 'free') return true
+  if (p.paymentType === 'paid') return false
+  return p.priceMinor === 0
+}
+
+/**
+ * The price field exactly as the seller typed it, in minor units, or null while
+ * it is not a price yet. The string is never rewritten while typing: "" , "0",
+ * "0.", "0.1" and "10" are all left alone, and only a complete number is saved.
+ */
+export function parsePriceInput(input: string): number | null {
+  const raw = input.trim()
+  if (!raw || !/^\d*(?:\.\d{0,2})?$/.test(raw)) return null
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return null
+  const minor = Math.round(n * 100)
+  return minor >= 0 && minor <= 99_999_99 ? minor : null
 }
 
 const RESERVED = new Set(['www', 'app', 'api', 'admin', 'mail', 'dashboard', 'help', 'blog', 'store', 'desknoty', 'support', 'signin', 'signup', 'login', 'logout', 'account', 'landing', 'design', 'video', 'pro', 'free', 'assets', 'fonts', 'icons', 'settings', 'projects', 'privacy', 'terms', 'pricing', 'legal', 'about', 'contact', 'static', 'favicon'])

@@ -3,7 +3,7 @@ import { Download, Star } from 'lucide-react'
 import { BuyRow, StorePage, storeStyle } from '../projects/seller/StorePage'
 import { ProductSheet } from '../projects/seller/ProductCard'
 import { Style2Page } from '../projects/seller/Style2'
-import { formatPrice, mediaUrl } from '../projects/seller/model'
+import { formatPrice, isFreeProduct, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
 import type { ClaimState, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
@@ -106,7 +106,7 @@ export default function PublicStore({ path }: { path: string }) {
       const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon)
       // Free (or otherwise already confirmed): download right here, no page change.
       // Only a paid product with a real price is remembered as owned: free ones stay email-only.
-      if (p.priceMinor > 0 && r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
+      if (!isFreeProduct(p) && r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
         rememberOwned(handle, p.id, r.orderUrl)
         setOwned((o) => ({ ...o, [p.id]: r.orderUrl! }))
         setChoosing(null)

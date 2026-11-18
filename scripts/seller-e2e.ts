@@ -387,6 +387,92 @@ try {
         check(`${tag}: no "changed elsewhere" notice after Unarchive`, (await page.getByText(/changed elsewhere/i).count()) === 0)
       }
 
+      // 7. A paid product stays paid while its price is being typed. Clearing it,
+      //    typing 0 / 0. / 0.10 / 10, switching products, autosaving, refreshing
+      //    and publishing must never turn it into a free product.
+      const guard = (await api('POST', '/api/seller/products', { title: 'Pricing guard', priceMinor: 2999, currency: 'gbp' }, C)).json.product
+      const guardFile = await fetch(`${BASE}/api/seller/products/${guard.id}/file`, { method: 'PUT', headers: { origin: BASE, cookie: C, 'content-type': 'application/zip', 'x-file-name': 'guard.zip' }, body: 'E2E' })
+      check(`${tag}: pricing guard product has a file so it can publish`, guardFile.status === 200)
+      const guardNow = async () => (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === guard.id)
+      const price = page.locator('input[aria-label="Price"]')
+      const freeSwitch = page.getByRole('switch', { name: 'Free product' })
+      const openGuard = async () => {
+        await page.getByText(/^Products \(/).first().click()
+        await page.getByRole('button', { name: /Pricing guard/ }).first().click()
+        await price.waitFor()
+      }
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await openGuard()
+      const initial = await guardNow()
+      check(`${tag}: a new paid product starts as paid`, initial?.paymentType === 'paid' && initial.priceMinor === 2999, JSON.stringify(initial && { mode: initial.paymentType, price: initial.priceMinor }))
+      check(`${tag}: the price field shows the saved price`, (await price.inputValue()) === '29.99', await price.inputValue())
+      check(`${tag}: the free switch starts off`, (await freeSwitch.getAttribute('aria-checked')) === 'false')
+
+      // Clearing the field is an unfinished edit, not a free product.
+      await price.fill('')
+      await page.waitForTimeout(1500)
+      const cleared = await guardNow()
+      check(`${tag}: clearing £29.99 keeps the input empty`, (await price.inputValue()) === '', await price.inputValue())
+      check(`${tag}: clearing £29.99 does not switch to FREE`, (await freeSwitch.getAttribute('aria-checked')) === 'false' && cleared?.paymentType === 'paid' && cleared.priceMinor === 2999, JSON.stringify(cleared && { mode: cleared.paymentType, price: cleared.priceMinor }))
+      check(`${tag}: clearing the price keeps focus in the input`, await price.evaluate((el: HTMLInputElement) => document.activeElement === el))
+      check(`${tag}: an empty paid price shows validation`, await page.getByText('Enter a price', { exact: true }).count() > 0)
+
+      // A zero/invalid paid price must not publish as free either.
+      await page.getByRole('button', { name: /Publish/ }).first().click()
+      await page.waitForTimeout(1200)
+      const blocked = await guardNow()
+      const liveBlocked = (await api('GET', `/api/store/${handle}`)).json.products ?? []
+      check(`${tag}: publishing with an empty paid price is blocked`, blocked?.paymentType === 'paid' && blocked.priceMinor === 2999 && !liveBlocked.some((p: { id: string }) => p.id === guard.id), JSON.stringify(blocked && { mode: blocked.paymentType, price: blocked.priceMinor }))
+
+      // Typing a price that starts with 0 must stay paid at every keystroke.
+      for (const [typed, savedPrice] of [['0', 2999], ['0.', 2999], ['0.1', 10], ['0.10', 10], ['10', 1000]] as Array<[string, number]>) {
+        await price.fill(typed)
+        await page.waitForTimeout(1500)
+        const during = await guardNow()
+        check(`${tag}: typing "${typed}" keeps the exact string`, (await price.inputValue()) === typed, await price.inputValue())
+        check(`${tag}: typing "${typed}" stays PAID`, (await freeSwitch.getAttribute('aria-checked')) === 'false' && during?.paymentType === 'paid' && during.priceMinor === savedPrice, JSON.stringify(during && { mode: during.paymentType, price: during.priceMinor }))
+      }
+
+      // Switching to another product and back keeps the typed value and mode.
+      await page.getByRole('button', { name: /Back to Products/ }).first().click()
+      await page.waitForTimeout(800)
+      await page.getByRole('button', { name: /Second product/ }).first().click()
+      await page.waitForTimeout(800)
+      check(`${tag}: a different product has its own paid mode`, (await page.getByRole('switch', { name: 'Free product' }).getAttribute('aria-checked')) === 'false')
+      await page.getByRole('button', { name: /Back to Products/ }).first().click()
+      await page.getByRole('button', { name: /Pricing guard/ }).first().click()
+      await price.waitFor()
+      // A completed autosave drops the exact keystroke string from recovery; a
+      // fresh editor may render the saved value as 10.00. The value and mode
+      // must survive, and it must never become the old price or free.
+      const switchedPrice = await price.inputValue()
+      check(`${tag}: switching products keeps the paid price and mode`, ['10', '10.00'].includes(switchedPrice) && (await freeSwitch.getAttribute('aria-checked')) === 'false', `${switchedPrice} / ${await freeSwitch.getAttribute('aria-checked')}`)
+
+      // A refresh rehydrates the editor from the server/recovery without a mode flip.
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await openGuard()
+      await page.waitForTimeout(800)
+      const guardAfterRefresh = await guardNow()
+      const refreshedPrice = await price.inputValue()
+      check(`${tag}: refreshing keeps the typed paid price`, ['10', '10.00'].includes(refreshedPrice) && (await freeSwitch.getAttribute('aria-checked')) === 'false', `${refreshedPrice} / ${await freeSwitch.getAttribute('aria-checked')}`)
+      check(`${tag}: refreshing keeps the server product PAID`, guardAfterRefresh?.paymentType === 'paid' && guardAfterRefresh.priceMinor === 1000, JSON.stringify(guardAfterRefresh && { mode: guardAfterRefresh.paymentType, price: guardAfterRefresh.priceMinor }))
+
+      // Publishing keeps the paid mode and the published price.
+      await page.getByRole('button', { name: /Publish/ }).first().click()
+      await page.waitForTimeout(2500)
+      const afterPublish = await guardNow()
+      const livePublished = ((await api('GET', `/api/store/${handle}`)).json.products ?? []).find((p: { id: string }) => p.id === guard.id)
+      check(`${tag}: publishing keeps the server product PAID`, afterPublish?.paymentType === 'paid' && afterPublish.priceMinor === 1000, JSON.stringify(afterPublish && { mode: afterPublish.paymentType, price: afterPublish.priceMinor }))
+      check(`${tag}: the live product is PAID at the new price`, livePublished?.paymentType === 'paid' && livePublished.priceMinor === 1000, JSON.stringify(livePublished && { mode: livePublished.paymentType, price: livePublished.priceMinor }))
+
+      // Only an intentional click on the selector may change the mode.
+      await freeSwitch.click()
+      await page.waitForTimeout(1800)
+      const afterFree = await guardNow()
+      check(`${tag}: the Free switch explicitly makes the product free`, (await freeSwitch.getAttribute('aria-checked')) === 'true' && afterFree?.paymentType === 'free' && afterFree.priceMinor === 0, JSON.stringify(afterFree && { mode: afterFree.paymentType, price: afterFree.priceMinor }))
+
       check(`${tag}: no page errors`, errors.length === 0, errors.join(' | '))
       check(`${tag}: no horizontal overflow`, !(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)))
       await page.screenshot({ path: join(tmp, `${name}-${viewport.label}.png`) })
