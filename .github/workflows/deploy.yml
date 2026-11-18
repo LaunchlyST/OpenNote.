@@ -1,7 +1,11 @@
 name: Deploy to GitHub Pages
 
 on:
-  # Publishing is an explicit manual action; pushing code must not deploy.
+  # Every commit that lands on the production branch is published: a change is
+  # not finished until it is live. `workflow_dispatch` stays available for a
+  # manual re-publish of the current commit.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -31,6 +35,9 @@ jobs:
         run: npm run build
         env:
           BASE_PATH: /
+          # Stamped into index.html and dist/version.json so the live site can
+          # prove which commit it is serving, and browsers can drop a cached build.
+          BUILD_ID: ${{ github.sha }}
           # The hosted API (Supabase Edge Function "api"). Paths are added by
           # the app (/api/...), so this ends at /functions/v1. A repository
           # variable VITE_API_BASE_URL overrides it. Public URL, not a secret.
@@ -59,3 +66,21 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Verify desknoty.com serves this commit
+        env:
+          WANT: ${{ github.sha }}
+        run: |
+          want="${WANT:0:12}"
+          for i in $(seq 1 30); do
+            got=$(curl -fsS --max-time 20 "https://desknoty.com/version.json?t=$(date +%s%N)" \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).build||""))}catch{}})')
+            if [ "$got" = "$want" ]; then
+              echo "Live build is $got (commit ${WANT:0:7})."
+              exit 0
+            fi
+            echo "attempt $i/30: live=$got want=$want"
+            sleep 10
+          done
+          echo "::error::desknoty.com never reported build $want"
+          exit 1
