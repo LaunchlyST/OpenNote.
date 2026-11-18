@@ -683,6 +683,14 @@ function Studio({
     pendingAdd.current = { kind: 'slide', blockId, slideIndex: slides.length }
     requestAdd({ kind: 'slide', blockId, slideIndex: slides.length })
   }
+  /** requestAddSlot, addressed by block id — the phone preview only knows the block. */
+  const requestAddSlotForBlock = (blockId: string) => {
+    const pageIndex = storePages(page).findIndex((pg) => pg.blocks.some((b) => b.id === blockId))
+    if (pageIndex < 0) return
+    const blockIndex = blocksOf(page, pageIndex).findIndex((b) => b.id === blockId)
+    if (blockIndex < 0) return
+    requestAddSlot(pageIndex, blockIndex)
+  }
   const removePlacement = (pageIndex: number, blockId: string, slideIndex: number) => {
     const blocks = blocksOf(page, pageIndex)
     const bi = blocks.findIndex((b) => b.id === blockId)
@@ -1043,6 +1051,10 @@ function Studio({
             onPreview={(id, value) => setPartPreview({ id, ...value })}
             onAddSlot={requestAddSlot}
             onRemoveSlide={removePlacement}
+            onPlaceNew={(blockId, slideIndex, productId) => {
+              pendingAdd.current = { kind: 'slide', blockId, slideIndex }
+              onPickProduct(productId)
+            }}
           />
         )}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -1078,7 +1090,8 @@ function Studio({
             className="ss-screen ss-slides"
             onPointerDown={(e) => {
               // swipe the page inside the phone: left for Style 2, right back to Style 1
-              if (e.button !== 0 || (e.target as HTMLElement).closest('.sp-grip, input, textarea, select')) return
+              // A product carousel owns its own horizontal drag, so leave it alone.
+              if (e.button !== 0 || (e.target as HTMLElement).closest('.sp-grip, .sp-track, .sp-carousel, .sp-car-nav, .sp-slide-empty, input, textarea, select')) return
               const scr = e.currentTarget
               const track = scr.querySelector<HTMLElement>('.ss-track')!
               const x0 = e.clientX, y0 = e.clientY
@@ -1112,7 +1125,7 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={tab === 'page' ? (id) => openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : undefined} onAddSlideProduct={tab === 'page' ? (blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex }) : undefined} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={(id) => tab === 'page' ? openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : requestAddSlotForBlock(id)} onAddSlideProduct={(blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex })} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
@@ -2031,7 +2044,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onRemoveSlide }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onRemoveSlide, onPlaceNew }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   useEffect(() => { if (open) window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60) }, [open])
@@ -2041,7 +2054,17 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
       await flushSellerEdits()
       const r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
       setStore(r.store)
-      setOpen(r.product.id)
+      // A product on its own is invisible on the store. Put it straight into the
+      // next free slide of the first product block, so it shows in the phone at once.
+      const pagesNow = storePages(r.store.draft)
+      const blockWithRoom = (pagesNow[0]?.blocks ?? [])
+        .filter((b) => b.type === 'featured' || b.type === 'grid')
+        .find((b) => slidesOf(b).length < 3)
+      if (blockWithRoom && onPlaceNew) {
+        onPlaceNew(blockWithRoom.id, slidesOf(blockWithRoom).length, r.product.id)
+      } else {
+        setOpen(r.product.id)
+      }
     } catch (e) {
       setErr((e as Error).message)
     }
