@@ -144,7 +144,11 @@ try {
 
       // 3b. Clicking the product in the phone preview opens that product's editing page.
       const cur = (await api('GET', '/api/seller/store', undefined, C)).json.store
-      const feat = { id: 'blk_e2e_featured', type: 'featured', hidden: false, data: { productId: prod.id, note: '', slides: [{ kind: 'digital', productId: prod.id }] } }
+      // A second product fills slide 2, which leaves slide 3 as the empty Product 3
+      // slot. A third product exists ready to be picked into that slot.
+      const prod2 = (await api('POST', '/api/seller/products', { title: 'Second product', priceMinor: 600, currency: 'gbp' }, C)).json.product
+      const prod3 = (await api('POST', '/api/seller/products', { title: 'Third product', priceMinor: 700, currency: 'gbp' }, C)).json.product
+      const feat = { id: 'blk_e2e_featured', type: 'featured', hidden: false, data: { productId: prod.id, note: '', slides: [{ kind: 'digital', productId: prod.id }, { kind: 'digital', productId: prod2.id }] } }
       const blocks = cur.draft.blocks.filter((b: { id: string }) => b.id !== feat.id)
       const foot = blocks.findIndex((b: { type: string }) => b.type === 'footer')
       blocks.splice(foot < 0 ? blocks.length : foot, 0, feat)
@@ -184,7 +188,75 @@ try {
         check(`${tag}: Back to Products returns to the list`, backToList, 'list did not come back')
       }
 
-      // 3c. The Add block popup belongs to the Add block button only. Add Product
+      // 3c. The product block is a three-slot carousel: the two products, then the
+      //     empty Product 3 slot. The dots follow the real slides, so there are
+      //     three of them and the third one reaches the empty slot.
+      await page.getByText(/^Page$/).first().click()
+      await page.waitForTimeout(1500)
+      const dots = page.locator('.ss-slide .sp-dot')
+      const dotCount = await dots.count()
+      check(`${tag}: the carousel shows three dots for its three slots`, dotCount === 3, `dots=${dotCount}`)
+      if (dotCount === 3) {
+        await dots.nth(2).click({ force: true })
+        await page.waitForTimeout(900)
+        const thirdSelected = (await dots.nth(2).getAttribute('aria-selected')) === 'true'
+        const emptyInThird = await page.locator('.ss-slide .sp-slide').nth(2).locator('.sp-slide-empty').count()
+        check(`${tag}: the third dot selects the empty Product 3 slide`, thirdSelected && emptyInThird === 1, `selected=${thirdSelected} empty=${emptyInThird}`)
+        await dots.nth(0).click({ force: true })
+        await page.waitForTimeout(600)
+      }
+
+      // 3d. Product 3 is added through the existing picker into its own slide, saved,
+      //     opened in its own editor, and can be removed again.
+      await page.getByText(/^Products \(/).first().click()
+      await page.waitForTimeout(1200)
+      const blockGrid = page.locator('section.sb-block').first().locator('.pg-grid')
+      const emptySlot = blockGrid.getByRole('button', { name: 'Add product' })
+      const emptySlots = await emptySlot.count()
+      check(`${tag}: the Products tab offers the empty Product 3 slot`, emptySlots === 1, `slots=${emptySlots}`)
+      if (emptySlots === 1) {
+        await emptySlot.first().click()
+        await page.waitForTimeout(900)
+        const pickerOpen = await page.getByRole('dialog', { name: 'Add a product' }).count()
+        const libraryOpen = await page.getByRole('dialog', { name: 'Add a block' }).count()
+        check(`${tag}: the empty third slot opens the product picker, not the block library`, pickerOpen === 1 && libraryOpen === 0, `picker=${pickerOpen} library=${libraryOpen}`)
+
+        await page.getByRole('dialog', { name: 'Add a product' }).getByRole('button', { name: /Third product/ }).first().click()
+        await page.waitForTimeout(2200)
+        const blocksNow = (await api('GET', '/api/seller/store', undefined, C)).json.store.draft.blocks
+        const savedSlides: string[] = ((blocksNow.find((b: { id: string }) => b.id === feat.id)?.data?.slides ?? []) as { productId: string }[]).map((s) => s.productId)
+        check(
+          `${tag}: Product 3 is saved as its own third slide`,
+          savedSlides.length === 3 && savedSlides[2] === prod3.id && new Set(savedSlides).size === 3,
+          `slides=${savedSlides.length} ids=${savedSlides.join(',')}`,
+        )
+
+        const editorForThird = (await page.locator('.pg-back').count()) === 1
+        check(`${tag}: picking Product 3 opens its editor`, editorForThird, `editor=${editorForThird}`)
+
+        await page.getByRole('button', { name: /Back to Products/ }).first().click()
+        await page.waitForTimeout(1200)
+        const thirdCard = page.locator('section.sb-block').first().getByRole('button', { name: /Edit Third product/ })
+        const thirdCards = await thirdCard.count()
+        check(`${tag}: Product 3 has its own card in the list`, thirdCards === 1, `cards=${thirdCards}`)
+        if (thirdCards === 1) {
+          await thirdCard.first().click()
+          await page.waitForTimeout(1200)
+          const thirdTitle = await title.inputValue().catch(() => '')
+          check(`${tag}: Product 3's card opens Product 3's editor`, thirdTitle === 'Third product', thirdTitle)
+          await page.getByRole('button', { name: /Back to Products/ }).first().click()
+          await page.waitForTimeout(1200)
+        }
+        const removes = page.locator('section.sb-block').first().getByRole('button', { name: 'Remove' })
+        const removeCount = await removes.count()
+        await removes.nth(removeCount - 1).click()
+        await page.waitForTimeout(2200)
+        const afterRemove = (await api('GET', '/api/seller/store', undefined, C)).json.store.draft.blocks
+        const leftSlides = (afterRemove.find((b: { id: string }) => b.id === feat.id)?.data?.slides ?? []) as unknown[]
+        check(`${tag}: Product 3 can be removed again`, leftSlides.length === 2, `slides=${leftSlides.length}`)
+      }
+
+      // 3e. The Add block popup belongs to the Add block button only. Add Product
       //     and product cards must never open it.
       await page.getByText(/^Products \(/).first().click()
       await page.waitForTimeout(800)

@@ -411,9 +411,13 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       const slides = slidesOf(block)
       const usable = slides.filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : Boolean(safeExternalUrl(s.affiliate.url))))
       const shown = p.live ? usable : slides
-      // In the editor, after a populated slide, offer one empty slide: swiping
-      // next then shows the "Add product slide" action the owner fills.
-      const editorShown = !p.live && shown.length > 0 && shown.length < 3 && shown[shown.length - 1] && (shown[shown.length - 1].kind === 'digital' ? Boolean(shown[shown.length - 1].productId) : Boolean(safeExternalUrl(shown[shown.length - 1].affiliate.url))) ? [...shown, { ...newSlide('digital'), id: `sld_${block.id}_add` }] : shown
+      // In the editor the block always offers the full three slots: the populated
+      // slides, then one empty slide per free slot (Product 3 included), each with
+      // the "Add product" action. The placeholders only exist while editing, so
+      // the public store still lists the populated slides only.
+      const editorShown = !p.live && shown.length > 0
+        ? [...shown, ...Array.from({ length: Math.max(0, 3 - shown.length) }, (_, i) => ({ ...newSlide('digital'), id: `sld_${block.id}_add_${i}` }))]
+        : shown
       const list = editorShown.length ? editorShown : shown
       if (!list.length) return <EmptyProduct block={block} {...p} />
       if (list.length === 1) {

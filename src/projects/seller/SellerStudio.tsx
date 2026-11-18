@@ -1053,7 +1053,7 @@ function Studio({
             products={store.products}
             onClose={() => { setPickReq(null); pendingAdd.current = null }}
             onPickExisting={(productId) => { setPickReq(null); onPickProduct(productId) }}
-            createProduct={(f) => createProduct(f).then(() => undefined)}
+            createProduct={(f) => createProduct(f).then((id) => { setPickReq(null); onPickProduct(id) })}
           />
         )}
         {tab === 'products' && (
@@ -1066,6 +1066,7 @@ function Studio({
             onFocus={setEditPart}
             onPreview={(id, value) => setPartPreview({ id, ...value })}
             onAddSlot={requestAddSlot}
+            onAddSlideAt={(blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex })}
             onRemoveSlide={removePlacement}
             onPlaceNew={(blockId, slideIndex, productId) => {
               pendingAdd.current = { kind: 'slide', blockId, slideIndex }
@@ -2101,7 +2102,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onRemoveSlide, onPlaceNew }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onAddSlideAt, onRemoveSlide, onPlaceNew }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onAddSlideAt?: (blockId: string, slideIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   // Switching between the list and a product is a view change, so the panel
@@ -2223,16 +2224,22 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
                     </div>
                   )
                 }
-                if (si > slides.length) return null
-                if (si === slides.length && slides.length < 3) {
-                  return (
-                    <button key={`empty-${block.id}-${si}`} type="button" className="pg-card" style={{ display: 'grid', placeItems: 'center', minHeight: 120, border: '1.5px dashed #d6d4cf', background: '#fafaf8' }} onClick={() => onAddSlot?.(0, bi)} aria-label="Add product">
-                      <span style={{ fontSize: 22, opacity: 0.5 }}>+</span>
-                      <span style={{ fontSize: 12, opacity: 0.6 }}>Add product</span>
-                    </button>
-                  )
-                }
-                return null
+                // An empty slot keeps its own "Add product" placeholder, so the
+                // block always offers its three slides (Product 3 included).
+                if (slides.length === 0 && si > 0) return null
+                return (
+                  <button
+                    key={`empty-${block.id}-${si}`}
+                    type="button"
+                    className="pg-card"
+                    style={{ display: 'grid', placeItems: 'center', minHeight: 120, border: '1.5px dashed #d6d4cf', background: '#fafaf8' }}
+                    onClick={() => (onAddSlideAt ? onAddSlideAt(block.id, si) : onAddSlot?.(0, bi))}
+                    aria-label="Add product"
+                  >
+                    <span style={{ fontSize: 22, opacity: 0.5 }}>+</span>
+                    <span style={{ fontSize: 12, opacity: 0.6 }}>Add product</span>
+                  </button>
+                )
               })}
             </div>
           </section>
