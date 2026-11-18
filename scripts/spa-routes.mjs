@@ -7,12 +7,16 @@
 //   index.html, so they answer HTTP 200 (link previews, search engines,
 //   in-app browsers). Store pages come from the API's public directory;
 //   if the API is unreachable the build still succeeds with the 404 fallback.
-import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 const dist = process.argv[2] ?? 'dist'
 const index = join(dist, 'index.html')
 if (!existsSync(index)) throw new Error(`${index} not found; run the build first`)
+// GitHub Pages serves static files. Apply the browser policy to every route copy.
+const shell = readFileSync(index, 'utf8')
+const policy = `<meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none'">`
+if (!shell.includes(policy)) writeFileSync(index, shell.replace('<head>', '<head>' + policy))
 const place = (route) => {
   const target = join(dist, route.replace(/^\/+/, ''), 'index.html')
   if (existsSync(target)) return

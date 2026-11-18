@@ -59,9 +59,14 @@ app.set('trust proxy', 1)
 // (for example a static site on GitHub Pages), the browser calls this server
 // from another origin. Allow those origins and their credentials, and answer
 // preflight requests, so the httpOnly session cookie can travel with them.
-const allowedOrigins = new Set([env.baseURL, ...env.trustedOrigins].map((o) => o.replace(/\/+$/, '')))
+const allowedOrigins = new Set([new URL(env.baseURL).origin, ...env.trustedOrigins].map((o) => o.replace(/\/+$/, '')))
 app.use((req, res, next) => {
   const origin = typeof req.headers.origin === 'string' ? req.headers.origin.replace(/\/+$/, '') : ''
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  if (origin && !allowedOrigins.has(origin) && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+    res.status(403).json({ error: 'Untrusted request origin.' })
+    return
+  }
   if (origin && allowedOrigins.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Vary', 'Origin')
