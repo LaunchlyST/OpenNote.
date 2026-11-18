@@ -37,6 +37,7 @@ import {
   Trash2,
   Tag,
   ChevronDown,
+  ChevronLeft,
   AtSign,
   Globe,
   Upload,
@@ -494,6 +495,8 @@ function Studio({
   const [tab, setTab] = useState<Tab>('page')
   const [picked, setPicked] = useState<string | null>(null)
   const [openProduct, setOpenProduct] = useState<string | null>(null)
+  // Leaving the Products tab returns it to the plain product list next time.
+  useEffect(() => { if (tab !== 'products') setOpenProduct(null) }, [tab])
   /** Click-to-edit: which product card part is open in the Page tab. */
   const [editPart, setEditPart] = useState<{ productId: string; part: CardPart } | null>(null)
   /** Unsaved change from that panel, so the phone shows it before the save lands. */
@@ -2047,7 +2050,16 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onRemoveSlide, onPlaceNew }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
-  useEffect(() => { if (open) window.setTimeout(() => panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 60) }, [open])
+  // Switching between the list and a product is a view change, so the panel
+  // starts at the top instead of staying where the list was scrolled to.
+  useEffect(() => {
+    if (!open) return
+    let node: HTMLElement | null = panel.current?.parentElement ?? null
+    while (node) {
+      if (node.scrollHeight > node.clientHeight + 1) { node.scrollTop = 0; break }
+      node = node.parentElement
+    }
+  }, [open])
 
   const add = async () => {
     try {
@@ -2070,6 +2082,43 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
     }
   }
   const choose = (id: string | null) => { onFocus?.(null); void flushSellerEdits().then(() => setOpen(id)).catch((e: Error) => setErr(e.message)) }
+
+  // Two mutually exclusive views: the product list, or one product's full editor.
+  // Never both — the editor replaces the list instead of sitting under it.
+  const selected = open ? store.products.find((p) => p.id === open) ?? null : null
+  if (selected) {
+    return (
+      <div className="ss-stack" ref={panel}>
+        <div className="pg-bar">
+          <button type="button" className="pg-back" onClick={() => choose(null)}>
+            <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to Products
+          </button>
+          <span className="pg-state">{selected.archived ? 'Archived' : selected.published ? 'Live' : 'Draft'}</span>
+        </div>
+        {focus?.productId === selected.id ? (
+          <ProductPartPanel
+            key={`${selected.id}.${focus.part}`}
+            product={selected}
+            store={store}
+            setStore={setStore}
+            part={focus.part}
+            onPart={(part) => onFocus?.({ productId: selected.id, part })}
+            onClose={() => choose(null)}
+            onFull={() => onFocus?.(null)}
+            onPreview={(value) => onPreview?.(selected.id, value)}
+          />
+        ) : (
+          <ProductForm
+            product={selected}
+            store={store}
+            setStore={setStore}
+            onDeleted={() => setOpen(null)}
+            onEditParts={() => onFocus?.({ productId: selected.id, part: 'card' })}
+          />
+        )}
+      </div>
+    )
+  }
 
   const pages = storePages(store.draft)
   const selIdx = 0
@@ -2132,26 +2181,6 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
                 return null
               })}
             </div>
-            {open && block && slides.some((sl) => sl.kind == 'digital' && sl.productId === open) && (
-              <div ref={panel} className="pg-panel" role="region" aria-label={`Edit ${store.products.find((p) => p.id === open)?.title?.trim() || 'product'}`} style={{ marginTop: 8 }}>
-                <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
-                {focus?.productId === open ? (
-                  <ProductPartPanel
-                    key={`${open}.${focus.part}`}
-                    product={store.products.find((p) => p.id === open)!}
-                    store={store}
-                    setStore={setStore}
-                    part={focus.part}
-                    onPart={(part) => onFocus?.({ productId: open, part })}
-                    onClose={() => choose(null)}
-                    onFull={() => onFocus?.(null)}
-                    onPreview={(value) => onPreview?.(open, value)}
-                  />
-                ) : (
-                  <ProductForm product={store.products.find((p) => p.id === open)!} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={() => onFocus?.({ productId: open, part: 'card' })} />
-                )}
-              </div>
-            )}
           </section>
         )
       })}
@@ -2190,27 +2219,6 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
             ))}
           </div>
         </details>
-      )}
-
-      {open && !productBlocks.some((b) => slidesOf(b).some((sl) => sl.kind == 'digital' && sl.productId === open)) && store.products.find((p) => p.id === open) && (
-        <div ref={panel} className="pg-panel" role="region" aria-label={`Edit ${store.products.find((p) => p.id === open)?.title?.trim() || 'product'}`}>
-          <button type="button" className="pg-x" aria-label="Close editor" onClick={() => choose(null)}><CloseIcon className="h-4 w-4" /></button>
-          {focus?.productId === open ? (
-            <ProductPartPanel
-              key={`${open}.${focus.part}`}
-              product={store.products.find((p) => p.id === open)!}
-              store={store}
-              setStore={setStore}
-              part={focus.part}
-              onPart={(part) => onFocus?.({ productId: open, part })}
-              onClose={() => choose(null)}
-              onFull={() => onFocus?.(null)}
-              onPreview={(value) => onPreview?.(open, value)}
-            />
-          ) : (
-            <ProductForm product={store.products.find((p) => p.id === open)!} store={store} setStore={setStore} onDeleted={() => setOpen(null)} onEditParts={() => onFocus?.({ productId: open, part: 'card' })} />
-          )}
-        </div>
       )}
     </div>
   )

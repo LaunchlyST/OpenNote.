@@ -158,7 +158,7 @@ try {
       if (cardCount) await card.click({ force: true })
       await page.waitForTimeout(1500)
       const productsTab = await page.getByRole('tab', { name: /^Products/ }).getAttribute('aria-selected')
-      const editorOpen = (await page.locator('.pg-panel').count()) > 0
+      const editorOpen = (await page.locator('.pg-back').count()) > 0
       check(`${tag}: clicking the product in the preview opens its editing page`, cardCount > 0 && productsTab === 'true' && editorOpen, `card=${cardCount} tab=${productsTab} editor=${editorOpen}`)
 
       // Clicking a product card (or any of its elements) opens its full product
@@ -170,7 +170,16 @@ try {
       if (hadTitle) {
         await titleEl.click({ force: true })
         await page.waitForTimeout(1500)
-        check(`${tag}: clicking a product opens its full editor`, (await page.locator('.pg-panel').count()) > 0, 'no product editor after clicking the title')
+        const editorOpen = (await page.locator('.pg-back').count()) > 0
+        // The editor replaces the list: no product cards, no Add Product button.
+        const listGone = (await page.locator('.pg-addbtn').count()) === 0
+        check(`${tag}: clicking a product opens its full editor`, editorOpen && listGone, `editor=${editorOpen} listGone=${listGone}`)
+
+        // Back returns to the untouched product list.
+        await page.getByRole('button', { name: /Back to Products/ }).first().click()
+        await page.waitForTimeout(1200)
+        const backToList = (await page.locator('.pg-addbtn').count()) === 1 && (await page.locator('.pg-back').count()) === 0
+        check(`${tag}: Back to Products returns to the list`, backToList, 'list did not come back')
       }
 
       // 4. A refresh in the middle of an edit: the edit survives and saving keeps working.
