@@ -16,6 +16,7 @@ import { extname, join, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { createRequire } from 'node:module'
 import { startFakeStripe } from './fake-stripe.ts'
+import { AMAZON_LINK_ERROR } from '../shared/amazon-link.ts'
 
 const dist = resolve('dist')
 if (!existsSync(join(dist, 'index.html'))) throw new Error('Build first: npm run build')
@@ -99,7 +100,11 @@ try {
       const prod = (await api('POST', '/api/seller/products', { title: 'First', priceMinor: 500, currency: 'gbp' }, C)).json.product
       const project = (await api('POST', '/api/projects', { name: 'Studio', workspace: 'pro' }, C)).json.project
 
-      const ctx = await browser.newContext({ viewport })
+      const mobileTouch = name === 'chromium' && viewport.label === 'mobile'
+      const ctx = await browser.newContext({
+        viewport,
+        ...(mobileTouch ? { hasTouch: true, isMobile: true } : {}),
+      })
       await ctx.addCookies(C.split('; ').filter(Boolean).map((c) => ({ name: c.split('=')[0], value: c.slice(c.indexOf('=') + 1), url: BASE })))
       await ctx.route(`${BASE}/**`, (route) => {
         const path = new URL(route.request().url()).pathname
@@ -181,7 +186,19 @@ try {
         const notBlockPopup = (await page.getByRole('dialog', { name: 'Add a block' }).count()) === 0
         check(`${tag}: clicking a product opens its full editor`, editorOpen && listGone && notBlockPopup, `editor=${editorOpen} listGone=${listGone} popup=${!notBlockPopup}`)
 
-        // Back returns to the untouched product list.
+        // Back from a product opened in the carousel returns to that carousel,
+        // with the block editor and the product list still intact.
+        await page.getByRole('button', { name: /Back to carousel/ }).first().click()
+        await page.waitForTimeout(1200)
+        const backToCarousel = (await page.locator('.bl-inline').count()) > 0 && (await page.locator('.pg-back').count()) === 0
+        check(`${tag}: Back to carousel restores the block editor`, backToCarousel, 'block editor did not come back')
+
+        // Leaving the block editor and opening a product from the Products tab
+        // still shows the ordinary "Back to Products" link.
+        await page.getByRole('tab', { name: /^Products/ }).first().click()
+        await page.waitForTimeout(1000)
+        await page.getByRole('button', { name: /Typed then publish/ }).first().click()
+        await page.waitForTimeout(1000)
         await page.getByRole('button', { name: /Back to Products/ }).first().click()
         await page.waitForTimeout(1200)
         const backToList = (await page.locator('.pg-addbtn').count()) === 1 && (await page.locator('.pg-back').count()) === 0
@@ -193,15 +210,62 @@ try {
       //     three of them and the third one reaches the empty slot.
       await page.getByText(/^Page$/).first().click()
       await page.waitForTimeout(1500)
+      // The slide tabs live in the block editor. Depending on what was open
+      // before, the block row click can either open or toggle it shut, so click
+      // until the tabs are actually present.
+      const blockMain = page.locator(`[data-block="${feat.id}"] .bl-main`)
+      for (let attempt = 0; attempt < 3 && (await page.getByRole('tab', { name: 'Slide 1' }).count()) === 0; attempt++) {
+        if (await blockMain.count()) await blockMain.click()
+        await page.waitForTimeout(600)
+      }
       const dots = page.locator('.ss-slide .sp-dot')
       const dotCount = await dots.count()
       check(`${tag}: the carousel shows three dots for its three slots`, dotCount === 3, `dots=${dotCount}`)
+      const slideTab = (n: number) => page.getByRole('tab', { name: `Slide ${n}` })
+      const swipeTo = async (i: number) => {
+        const track = page.locator('.ss-slide .sp-track').first()
+        // A touch swipe on mobile; a scroll gesture on desktop. Both go through
+        // the real scroll handler, with the product editor still open.
+        if (mobileTouch) {
+          const box = await track.boundingBox()
+          if (box) {
+            const y = Math.round(box.y + box.height / 2)
+            const from = Math.round(box.x + box.width * (i > 0 ? 0.8 : 0.2))
+            const to = Math.round(box.x + box.width * (i > 0 ? 0.2 : 0.8))
+            const cdp = await ctx.newCDPSession(page)
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: from, y }] })
+            for (let step = 1; step <= 6; step++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: Math.round(from + (to - from) * step / 6), y }] })
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+            await cdp.detach()
+            await page.waitForTimeout(500)
+            return
+          }
+        }
+        await track.evaluate((el, index) => { const t = el as HTMLElement; t.scrollLeft = index * t.clientWidth }, i)
+        await page.waitForTimeout(500)
+      }
       if (dotCount === 3) {
+        // The third preview slot is a placeholder until a real third slide is
+        // added: the editor shows "Empty slide" but has no third tab yet.
         await dots.nth(2).click({ force: true })
         await page.waitForTimeout(900)
         const thirdSelected = (await dots.nth(2).getAttribute('aria-selected')) === 'true'
         const emptyInThird = await page.locator('.ss-slide .sp-slide').nth(2).locator('.sp-slide-empty').count()
+        const editorShowsEmpty = (await page.getByText('Empty slide', { exact: true }).count()) > 0
         check(`${tag}: the third dot selects the empty Product 3 slide`, thirdSelected && emptyInThird === 1, `selected=${thirdSelected} empty=${emptyInThird}`)
+        check(`${tag}: the slide editor follows the active empty slide`, editorShowsEmpty, `editor=${editorShowsEmpty}`)
+        await dots.nth(0).click({ force: true })
+        await page.waitForTimeout(600)
+
+        // Arrows and a real swipe must move the preview AND the open editor.
+        await page.getByRole('button', { name: 'Next product' }).first().click({ force: true })
+        await page.waitForTimeout(700)
+        check(`${tag}: the Next arrow moves the carousel and the editor together`, (await dots.nth(1).getAttribute('aria-selected')) === 'true' && (await slideTab(2).getAttribute('aria-selected')) === 'true')
+        await swipeTo(2)
+        check(`${tag}: swiping with the editor open reaches the empty slide`, (await dots.nth(2).getAttribute('aria-selected')) === 'true' && (await page.getByText('Empty slide', { exact: true }).count()) > 0)
+        await page.getByRole('button', { name: 'Previous product' }).first().click({ force: true })
+        await page.waitForTimeout(700)
+        check(`${tag}: the Previous arrow returns to the populated slide`, (await dots.nth(1).getAttribute('aria-selected')) === 'true' && (await slideTab(2).getAttribute('aria-selected')) === 'true')
         await dots.nth(0).click({ force: true })
         await page.waitForTimeout(600)
       }
@@ -231,22 +295,49 @@ try {
           `slides=${savedSlides.length} ids=${savedSlides.join(',')}`,
         )
 
-        const editorForThird = (await page.locator('.pg-back').count()) === 1
-        check(`${tag}: picking Product 3 opens its editor`, editorForThird, `editor=${editorForThird}`)
+        const slideEditorStillOpen = (await page.locator('.bl-inline').count()) > 0
+        const thirdSelected = page.getByRole('tab', { name: 'Slide 3' }).getAttribute('aria-selected')
+        const thirdProductSelected = await page.locator('select[aria-label="Product for slide 3"]').inputValue().catch(() => '')
+        check(
+          `${tag}: picking Product 3 fills its slide and keeps the block editor open`,
+          slideEditorStillOpen && (await thirdSelected) === 'true' && thirdProductSelected === prod3.id,
+          `editor=${slideEditorStillOpen} slide=${await thirdSelected} product=${thirdProductSelected}`,
+        )
 
-        await page.getByRole('button', { name: /Back to Products/ }).first().click()
+        // "Edit this product" opens the third product's full editor and returns
+        // to the same slide rather than dropping the owner in the product list.
+        await page.getByRole('button', { name: 'Edit this product' }).first().click()
         await page.waitForTimeout(1200)
-        const thirdCard = page.locator('section.sb-block').first().getByRole('button', { name: /Edit Third product/ })
-        const thirdCards = await thirdCard.count()
-        check(`${tag}: Product 3 has its own card in the list`, thirdCards === 1, `cards=${thirdCards}`)
-        if (thirdCards === 1) {
-          await thirdCard.first().click()
-          await page.waitForTimeout(1200)
-          const thirdTitle = await title.inputValue().catch(() => '')
-          check(`${tag}: Product 3's card opens Product 3's editor`, thirdTitle === 'Third product', thirdTitle)
-          await page.getByRole('button', { name: /Back to Products/ }).first().click()
-          await page.waitForTimeout(1200)
+        const fullEditorTitle = await title.inputValue().catch(() => '')
+        const backToSlides = await page.getByRole('button', { name: /Back to carousel/ }).count()
+        check(
+          `${tag}: Edit this product opens the active product's full editor`,
+          fullEditorTitle === 'Third product' && backToSlides === 1,
+          `title=${fullEditorTitle} back=${backToSlides}`,
+        )
+        await page.getByRole('button', { name: /Back to carousel/ }).first().click()
+        await page.waitForTimeout(1200)
+        const returnedSlide = page.getByRole('tab', { name: 'Slide 3' }).getAttribute('aria-selected')
+        check(`${tag}: Back to carousel preserves the active slide`, (await returnedSlide) === 'true', `slide=${await returnedSlide}`)
+
+        // "+ Add product slide" creates a fourth, empty slide and selects it.
+        const addFourth = page.getByRole('button', { name: '+ Add product slide' })
+        if ((await addFourth.count()) === 1) {
+          await addFourth.click()
+          await page.waitForTimeout(1800)
+          const fourthSelected = (await page.getByRole('tab', { name: 'Slide 4' }).getAttribute('aria-selected')) === 'true'
+          // A real empty slide shows a product picker (not the preview-only
+          // "Empty slide" placeholder), with no product chosen yet.
+          const fourthEmpty = (await page.locator('select[aria-label="Product for slide 4"]').inputValue().catch(() => 'missing')) === ''
+          const fourDots = (await page.locator('.ss-slide .sp-dot').count()) === 4
+          check(`${tag}: + Add product slide creates and selects an empty fourth slide`, fourthSelected && fourthEmpty && fourDots, `selected=${fourthSelected} empty=${fourthEmpty} dots=${fourDots}`)
+          // Remove that empty slide again so the next check sees three products.
+          await page.getByRole('button', { name: 'Remove slide 4' }).first().click()
+          await page.waitForTimeout(1600)
+          check(`${tag}: an empty slide can be removed independently`, (await page.locator('.ss-slide .sp-dot').count()) === 3)
         }
+        await page.getByRole('tab', { name: /^Products/ }).first().click()
+        await page.waitForTimeout(1000)
         const removes = page.locator('section.sb-block').first().getByRole('button', { name: 'Remove' })
         const removeCount = await removes.count()
         await removes.nth(removeCount - 1).click()
@@ -295,6 +386,144 @@ try {
         blocksAfterImages > blocksAfter && (await page.getByRole('dialog', { name: 'Add a block' }).count()) === 0,
         `before=${blocksAfter} after=${blocksAfterImages}`,
       )
+
+      // 3f. The type selector owns the whole product editor: irrelevant fields
+      // disappear, shared fields survive, and the saved type follows the choice.
+      const typeProduct = (await api('POST', '/api/seller/products', { title: 'Editor type test', priceMinor: 500, currency: 'gbp' }, C)).json.product
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await page.getByText(/^Products \(/).first().click()
+      await page.getByRole('button', { name: /Editor type test/ }).first().click()
+      const normalRadio = page.getByRole('radio', { name: /Normal Product/ })
+      const affiliateRadio = page.getByRole('radio', { name: /Affiliate Product/ })
+      const categoryInput = page.getByLabel('Category')
+      const amazonInput = page.getByRole('textbox', { name: 'Amazon product URL' })
+      check(`${tag}: a new product starts as a Normal Product`, (await normalRadio.getAttribute('aria-checked')) === 'true' && (await page.locator('input[aria-label="Price"]').count()) === 1 && (await page.getByText('Digital delivery', { exact: true }).count()) === 1)
+      check(`${tag}: the Normal editor hides Amazon fields`, (await amazonInput.count()) === 0)
+      await categoryInput.fill('Tech')
+      await affiliateRadio.click()
+      await page.waitForTimeout(500)
+      check(`${tag}: switching to Affiliate hides price, payment and file fields`, (await affiliateRadio.getAttribute('aria-checked')) === 'true' && (await page.locator('input[aria-label="Price"]').count()) === 0 && (await page.getByText('Digital delivery', { exact: true }).count()) === 0 && (await page.getByText('Checkout', { exact: true }).count()) === 0)
+      const ctaChips = page.locator('.pe-chips button')
+      check(`${tag}: the Affiliate editor shows the Amazon defaults`, (await amazonInput.count()) === 1 && (await ctaChips.filter({ hasText: 'View on Amazon' }).getAttribute('aria-pressed')) === 'true' && (await ctaChips.filter({ hasText: 'Check on Amazon' }).count()) === 1 && (await page.getByLabel('Affiliate disclosure').inputValue()).includes('Amazon Associate'))
+      check(`${tag}: shared category survives the type switch`, (await page.getByLabel('Category').inputValue()) === 'Tech')
+      await amazonInput.fill('https://amazon.co.uk.evil.example/dp/B0C1ABCDEF')
+      check(`${tag}: an Amazon lookalike shows the exact link error`, (await page.getByText(AMAZON_LINK_ERROR, { exact: true }).count()) > 0)
+      const goodLink = 'https://www.amazon.co.uk/dp/B0C1ABCDEF?tag=e2e-21'
+      await amazonInput.fill(goodLink)
+      await page.getByRole('button', { name: 'Test link' }).click()
+      await page.waitForTimeout(600)
+      check(`${tag}: a valid Amazon link passes the live check`, (await page.getByText(/Valid Amazon link/).count()) > 0)
+      await ctaChips.filter({ hasText: 'Check on Amazon' }).click()
+      await page.waitForTimeout(2200)
+      const affSaved = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === typeProduct.id)
+      check(`${tag}: the Amazon type, tracking link, CTA and category are saved`, affSaved?.extras?.productType === 'affiliate' && affSaved.extras.affiliate.url === goodLink && affSaved.extras.affiliate.cta === 'Check on Amazon' && affSaved.extras.category === 'Tech', JSON.stringify(affSaved?.extras))
+      await normalRadio.click()
+      await page.waitForTimeout(2200)
+      const backSaved = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === typeProduct.id)
+      check(`${tag}: switching back hides Amazon fields but keeps their values`, (await amazonInput.count()) === 0 && (await categoryInput.inputValue()) === 'Tech' && backSaved?.extras?.productType === 'normal' && backSaved.extras.affiliate.url === goodLink, JSON.stringify(backSaved?.extras))
+      await page.getByRole('button', { name: /Back to Products/ }).first().click()
+      await page.waitForTimeout(800)
+
+      // 3g. Three-dot menus: portaled, clamped, one at a time, with complete
+      // block actions. Deleting a block is draft-only, product-safe and undoable.
+      const emptyBlockId = 'blk_e2e_empty'
+      {
+        const st = (await api('GET', '/api/seller/store', undefined, C)).json.store
+        const blocks = st.draft.blocks as Array<{ id: string; type: string }>
+        if (!blocks.some((b) => b.id === emptyBlockId)) {
+          const foot = blocks.findIndex((b) => b.type === 'footer')
+          blocks.splice(foot < 0 ? blocks.length : foot, 0, { id: emptyBlockId, type: 'featured', hidden: false, data: { productId: '', note: '', slides: [] } } as never)
+          await api('PUT', '/api/seller/store/draft', { page: { ...st.draft, blocks }, revision: st.revision }, C)
+        }
+      }
+      await api('POST', '/api/seller/store/publish', undefined, C)
+      await page.reload()
+      await page.getByText(/^Page$/).first().waitFor({ timeout: 20000 })
+      await page.getByText(/^Page$/).first().click()
+      await page.waitForTimeout(1200)
+      const emptyMore = page.locator(`[data-block="${emptyBlockId}"] .bl-more`)
+      const featMore = page.locator(`[data-block="${feat.id}"] .bl-more`)
+      // The block above is seeded through the API, but the editor also keeps a
+      // localStorage copy of the page draft. A later recovery flush can replace
+      // the seeded block with an older snapshot, so re-seed it when it vanishes.
+      const ensureEmpty = async () => {
+        if (await emptyMore.count()) return
+        const st = (await api('GET', '/api/seller/store', undefined, C)).json.store
+        const blocks = st.draft.blocks as Array<{ id: string; type: string }>
+        if (!blocks.some((b) => b.id === emptyBlockId)) {
+          const foot = blocks.findIndex((b) => b.type === 'footer')
+          blocks.splice(foot < 0 ? blocks.length : foot, 0, { id: emptyBlockId, type: 'featured', hidden: false, data: { productId: '', note: '', slides: [] } } as never)
+          await api('PUT', '/api/seller/store/draft', { page: { ...st.draft, blocks }, revision: st.revision }, C)
+        }
+        await page.evaluate((id) => localStorage.removeItem(`desknoty.seller.recovery.${id}.page`), st.id)
+        await page.reload()
+        await page.getByText(/^Page$/).first().waitFor({ timeout: 20000 })
+        await page.getByText(/^Page$/).first().click()
+        await page.waitForTimeout(800)
+      }
+      check(`${tag}: an empty Digital product block has a three-dot menu`, (await emptyMore.count()) === 1)
+      await emptyMore.click()
+      const menuLabels = await page.locator('.bl-menu-portal').getByRole('menuitem').allTextContents()
+      const requiredLabels = ['Edit block', 'Duplicate block', 'Move up', 'Move down', 'Delete block']
+      check(`${tag}: every Digital block menu offers all block actions`, requiredLabels.every((l) => menuLabels.includes(l)), menuLabels.join('|'))
+      const pos = await page.evaluate(() => {
+        const btn = document.querySelector('[data-block="blk_e2e_empty"] .bl-more')
+        const menu = document.querySelector('.bl-menu-portal')
+        if (!btn || !menu) return null
+        const a = btn.getBoundingClientRect(), r = menu.getBoundingClientRect()
+        return {
+          body: menu.parentElement === document.body,
+          inside: r.left >= -1 && r.top >= -1 && r.right <= window.innerWidth + 1 && r.bottom <= window.innerHeight + 1,
+          near: Math.abs(r.right - a.right) < 48 || Math.abs(r.left - a.left) < 48,
+          roomBelow: window.innerHeight - a.bottom,
+          menuH: r.height,
+          flipped: r.bottom <= a.top + 8,
+        }
+      })
+      check(`${tag}: the menu is portaled, anchored and inside the viewport`, Boolean(pos?.body && pos.inside && pos.near), JSON.stringify(pos))
+      await featMore.click()
+      const openMenus = await page.locator('.bl-menu-portal').count()
+      const expanded = await page.locator('.bl-more[aria-expanded="true"]').count()
+      check(`${tag}: only one block menu can be open at a time`, openMenus === 1 && expanded === 1, `menus=${openMenus} expanded=${expanded}`)
+      await page.getByText(/^Page$/).first().click({ force: true })
+      check(`${tag}: an outside click closes the menu`, (await page.locator('.bl-menu-portal').count()) === 0)
+      await ensureEmpty()
+      await emptyMore.click()
+      await page.keyboard.press('Escape')
+      check(`${tag}: Escape closes the menu`, (await page.locator('.bl-menu-portal').count()) === 0)
+      await ensureEmpty()
+      // Put the button near the bottom edge: the menu must flip up, not vanish.
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-block="blk_e2e_empty"] .bl-more') as HTMLElement | null
+        if (!el) return
+        let p: HTMLElement | null = el
+        while (p) { if (p.scrollHeight > p.clientHeight + 20) p.scrollTop = p.scrollHeight; p = p.parentElement }
+        el.scrollIntoView({ block: 'end', inline: 'nearest' })
+      })
+      await page.waitForTimeout(300)
+      await emptyMore.click()
+      const flip = await page.evaluate(() => {
+        const btn = document.querySelector('[data-block="blk_e2e_empty"] .bl-more')
+        const menu = document.querySelector('.bl-menu-portal')
+        if (!btn || !menu) return null
+        const a = btn.getBoundingClientRect(), r = menu.getBoundingClientRect()
+        return { roomBelow: window.innerHeight - a.bottom, menuH: r.height, flipped: r.bottom <= a.top + 8, inside: r.top >= -1 && r.bottom <= window.innerHeight + 1 }
+      })
+      check(`${tag}: a menu near the bottom flips up and stays on screen`, Boolean(flip && flip.inside && (flip.roomBelow >= flip.menuH + 14 || flip.flipped)), JSON.stringify(flip))
+      const countBeforeDelete = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.length
+      let confirmed = false
+      page.once('dialog', async (d) => { confirmed = /Delete .*Digital product/i.test(d.message()); await d.accept() })
+      await page.locator('.bl-menu-portal').getByRole('menuitem', { name: 'Delete block' }).click()
+      await page.waitForTimeout(2200)
+      const afterDelete = (await api('GET', '/api/seller/store', undefined, C)).json.store
+      const liveAfterDelete = (await api('GET', `/api/store/${handle}`)).json
+      check(`${tag}: deleting a block removes only that block`, confirmed && !(afterDelete.draft.blocks as Array<{ id: string }>).some((b) => b.id === emptyBlockId) && afterDelete.products.length === countBeforeDelete)
+      check(`${tag}: a draft deletion leaves the published storefront unchanged`, (liveAfterDelete.page?.blocks as Array<{ id: string }> | undefined)?.some((b) => b.id === emptyBlockId) === true)
+      await page.getByRole('button', { name: 'Undo' }).first().click()
+      await page.waitForTimeout(2200)
+      const afterUndo = (await api('GET', '/api/seller/store', undefined, C)).json.store
+      check(`${tag}: Undo restores the deleted block and keeps its product`, (afterUndo.draft.blocks as Array<{ id: string }>).some((b) => b.id === emptyBlockId) && afterUndo.products.length === countBeforeDelete)
 
       // 4. A refresh in the middle of an edit: the edit survives and saving keeps working.
       //    (The draft is still being written when the page goes away: the editor must
@@ -466,6 +695,14 @@ try {
       const livePublished = ((await api('GET', `/api/store/${handle}`)).json.products ?? []).find((p: { id: string }) => p.id === guard.id)
       check(`${tag}: publishing keeps the server product PAID`, afterPublish?.paymentType === 'paid' && afterPublish.priceMinor === 1000, JSON.stringify(afterPublish && { mode: afterPublish.paymentType, price: afterPublish.priceMinor }))
       check(`${tag}: the live product is PAID at the new price`, livePublished?.paymentType === 'paid' && livePublished.priceMinor === 1000, JSON.stringify(livePublished && { mode: livePublished.paymentType, price: livePublished.priceMinor }))
+
+      // Changing the type of a published product must warn first; cancelling
+      // the warning must leave the product exactly as it was.
+      let typeWarned = false
+      page.once('dialog', async (d) => { typeWarned = d.type() === 'confirm' && /published product to an Amazon affiliate/i.test(d.message()); await d.dismiss() })
+      await page.getByRole('radio', { name: /Affiliate Product/ }).click()
+      await page.waitForTimeout(400)
+      check(`${tag}: changing a published product type warns and can be cancelled`, typeWarned && (await page.getByRole('radio', { name: /Normal Product/ }).getAttribute('aria-checked')) === 'true', `warned=${typeWarned}`)
 
       // Only an intentional click on the selector may change the mode.
       await freeSwitch.click()

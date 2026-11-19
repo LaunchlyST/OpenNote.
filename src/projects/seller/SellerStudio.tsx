@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
@@ -53,12 +53,17 @@ import { useSellerSave, flushSellerEdits, trackSellerWork } from './use-seller-s
 import { SellerError, dataUrlToBlob, sellerApi } from './api'
 import type { Earnings } from './api'
 import {
+  AMAZON_CTA_PRESETS,
+  AMAZON_LINK_ERROR,
   BUTTON_STYLES,
   CURRENCIES,
+  DEFAULT_AFFILIATE_DISCLOSURE,
+  DEFAULT_AMAZON_CTA,
   DEFAULT_EXTRAS,
   MAX_PRODUCT_BLOCKS_PER_PAGE,
+  MAX_PRODUCT_SLIDES,
   MAX_STORE_PAGES,
-  affiliateUrlProblem,
+  amazonUrlCheck,
   findProductBlockPage,
   forgetLegacyDraft,
   formatPrice,
@@ -73,6 +78,7 @@ import {
   parsePriceInput,
   primaryProductId,
   productBlockCount,
+  productTypeOf,
   readLegacyDraft,
   slidesOf,
   storePages,
@@ -88,7 +94,7 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
-import type { Block, BlockType, CardPart, DraftProduct, PaymentType, ProductExtras, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, ShopProduct, StoreView } from './model'
+import type { Block, BlockType, CardPart, DraftProduct, PaymentType, ProductExtras, ProductType, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, ShopProduct, StoreView } from './model'
 
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
@@ -497,6 +503,9 @@ function Studio({
   const [tab, setTab] = useState<Tab>('page')
   const [picked, setPicked] = useState<string | null>(null)
   const [openProduct, setOpenProduct] = useState<string | null>(null)
+  // A product opened from a carousel returns there; one opened from the Products
+  // tab keeps the ordinary product-list back link.
+  const [fromCarousel, setFromCarousel] = useState(false)
   // Leaving the Products tab returns it to the plain product list next time.
   useEffect(() => { if (tab !== 'products') setOpenProduct(null) }, [tab])
   /** Click-to-edit: which product card part is open in the Page tab. */
@@ -510,13 +519,46 @@ function Studio({
   const [pickReq, setPickReq] = useState<Extract<AddReq, { kind: 'slide' } | { kind: 'below' }> | null>(null)
   const requestAdd = (req: AddReq) => {
     if (req.kind === 'block') { setAddReq(req); return }
-    setPickReq(req)
+    // A click on a placeholder beyond the saved slides creates exactly one new
+    // empty slide first, then opens the picker for that slide. Clicking the
+    // button on a slide that already exists just fills that slide.
+    if (req.kind === 'slide' && req.slideIndex >= slidesForBlock(req.blockId).length) {
+      const next: typeof req = { ...req, slideIndex: slidesForBlock(req.blockId).length }
+      addEmptySlide(next.blockId, next.slideIndex)
+      pendingAdd.current = next
+      setPickReq(next)
+      return
+    }
     pendingAdd.current = req
+    setPickReq(req)
+  }
+  function slidesForBlock(blockId: string): ProductSlide[] {
+    const pg = storePages(page).findIndex((p) => p.blocks.some((b) => b.id === blockId))
+    if (pg < 0) return []
+    const b = blocksOf(page, pg).find((x) => x.id === blockId)
+    return b ? slidesOf(b) : []
+  }
+  /** Append one empty slide and make it the active slide in both editor and preview. */
+  function addEmptySlide(blockId: string, slideIndex: number) {
+    const from = storePages(page).findIndex((pg) => pg.blocks.some((b) => b.id === blockId))
+    const base = blocksOf(page, from)
+    const bi = base.findIndex((b) => b.id === blockId)
+    const b = bi >= 0 ? base[bi] : null
+    if (!b || b.type !== 'featured') return
+    const slides = slidesOf(b)
+    if (slides.length >= MAX_PRODUCT_SLIDES) return
+    const nextSlides = [...slides]
+    nextSlides.splice(Math.min(slideIndex, nextSlides.length), 0, newSlide('digital'))
+    const next = [...base]
+    next[bi] = { ...b, data: { ...b.data, slides: nextSlides, productId: primaryProductId(nextSlides) } }
+    edit(withPageBlocks(page, from, cleanFor(from, next)))
+    setPageIndex(from)
+    setActiveSlideBlock(blockId)
+    setActiveSlide(Math.min(slideIndex, nextSlides.length - 1))
   }
   /** Which slide of the focused product block is selected, for phone/preview sync. */
   const [activeSlide, setActiveSlide] = useState(0)
   const [activeSlideBlock, setActiveSlideBlock] = useState<string | null>(null)
-  useEffect(() => { setActiveSlide(0); setActiveSlideBlock(picked) }, [picked])
   useEffect(() => {
     if (!editPart || !activeSlideBlock) return
     const block = allBlocks(page).find((b) => b.id === activeSlideBlock)
@@ -544,12 +586,14 @@ function Studio({
     if (!p) return
     if (p.kind === 'slide') {
       void addProductToSlide(p.blockId, p.slideIndex, productId)
+      // Stay in the block editor: the chosen product must appear in this slide
+      // immediately, with the carousel and the left-hand editor still in sync.
+      setPicked(p.blockId)
       setActiveSlideBlock(p.blockId)
       setActiveSlide(p.slideIndex)
-      closeEditor()
-      setOpenProduct(productId)
-      setTab('products')
-      void navigate('products').then(() => setEditPart({ productId, part: 'card' }))
+      setFromCarousel(false)
+      setTab('page')
+      setEditPart(null)
     } else if (p.kind === 'below') {
       void addProductBlockBelow(p.blockId, productId)
     }
@@ -570,8 +614,46 @@ function Studio({
     return { value: r.store.draft, revision: r.store.revision }
   })
   const full = pageSave.value
+  /**
+   * Page-builder slides and the product library share one type. Changing a
+   * digital slide to Affiliate (or picking a product for a digital slide) also
+   * updates that product, so the storefront, checkout and editor never disagree.
+   * All other product settings stay untouched.
+   */
+  const setSlideProductType = (productId: string, next: ProductType, amazonUrl?: string) => {
+    const p = store.products.find((x) => x.id === productId)
+    if (!p) return
+    const x = withExtras(p.extras)
+    if (productTypeOf(x) === next) return
+    if (!confirmProductTypeChange(p.published, next)) return
+    const input = amazonUrl || x.affiliate?.input || x.affiliate?.url || ''
+    const checked = input ? amazonUrlCheck(input) : null
+    if (next === 'affiliate' && input && !checked?.ok) return setErr(AMAZON_LINK_ERROR)
+    const extras: ProductExtras = {
+      ...x,
+      productType: next,
+      affiliate: {
+        ...x.affiliate,
+        input,
+        url: checked?.ok ? checked.url : x.affiliate?.url || '',
+        cta: x.affiliate?.cta || DEFAULT_AMAZON_CTA,
+        disclosure: x.affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE,
+      },
+    }
+    void sellerApi.updateProduct(p.id, { extras }, p.revision)
+      .then((r) => { setStore(r.store); setErr(null) })
+      .catch((e: Error) => setErr(e.message))
+  }
   // Style 1 is the editable store. Swiping inside the phone shows Style 2, a "coming soon" preview.
   const page: Page = full
+  // Opening a different block follows it, but coming back to the same block (or
+  // closing the editor) never snaps the carousel back to slide 1.
+  useEffect(() => {
+    if (!picked || activeSlideBlock === picked) return
+    const slides = slidesForBlock(picked)
+    setActiveSlideBlock(picked)
+    setActiveSlide((i) => Math.min(i, Math.max(0, slides.length - 1)))
+  }, [picked, activeSlideBlock, page])
   const [slide, setSlide] = useState<0 | 1>(full.use === 2 ? 1 : 0)
   // Which store page the editor and the phone are on (Home = 0, then Page 2/Page 3).
   const [pageIndex, setPageIndex] = useState(0)
@@ -725,6 +807,7 @@ function Studio({
     const b = bi >= 0 ? base[bi] : null
     if (!b || b.type !== 'featured') return
     const slides = slidesOf(b)
+    if (slideIndex >= slides.length && slides.length >= MAX_PRODUCT_SLIDES) return
     const nextSlides = slideIndex < slides.length
       ? slides.map((s, i) => (i === slideIndex ? { ...newSlide('digital', productId), id: s.id } : s))
       : [...slides, { ...newSlide('digital', productId) }]
@@ -974,7 +1057,7 @@ function Studio({
               ['orders', 'Orders'],
             ] as Array<[Tab, string]>
           ).map(([id, label]) => (
-            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => (id === 'products' && setOpenProduct(null), void navigate(id))}>
+            <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => (id === 'products' && setOpenProduct(null), setFromCarousel(false), void navigate(id))}>
               {label}
             </button>
           ))}
@@ -1033,7 +1116,8 @@ function Studio({
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
           <PageEditor
-            onOpenProduct={(pid) => { closeEditor(); setEditPart(null); setOpenProduct(pid); setTab('products') }}
+            onOpenProduct={(pid) => { setEditPart(null); setFromCarousel(true); setOpenProduct(pid); setTab('products') }}
+            onSetProductType={setSlideProductType}
             page={page}
             pageIndex={safePageIndex}
             onChange={edit}
@@ -1042,8 +1126,10 @@ function Studio({
             setOpen={openEditor}
             onMoveBlock={moveBlockToPage}
             onRequestAdd={requestAdd}
+            onAddEmptySlide={(blockId, slideIndex) => { addEmptySlide(blockId, slideIndex); setPicked(blockId); setTab('page') }}
+            activeSlideBlock={activeSlideBlock}
             activeSlide={activeSlide}
-            onActiveSlideChange={setActiveSlide}
+            onActiveSlideChange={(i) => { setActiveSlideBlock(picked); setActiveSlide(Math.max(0, Math.min(MAX_PRODUCT_SLIDES - 1, i))) }}
           />
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
@@ -1082,6 +1168,8 @@ function Studio({
               pendingAdd.current = { kind: 'slide', blockId, slideIndex }
               onPickProduct(productId)
             }}
+            backToCarousel={fromCarousel}
+            onBackToCarousel={() => { setFromCarousel(false); setOpenProduct(null); setTab('page') }}
           />
         )}
         {tab === 'payouts' && <PayoutsPanel store={store} setup={setup} reload={reload} />}
@@ -1152,16 +1240,19 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={(id) => tab === 'page' ? openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : requestAddSlotForBlock(id)} onAddSlideProduct={(blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex })} activeSlide={tab === 'page' ? activeSlide : undefined} onSlideChange={tab === 'page' ? (blockId, i) => { if (blockId === activeSlideBlock) setActiveSlide(i) } : undefined} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={(id) => tab === 'page' ? openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : requestAddSlotForBlock(id)} onAddSlideProduct={(blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex })} activeSlideBlock={activeSlideBlock} activeSlide={activeSlide} onSlideChange={(blockId, i) => { setActiveSlideBlock(blockId); setActiveSlide(Math.max(0, Math.min(MAX_PRODUCT_SLIDES - 1, i))) }} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
                   //  - the card's own background opens the product's full editor.
                   if (pid) {
-                    closeEditor()
+                    // Keep the block and its slide: the full editor can return here.
+                    setPicked(id)
+                    setActiveSlideBlock(id)
+                    setFromCarousel(true)
                     setOpenProduct(pid)
                     setEditPart(null)
-                    void navigate('products')
+                    setTab('products')
                     return
                   }
                   setEditPart(null)
@@ -1334,7 +1425,72 @@ function PreviewModal({ children, onClose, onPublish, url, published }: { childr
   )
 }
 
-function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onRequestAdd, activeSlide, onActiveSlideChange }: { onOpenProduct?: (id: string) => void; page: Page; pageIndex: number; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
+type BlockMenuItem = { label: string; onSelect: () => void; disabled?: boolean; hint?: string; danger?: boolean }
+
+/** Block deletion is a page-only change; say so, and say how to get it back. */
+function confirmBlockDelete(name: string) {
+  return window.confirm(`Delete ${name} from this page? The product stays in your product library, and you can Undo this before publishing.`)
+}
+
+/**
+ * The block's three-dot menu. It is portaled to the body and positioned from the
+ * clicked button: a tall, expanded Digital product block can no longer push the
+ * menu off screen, and no parent with `overflow: hidden` can clip it.
+ */
+function BlockMenu({ anchor, items, onClose }: { anchor: HTMLElement; items: BlockMenuItem[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number } | null>(null)
+
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = ref.current
+      if (!el || !anchor) return
+      const r = anchor.getBoundingClientRect()
+      const w = el.offsetWidth
+      const h = el.offsetHeight
+      const pad = 8
+      const gap = 6
+      // Prefer below the button, flip above when there isn't room, and clamp as
+      // a last resort for very short viewports.
+      let top = r.bottom + gap
+      if (h + gap + pad > window.innerHeight - r.bottom) top = r.top - h - gap
+      if (top < pad) top = Math.max(pad, Math.min(r.top, window.innerHeight - h - pad))
+      const left = Math.max(pad, Math.min(r.right - w, window.innerWidth - w - pad))
+      setPos({ left, top, maxHeight: Math.min(420, window.innerHeight - pad * 2) })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+  }, [anchor, items.length])
+
+  useEffect(() => {
+    const down = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest('.bl-menu, .bl-more')) onClose() }
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('pointerdown', down)
+    document.addEventListener('keydown', key)
+    return () => { document.removeEventListener('pointerdown', down); document.removeEventListener('keydown', key) }
+  }, [onClose])
+
+  return createPortal(
+    <div ref={ref} className="bl-menu bl-menu-portal" role="menu" style={{ left: pos?.left ?? 0, top: pos?.top ?? 0, maxHeight: pos?.maxHeight, visibility: pos ? 'visible' : 'hidden' }}>
+      {items.map((it) => (
+        <button
+          key={it.label}
+          type="button"
+          role="menuitem"
+          disabled={it.disabled}
+          title={it.disabled ? it.hint : undefined}
+          className={cn(it.danger && 'bl-del')}
+          onClick={() => { onClose(); it.onSelect() }}
+        >{it.label}</button>
+      ))}
+    </div>,
+    document.body,
+  )
+}
+
+function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMoveBlock, onOpenProduct, onSetProductType, onRequestAdd, onAddEmptySlide, activeSlideBlock, activeSlide, onActiveSlideChange }: { onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; page: Page; pageIndex: number; onChange: (p: Page) => void; products: DraftProduct[]; open: string | null; setOpen: (id: string | null, el?: HTMLElement) => void; onMoveBlock: (id: string, to: number) => void; onRequestAdd: (req: AddReq) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlideBlock?: string | null; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const pages = storePages(page)
   const isHome = pageIndex === 0
   // Home keeps its pinned profile and footer; Page 2/3 hold content only.
@@ -1342,15 +1498,11 @@ function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMove
   const first = isHome ? 1 : 0
   const last = isHome ? blocks.length - 2 : blocks.length - 1
   const setBlocks = (b: Block[]) => onChange(withPageBlocks(page, pageIndex, isHome ? pinEnds(b) : b.filter((x) => x.type !== 'header' && x.type !== 'footer')))
-  const [menu, setMenu] = useState<string | null>(null)
+  // One menu at a time, anchored to the button that opened it. The menu itself
+  // owns outside-click / Escape dismissal and viewport-aware placement.
+  const [menu, setMenu] = useState<{ id: string; anchor: HTMLElement } | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
-  useEffect(() => {
-    if (!menu) return
-    const close = (e: PointerEvent) => { if (!(e.target as HTMLElement).closest('.bl-menu, .bl-more')) setMenu(null) }
-    document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
-  }, [menu])
   const move = (from: number, to: number) => {
     if (to < first || to > last || from === to) return
     const next = [...blocks]
@@ -1365,10 +1517,22 @@ function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMove
     next.splice(i + 1, 0, copy)
     setBlocks(next)
   }
-  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => {
+  const openEditor = (id: string, el?: HTMLElement) => {
     // a Digital product opens right under its row (click again to close); other blocks use the pop-up editor
     if (blocks.find((x) => x.id === id)?.type === 'featured' && open === id) return setOpen(null)
-    setOpen(id, e.currentTarget.closest('.bl-card') as HTMLElement)
+    setOpen(id, el ?? (document.querySelector(`[data-block="${id}"] .bl-main`) as HTMLElement) ?? undefined)
+  }
+  const openRow = (id: string) => (e: React.MouseEvent<HTMLElement>) => openEditor(id, e.currentTarget.closest('.bl-card') as HTMLElement)
+  /**
+   * Remove one block from this page's draft only. The product library is never
+   * touched, and the change goes through `setBlocks` so Undo restores it.
+   */
+  const deleteBlock = (b: Block, i: number) => {
+    const name = `Block ${i + 1} — ${blockLabel(b.type)}`
+    if (!confirmBlockDelete(name)) return
+    if (open === b.id) setOpen(null)
+    setMenu(null)
+    setBlocks(blocks.filter((x) => x.id !== b.id))
   }
   return (
     <div className="ss-stack">
@@ -1420,25 +1584,29 @@ function PageEditor({ page, pageIndex, onChange, products, open, setOpen, onMove
                     <button type="button" aria-label={`Move ${blockLabel(b.type)} up`} disabled={i <= first} onClick={() => move(i, i - 1)} />
                     <button type="button" aria-label={`Move ${blockLabel(b.type)} down`} disabled={i >= last} onClick={() => move(i, i + 1)} />
                   </span>
-                  <button type="button" className="bl-more" aria-label={`More for ${blockLabel(b.type)}`} aria-expanded={menu === b.id} onClick={() => setMenu(menu === b.id ? null : b.id)}><MoreHorizontal className="h-4 w-4" /></button>
+                  <button type="button" className="bl-more" aria-label={`More for ${blockLabel(b.type)}`} aria-expanded={menu?.id === b.id} onClick={(e) => { const btn = e.currentTarget; setMenu((m) => (m?.id === b.id ? null : { id: b.id, anchor: btn })) }}><MoreHorizontal className="h-4 w-4" /></button>
                   <button type="button" className="bl-eye" aria-label={`${b.hidden ? 'Show' : 'Hide'} ${blockLabel(b.type)}`} aria-pressed={b.hidden} onClick={() => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x)))}>
                     {b.hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                   {open === b.id && b.type === 'featured' && (
                     <div className="bl-inline" role="region" aria-label="Edit Digital product">
-                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} onAddBelow={(id) => onRequestAdd({ kind: 'below', blockId: id })} onAddSlide={(id, i) => onRequestAdd({ kind: 'slide', blockId: id, slideIndex: i })} activeSlide={activeSlide} onActiveSlideChange={onActiveSlideChange} />
+                      <BlockEditor block={b} products={products} onOpenProduct={onOpenProduct} onSetProductType={onSetProductType} update={(d) => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, data: { ...x.data, ...d } } : x)))} onAddBelow={(id) => onRequestAdd({ kind: 'below', blockId: id })} onAddSlide={(id, i) => onRequestAdd({ kind: 'slide', blockId: id, slideIndex: i })} onAddEmptySlide={onAddEmptySlide} activeSlide={activeSlideBlock === b.id ? activeSlide : undefined} onActiveSlideChange={onActiveSlideChange} />
                     </div>
                   )}
-                  {menu === b.id && (
-                    <div className="bl-menu" role="menu">
-                      <button type="button" role="menuitem" onClick={(e) => (setMenu(null), openRow(b.id)(e))}>Edit</button>
-                      <button type="button" role="menuitem" onClick={() => (setMenu(null), duplicate(b))}>Duplicate</button>
-                      <button type="button" role="menuitem" onClick={() => (setMenu(null), setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x))))}>{b.hidden ? 'Show' : 'Hide'}</button>
-                      {pages.filter((pg) => pg.index !== pageIndex).map((pg) => (
-                        <button key={pg.id} type="button" role="menuitem" onClick={() => (setMenu(null), onMoveBlock(b.id, pg.index))}>Move to {pageLabel(pg.index)}</button>
-                      ))}
-                      <button type="button" role="menuitem" className="bl-del" onClick={() => (setMenu(null), setBlocks(blocks.filter((x) => x.id !== b.id)))}>Delete</button>
-                    </div>
+                  {menu?.id === b.id && (
+                    <BlockMenu
+                      anchor={menu.anchor}
+                      onClose={() => setMenu(null)}
+                      items={[
+                        { label: 'Edit block', onSelect: () => openEditor(b.id) },
+                        { label: 'Duplicate block', onSelect: () => duplicate(b) },
+                        { label: 'Move up', disabled: i <= first, hint: i <= first ? 'This block is already first on the page.' : undefined, onSelect: () => move(i, i - 1) },
+                        { label: 'Move down', disabled: i >= last, hint: i >= last ? 'This block is already last on the page.' : undefined, onSelect: () => move(i, i + 1) },
+                        { label: b.hidden ? 'Show block' : 'Hide block', onSelect: () => setBlocks(blocks.map((x) => (x.id === b.id ? { ...x, hidden: !x.hidden } : x))) },
+                        ...pages.filter((pg) => pg.index !== pageIndex).map((pg) => ({ label: `Move to ${pageLabel(pg.index)}`, onSelect: () => onMoveBlock(b.id, pg.index) })),
+                        { label: 'Delete block', danger: true, onSelect: () => deleteBlock(b, i) },
+                      ]}
+                    />
                   )}
                 </>
               )}
@@ -1705,6 +1873,9 @@ function FloatingEditor({ page, pageIndex, onChange, products, id, anchor, onClo
       <div ref={ref} className={cn('fe', phone && 'fe-sheet')} style={style} role="dialog" aria-label="Edit Banner">
         <header className="fe-head"><span className="sb-ico" aria-hidden="true">🎞</span><b>Banner</b><button type="button" className="fe-x" aria-label="Close" onClick={onClose}>✕</button></header>
         <div className="fe-body"><BannerEditor page={page} onChange={onChange} /></div>
+        <footer className="fe-foot">
+          <button type="button" className="fe-del" onClick={() => { if (!page.banner || !confirmBlockDelete('Banner')) return; onChange({ ...page, banner: null }); onClose() }}><Trash2 className="h-3.5 w-3.5" /> Delete banner</button>
+        </footer>
       </div>
     )
   if (!b) return null
@@ -1754,7 +1925,7 @@ function FloatingEditor({ page, pageIndex, onChange, products, id, anchor, onClo
             next.splice(i + 1, 0, copy)
             setBlocks(next)
           }}><Copy className="h-3.5 w-3.5" /> Duplicate</button>
-          <button type="button" className="fe-del" onClick={() => (setBlocks(blocks.filter((x) => x.id !== id)), onClose())}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
+          <button type="button" className="fe-del" onClick={() => { if (!confirmBlockDelete(`Block ${i + 1} — ${blockLabel(b.type)}`)) return; setBlocks(blocks.filter((x) => x.id !== id)); onClose() }}><Trash2 className="h-3.5 w-3.5" /> Delete</button>
         </footer>
       )}
       {pickingFont && (
@@ -1812,18 +1983,22 @@ function summary(b: Block, products: DraftProduct[]) {
  * become a carousel. Digital and affiliate settings are kept side by side, so
  * switching a slide's type never loses the product, file or cover.
  */
-function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAddSlide, activeSlide, onActiveSlideChange }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
+function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSetProductType, onAddSlide, onAddEmptySlide, activeSlide, onActiveSlideChange }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const set = (i: number, patch: Partial<ProductSlide>) => onChange(slides.map((s, j) => (j === i ? { ...s, ...patch } : s)))
   const setAff = (i: number, patch: Partial<ProductSlide['affiliate']>) => onChange(slides.map((s, j) => (j === i ? { ...s, affiliate: { ...s.affiliate, ...patch } } : s)))
   const [active, setActive] = useState(0)
-  useEffect(() => {
-    if (activeSlide !== undefined && activeSlide >= 0 && activeSlide < slides.length) setActive(activeSlide)
-    else if (active >= slides.length) setActive(Math.max(0, slides.length - 1))
-  }, [activeSlide, slides.length])
+  // The studio owns the active slide. Keep a local value only for callers with
+  // no prop. The index can point at an empty preview slot beyond `slides`; that
+  // is rendered below instead of being silently clamped away.
+  const a = Math.max(0, Math.min(activeSlide ?? active, MAX_PRODUCT_SLIDES - 1))
   const setActiveIdx = (i: number) => { setActive(i); onActiveSlideChange?.(i) }
-  const a = Math.min(Math.max(0, active), Math.max(0, slides.length - 1))
-  const s = slides.length ? slides[a] : null
-  const problem = s && s.kind === 'affiliate' ? affiliateUrlProblem(s.affiliate.url) : null
+  const s = slides[a] ?? null
+  const problem = s && s.kind === 'affiliate' && s.affiliate.url.trim() && !amazonUrlCheck(s.affiliate.url).ok ? AMAZON_LINK_ERROR : null
+  const changeKind = (kind: ProductSlide['kind']) => {
+    if (s?.kind === kind) return
+    if (s?.productId) onSetProductType?.(s.productId, kind === 'affiliate' ? 'affiliate' : 'normal', kind === 'affiliate' ? s.affiliate.url : undefined)
+    set(a, { kind })
+  }
   return (
     <div className="sb-edit">
       <span className="ss-label">Product slides</span>
@@ -1833,17 +2008,29 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAd
             Slide {i + 1}
           </button>
         ))}
-        {slides.length < 3 && onAddSlide && (
-          <button type="button" className="ss-ghost" onClick={() => onAddSlide(blockId, slides.length)}>+ Add product slide</button>
+        {slides.length < MAX_PRODUCT_SLIDES && (onAddEmptySlide ?? onAddSlide) && (
+          <button type="button" className="ss-ghost" onClick={() => (onAddEmptySlide ?? onAddSlide)!(blockId, slides.length)}>+ Add product slide</button>
         )}
       </div>
+      {!s && (
+        <div className="sld-card">
+          <div className="sld-head">
+            <span className="sld-num" aria-hidden="true">{a + 1}</span>
+            <span className="ss-label">Empty slide</span>
+          </div>
+          <p className="ss-muted">This slide is empty. Choose a product to fill it.</p>
+          {onAddSlide && (
+            <button type="button" className="ss-ghost self-start" onClick={() => onAddSlide(blockId, a)}>+ Add product</button>
+          )}
+        </div>
+      )}
       {s && (
         <div className="sld-card" key={s.id}>
           <div className="sld-head">
             <span className="sld-num" aria-hidden="true">{a + 1}</span>
             <div className="sld-kinds" role="group" aria-label={`Slide ${a + 1} type`}>
-              <button type="button" aria-pressed={s.kind === 'digital'} className={s.kind === 'digital' ? 'on' : ''} onClick={() => set(a, { kind: 'digital' })}>Digital product</button>
-              <button type="button" aria-pressed={s.kind === 'affiliate'} className={s.kind === 'affiliate' ? 'on' : ''} onClick={() => set(a, { kind: 'affiliate' })}>Affiliate</button>
+              <button type="button" aria-pressed={s.kind === 'digital'} className={s.kind === 'digital' ? 'on' : ''} onClick={() => changeKind('digital')}>Digital product</button>
+              <button type="button" aria-pressed={s.kind === 'affiliate'} className={s.kind === 'affiliate' ? 'on' : ''} onClick={() => changeKind('affiliate')}>Affiliate</button>
             </div>
             <button type="button" className="ss-ghost" aria-label={`Remove slide ${a + 1}`} onClick={() => { onChange(slides.filter((_, j) => j !== a)); setActive(0); onActiveSlideChange?.(0) }}><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
@@ -1852,7 +2039,7 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAd
               {products.length === 0 ? (
                 <p className="ss-muted">Create a product in the Products tab first.</p>
               ) : (
-                <select className="ss-input" aria-label={`Product for slide ${a + 1}`} value={s.productId ?? ''} onChange={(e) => set(a, { productId: e.target.value || null })}>
+                <select className="ss-input" aria-label={`Product for slide ${a + 1}`} value={s.productId ?? ''} onChange={(e) => { const id = e.target.value || null; set(a, { productId: id }); if (id) onSetProductType?.(id, 'normal') }}>
                   <option value="">Choose a product…</option>
                   {products.map((p) => <option key={p.id} value={p.id}>{p.title.trim() || 'Untitled product'}</option>)}
                 </select>
@@ -1860,15 +2047,15 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAd
             </Field>
           ) : (
             <>
-              <Field label="Affiliate link" hint="The full https:// address on the partner site.">
-                <input className="ss-input" inputMode="url" value={s.affiliate.url} onChange={(e) => setAff(a, { url: e.target.value })} placeholder="https://partner.example/product" />
+              <Field label="Amazon product link" hint="Amazon marketplace product pages and short links only.">
+                <input className="ss-input" inputMode="url" value={s.affiliate.url} onChange={(e) => { setAff(a, { url: e.target.value }); if (s.productId) onSetProductType?.(s.productId, 'affiliate', e.target.value) }} placeholder="https://www.amazon.co.uk/dp/B0..." />
               </Field>
               {problem && <span className="sld-err" role="alert">{problem}</span>}
               <Field label="Title"><input className="ss-input" maxLength={80} value={s.affiliate.title} onChange={(e) => setAff(a, { title: e.target.value })} /></Field>
               <Field label="Description (optional)"><textarea className="ss-input" rows={2} maxLength={500} value={s.affiliate.description} onChange={(e) => setAff(a, { description: e.target.value })} /></Field>
               <Field label="Cover image"><ImagePicker value={s.affiliate.cover} onChange={(v) => setAff(a, { cover: v })} label="Upload cover" /></Field>
               <Field label="Button text" hint="Empty hides the button; the cover still opens the link.">
-                <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff(a, { cta: e.target.value })} placeholder="View product ↗" />
+                <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff(a, { cta: e.target.value })} placeholder={DEFAULT_AMAZON_CTA} />
               </Field>
               <p className="sld-note">Payments and delivery are handled by the external website. Commission depends on your affiliate programme and tracking link.</p>
             </>
@@ -1884,7 +2071,7 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onAd
 }
 
 
-function BlockEditor({ block, products, update, onOpenProduct, onAddBelow, onAddSlide, activeSlide, onActiveSlideChange }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
+function BlockEditor({ block, products, update, onOpenProduct, onSetProductType, onAddBelow, onAddSlide, onAddEmptySlide, activeSlide, onActiveSlideChange }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const d = block.data
   switch (block.type) {
     case 'header':
@@ -1980,7 +2167,9 @@ function BlockEditor({ block, products, update, onOpenProduct, onAddBelow, onAdd
             blockId={block.id}
             onChange={(slides) => update({ slides, productId: primaryProductId(slides) })}
             onOpenProduct={onOpenProduct}
+            onSetProductType={onSetProductType}
             onAddSlide={onAddSlide}
+            onAddEmptySlide={onAddEmptySlide}
             activeSlide={activeSlide}
             onActiveSlideChange={onActiveSlideChange}
           />
@@ -2112,7 +2301,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onAddSlideAt, onRemoveSlide, onPlaceNew }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onAddSlideAt?: (blockId: string, slideIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void }) {
+function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onAddSlideAt, onRemoveSlide, onPlaceNew, backToCarousel, onBackToCarousel }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onAddSlideAt?: (blockId: string, slideIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void; backToCarousel?: boolean; onBackToCarousel?: () => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   // Switching between the list and a product is a view change, so the panel
@@ -2155,9 +2344,15 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
     return (
       <div className="ss-stack" ref={panel}>
         <div className="pg-bar">
-          <button type="button" className="pg-back" onClick={() => choose(null)}>
-            <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to Products
-          </button>
+          {backToCarousel && onBackToCarousel ? (
+            <button type="button" className="pg-back" onClick={onBackToCarousel}>
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to carousel
+            </button>
+          ) : (
+            <button type="button" className="pg-back" onClick={() => choose(null)}>
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to Products
+            </button>
+          )}
           <span className="pg-state">{selected.archived ? 'Archived' : selected.published ? 'Live' : 'Draft'}</span>
         </div>
         {focus?.productId === selected.id ? (
@@ -2341,6 +2536,14 @@ type ProductFormState = {
 /** The saved payment mode. Older rows only carry a price, and a saved price is a valid one. */
 const paymentModeOf = (p: DraftProduct): PaymentType => (p.paymentType === 'free' ? 'free' : p.paymentType === 'paid' ? 'paid' : p.priceMinor === 0 ? 'free' : 'paid')
 
+/** One warning for both ways in: the product editor and the page builder. */
+function confirmProductTypeChange(published: boolean, next: ProductType) {
+  if (!published) return true
+  return window.confirm(next === 'affiliate'
+    ? 'Change this published product to an Amazon affiliate product? Buyers will stop buying and downloading it here. Existing orders and download links stay valid, and your price and file are kept but hidden until you switch back.'
+    : 'Change this published affiliate product to a normal product? Buyers can buy it here again once you save a price and add a file. Your Amazon link is kept but hidden until you switch back.')
+}
+
 const productForm = (p: DraftProduct): ProductFormState => ({
   title: p.title,
   description: p.description,
@@ -2357,6 +2560,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   const [uploading, setUploading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [linkTest, setLinkTest] = useState<{ ok: boolean; message: string } | null>(null)
   const saved = useSellerSave(`desknoty.seller.recovery.${store.id}.${product.id}`, productForm(product), product.revision, async (value, revision, token) => {
     // The mode comes from the selector, never from the typed digits. A paid
     // product with an unfinished price is a validation error: nothing is saved,
@@ -2368,6 +2572,8 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
     if (mode === 'paid' && (typed === null || typed <= 0)) {
       throw new Error(typed === null ? 'Enter a price for this paid product, or switch it to free.' : 'A paid product needs a price above 0. Switch it to free if it is free.')
     }
+    const link = String(value.extras?.affiliate?.url ?? '').trim()
+    if (productTypeOf(value.extras) === 'affiliate' && link && !amazonUrlCheck(link).ok) throw new Error(AMAZON_LINK_ERROR)
     const r = await sellerApi.updateProduct(product.id, { ...value, paymentType: mode, priceMinor: mode === 'free' ? 0 : (typed as number) }, revision, token)
     setStore(r.store)
     return r.product.revision
@@ -2382,6 +2588,34 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   const form = saved.value
   const setForm = saved.edit
   const x: ProductExtras = withExtras(form.extras)
+  const ptype: ProductType = productTypeOf(x)
+  const affiliate = ptype === 'affiliate'
+  const linkInput = String(x.affiliate?.input ?? x.affiliate?.url ?? '')
+  const linkCheck = linkInput.trim() ? amazonUrlCheck(linkInput) : null
+  const linkProblem = !linkInput.trim() ? 'Add an Amazon product link before publishing.' : linkCheck?.ok ? null : AMAZON_LINK_ERROR
+  const switchType = (next: ProductType) => {
+    if (next === ptype) return
+    if (!confirmProductTypeChange(product.published, next)) return
+    setLinkTest(null)
+    setX({
+      productType: next,
+      affiliate: {
+        ...x.affiliate,
+        input: x.affiliate?.input ?? x.affiliate?.url ?? '',
+        cta: x.affiliate?.cta || DEFAULT_AMAZON_CTA,
+        disclosure: x.affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE,
+      },
+    })
+  }
+  const testLink = async () => {
+    setLinkTest(null)
+    try {
+      const r = await sellerApi.checkAmazonUrl(linkInput)
+      setLinkTest({ ok: true, message: `Valid Amazon link${r.short ? ' (destination checked)' : ''}.` })
+    } catch (e) {
+      setLinkTest({ ok: false, message: (e as Error).message || AMAZON_LINK_ERROR })
+    }
+  }
   // The server returns the card settings it actually stored. An API without Store V2 drops them,
   // so their absence means these controls can't save anything yet.
   const v2 = Boolean(product.extras && 'layout' in product.extras)
@@ -2419,6 +2653,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   const fmt = (m: number) => formatPrice(m, form.currency)
   const cardPreview: ShopProduct = {
     ...x,
+    productType: ptype,
     id: product.id,
     title: form.title.trim() || 'Untitled product',
     description: form.description,
@@ -2453,9 +2688,21 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
         </p>
       )}
 
-      <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub="Title, description, what’s included and file" open>
-        <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Content planner template" /></Field>
-        <Field label="Description"><textarea className="ss-input" rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="What buyers get, in a few lines" /></Field>
+      <div className="pe-type" role="radiogroup" aria-label="Product type">
+        <button type="button" role="radio" aria-checked={!affiliate} aria-pressed={!affiliate} onClick={() => switchType('normal')}>
+          <Package className="h-4 w-4" aria-hidden="true" /><span><b>Normal Product</b><small>Price, Stripe checkout and file delivery</small></span>
+        </button>
+        <button type="button" role="radio" aria-checked={affiliate} aria-pressed={affiliate} onClick={() => switchType('affiliate')}>
+          <ExternalLink className="h-4 w-4" aria-hidden="true" /><span><b>Affiliate Product</b><small>Amazon link, no Desknoty payment</small></span>
+        </button>
+      </div>
+      {product.published && <p className="ss-hint pe-type-note">Changing the type of a published product affects checkout and delivery. Existing orders and download access are never removed.</p>}
+
+      <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub={affiliate ? 'Title, description and category' : 'Title, description and category'} open>
+        <Field label="Title"><input className="ss-input" maxLength={80} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={affiliate ? 'e.g. Wireless headphones review pick' : 'e.g. Content planner template'} /></Field>
+        <Field label="Description"><textarea className="ss-input" rows={4} maxLength={2000} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={affiliate ? 'Why you recommend this product' : 'What buyers get, in a few lines'} /></Field>
+        <Field label="Category" hint="Shared by both product types."><input className="ss-input" maxLength={80} value={x.category} onChange={(e) => setX({ category: e.target.value })} placeholder="e.g. Stationery, Tech, Home" /></Field>
+        {!affiliate && (
         <fieldset className="pe2-v2" disabled={!v2}>
           {!v2 && <p className="pe2-unavail" role="status">Not available yet: the live Desknoty API hasn’t been updated for these settings, so they can’t be saved. They’ll switch on once the API is deployed.</p>}
         <Field label="Subtitle" hint="One short line on the card, about the benefit."><input className="ss-input" maxLength={100} value={x.subtitle} onChange={(e) => setX({ subtitle: e.target.value })} placeholder="e.g. Plan a month of posts in one afternoon" /></Field>
@@ -2476,45 +2723,70 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           </>
         )}
         </fieldset>
-        <fieldset className="pe2-v2" disabled={!v2}>
-          <Field label="Affiliate / External" hint="When set, shows an external link instead of Buy/Download. The product data is preserved.">
-            <div className="ss-grid2">
-              <Field label="Affiliate URL"><input className="ss-input" value={x.affiliate?.url ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, url: (e.target as HTMLInputElement).value as string } })} placeholder="https://" /></Field>
-              <Field label="Image URL"><input className="ss-input" value={x.affiliate?.image ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, image: (e.target as HTMLInputElement).value as string } })} placeholder="https://" /></Field>
-              <Field label="Title"><input className="ss-input" value={x.affiliate?.title ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, title: (e.target as HTMLInputElement).value as string } })} placeholder="Product name" /></Field>
-              <Field label="Description"><textarea className="ss-input" rows={2} value={x.affiliate?.description ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, description: (e.target as HTMLTextAreaElement).value as string } })} placeholder="Optional description" /></Field>
-              <Field label="Disclosure"><textarea className="ss-input" rows={2} value={x.affiliate?.disclosure ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, disclosure: (e.target as HTMLTextAreaElement).value as string } })} placeholder="e.g. As an affiliate, I earn from qualifying purchases" /></Field>
+        )}
+      </PSection>
+
+      {!affiliate && (
+        <PSection icon={<Upload className="h-4 w-4" />} title="Digital delivery" sub={product.file ? product.file.name : 'No file uploaded yet'} open>
+          <div className="ss-field">
+            <span className="ss-label">File buyers download</span>
+            <div className="pe-file">
+              <Upload className="h-4 w-4" aria-hidden="true" />
+              <span className="ss-file">{product.file ? `${product.file.name} · ${(product.file.size / 1024 / 1024).toFixed(2)} MB` : 'No file yet'}</span>
+              <label className="ss-ghost cursor-pointer">
+                {uploading ? 'Uploading…' : product.file ? 'Replace' : 'Upload'}
+                <input
+                  type="file"
+                  className="sr-only"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (!f) return
+                    if (f.size > MAX_PRODUCT_FILE_MB * 1024 * 1024) return setState(`Files can be up to ${MAX_PRODUCT_FILE_MB} MB.`)
+                    setUploading(true)
+                    trackSellerWork(sellerApi
+                      .uploadFile(product.id, f)
+                      .then(() => sellerApi.store())
+                      .then((r) => r.store && setStore(r.store)))
+                      .catch((er: SellerError) => setState(er.status === 413 ? `That file is too big. Files can be up to ${MAX_PRODUCT_FILE_MB} MB.` : er.message))
+                      .finally(() => setUploading(false))
+                  }}
+                />
+              </label>
+            </div>
+            <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after paying.</span>
+          </div>
+        </PSection>
+      )}
+
+      {affiliate && (
+        <PSection icon={<ExternalLink className="h-4 w-4" />} title="Amazon link" sub={linkProblem ?? 'Ready to publish'} open>
+          <Field label="Amazon product URL" hint="Amazon marketplace product pages and Amazon short links only. Associates tags are kept.">
+            <input
+              className="ss-input"
+              aria-label="Amazon product URL"
+              inputMode="url"
+              value={linkInput}
+              onChange={(e) => { const checked = amazonUrlCheck(e.target.value); setLinkTest(null); setX({ affiliate: { ...x.affiliate, input: e.target.value, url: checked.ok ? checked.url : '' } }) }}
+              placeholder="https://www.amazon.co.uk/dp/B0..."
+            />
+          </Field>
+          <div className="pe-row pe-aff-status">
+            <span className={cn('pe-pill', linkProblem ? 'pe-pill-warn' : 'pe-pill-published')} role="status">
+              {linkProblem ?? 'Valid Amazon product link'}
+            </span>
+            <button type="button" className="ss-ghost" disabled={!linkInput.trim() || busy} onClick={() => void testLink()}>Test link</button>
+          </div>
+          {linkTest && <p className="ss-hint" role="status">{linkTest.message}</p>}
+          <Field label="Button text" hint="Shown on your store instead of Buy now.">
+            <div className="pe-chips">
+              {AMAZON_CTA_PRESETS.map((t) => <button key={t} type="button" aria-pressed={(x.affiliate?.cta || DEFAULT_AMAZON_CTA) === t} onClick={() => setX({ affiliate: { ...x.affiliate, cta: t } })}>{t}</button>)}
             </div>
           </Field>
-        </fieldset>
-        <div className="ss-field">
-          <span className="ss-label">File buyers download</span>
-          <div className="pe-file">
-            <Upload className="h-4 w-4" aria-hidden="true" />
-            <span className="ss-file">{product.file ? `${product.file.name} · ${(product.file.size / 1024 / 1024).toFixed(2)} MB` : 'No file yet'}</span>
-            <label className="ss-ghost cursor-pointer">
-              {uploading ? 'Uploading…' : product.file ? 'Replace' : 'Upload'}
-              <input
-                type="file"
-                className="sr-only"
-                onChange={(e) => {
-                  const f = e.target.files?.[0]
-                  if (!f) return
-                  if (f.size > MAX_PRODUCT_FILE_MB * 1024 * 1024) return setState(`Files can be up to ${MAX_PRODUCT_FILE_MB} MB.`)
-                  setUploading(true)
-                  trackSellerWork(sellerApi
-                    .uploadFile(product.id, f)
-                    .then(() => sellerApi.store())
-                    .then((r) => r.store && setStore(r.store)))
-                    .catch((er: SellerError) => setState(er.status === 413 ? `That file is too big. Files can be up to ${MAX_PRODUCT_FILE_MB} MB.` : er.message))
-                    .finally(() => setUploading(false))
-                }}
-              />
-            </label>
-          </div>
-          <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after paying.</span>
-        </div>
-      </PSection>
+          <Field label="Or your own button text"><input className="ss-input" maxLength={40} aria-label="Affiliate button text" value={x.affiliate?.cta ?? ''} placeholder={DEFAULT_AMAZON_CTA} onChange={(e) => setX({ affiliate: { ...x.affiliate, cta: e.target.value } })} /></Field>
+          <Field label="Affiliate disclosure" hint="Shown with the product on your store."><textarea className="ss-input" rows={2} value={x.affiliate?.disclosure ?? ''} onChange={(e) => setX({ affiliate: { ...x.affiliate, disclosure: e.target.value } })} placeholder={DEFAULT_AFFILIATE_DISCLOSURE} /></Field>
+          <p className="ss-hint">Link checking confirms the destination only. It does not confirm stock, prices, or Amazon Associates approval. Payment and delivery happen on Amazon — no Desknoty order or download is created.</p>
+        </PSection>
+      )}
 
       <PSection icon={<ImageIcon className="h-4 w-4" />} title="Media & previews" sub={`${form.cover ? 'Cover' : 'No cover'}${x.gallery.length ? ` · ${x.gallery.length} image${x.gallery.length === 1 ? '' : 's'}` : ''}${x.video ? ' · video' : ''}`}>
         {v2 ? (
@@ -2531,6 +2803,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
         )}
       </PSection>
 
+      {!affiliate && (
       <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(priceMinor)} open>
         <div className="pe-row">
           <span className="pe-lbl">Free product</span>
@@ -2624,7 +2897,15 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           </div>
         )}
       </PSection>
+      )}
 
+      {!affiliate && (
+        <PSection icon={<Landmark className="h-4 w-4" />} title="Checkout" sub="Stripe payments and private downloads">
+          <p className="ss-hint">Buyers pay securely with Stripe. After payment they get an expiring download link for the file above, and the order appears in your Orders tab. Checkout also needs a connected payout account in Payouts.</p>
+        </PSection>
+      )}
+
+      {!affiliate && (
       <PSection icon={<LayoutGrid className="h-4 w-4" />} title="Card appearance" sub={`${v2 ? `${x.layout.charAt(0).toUpperCase()}${x.layout.slice(1)} · ` : ''}${x.cta.text || (free ? 'Get it free' : 'Buy now')}`}>
         {v2 ? <CardAppearance x={x} setX={setX} store={store} preview={cardPreview} buy={<BuyRow prod={cardPreview} page={store.draft} products={[]} handle={store.handle} small={x.layout === 'compact'} />} /> : <p className="pe2-unavail" role="status">Not available yet: the live Desknoty API hasn’t been updated for these settings, so they can’t be saved. They’ll switch on once the API is deployed.</p>}
         <span className="ss-label">Buy button</span>
@@ -2637,8 +2918,9 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           {BADGE_COLOURS.map((c) => <button key={c} type="button" role="radio" aria-checked={x.cta.color === c} aria-label={`Button colour ${c}`} style={{ background: c }} onClick={() => setX({ cta: { ...x.cta, color: c } })} />)}
         </div>
       </PSection>
+      )}
 
-      {v2c && (
+      {!affiliate && v2c && (
         <PSection icon={<Star className="h-4 w-4" />} title="Reviews" sub="From verified buyers">
           <SellerReviews handle={store.handle} productId={product.id} published={product.published} />
         </PSection>
@@ -2650,7 +2932,12 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           <button type="button" role="radio" aria-checked={vis === 'published'} onClick={() => setVis('published')}>Published</button>
           <button type="button" role="radio" aria-checked={vis === 'hidden'} onClick={() => setVis('hidden')}>Hidden</button>
         </div>
-        <p className="ss-hint">{vis === 'draft' ? 'Not on sale. Publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by its own link only; not listed on your page.' : 'On sale once you press Publish on your page.'}{product.problem ? ` To sell it: ${product.problem}` : ''}</p>
+        <p className="ss-hint">
+          {affiliate
+            ? `This product sends buyers to Amazon. No price, checkout, Stripe payment or download is shown, and no Desknoty order is created. ${linkProblem || (vis === 'draft' ? 'Not shown yet; publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by its own link only; not listed on your page.' : 'On sale once you press Publish on your page.')}`
+            : vis === 'draft' ? 'Not on sale. Publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by its own link only; not listed on your page.' : 'On sale once you press Publish on your page.'}
+          {!affiliate && product.problem ? ` To sell it: ${product.problem}` : ''}
+        </p>
         {product.published && (
           <div className="ss-row">
             <code className="ss-code">{shareUrl.replace(/^https?:\/\//, '')}</code>

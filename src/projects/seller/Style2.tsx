@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { PriceTag, accentOf, ctaStyle } from './StorePage'
 import type { StorePageProps } from './StorePage'
-import { FONTS, ensureFont, fontById, isFreeProduct, mediaUrl, safeExternalUrl } from './model'
+import { FONTS, affiliateHref, DEFAULT_AMAZON_CTA, ensureFont, fontById, isFreeProduct, mediaUrl } from './model'
 import type { ShopProduct } from './model'
 import './style2.css'
 
@@ -79,14 +79,14 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
   )
   // Affiliate / external mode: link out instead of selling here. No price, checkout
   // or download is rendered, and the partner link keeps its tracking params.
-  const external = safeExternalUrl(p.affiliate?.url ?? '')
+  const external = affiliateHref(p)
   if (external) {
     return (
       <article className="s2p-card">
         {props.live && !props.only ? <a href={`/${props.handle}/p/${p.id}`}>{Img}</a> : Img}
         <div className="s2p-info">
           <h3>{p.title}</h3>
-          {props.only && p.description && <p className="s2p-desc">{p.description}</p>}
+          {p.description && <p className="s2p-desc">{p.description}</p>}
           <span className="s2p-price">Affiliate</span>
           <a
             className="s2p-buy"
@@ -96,10 +96,10 @@ function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
             rel="sponsored noopener noreferrer"
             onClick={props.live ? undefined : (e) => e.preventDefault()}
           >
-            {p.cta?.text || 'View product ↗'}
+            {p.productType === 'affiliate' ? (p.affiliate?.cta || DEFAULT_AMAZON_CTA) : (p.cta?.text || 'View product ↗')}
           </a>
           <p className="s2p-aff-note">
-            {p.affiliate?.disclosure || 'Paid partnership · payment and delivery happen on the external website.'}
+            {p.affiliate?.disclosure || 'As an Amazon Associate, I earn from qualifying purchases. Payment and delivery happen on Amazon.'}
           </p>
         </div>
       </article>

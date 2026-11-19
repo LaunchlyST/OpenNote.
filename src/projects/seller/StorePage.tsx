@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { AtSign, ChevronDown, Globe, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
+import { AtSign, ChevronDown, Globe, MoreVertical, Play, X as XIcon } from 'lucide-react'
+import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -28,6 +28,11 @@ export interface StorePageProps {
    * (cover, title, description, button or the card itself) was clicked.
    */
   onPick?: (blockId: string, el: HTMLElement, productId?: string, part?: CardPart) => void
+  /**
+   * Editor preview: right-click (or the ⋯ menu button) on a section or product.
+   * `hit.self` means the section's own background was hit rather than a child.
+   */
+  onContextMenu?: (hit: ShopHit, at: { x: number; y: number }) => void
   picked?: string | null
   /** Editor preview: which card part is selected, so it stays highlighted. */
   editCard?: { productId: string | null; part: CardPart | null } | null
@@ -69,6 +74,8 @@ export interface StorePageProps {
    * phone preview scrolls to it and stays in sync with the left-hand editor.
    */
   activeSlide?: number
+  /** Editor: the block `activeSlide` belongs to, so each carousel keeps its own position. */
+  activeSlideBlock?: string | null
   /** Editor: called when the owner swipes/clicks to a different slide in the phone preview. */
   onSlideChange?: (blockId: string, slideIndex: number) => void
   /**
@@ -99,22 +106,54 @@ export function lookStyle(look: Block['look']): CSSProperties | undefined {
   } as CSSProperties
 }
 
+/** What a right-click in the owner's preview landed on. */
+export type ShopHit = {
+  blockId: string
+  /** Set when the click was inside a product card. */
+  productId?: string
+  part?: CardPart
+  /** Human name of the section or product, for the menu and the confirmation. */
+  label: string
+  /** True when the section's own background was hit, not one of its children. */
+  self: boolean
+}
+
 /** Timestamp of the last carousel swipe, so a click after a drag doesn't open anything. */
 const lastSwipeAt = { current: 0 }
 
 /** In the editor preview, each section is clickable and shows an outline with its name. */
-function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; onPick?: StorePageProps['onPick']; picked?: string | null; onGrab?: StorePageProps['onGrab']; children: ReactNode }) {
+function Pickable({ block, onPick, picked, onGrab, onContextMenu, children }: { block: Block; onPick?: StorePageProps['onPick']; picked?: string | null; onGrab?: StorePageProps['onGrab']; onContextMenu?: StorePageProps['onContextMenu']; children: ReactNode }) {
   const style = lookStyle(block.look)
+  const label = PICK_LABEL[block.type] ?? block.type
   // the profile header (photo, name, @username) comes from TikTok and isn't editable here
-  if (!onPick || block.type === 'header') return style ? <div className="sp-look" style={style}>{children}</div> : <>{children}</>
+  if ((!onPick && !onContextMenu) || block.type === 'header') return style ? <div className="sp-look" style={style}>{children}</div> : <>{children}</>
   return (
     <div
       className={picked === block.id ? 'sp-pick on' : 'sp-pick'}
       data-id={block.id}
-      data-label={PICK_LABEL[block.type] ?? block.type}
+      data-label={label}
       style={style}
+      onContextMenu={onContextMenu ? (e) => {
+        if ((e.target as HTMLElement).closest('.sp-grip, .sp-menu-btn, .sp-card-menu')) return
+        e.preventDefault()
+        e.stopPropagation()
+        const target = e.target as HTMLElement
+        const card = target.closest<HTMLElement>('[data-product-id]')
+        const productId = card?.dataset.productId
+        onContextMenu(
+          {
+            blockId: block.id,
+            productId,
+            part: target.closest<HTMLElement>('[data-edit-part]')?.dataset.editPart as CardPart | undefined,
+            label: productId ? (card?.querySelector('h3')?.textContent?.trim() || 'Product') : label,
+            self: !productId && target === e.currentTarget,
+          },
+          { x: e.clientX, y: e.clientY },
+        )
+      } : undefined}
       onClickCapture={(e) => {
-        if ((e.target as HTMLElement).closest('.sp-grip')) return
+        if (!onPick) return
+        if ((e.target as HTMLElement).closest('.sp-grip, .sp-menu-btn, .sp-card-menu')) return
         // the empty "add product" placeholder opens the picker itself
         if ((e.target as HTMLElement).closest('.sp-slide-empty')) return
         // the carousel's own controls (previous / next arrows, dots) navigate the
@@ -134,8 +173,25 @@ function Pickable({ block, onPick, picked, onGrab, children }: { block: Block; o
       }}
     >
       {onGrab && (
-        <button type="button" className="sp-grip" aria-label={`Drag ${PICK_LABEL[block.type] ?? block.type} to move it`} onPointerDown={(e) => (e.stopPropagation(), onGrab(block.id, e))}>
+        <button type="button" className="sp-grip" aria-label={`Drag ${label} to move it`} onPointerDown={(e) => (e.stopPropagation(), onGrab(block.id, e))}>
           ⋮⋮
+        </button>
+      )}
+      {onContextMenu && (
+        <button
+          type="button"
+          className="sp-menu-btn"
+          aria-label={`More for ${label}`}
+          aria-haspopup="menu"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            const r = e.currentTarget.getBoundingClientRect()
+            onContextMenu({ blockId: block.id, label, self: true }, { x: r.right, y: r.bottom })
+          }}
+        >
+          <MoreVertical className="h-3.5 w-3.5" />
         </button>
       )}
       {children}
@@ -198,7 +254,7 @@ export function StorePage(props: StorePageProps) {
           {tabs.length > 1 && <PageTabs tabs={tabs.map((t) => t.index)} index={index} onSelect={select} onHide={props.onHide} />}
           <div className="sp-page-panel" id="sp-page-panel" role="tabpanel" aria-labelledby={`sp-page-${index}`}>
             {body.map((b) => (
-              <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}><BlockView block={b} {...props} /></Pickable>
+              <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab} onContextMenu={props.onContextMenu}><BlockView block={b} {...props} /></Pickable>
             ))}
             {!body.length && !live && props.onAddSlide && (
               <div className="sp-block sp-drop sp-drop-page">
@@ -409,7 +465,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       // is shown (an empty one waits to be filled); on the public store only the
       // populated slides are.
       const slides = slidesOf(block)
-      const usable = slides.filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : Boolean(safeExternalUrl(s.affiliate.url))))
+      const usable = slides.filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : amazonUrlCheck(s.affiliate.url).ok))
       const shown = p.live ? usable : slides
       // In the editor the block always offers the full three slots: the populated
       // slides, then one empty slide per free slot (Product 3 included), each with
@@ -422,22 +478,22 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       if (!list.length) return <EmptyProduct block={block} {...p} />
       if (list.length === 1) {
         const one = list[0]
-        const oneEmpty = !one.productId && !safeExternalUrl(one.affiliate.url)
+        const oneEmpty = !one.productId && !amazonUrlCheck(one.affiliate.url).ok
         if (oneEmpty) {
           // The owner is building this first slide: offer the picker.
           return (
-            <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlide?.(block.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlide?.(block.id) } }}>
-              <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlide?.(block.id) }}>+ Add product</button>
+            <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id) } }}>
+              <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id) }}>+ Add product</button>
             </div>
           )
         }
         return (
           <section className="sp-block sp-featured-v2">
-            {one.kind === 'digital' ? <DigitalSlide slide={one} {...p} /> : <AffiliateSlide slide={one} {...p} />}
+            {one.kind === 'digital' ? <DigitalSlide slide={one} blockId={block.id} {...p} /> : <AffiliateSlide slide={one} {...p} />}
           </section>
         )
       }
-      return <SlideCarousel slides={list} blockId={block.id} interactive={!p.live} activeSlide={p.picked === block.id ? p.activeSlide : undefined} onCarouselSlideChange={p.picked === block.id ? (i) => p.onSlideChange?.(block.id, i) : undefined} {...p} />
+      return <SlideCarousel {...p} slides={list} blockId={block.id} interactive={!p.live} activeSlide={p.activeSlideBlock === block.id ? p.activeSlide : undefined} onCarouselSlideChange={(i) => p.onSlideChange?.(block.id, i)} />
     }
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -460,7 +516,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
           {(
             <div className="sp-grid">
               {list.map((prod) => (
-                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} edit={cardEdit(p, prod.id)} />
+                <ProductCard key={prod.id} p={prod} href={p.live ? `/${p.handle}/p/${prod.id}` : undefined} onOpen={p.live ? p.onOpenProduct : undefined} buy={<BuyRow prod={prod} {...p} small={(prod.layout ?? 'compact') === 'compact'} />} saved={p.savedIds?.includes(prod.id)} onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined} edit={cardEdit(p, prod.id, prod.title, block.id)} />
               ))}
             </div>
           )}
@@ -475,12 +531,22 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
 }
 
 /** Editor: every card is marked editable; the picked part stays highlighted. */
-function cardEdit(p: StorePageProps, id: string) {
-  return p.editCard ? { part: p.editCard.productId === id ? p.editCard.part : null } : undefined
+function cardEdit(p: StorePageProps, id: string, title?: string, blockId?: string) {
+  if (!p.editCard) return undefined
+  return {
+    part: p.editCard.productId === id ? p.editCard.part : null,
+    // The card's ⋯ button (the touch-friendly twin of right-click).
+    onMenu: p.onContextMenu
+      ? (e: ReactMouseEvent<HTMLButtonElement>) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          p.onContextMenu!({ blockId: blockId ?? '', productId: id, label: title?.trim() || 'Product', self: false }, { x: r.right, y: r.bottom })
+        }
+      : undefined,
+  }
 }
 
 /** One digital product in a product block: cover, title, price and Buy/Get it free. */
-function DigitalSlide({ slide, ...p }: { slide: ProductSlide } & StorePageProps) {
+function DigitalSlide({ slide, blockId, ...p }: { slide: ProductSlide; blockId?: string } & StorePageProps) {
   const prod = p.products.find((x) => x.id === slide.productId)
   if (!prod) return null
   return (
@@ -492,7 +558,7 @@ function DigitalSlide({ slide, ...p }: { slide: ProductSlide } & StorePageProps)
       buy={<BuyRow prod={prod} {...p} />}
       saved={p.savedIds?.includes(prod.id)}
       onToggleSave={p.onToggleSave ? () => p.onToggleSave!(prod) : undefined}
-      edit={cardEdit(p, prod.id)}
+      edit={cardEdit(p, prod.id, prod.title, blockId)}
     />
   )
 }
@@ -504,7 +570,8 @@ function DigitalSlide({ slide, ...p }: { slide: ProductSlide } & StorePageProps)
  */
 function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProps) {
   const a = slide.affiliate
-  const href = safeExternalUrl(a.url)
+  const checked = amazonUrlCheck(a.url)
+  const href = checked.ok ? checked.url : null
   const cover = mediaUrl(a.cover)
   if (!href) return null
   return (
@@ -523,10 +590,10 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
         <span className="sp-aff-tag">Affiliate</span>
         {a.title && <h3>{a.title}</h3>}
         {a.description && <p>{a.description}</p>}
-        {a.cta && (live
-          ? <a className="sp-btn sp-btn-sm sp-aff-cta" href={href} target="_blank" rel="sponsored noopener noreferrer">{a.cta}</a>
-          : <span className="sp-btn sp-btn-sm sp-aff-cta">{a.cta}</span>)}
-        <p className="sp-aff-note">Paid partnership · payment and delivery happen on the external website.</p>
+        {(live
+          ? <a className="sp-btn sp-btn-sm sp-aff-cta" href={href} target="_blank" rel="sponsored noopener noreferrer">{a.cta || DEFAULT_AMAZON_CTA}</a>
+          : <span className="sp-btn sp-btn-sm sp-aff-cta">{a.cta || DEFAULT_AMAZON_CTA}</span>)}
+        <p className="sp-aff-note">As an Amazon Associate, I earn from qualifying purchases. Payment and delivery happen on Amazon.</p>
       </div>
     </article>
   )
@@ -540,26 +607,34 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
  */
 function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSlideChange, ...p }: { slides: ProductSlide[]; blockId?: string; interactive?: boolean; activeSlide?: number; onCarouselSlideChange?: (i: number) => void } & StorePageProps) {
   const track = useRef<HTMLDivElement>(null)
-  const [at, setAt] = useState(activeSlide ?? 0)
+  const [at, setAt] = useState(() => Math.min(slides.length - 1, Math.max(0, activeSlide ?? 0)))
   const scrolledAt = useRef(0)
   const lastScrollLeft = useRef<number | null>(null)
   const mountedAt = useRef(performance.now())
+  // The studio owns `activeSlide`: use it directly whenever it is supplied so
+  // the preview and the left editor can never disagree about the current slide.
+  const current = activeSlide !== undefined ? Math.min(slides.length - 1, Math.max(0, activeSlide)) : at
   useEffect(() => {
-    if (activeSlide !== undefined && activeSlide !== at) {
-      const el = track.current
-      if (el) {
-        const next = Math.min(slides.length - 1, Math.max(0, activeSlide))
-        el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
-      }
-      setAt(activeSlide)
+    if (activeSlide === undefined) return
+    const next = Math.min(slides.length - 1, Math.max(0, activeSlide))
+    const el = track.current
+    if (el && Math.abs(el.scrollLeft - next * el.clientWidth) > 1) {
+      // An external slide change is not a swipe: move the track without going
+      // through the scroll handler, which would report it back as a new swipe.
+      lastScrollLeft.current = next * el.clientWidth
+      el.scrollLeft = next * el.clientWidth
     }
-  }, [activeSlide])
+    setAt(next)
+  }, [activeSlide, slides.length])
   const goTo = (i: number) => {
     const el = track.current
     if (!el) return
     const next = Math.min(slides.length - 1, Math.max(0, i))
-    el.scrollTo({ left: next * el.clientWidth, behavior: 'smooth' })
-    if (next !== at) {
+    if (Math.abs(el.scrollLeft - next * el.clientWidth) > 1) {
+      lastScrollLeft.current = next * el.clientWidth
+      el.scrollLeft = next * el.clientWidth
+    }
+    if (next !== current) {
       setAt(next)
       onCarouselSlideChange?.(next)
     }
@@ -573,7 +648,7 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
     if (el.scrollLeft === lastScrollLeft.current) return
     lastScrollLeft.current = el.scrollLeft
     const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
-    if (i !== at) {
+    if (i !== current) {
       setAt(i)
       onCarouselSlideChange?.(i)
     }
@@ -593,9 +668,9 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
   const onKey = (e: ReactKeyboardEvent<HTMLElement>) => {
     if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return
     e.preventDefault()
-    goTo(e.key === 'ArrowRight' ? at + 1 : at - 1)
+    goTo(e.key === 'ArrowRight' ? current + 1 : current - 1)
   }
-  const isEmpty = (s: ProductSlide) => (s.kind === 'digital' ? !s.productId : !safeExternalUrl(s.affiliate.url))
+  const isEmpty = (s: ProductSlide) => (s.kind === 'digital' ? !p.products.some((x) => x.id === s.productId) : !safeExternalUrl(s.affiliate.url))
   return (
     <section className="sp-block sp-carousel" aria-roledescription="carousel" aria-label={`${slides.length} products`} tabIndex={interactive ? 0 : undefined} onKeyDown={interactive ? onKey : undefined}>
       <div className="sp-track" ref={track} onScroll={onScroll} onClickCapture={swallow}>
@@ -603,23 +678,23 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
           <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}`}>
             {isEmpty(s) ? (
               !p.live && p.onAddSlideProduct && blockId ? (
-                <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlide?.(blockId)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlide?.(blockId) } }}>
-                  <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlide?.(blockId) }}>+ Add product</button>
+                <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) } }}>
+                  <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) }}>+ Add product</button>
                 </div>
               ) : null
-            ) : s.kind === 'digital' ? <DigitalSlide slide={s} {...p} /> : <AffiliateSlide slide={s} {...p} />}
+            ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
         ))}
       </div>
       {slides.length > 1 && (
         <div className="sp-car-nav">
-          <button type="button" className="sp-arrow" aria-label="Previous product" disabled={at === 0} onClick={() => goTo(at - 1)}>‹</button>
+          <button type="button" className="sp-arrow" aria-label="Previous product" disabled={current === 0} onClick={() => goTo(current - 1)}>‹</button>
           <div className="sp-dots" role="tablist" aria-label="Choose a product">
             {slides.map((s, i) => (
-              <button key={s.id} type="button" role="tab" aria-selected={i === at} aria-label={`Product ${i + 1}`} className={i === at ? 'sp-dot on' : 'sp-dot'} onClick={() => goTo(i)} />
+              <button key={s.id} type="button" role="tab" aria-selected={i === current} aria-label={`Product ${i + 1}`} className={i === current ? 'sp-dot on' : 'sp-dot'} onClick={() => goTo(i)} />
             ))}
           </div>
-          <button type="button" className="sp-arrow" aria-label="Next product" disabled={at === slides.length - 1} onClick={() => goTo(at + 1)}>›</button>
+          <button type="button" className="sp-arrow" aria-label="Next product" disabled={current === slides.length - 1} onClick={() => goTo(current + 1)}>›</button>
         </div>
       )}
     </section>
@@ -663,12 +738,14 @@ function TikTokCard({ url, live }: { url: string; live?: boolean }) {
 }
 
 
-/** Price with a running offer: old price struck through, sale price, savings and (for a real deadline) a countdown. */
-export function PriceTag({ prod }: { prod: ShopProduct }) {
-  if (!prod.offer) return <span className="sp-price">{formatPrice(prod.priceMinor, prod.currency)}</span>
+/** Price with a running offer: old price struck through, sale price, savings and (for a real deadline) a countdown.
+    In the owner's editor the price carries a marker, so clicking it opens the price settings. */
+export function PriceTag({ prod, edit }: { prod: ShopProduct; edit?: boolean }) {
+  const mark = edit ? { 'data-edit-part': 'price', 'data-label': 'Price' } : {}
+  if (!prod.offer) return <span className={edit ? 'sp-price sp-part' : 'sp-price'} {...mark}>{formatPrice(prod.priceMinor, prod.currency)}</span>
   const saved = prod.offer.savedMinor ?? prod.priceMinor - prod.offer.priceMinor
   return (
-    <span className="sp-price sp-price-sale">
+    <span className={edit ? 'sp-price sp-price-sale sp-part' : 'sp-price sp-price-sale'} {...mark}>
       <s aria-label={`Was ${formatPrice(prod.priceMinor, prod.currency)}`}>{formatPrice(prod.priceMinor, prod.currency)}</s>
       <b>{formatPrice(prod.offer.priceMinor, prod.currency)}</b>
       <em className="sp-badge" style={{ background: prod.offer.badgeColor }}>{prod.offer.badge}</em>
@@ -698,7 +775,10 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
   const disabled = !live || !checkoutReady || buying === prod.id
   // Affiliate / external mode: the product is bought on the partner's site, never
   // here. No price, checkout or download is shown; the link keeps its tracking params.
-  const external = safeExternalUrl(prod.affiliate?.url ?? '')
+  const affiliate = prod.affiliate
+  // New affiliate products are Amazon-only. Old data without an explicit type
+  // keeps its original external URL so existing stores and orders still work.
+  const external = affiliateHref(prod)
   if (external) {
     return (
       <div className="sp-buyrow sp-aff-row">
@@ -711,8 +791,9 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
           rel="sponsored noopener noreferrer"
           onClick={live ? undefined : (e) => e.preventDefault()}
         >
-          {prod.cta?.text || 'View product ↗'}
+          {prod.productType === 'affiliate' ? (affiliate?.cta || DEFAULT_AMAZON_CTA) : (prod.cta?.text || 'View product ↗')}
         </a>
+        <small className="sp-aff-note">As an Amazon Associate, I earn from qualifying purchases.</small>
       </div>
     )
   }
@@ -734,7 +815,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
   if (prod.bundle && !prod.bundle.available)
     return (
       <div className="sp-buyrow">
-        <PriceTag prod={prod} />
+        <PriceTag prod={prod} edit={!live} />
         <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} disabled title="One of this bundle’s products isn’t available">Unavailable</button>
       </div>
     )
@@ -750,7 +831,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
         : prod.cta?.text || 'Get it free'
     return (
       <div className="sp-buyrow">
-        <span className="sp-price">Free</span>
+        <span className={live ? 'sp-price' : 'sp-price sp-part'} {...(live ? {} : { 'data-edit-part': 'price', 'data-label': 'Price' })}>Free</span>
         <button
           type="button"
           className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'}
@@ -766,7 +847,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
   }
   return (
     <div className="sp-buyrow">
-      <PriceTag prod={prod} />
+      <PriceTag prod={prod} edit={!live} />
       <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={disabled} onClick={() => onBuy?.(prod)} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
         {buying === prod.id ? 'Opening checkout…' : prod.cta?.text || 'Buy now'}
       </button>
@@ -775,7 +856,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
 }
 
 function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
-  const external = safeExternalUrl(p.affiliate?.url ?? '')
+  const external = affiliateHref(p)
   return (
     <section className="sp-block sp-detail">
       <Gallery p={p} label={`${p.title} images`} />

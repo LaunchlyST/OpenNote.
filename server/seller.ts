@@ -20,6 +20,7 @@ import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { makeBlobs } from './blobs.ts'
 import type { Blobs } from './blobs.ts'
 import { resolve } from 'node:path'
+import { isIP } from 'node:net'
 import express, { Router } from 'express'
 import type { NextFunction, Request, Response } from 'express'
 import Stripe from 'stripe'
@@ -31,6 +32,7 @@ import type { Sql } from './sql.ts'
 import { env } from './env.ts'
 import { enqueueEmail, sendNow, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
+import { AMAZON_LINK_ERROR, checkAmazonUrl, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../shared/amazon-link.ts'
 import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices } from './payments.ts'
 import type { PaymentSettings } from './payments.ts'
 
@@ -443,6 +445,77 @@ const affiliateUrl = (v: unknown) => {
     return ''
   }
 }
+
+/**
+ * Amazon affiliate links use an explicit hostname allowlist. Legacy records
+ * without a product type keep the older http(s)-only rule so existing stores
+ * don't break, but a record explicitly marked as Amazon must pass this check.
+ */
+const amazonLinkCheck = (v: unknown) => checkAmazonUrl(typeof v === 'string' ? v.slice(0, 2000) : '')
+const affiliateTypeOf = (x: { productType?: ProductType; affiliate?: { url?: string } } | undefined | null): ProductType => productTypeOf(x)
+/** Checkout, claims and delivery must all refuse an affiliate product. */
+const isAffiliatePublished = (p: ProductRow) => affiliateTypeOf(readExtras(p.pubExtras)) === 'affiliate'
+
+/** Never follow a redirect to a private address, a loopback host or a non-http scheme. */
+function unsafeRedirectHost(hostname: string): boolean {
+  const h = hostname.replace(/^\[|\]$/g, '').toLowerCase()
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal') || h === '::1') return true
+  if (isIP(h) === 4) {
+    const [a, b] = h.split('.').map(Number)
+    return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || (a === 198 && (b === 18 || b === 19))
+  }
+  if (isIP(h) === 6) return h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80') || h.startsWith('::ffff:')
+  return false
+}
+function safeRedirectUrl(location: string, base: string): string | null {
+  try {
+    const u = new URL(location, base)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null
+    if (u.username || u.password || unsafeRedirectHost(u.hostname)) return null
+    return u.toString()
+  } catch {
+    return null
+  }
+}
+/** Follow Amazon short links manually and check every hop; only a real Amazon
+ *  product page at the end is accepted. No body is read and no page is executed. */
+async function resolveAmazonDestination(raw: string): Promise<boolean> {
+  let current = raw
+  const seen = new Set<string>()
+  for (let hop = 0; hop < 5; hop++) {
+    const amazon = checkAmazonUrl(current)
+    if (amazon.ok && !amazon.short) return true
+    const safe = safeRedirectUrl(current, 'https://amazon.com/')
+    if (!safe || seen.has(safe)) return false
+    seen.add(safe)
+    let res: Awaited<ReturnType<typeof fetch>>
+    try {
+      res = await fetch(safe, { method: 'GET', redirect: 'manual', headers: { 'User-Agent': 'Desknoty link check' }, signal: AbortSignal.timeout(4000) })
+    } catch {
+      return false
+    }
+    const location = res.headers.get('location')
+    if (!location) return false
+    const next = safeRedirectUrl(location, safe)
+    if (!next || seen.has(next)) return false
+    current = next
+  }
+  return false
+}
+/** Validate the raw request before cleaning strips an invalid link down to ''. */
+async function explicitAmazonError(body: Record<string, unknown>): Promise<string | null> {
+  const extras = (body ?? {})?.extras
+  if (!extras || typeof extras !== 'object') return null
+  const e = extras as Record<string, unknown>
+  if (e.productType !== 'affiliate') return null
+  const a = (e.affiliate ?? {}) as Record<string, unknown>
+  const raw = String(a.url ?? '').trim() || String(a.input ?? '').trim()
+  if (!raw) return null
+  const checked = amazonLinkCheck(raw)
+  if (!checked.ok) return AMAZON_LINK_ERROR
+  if (checked.short && !(await resolveAmazonDestination(checked.url))) return AMAZON_LINK_ERROR
+  return null
+}
 const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.test(v) ? v : null)
 
 /**
@@ -748,8 +821,11 @@ export type ProductExtras = {
   related: string[]
   /** Stage C: a bundle lists 2 or more of the seller's own products; buying it grants all of them. */
   bundle: string[]
+  /** Explicit product mode. Missing on older records: infer it from `affiliate.url`. */
+  productType?: ProductType
+  category?: string
   /** Affiliate / external mode: when set, shows an external link instead of Buy/Download. */
-  affiliate?: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
+  affiliate?: { url: string; input?: string; cta?: string; image?: string; title?: string; description?: string; disclosure?: string }
   /** Typography for the card title and description; empty values follow the store theme. */
   titleStyle: TextStyle
   descStyle: TextStyle
@@ -801,16 +877,37 @@ export function cleanExtras(v: unknown): ProductExtras {
   value = kind === 'percent' ? Math.min(95, Math.max(0, value)) : Math.max(0, Math.min(99_999_99, value))
   const cta = (o.cta ?? {}) as Record<string, unknown>
   const affiliate = (o.affiliate ?? {}) as Record<string, unknown>
-  // http(s) only, no credentials; the exact string (with tracking params) is kept.
+  // Only an explicit choice is stored. Old records have no productType: their
+  // http(s) affiliate.url still makes them affiliates, but saving an unrelated
+  // field must not turn that legacy behaviour into a new Amazon-only rule.
+  const explicit: ProductType | undefined = o.productType === 'affiliate' || o.productType === 'normal' ? o.productType : undefined
+  const rawInput = line(affiliate.input ?? affiliate.url ?? '', 1000)
   const rawAffiliateUrl = String(affiliate.url ?? '').trim()
-  const safeUrl = affiliateUrl(rawAffiliateUrl) ? rawAffiliateUrl : null
+  const strict = explicit === 'affiliate'
+  // The raw text is kept alongside the validated URL so a rejected Amazon link
+  // can be corrected in the editor instead of silently disappearing.
+  const amazon = strict ? amazonLinkCheck(rawAffiliateUrl) : null
+  const safeUrl = strict ? (amazon?.ok ? amazon.url : '') : (affiliateUrl(rawAffiliateUrl) ? rawAffiliateUrl : null)
   const affiliateImage = affiliateUrl(affiliate.image) ? line(affiliate.image, 1000) : ''
+  const affiliateFields = {
+    input: rawInput,
+    cta: strict ? (line(affiliate.cta, 40) || DEFAULT_AMAZON_CTA) : line(affiliate.cta, 40) || undefined,
+    image: affiliateImage || undefined,
+    title: line(affiliate.title, 80) || undefined,
+    description: line(affiliate.description, 500) || undefined,
+    disclosure: line(affiliate.disclosure, 500) || (strict ? 'As an Amazon Associate, I earn from qualifying purchases.' : undefined),
+  }
   return {
     offer: { on: Boolean(f.on), kind, value, starts: isoDay(f.starts), ends: isoDay(f.ends), badge: BADGES.includes(String(f.badge)) ? String(f.badge) : 'PERCENT', badgeColor: HEX.test(String(f.badgeColor)) ? String(f.badgeColor) : '#e11d48', ...offerSchedule(f) },
     cta: { text: String(cta.text ?? '').replace(/[\r\n]/g, ' ').trim().slice(0, 30), color: HEX.test(String(cta.color)) ? String(cta.color) : '' },
     hidden: Boolean(o.hidden),
     ...cleanCard(o),
-    affiliate: safeUrl ? { url: safeUrl, image: affiliateImage || undefined, title: line(affiliate.title, 80) || undefined, description: line(affiliate.description, 500) || undefined, disclosure: line(affiliate.disclosure, 500) || undefined } : undefined,
+    ...(explicit ? { productType: explicit } : {}),
+    category: line(o.category, 80),
+    // Keep the affiliate fields when switching back to Normal: nothing is
+    // silently deleted. They are ignored by the storefront and by checkout
+    // while the explicit type is normal.
+    affiliate: safeUrl || rawInput ? { url: safeUrl || '', ...affiliateFields } : undefined,
   }
 }
 const LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
@@ -924,7 +1021,11 @@ function productPublicView(p: ProductRow) {
     currency: p.pubCurrency ?? 'gbp',
     ...(() => {
       const x = readExtras(p.pubExtras)
-      return { offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, titleStyle: x.titleStyle, descStyle: x.descStyle, cardBg: x.cardBg, cardRadius: x.cardRadius, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle, affiliate: x.affiliate }
+      const type = affiliateTypeOf(x)
+      // Never publish an invalid or non-Amazon affiliate URL, even if an old
+      // draft still carries one. The storefront only sees the checked value.
+      const affiliate = type === 'affiliate' && x.affiliate?.url ? x.affiliate : undefined
+      return { productType: x.productType, category: x.category, offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, titleStyle: x.titleStyle, descStyle: x.descStyle, cardBg: x.cardBg, cardRadius: x.cardRadius, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle, affiliate }
     })(),
   }
 }
@@ -933,11 +1034,16 @@ function productProblem(p: ProductRow): string | null {
   if (!CURRENCIES.has(p.currency)) return 'Choose a currency.'
   if (p.priceMinor < 0) return 'The price can’t be negative.'
   if (paymentOf(p) === 'paid' && p.priceMinor <= 0) return 'Add a price above 0, or switch this product to free.'
-  const bundle = readExtras(p.extras).bundle
+  const x = readExtras(p.extras)
+  const bundle = x.bundle
   if (bundle.length === 1) return 'A bundle needs at least 2 products.'
   if (bundle.length >= 2) return null
   // An affiliate product is bought on the partner's site: it needs no file here.
-  if (readExtras(p.extras).affiliate?.url) return null
+  if (affiliateTypeOf(x) === 'affiliate') {
+    if (x.productType === 'affiliate' && !amazonLinkCheck(x.affiliate?.url ?? '').ok) return AMAZON_LINK_ERROR
+    if (!x.affiliate?.url) return AMAZON_LINK_ERROR
+    return null
+  }
   if (!p.fileId) return 'Upload the file buyers will download.'
   return null
 }
@@ -1471,6 +1577,15 @@ export function sellerRouter() {
   me.post('/store/publish', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
+    // A published affiliate product must have a checked Amazon destination.
+    // Short links resolve on the server; a failed check blocks the publish.
+    for (const p of await q.products(s.id)) {
+      if (!p.listed || p.archived) continue
+      const x = readExtras(p.extras)
+      if (x.productType !== 'affiliate') continue
+      const checked = amazonLinkCheck(x.affiliate?.url ?? '')
+      if (!checked.ok || (checked.short && !(await resolveAmazonDestination(checked.url)))) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+    }
     const t = now()
     await sql.tx(async (tx) => {
       for (const p of await q.products(s.id, tx)) {
@@ -1540,6 +1655,8 @@ export function sellerRouter() {
   me.post('/products', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
+    const linkError = await explicitAmazonError((req.body ?? {}) as Record<string, unknown>)
+    if (linkError) return void res.status(400).json({ error: linkError })
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const count = (await q.products(s.id)).length
@@ -1554,11 +1671,27 @@ export function sellerRouter() {
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
+  /** Check an Amazon link before saving/publishing. Short links are followed
+   *  here (server-side) so the browser can never bypass the destination check. */
+  me.post('/products/amazon-check', async (req: Authed, res) => {
+    if (!await mine(req, res)) return
+    const raw = String((req.body ?? {})?.url ?? '')
+    const checked = amazonLinkCheck(raw)
+    if (!checked.ok) return void res.status(400).json({ ok: false, error: AMAZON_LINK_ERROR })
+    if (checked.short && !(await resolveAmazonDestination(checked.url))) return void res.status(400).json({ ok: false, error: AMAZON_LINK_ERROR })
+    res.json({ ok: true, url: checked.url, short: checked.short })
+  })
+
   me.patch('/products/:id', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
     const p = await q.product(String(req.params.id), s.id)
     if (!p) return void res.status(404).json({ error: 'Product not found.' })
+    // An explicitly typed Amazon affiliate may be drafted with an empty URL,
+    // but anything filled in must be a real Amazon product link. This reads the
+    // raw body: cleaning an invalid link turns it into '' and would hide it.
+    const linkError = await explicitAmazonError((req.body ?? {}) as Record<string, unknown>)
+    if (linkError) return void res.status(400).json({ error: linkError })
     const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const token = writerToken(req.body?.token)
@@ -2152,7 +2285,7 @@ export function sellerRouter() {
     const found = await q.product(String(b.productId ?? ''), s.id)
     if (!found || !found.pubAt || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t available.' })
     // An affiliate product is bought on the partner's site: there is no file to send.
-    if (readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'Affiliate products are not available as free products.' })
+    if (isAffiliatePublished(found)) return void res.status(409).json({ error: 'Affiliate products are not available as free products.' })
     const bundle = readExtras(found.pubExtras).bundle
     if (!found.pubFileId && bundle.length < 2) return void res.status(404).json({ error: 'This product isn’t available.' })
     const priced = await pricePurchase(s, found, b.coupon)
@@ -2240,7 +2373,7 @@ export function sellerRouter() {
     const found = s ? await q.product(c.productId, s.id) : undefined
     if (!s || !found || !found.pubAt) return void res.status(404).json({ error: 'This product isn’t available any more.' })
     // The product may have become an affiliate product since the link was sent.
-    if (readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'This product isn’t available as a free download any more.' })
+    if (isAffiliatePublished(found)) return void res.status(409).json({ error: 'This product isn’t available as a free download any more.' })
     // the same address already has this product: hand back that order instead of a duplicate
     let order = c.orderId ? await q.order(c.orderId) : await sql.get<OrderRow>(`SELECT * FROM seller_order WHERE "storeId" = ? AND "productId" = ? AND method = 'free' AND status = 'paid' AND "buyerEmail" = ? ORDER BY "createdAt" LIMIT 1`, s.id, found.id, c.email)
     if (!order) {
@@ -2287,6 +2420,7 @@ export function sellerRouter() {
     if (!s) return
     const found = await q.product(String(req.body?.productId ?? ''), s.id)
     if (!found || !found.pubAt || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
+    if (isAffiliatePublished(found)) return void res.status(409).json({ error: 'This product is sold on the partner’s website.' })
     const given = String(req.body?.coupon ?? '').trim()
     const code = given ? normaliseCode(given) : null
     const c = code ? await q.coupon(s.id, code) : undefined
@@ -2302,7 +2436,7 @@ export function sellerRouter() {
     const bundleIds = found ? readExtras(found.pubExtras).bundle : []
     // Affiliate / external products are bought on the partner's site. Refuse a
     // crafted checkout too, so no Desknoty order is ever created for them.
-    if (found && readExtras(found.pubExtras).affiliate?.url) return void res.status(409).json({ error: 'This product is sold on the partner’s website.' })
+    if (found && isAffiliatePublished(found)) return void res.status(409).json({ error: 'This product is sold on the partner’s website.' })
     if (!found || !found.pubAt || (!found.pubFileId && bundleIds.length < 2) || found.pubPriceMinor == null || !found.pubCurrency) return void res.status(404).json({ error: 'This product isn’t for sale.' })
     // A bundle can only be bought when the order will grant every item: each must be live with a file.
     let entitlements: Array<{ productId: string; title: string; fileId: string; fileName: string }> = []

@@ -1,5 +1,8 @@
 /** Seller Studio data, as the Desknoty server stores it. */
 import { apiUrl } from '../../lib/api-base'
+import { AMAZON_CTA_PRESETS, checkAmazonUrl, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../../../shared/amazon-link.ts'
+
+export { AMAZON_CTA_PRESETS, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType }
 
 /** Desknoty's cut of each sale. Stripe's own processing fee is separate and charged by Stripe. */
 export const PLATFORM_FEE_PERCENT = 0
@@ -120,8 +123,11 @@ export interface ShopProduct {
   related?: string[]
   /** Stage C: a bundle's items; available only when every item can be delivered. */
   bundle?: { items: Array<{ id: string; title: string }>; available: boolean } | null
+  /** Explicit product mode; old data is inferred from `affiliate.url`. */
+  productType?: ProductType
+  category?: string
   /** Affiliate / external mode: when set, shows an external link instead of Buy/Download. */
-  affiliate?: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
+  affiliate?: { url: string; cta?: string; image?: string; title?: string; description?: string; disclosure?: string }
   /** Per-product typography for the card title and description. */
   titleStyle?: TextStyle
   descStyle?: TextStyle
@@ -133,7 +139,7 @@ export interface ShopProduct {
 export type CardLayout = 'compact' | 'showcase' | 'featured'
 
 /** The parts of a product card that can be edited by clicking them in the preview. */
-export type CardPart = 'cover' | 'title' | 'desc' | 'button' | 'card'
+export type CardPart = 'cover' | 'price' | 'title' | 'desc' | 'button' | 'card'
 
 /**
  * Typography for one piece of card text. Every field is optional: an empty
@@ -191,7 +197,11 @@ export type ProductExtras = {
   textPos: { title: number; desc: number }
   related: string[]
   bundle: string[]
-  affiliate: { url: string; image?: string; title?: string; description?: string; disclosure?: string }
+  /** Explicit product mode. Old records are inferred from `affiliate.url`. */
+  productType?: ProductType
+  /** Shared category, shown for both product types. */
+  category?: string
+  affiliate: { url: string; input?: string; cta?: string; image?: string; title?: string; description?: string; disclosure?: string }
   titleStyle: TextStyle
   descStyle: TextStyle
   cardBg: CardBg
@@ -214,7 +224,9 @@ export const DEFAULT_EXTRAS: ProductExtras = {
   textPos: { title: 0, desc: 0 },
   related: [],
   bundle: [],
-  affiliate: { url: '', image: '', title: '', description: '', disclosure: '' },
+  productType: 'normal',
+  category: '',
+  affiliate: { url: '', input: '', cta: DEFAULT_AMAZON_CTA, image: '', title: '', description: '', disclosure: '' },
   titleStyle: { ...DEFAULT_TEXT_STYLE },
   descStyle: { ...DEFAULT_TEXT_STYLE },
   cardBg: '',
@@ -239,7 +251,12 @@ export function withExtras(x: Partial<ProductExtras> | undefined): ProductExtras
     faq: x?.faq ?? [],
     related: x?.related ?? [],
     bundle: x?.bundle ?? [],
-    affiliate: x?.affiliate ?? DEFAULT_EXTRAS.affiliate,
+    // Keep the saved choice only. An old record has none: its http(s)
+    // affiliate.url still behaves as before, and must not be promoted to the
+    // stricter Amazon-only type just by opening and saving the editor.
+    productType: x?.productType,
+    category: x?.category ?? '',
+    affiliate: { ...DEFAULT_EXTRAS.affiliate, ...x?.affiliate },
     titleStyle: { ...DEFAULT_TEXT_STYLE, ...x?.titleStyle },
     descStyle: { ...DEFAULT_TEXT_STYLE, ...x?.descStyle },
     cardBg: x?.cardBg ?? '',
@@ -344,6 +361,8 @@ export function newBlock(type: BlockType): Block {
 export const MAX_STORE_PAGES = 3
 /** A product block (one product, a carousel, or a collection) per page. */
 export const MAX_PRODUCT_BLOCKS_PER_PAGE = 3
+/** The preview always offers three slots; an owner can fill a fourth. */
+export const MAX_PRODUCT_SLIDES = 4
 
 /** A block that presents products. A carousel is still one block, whatever its slide count. */
 export const isProductBlock = (b: Block) => b.type === 'featured' || b.type === 'grid'
@@ -417,7 +436,7 @@ export function newSlide(kind: ProductSlide['kind'] = 'digital', productId: stri
     id: `sld_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`,
     kind,
     productId,
-    affiliate: { url: '', title: '', description: '', cover: null, cta: 'View product ↗' },
+    affiliate: { url: '', title: '', description: '', cover: null, cta: DEFAULT_AMAZON_CTA },
   }
 }
 
@@ -434,7 +453,7 @@ export function cleanSlide(raw: Partial<ProductSlide> | null | undefined): Produ
       title: typeof a.title === 'string' ? a.title : '',
       description: typeof a.description === 'string' ? a.description : '',
       cover: typeof a.cover === 'string' ? a.cover : null,
-      cta: typeof a.cta === 'string' ? a.cta : 'View product ↗',
+      cta: typeof a.cta === 'string' ? a.cta : DEFAULT_AMAZON_CTA,
     },
   }
 }
@@ -467,6 +486,24 @@ export function safeExternalUrl(input: string): string | null {
   } catch {
     return null
   }
+}
+
+/** Affiliate slides use the same Amazon-only policy as product-level affiliates. */
+export { checkAmazonUrl as amazonUrlCheck, AMAZON_LINK_ERROR } from '../../../shared/amazon-link.ts'
+
+/**
+ * One storefront decision for every card: explicit affiliates go to Amazon,
+ * old untyped affiliates keep their http(s) link, and a normal product ignores
+ * any affiliate fields left over from a previous type.
+ */
+export function affiliateHref(p: Pick<ShopProduct, 'productType' | 'affiliate'>): string | null {
+  const url = p.affiliate?.url?.trim()
+  if (!url || p.productType === 'normal') return null
+  if (p.productType === 'affiliate') {
+    const checked = checkAmazonUrl(url)
+    return checked.ok ? checked.url : null
+  }
+  return safeExternalUrl(url)
 }
 
 /** An empty affiliate URL is allowed while drafting; a filled one must be safe. */

@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import pg from 'pg'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
+import { AMAZON_LINK_ERROR, checkAmazonUrl, productTypeOf } from '../shared/amazon-link.ts'
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-seller-'))
 const PORT = 4000 + Math.floor(Math.random() * 90)
@@ -316,10 +317,37 @@ try {
   check('published card settings reach the public store', pub2.layout === 'showcase' && pub2.subtitle === 'Plan a month in one afternoon' && pub2.textPos.title === 0.5 && pub2.gallery[0] === mineImg && pub2.badges.new === true && pub2.titleStyle?.font === 'playfair' && pub2.cardBg === 'tint' && pub2.cardRadius === 24)
   check('the public card shows a file type label, not the file name', pub2.fileType === 'PDF' && !JSON.stringify(pub2).includes('planner.pdf'))
   const badAff = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, affiliate: { url: 'javascript:alert(1)', title: 'Bad' } } }, A)
-  check('a product affiliate link must be http(s)', badAff.json?.product?.extras?.affiliate === undefined)
+  check('a product affiliate link must be http(s)', badAff.status === 200 && badAff.json?.product?.extras?.affiliate?.url === '' && productTypeOf(badAff.json?.product?.extras) === 'normal')
   const goodAff = await req('PATCH', `/api/seller/products/${pid}`, { extras: { ...vx, affiliate: { url: 'https://partner.example/x?ref=1&utm_campaign=ava', title: 'Partner' } } }, A)
   check('a product affiliate link keeps its tracking params', goodAff.json?.product?.extras?.affiliate?.url === 'https://partner.example/x?ref=1&utm_campaign=ava')
   await req('PATCH', `/api/seller/products/${pid}`, { extras: vx }, A)
+
+  console.log('\n  Amazon affiliate products: validation, publishing and checkout guards')
+  const amazonUrl = 'https://www.amazon.co.uk/dp/B0C1ABCDEF?tag=ava-21'
+  const badAmazonUrl = 'https://amazon.co.uk.evil.example/dp/B0C1ABCDEF'
+  // The same validator runs in the browser and on the API.
+  check('the shared validator accepts recognised marketplaces and short links', checkAmazonUrl(amazonUrl).ok && checkAmazonUrl('https://amzn.to/abc123').ok)
+  check('the shared validator rejects lookalike hosts', !checkAmazonUrl(badAmazonUrl).ok && !checkAmazonUrl('https://notamazon.com/dp/B0C1ABCDEF').ok)
+  const invalidCheck = await req('POST', '/api/seller/products/amazon-check', { url: badAmazonUrl }, A)
+  check('the link-check API rejects a lookalike with the exact message', invalidCheck.status === 400 && invalidCheck.json?.error === AMAZON_LINK_ERROR, JSON.stringify(invalidCheck.json))
+  const validCheck = await req('POST', '/api/seller/products/amazon-check', { url: amazonUrl }, A)
+  check('the link-check API keeps Associates tracking parameters', validCheck.status === 200 && validCheck.json?.url === amazonUrl, JSON.stringify(validCheck.json))
+
+  const aff = (await req('POST', '/api/seller/products', { title: 'Amazon pick', priceMinor: 0, currency: 'gbp' }, A)).json.product
+  const badAffiliate = await req('PATCH', `/api/seller/products/${aff.id}`, { extras: { productType: 'affiliate', affiliate: { url: badAmazonUrl } } }, A)
+  check('a saved Amazon product refuses a lookalike URL', badAffiliate.status === 400 && badAffiliate.json?.error === AMAZON_LINK_ERROR, JSON.stringify(badAffiliate.json))
+  const savedAff = await req('PATCH', `/api/seller/products/${aff.id}`, { extras: { productType: 'affiliate', category: 'Tech', cta: { text: 'Buy now', color: '' }, affiliate: { url: amazonUrl, cta: 'Shop on Amazon', disclosure: 'I earn from qualifying purchases.' } } }, A)
+  const affExtras = savedAff.json?.product?.extras
+  check('an Amazon product saves its type, category, custom CTA and disclosure', savedAff.status === 200 && affExtras?.productType === 'affiliate' && affExtras?.category === 'Tech' && affExtras?.affiliate?.cta === 'Shop on Amazon' && affExtras?.affiliate?.disclosure === 'I earn from qualifying purchases.' && affExtras?.affiliate?.url === amazonUrl, JSON.stringify(affExtras))
+  check('an Amazon product needs no uploaded file to publish', (await req('POST', '/api/seller/store/publish', undefined, A)).status === 200)
+  const liveAff = (await req('GET', '/api/store/ava-makes')).json.products.find((p: { id: string }) => p.id === aff.id)
+  check('the live Amazon card has a custom CTA and disclosure, with no Desknoty checkout', liveAff?.productType === 'affiliate' && liveAff?.affiliate?.cta === 'Shop on Amazon' && liveAff?.affiliate?.disclosure === 'I earn from qualifying purchases.' && liveAff?.affiliate?.url === amazonUrl, JSON.stringify(liveAff))
+  const beforeAffOrders = (await dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "productId" = ?`, aff.id)).n
+  const checkoutAff = await req('POST', '/api/store/ava-makes/checkout', { productId: aff.id, email: 'buyer@affiliate.test' })
+  const quoteAff = await req('POST', '/api/store/ava-makes/quote', { productId: aff.id })
+  const claimAff = await req('POST', '/api/store/ava-makes/claim', { productId: aff.id, email: 'buyer@affiliate.test', name: 'Buyer', clientRef: 'affiliate_claim_0001' })
+  const afterAffOrders = (await dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "productId" = ?`, aff.id)).n
+  check('direct checkout, quote and free claim all refuse an Amazon product', checkoutAff.status === 409 && quoteAff.status === 409 && claimAff.status === 409 && beforeAffOrders === afterAffOrders, `${checkoutAff.status}/${quoteAff.status}/${claimAff.status}`)
 
   await req('PATCH', `/api/seller/products/${pid}`, { title: 'Content planner v2', priceMinor: 99 }, A)
   await req('PUT', '/api/seller/store/draft', { page: { ...store.draft, blocks: between.filter((x: { type: string }) => x.type !== 'faq') } }, A)

@@ -3,7 +3,7 @@ import { Download, Star } from 'lucide-react'
 import { BuyRow, StorePage, storeStyle } from '../projects/seller/StorePage'
 import { ProductSheet } from '../projects/seller/ProductCard'
 import { Style2Page } from '../projects/seller/Style2'
-import { formatPrice, isFreeProduct, mediaUrl } from '../projects/seller/model'
+import { affiliateHref, formatPrice, isFreeProduct, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
 import type { ClaimState, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
@@ -201,7 +201,7 @@ export default function PublicStore({ path }: { path: string }) {
       <Shell store={store}>
         {params.get('checkout') === 'cancelled' && <Banner>Checkout cancelled. You weren’t charged.</Banner>}
         {buyErr && <Banner>{buyErr}</Banner>}
-        {!store.checkoutReady && product.priceMinor > 0 && <Banner>This seller hasn’t added a bank account in Payouts yet, so you can’t buy right now.</Banner>}
+        {!store.checkoutReady && product.priceMinor > 0 && !affiliateHref(product) && <Banner>This seller hasn’t added a bank account in Payouts yet, so you can’t buy right now.</Banner>}
         {chooser}
         {party}
         {store.page.layout === 'style2' ? <Style2Page {...base} only={product} /> : <StorePage {...base} only={product} />}

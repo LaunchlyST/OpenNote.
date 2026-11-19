@@ -125,7 +125,7 @@ try {
 
   // 2. Product with a private file and a cover
   await page.getByRole('tab', { name: /Products/ }).click()
-  await page.getByRole('button', { name: 'Add Product' }).click()
+  await page.getByRole('button', { name: 'Add Product', exact: true }).click()
   await page.getByPlaceholder('e.g. Content planner template').fill('Content planner')
   await page.getByPlaceholder('What buyers get, in a few lines').fill('A Notion template for planning a month of videos.')
   const price = page.getByLabel('Price', { exact: true })
@@ -348,7 +348,9 @@ try {
   try { process.kill(-web.pid!, 'SIGTERM') } catch { web.kill('SIGTERM') }
   await new Promise<void>((r) => (api.once('exit', () => r()), api.kill('SIGTERM')))
   await fake.close()
-  if (!process.env.SHOTS_DIR) rmSync(tmp, { recursive: true, force: true })
+  // Windows can keep a transient lock on a temp file just after the child
+  // processes exit. Retry briefly, and never fail the run over leftover temp.
+  if (!process.env.SHOTS_DIR) { try { rmSync(tmp, { recursive: true, force: true, maxRetries: 6, retryDelay: 200 }) } catch { /* keep the folder */ } }
 }
 console.log(failures ? `\n${failures} check(s) failed.` : '\nAll seller browser checks passed.')
 process.exit(failures ? 1 : 0)
