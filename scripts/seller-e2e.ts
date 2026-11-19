@@ -303,6 +303,7 @@ try {
           slideEditorStillOpen && (await thirdSelected) === 'true' && thirdProductSelected === prod3.id,
           `editor=${slideEditorStillOpen} slide=${await thirdSelected} product=${thirdProductSelected}`,
         )
+        check(`${tag}: a Digital slide editor hides the Affiliate option`, (await page.locator('.bl-inline').getByRole('button', { name: 'Affiliate', exact: true }).count()) === 0 && (await page.locator('.bl-inline .sld-kind-static').count()) >= 1)
 
         // "Edit this product" opens the third product's full editor and returns
         // to the same slide rather than dropping the owner in the product list.
@@ -387,29 +388,37 @@ try {
         `before=${blocksAfter} after=${blocksAfterImages}`,
       )
 
-      // 3f. The type selector owns the whole product editor: irrelevant fields
-      // disappear, shared fields survive, and the saved type follows the choice.
+      // 3f. Normal is the clean default: no Affiliate tools at all. An Amazon
+      // product keeps the switch so it can be returned to Normal without losing
+      // the shared title, description or category.
       const typeProduct = (await api('POST', '/api/seller/products', { title: 'Editor type test', priceMinor: 500, currency: 'gbp' }, C)).json.product
       await page.reload()
       await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
       await page.getByText(/^Products \(/).first().click()
       await page.getByRole('button', { name: /Editor type test/ }).first().click()
-      const normalRadio = page.getByRole('radio', { name: /Normal Product/ })
       const affiliateRadio = page.getByRole('radio', { name: /Affiliate Product/ })
+      const normalRadio = page.getByRole('radio', { name: /Normal Product/ })
       const categoryInput = page.getByLabel('Category')
       const amazonInput = page.getByRole('textbox', { name: 'Amazon product URL' })
-      check(`${tag}: a new product starts as a Normal Product`, (await normalRadio.getAttribute('aria-checked')) === 'true' && (await page.locator('input[aria-label="Price"]').count()) === 1 && (await page.getByText('Digital delivery', { exact: true }).count()) === 1)
+      check(`${tag}: a new product starts as Normal with no Affiliate option`, (await affiliateRadio.count()) === 0 && (await page.getByText('Normal Product', { exact: true }).count()) === 1 && (await page.locator('input[aria-label="Price"]').count()) === 1 && (await page.getByText('Digital delivery', { exact: true }).count()) === 1)
       check(`${tag}: the Normal editor hides Amazon fields`, (await amazonInput.count()) === 0)
-      await categoryInput.fill('Tech')
-      await affiliateRadio.click()
-      await page.waitForTimeout(500)
-      check(`${tag}: switching to Affiliate hides price, payment and file fields`, (await affiliateRadio.getAttribute('aria-checked')) === 'true' && (await page.locator('input[aria-label="Price"]').count()) === 0 && (await page.getByText('Digital delivery', { exact: true }).count()) === 0 && (await page.getByText('Checkout', { exact: true }).count()) === 0)
+      const normalEditorText = await page.locator('.ss-stack').innerText()
+      check(`${tag}: the Normal editor never mentions an Amazon link`, !/Amazon link|affiliate link/i.test(normalEditorText), normalEditorText.slice(0, 400))
+
+      const goodLink = 'https://www.amazon.co.uk/dp/B0C1ABCDEF?tag=e2e-21'
+      const promoted = await api('PATCH', `/api/seller/products/${typeProduct.id}`, { revision: typeProduct.revision, extras: { productType: 'affiliate', affiliate: { url: goodLink, cta: 'View on Amazon', disclosure: 'As an Amazon Associate I earn from qualifying purchases.' } } }, C)
+      check(`${tag}: an affiliate product can be opened for editing`, promoted.status === 200, String(promoted.status))
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await page.getByText(/^Products \(/).first().click()
+      await page.getByRole('button', { name: /Editor type test/ }).first().click()
+      await page.waitForTimeout(300)
+      check(`${tag}: an Amazon product shows the switch and affiliate fields`, (await affiliateRadio.getAttribute('aria-checked')) === 'true' && (await amazonInput.count()) === 1 && (await page.locator('input[aria-label="Price"]').count()) === 0 && (await page.getByText('Digital delivery', { exact: true }).count()) === 0 && (await page.getByText('Checkout', { exact: true }).count()) === 0)
       const ctaChips = page.locator('.pe-chips button')
-      check(`${tag}: the Affiliate editor shows the Amazon defaults`, (await amazonInput.count()) === 1 && (await ctaChips.filter({ hasText: 'View on Amazon' }).getAttribute('aria-pressed')) === 'true' && (await ctaChips.filter({ hasText: 'Check on Amazon' }).count()) === 1 && (await page.getByLabel('Affiliate disclosure').inputValue()).includes('Amazon Associate'))
-      check(`${tag}: shared category survives the type switch`, (await page.getByLabel('Category').inputValue()) === 'Tech')
+      check(`${tag}: the Affiliate editor shows the Amazon defaults`, (await ctaChips.filter({ hasText: 'View on Amazon' }).getAttribute('aria-pressed')) === 'true' && (await ctaChips.filter({ hasText: 'Check on Amazon' }).count()) === 1 && (await page.getByLabel('Affiliate disclosure').inputValue()).includes('Amazon Associate'))
+      await categoryInput.fill('Tech')
       await amazonInput.fill('https://amazon.co.uk.evil.example/dp/B0C1ABCDEF')
       check(`${tag}: an Amazon lookalike shows the exact link error`, (await page.getByText(AMAZON_LINK_ERROR, { exact: true }).count()) > 0)
-      const goodLink = 'https://www.amazon.co.uk/dp/B0C1ABCDEF?tag=e2e-21'
       await amazonInput.fill(goodLink)
       await page.getByRole('button', { name: 'Test link' }).click()
       await page.waitForTimeout(600)
@@ -421,7 +430,7 @@ try {
       await normalRadio.click()
       await page.waitForTimeout(2200)
       const backSaved = (await api('GET', '/api/seller/store', undefined, C)).json.store.products.find((p: { id: string }) => p.id === typeProduct.id)
-      check(`${tag}: switching back hides Amazon fields but keeps their values`, (await amazonInput.count()) === 0 && (await categoryInput.inputValue()) === 'Tech' && backSaved?.extras?.productType === 'normal' && backSaved.extras.affiliate.url === goodLink, JSON.stringify(backSaved?.extras))
+      check(`${tag}: returning to Normal removes the Affiliate option but keeps shared fields`, (await affiliateRadio.count()) === 0 && (await amazonInput.count()) === 0 && (await categoryInput.inputValue()) === 'Tech' && backSaved?.extras?.productType === 'normal' && backSaved.extras.affiliate.url === goodLink, JSON.stringify(backSaved?.extras))
       await page.getByRole('button', { name: /Back to Products/ }).first().click()
       await page.waitForTimeout(800)
 
@@ -696,13 +705,28 @@ try {
       check(`${tag}: publishing keeps the server product PAID`, afterPublish?.paymentType === 'paid' && afterPublish.priceMinor === 1000, JSON.stringify(afterPublish && { mode: afterPublish.paymentType, price: afterPublish.priceMinor }))
       check(`${tag}: the live product is PAID at the new price`, livePublished?.paymentType === 'paid' && livePublished.priceMinor === 1000, JSON.stringify(livePublished && { mode: livePublished.paymentType, price: livePublished.priceMinor }))
 
-      // Changing the type of a published product must warn first; cancelling
-      // the warning must leave the product exactly as it was.
+      // Changing a published Amazon product back to Normal must warn first;
+      // cancelling must leave the product exactly as it was.
+      const warnCreated = await api('POST', '/api/seller/products', { title: 'Type warning test', priceMinor: 0, currency: 'gbp' }, C)
+      const warnProduct = warnCreated.json.product
+      const warnPatched = await api('PATCH', `/api/seller/products/${warnProduct.id}`, { revision: warnProduct.revision, extras: { productType: 'affiliate', affiliate: { url: 'https://www.amazon.co.uk/dp/B0CWARN123', cta: 'View on Amazon', disclosure: 'As an Amazon Associate I earn from qualifying purchases.' } } }, C)
+      check(`${tag}: a published Amazon product can be prepared for the warning check`, warnCreated.status === 201 && warnPatched.status === 200, `${warnCreated.status}/${warnPatched.status}`)
+      await api('POST', '/api/seller/store/publish', undefined, C)
+      await page.reload()
+      await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
+      await page.getByText(/^Products \(/).first().click()
+      await page.locator('details.pg-archived summary').filter({ hasText: 'Product library' }).first().click()
+      await page.getByRole('button', { name: /Type warning test/ }).first().click()
       let typeWarned = false
-      page.once('dialog', async (d) => { typeWarned = d.type() === 'confirm' && /published product to an Amazon affiliate/i.test(d.message()); await d.dismiss() })
-      await page.getByRole('radio', { name: /Affiliate Product/ }).click()
+      page.once('dialog', async (d) => { typeWarned = d.type() === 'confirm' && /published affiliate product to a normal product/i.test(d.message()); await d.dismiss() })
+      await page.getByRole('radio', { name: /Normal Product/ }).click()
       await page.waitForTimeout(400)
-      check(`${tag}: changing a published product type warns and can be cancelled`, typeWarned && (await page.getByRole('radio', { name: /Normal Product/ }).getAttribute('aria-checked')) === 'true', `warned=${typeWarned}`)
+      check(`${tag}: changing a published product type warns and can be cancelled`, typeWarned && (await page.getByRole('radio', { name: /Affiliate Product/ }).getAttribute('aria-checked')) === 'true', `warned=${typeWarned}`)
+      await page.getByRole('button', { name: /Back to Products/ }).first().click()
+      await page.waitForTimeout(600)
+      await page.locator('details.pg-archived summary').filter({ hasText: 'Product library' }).first().click()
+      await page.getByRole('button', { name: /Pricing guard/ }).first().click()
+      await price.waitFor()
 
       // Only an intentional click on the selector may change the mode.
       await freeSwitch.click()

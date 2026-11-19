@@ -96,6 +96,30 @@ import {
 const MAX_PRODUCT_FILE_MB = 50
 import type { Block, BlockType, CardPart, DraftProduct, PaymentType, ProductExtras, ProductType, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, ShopProduct, StoreView } from './model'
 
+/** Copy text even when the async Clipboard API is blocked, denied or missing. */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch { /* the fallback below works on http and older browsers too */ }
+  try {
+    const field = document.createElement('textarea')
+    field.value = text
+    field.setAttribute('readonly', '')
+    field.style.position = 'fixed'
+    field.style.top = '0'
+    field.style.left = '-9999px'
+    document.body.appendChild(field)
+    field.select()
+    field.setSelectionRange(0, text.length)
+    const ok = document.execCommand('copy')
+    field.remove()
+    return ok
+  } catch { return false }
+}
+
 /**
  * Seller Studio: Start your store → optional Connect TikTok → build the page,
  * add products, connect payouts, publish, copy the bio link.
@@ -468,7 +492,7 @@ function TikTokBioConnect({ onUnreachable }: { onUnreachable: () => void }) {
           <p className="ss-ttflow-step"><b>1.</b> Copy this code:</p>
           <div className="ss-ttcode">
             <code>{code}</code>
-            <button type="button" className="ss-ghost" onClick={() => void navigator.clipboard?.writeText(code).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)))}>{copied ? 'Copied' : 'Copy'}</button>
+            <button type="button" className="ss-ghost" onClick={() => void copyToClipboard(code).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1500) } })}>{copied ? 'Copied' : 'Copy'}</button>
           </div>
           <p className="ss-ttflow-step"><b>2.</b> On TikTok go to <b>Profile → Edit profile → Bio</b>, paste it anywhere in your bio and save.</p>
           <p className="ss-ttflow-step"><b>3.</b> Come back and press Verify. You can delete the code from your bio afterwards.</p>
@@ -662,12 +686,20 @@ function Studio({
   const [toast, setToast] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [shared, setShared] = useState(false)
+  const [shareFailed, setShareFailed] = useState(false)
   const share = async () => {
-    const url = store.url
-    try {
-      if (navigator.share && window.innerWidth < 760) await navigator.share({ title: page.name || store.handle, url })
-      else { await navigator.clipboard.writeText(url); setShared(true); window.setTimeout(() => setShared(false), 1600) }
-    } catch { /* cancelled */ }
+    // Always copy the store's website URL. The native share sheet made "Share"
+    // open a panel instead of filling the clipboard, so pasting did nothing.
+    const url = store.url || `${window.location.origin}/${store.handle}`
+    const ok = await copyToClipboard(url)
+    if (ok) {
+      setShared(true)
+      setShareFailed(false)
+      window.setTimeout(() => setShared(false), 1600)
+    } else {
+      setShareFailed(true)
+      window.setTimeout(() => setShareFailed(false), 4000)
+    }
   }
   // Undo / redo over the draft (every change still autosaves as the draft only).
   // The chosen style is not part of an edit: undoing a change must never swap
@@ -1194,7 +1226,7 @@ function Studio({
             <i />{saving === 'saving' || pageSave.dirty ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved ✓'}
           </span>
           <button type="button" className="pv-btn" onClick={() => setPreviewOpen(true)}><Eye className="h-4 w-4" /> Preview</button>
-          <button type="button" className="pv-btn" onClick={() => void share()}><Share2 className="h-4 w-4" /> {shared ? 'Link copied' : 'Share'}</button>
+          <button type="button" className="pv-btn" title={`Copy ${store.url || `${window.location.origin}/${store.handle}`}`} onClick={() => void share()}><Share2 className="h-4 w-4" /> {shared ? 'Link copied' : shareFailed ? 'Copy failed' : 'Share'}</button>
           <button type="button" className="pv-btn pv-publish" onClick={() => void publish()} disabled={publishing}><Globe className="h-4 w-4" /> {publishing ? 'Publishing…' : 'Publish'}</button>
         </div>
         <div
@@ -2028,10 +2060,14 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSe
         <div className="sld-card" key={s.id}>
           <div className="sld-head">
             <span className="sld-num" aria-hidden="true">{a + 1}</span>
-            <div className="sld-kinds" role="group" aria-label={`Slide ${a + 1} type`}>
-              <button type="button" aria-pressed={s.kind === 'digital'} className={s.kind === 'digital' ? 'on' : ''} onClick={() => changeKind('digital')}>Digital product</button>
-              <button type="button" aria-pressed={s.kind === 'affiliate'} className={s.kind === 'affiliate' ? 'on' : ''} onClick={() => changeKind('affiliate')}>Affiliate</button>
-            </div>
+            {s.kind === 'digital' ? (
+              <span className="sld-kind-static" aria-label={`Slide ${a + 1} type`}>Digital product</span>
+            ) : (
+              <div className="sld-kinds" role="group" aria-label={`Slide ${a + 1} type`}>
+                <button type="button" aria-pressed={false} onClick={() => changeKind('digital')}>Digital product</button>
+                <button type="button" aria-pressed={true} className="on" onClick={() => changeKind('affiliate')}>Affiliate</button>
+              </div>
+            )}
             <button type="button" className="ss-ghost" aria-label={`Remove slide ${a + 1}`} onClick={() => { onChange(slides.filter((_, j) => j !== a)); setActive(0); onActiveSlideChange?.(0) }}><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
           {s.kind === 'digital' ? (
@@ -2541,7 +2577,7 @@ function confirmProductTypeChange(published: boolean, next: ProductType) {
   if (!published) return true
   return window.confirm(next === 'affiliate'
     ? 'Change this published product to an Amazon affiliate product? Buyers will stop buying and downloading it here. Existing orders and download links stay valid, and your price and file are kept but hidden until you switch back.'
-    : 'Change this published affiliate product to a normal product? Buyers can buy it here again once you save a price and add a file. Your Amazon link is kept but hidden until you switch back.')
+    : 'Change this published affiliate product to a normal product? Buyers can buy it here again once you save a price and add a file. Your Amazon settings are kept but hidden until you switch back.')
 }
 
 const productForm = (p: DraftProduct): ProductFormState => ({
@@ -2688,14 +2724,22 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
         </p>
       )}
 
-      <div className="pe-type" role="radiogroup" aria-label="Product type">
-        <button type="button" role="radio" aria-checked={!affiliate} aria-pressed={!affiliate} onClick={() => switchType('normal')}>
-          <Package className="h-4 w-4" aria-hidden="true" /><span><b>Normal Product</b><small>Price, Stripe checkout and file delivery</small></span>
-        </button>
-        <button type="button" role="radio" aria-checked={affiliate} aria-pressed={affiliate} onClick={() => switchType('affiliate')}>
-          <ExternalLink className="h-4 w-4" aria-hidden="true" /><span><b>Affiliate Product</b><small>Amazon link, no Desknoty payment</small></span>
-        </button>
-      </div>
+      {affiliate ? (
+        <div className="pe-type" role="radiogroup" aria-label="Product type">
+          <button type="button" role="radio" aria-checked={false} aria-pressed={false} onClick={() => switchType('normal')}>
+            <Package className="h-4 w-4" aria-hidden="true" /><span><b>Normal Product</b><small>Price, Stripe checkout and file delivery</small></span>
+          </button>
+          <button type="button" role="radio" aria-checked={true} aria-pressed={true} onClick={() => switchType('affiliate')}>
+            <ExternalLink className="h-4 w-4" aria-hidden="true" /><span><b>Affiliate Product</b><small>Amazon products, no Desknoty payment</small></span>
+          </button>
+        </div>
+      ) : (
+        <div className="pe-type pe-type-static" aria-label="Product type">
+          <div>
+            <Package className="h-4 w-4" aria-hidden="true" /><span><b>Normal Product</b><small>Price, Stripe checkout and file delivery</small></span>
+          </div>
+        </div>
+      )}
       {product.published && <p className="ss-hint pe-type-note">Changing the type of a published product affects checkout and delivery. Existing orders and download access are never removed.</p>}
 
       <PSection icon={<Package className="h-4 w-4" />} title="Product details" sub={affiliate ? 'Title, description and category' : 'Title, description and category'} open>
@@ -2753,7 +2797,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
                 />
               </label>
             </div>
-            <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get an expiring link after paying.</span>
+            <span className="ss-hint">Up to {MAX_PRODUCT_FILE_MB} MB. Kept private. Buyers only get expiring access after paying.</span>
           </div>
         </PSection>
       )}
@@ -2901,7 +2945,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
 
       {!affiliate && (
         <PSection icon={<Landmark className="h-4 w-4" />} title="Checkout" sub="Stripe payments and private downloads">
-          <p className="ss-hint">Buyers pay securely with Stripe. After payment they get an expiring download link for the file above, and the order appears in your Orders tab. Checkout also needs a connected payout account in Payouts.</p>
+          <p className="ss-hint">Buyers pay securely with Stripe. After payment they get secure, expiring access to the file above, and the order appears in your Orders tab. Checkout also needs a connected payout account in Payouts.</p>
         </PSection>
       )}
 
@@ -2926,7 +2970,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
         </PSection>
       )}
 
-      <PSection icon={<Globe className="h-4 w-4" />} title="Publishing" sub={vis === 'draft' ? 'Draft' : vis === 'hidden' ? 'Hidden · link only' : 'Published'} open>
+      <PSection icon={<Globe className="h-4 w-4" />} title="Publishing" sub={vis === 'draft' ? 'Draft' : vis === 'hidden' ? (affiliate ? 'Hidden · link only' : 'Hidden · direct only') : 'Published'} open>
         <div className="pe-seg pe-seg3" role="radiogroup" aria-label="Visibility">
           <button type="button" role="radio" aria-checked={vis === 'draft'} onClick={() => setVis('draft')}>Draft</button>
           <button type="button" role="radio" aria-checked={vis === 'published'} onClick={() => setVis('published')}>Published</button>
@@ -2935,14 +2979,14 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
         <p className="ss-hint">
           {affiliate
             ? `This product sends buyers to Amazon. No price, checkout, Stripe payment or download is shown, and no Desknoty order is created. ${linkProblem || (vis === 'draft' ? 'Not shown yet; publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by its own link only; not listed on your page.' : 'On sale once you press Publish on your page.')}`
-            : vis === 'draft' ? 'Not on sale. Publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by its own link only; not listed on your page.' : 'On sale once you press Publish on your page.'}
+            : vis === 'draft' ? 'Not on sale. Publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by direct address only; not listed on your page.' : 'On sale once you press Publish on your page.'}
           {!affiliate && product.problem ? ` To sell it: ${product.problem}` : ''}
         </p>
         {product.published && (
           <div className="ss-row">
             <code className="ss-code">{shareUrl.replace(/^https?:\/\//, '')}</code>
             <a className="ss-ghost" href={shareUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" /> Preview</a>
-            <button type="button" className="ss-ghost" onClick={() => void navigator.clipboard?.writeText(shareUrl).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1500)))}>
+            <button type="button" className="ss-ghost" onClick={() => void copyToClipboard(shareUrl).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1500) } })}>
               <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy link'}
             </button>
           </div>
@@ -3215,7 +3259,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
     setMethods(v.payouts.methods ?? [])
   }
   const [bankErr, setBankErr] = useState<string | null>(null)
-  const useBank = async (i: number) => {
+  const pickBank = async (i: number) => {
     setBankErr(null)
     try { afterSave((await sellerApi.useBank(i)).store) } catch (e) { setBankErr((e as Error).message) }
   }
@@ -3295,7 +3339,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           const active = isActive(sb)
           return (
             <article key={`${sb.sortCode}${sb.accountNumber}${sb.iban}`} className={cn('wl-bank', active && 'wl-bank-active', !active && 'wl-bank-pick')} aria-label={`${sb.bankName || 'Bank'} ending ${sb.accountNumber.slice(-4) || sb.iban.slice(-4)}`}
-              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void useBank(i) }}>
+              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void pickBank(i) }}>
               <header>
                 <BankMark name={sb.bankName} />
                 <b>{sb.bankName || 'Bank account'}</b>
@@ -3310,7 +3354,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
                 <small>{active ? 'Buyers pay here' : ''}</small>
                 {active
                   ? <button type="button" className="wl-btn" onClick={() => setBankOpen('edit')}>Edit bank details</button>
-                  : <button type="button" className="wl-btn wl-btn-main" onClick={() => void useBank(i)}>Use this account</button>}
+                  : <button type="button" className="wl-btn wl-btn-main" onClick={() => void pickBank(i)}>Use this account</button>}
               </footer>
             </article>
           )
@@ -3392,13 +3436,13 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           activeIndex={saved.findIndex(isActive)}
           orders={(orders ?? []).filter((o) => o.method === 'bank')}
           onClose={() => setPaidOpen(false)}
-          onPick={useBank}
+          onPick={pickBank}
           onAdd={() => (setPaidOpen(false), setBankOpen('new'))}
         />
       )}
       {choosing && (
         <ChooseBankDialog saved={saved} activeIndex={saved.findIndex(isActive)} onClose={() => setChoosing(false)} onAdd={() => (setChoosing(false), setBankOpen('new'))}
-          onPick={async (i) => { await useBank(i); setChoosing(false) }} />
+          onPick={async (i) => { await pickBank(i); setChoosing(false) }} />
       )}
       {withdrawing && <WithdrawDialog amount={avail} currency={cur} banks={banks} onClose={() => setWithdrawing(false)} onSent={(m) => (setSent(m), setWithdrawing(false), void load())} />}
     </div>
@@ -3551,7 +3595,7 @@ function LinkPanel({ store, setStore }: { store: StoreView; setStore: (s: StoreV
   const [saved, setSaved] = useState(false)
   const check = useHandleCheck(handle)
   const short = store.url.replace(/^https?:\/\//, '')
-  const copy = () => void navigator.clipboard?.writeText(store.url).then(() => (setCopied(true), window.setTimeout(() => setCopied(false), 1600)))
+  const copy = () => void copyToClipboard(store.url).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1600) } })
   const save = () =>
     void sellerApi
       .changeHandle(handle)

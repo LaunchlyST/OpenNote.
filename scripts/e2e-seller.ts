@@ -123,6 +123,12 @@ try {
   await page.getByRole('tab', { name: 'Page' }).waitFor()
   check('studio opens on the Page tab', true)
 
+  // The toolbar Share button must fill the clipboard with the store's website
+  // URL, not open a share sheet that leaves nothing to paste.
+  await page.getByRole('button', { name: 'Share', exact: true }).click()
+  await page.getByRole('button', { name: 'Link copied' }).waitFor()
+  check('Studio Share copies the website URL', (await page.evaluate(() => navigator.clipboard.readText())) === `${SITE}/ava-makes`, await page.evaluate(() => navigator.clipboard.readText()))
+
   // 2. Product with a private file and a cover
   await page.getByRole('tab', { name: /Products/ }).click()
   await page.getByRole('button', { name: 'Add Product', exact: true }).click()

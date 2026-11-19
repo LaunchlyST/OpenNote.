@@ -7675,6 +7675,7 @@ select.ss-input option {
 .sld-kinds { display: flex; gap: 4px; margin-left: auto; }
 .sld-kinds button { padding: 5px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 650; color: #555; background: #f2f1ee; }
 .sld-kinds button.on { color: #fff; background: #111114; }
+.sld-kind-static { margin-left: auto; padding: 5px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 650; color: #fff; background: #111114; }
 .sld-row { display: flex; align-items: center; gap: 8px; }
 .sld-thumb { width: 44px; height: 44px; flex: 0 0 auto; border-radius: 9px; background: #f2f1ee center/cover no-repeat; }
 .sld-note { padding: 8px 10px; border-radius: 9px; font-size: 12px; line-height: 1.45; color: #6b6a66; background: #f7f6f3; }
@@ -8549,17 +8550,19 @@ select.ss-input option {
 .pe-saved { margin-left: auto; font-size: 12px; color: #8a8a96; white-space: nowrap; }
 /* Product type: the one switch that decides every field below it. */
 .pe-type { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.pe-type button { display: flex; align-items: flex-start; gap: 9px; min-height: 62px; padding: 10px 11px; border-radius: 13px; text-align: left; color: #52525b; background: #fff; box-shadow: inset 0 0 0 1px #e4e4e7; transition: background .15s, box-shadow .15s, transform .12s; }
+.pe-type button, .pe-type-static > div { display: flex; align-items: flex-start; gap: 9px; min-height: 62px; padding: 10px 11px; border-radius: 13px; text-align: left; color: #52525b; background: #fff; box-shadow: inset 0 0 0 1px #e4e4e7; transition: background .15s, box-shadow .15s, transform .12s; }
 .pe-type button:hover { background: #fafafa; }
 .pe-type button:active { transform: scale(.99); }
 .pe-type button[aria-checked='true'] { color: #111114; background: #f4f4f5; box-shadow: inset 0 0 0 2px #111114; }
-.pe-type button > svg { flex: none; margin-top: 2px; }
-.pe-type button span { display: grid; gap: 3px; min-width: 0; }
-.pe-type button b { font-size: 13.5px; }
-.pe-type button small { font-size: 11.5px; color: #8a8a96; line-height: 1.35; }
+.pe-type button > svg, .pe-type-static > div > svg { flex: none; margin-top: 2px; }
+.pe-type button span, .pe-type-static > div span { display: grid; gap: 3px; min-width: 0; }
+.pe-type button b, .pe-type-static > div b { font-size: 13.5px; }
+.pe-type button small, .pe-type-static > div small { font-size: 11.5px; color: #8a8a96; line-height: 1.35; }
+.pe-type-static { grid-template-columns: 1fr; }
+.pe-type-static > div { color: #111114; background: #f4f4f5; box-shadow: inset 0 0 0 2px #111114; }
 .pe-type-note { margin: -2px 0 2px; }
 .pe-aff-status { flex-wrap: wrap; }
-@media (max-width: 520px) { .pe-type { grid-template-columns: 1fr; } }
+@media (max-width: 520px) { .pe-type, .pe-type-static { grid-template-columns: 1fr; } }
 
 .pe-sec { border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px #ececef; transition: box-shadow .2s; }
 .pe-sec.on { box-shadow: 0 0 0 1px #e4e4e7, 0 8px 24px -16px rgba(0,0,0,.25); }
