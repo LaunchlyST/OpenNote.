@@ -6,6 +6,7 @@ import { SITE, useDocumentMeta } from './landing/seo'
 import { Button, Logo } from './landing/components/primitives'
 import { LandingGate } from './landing/LandingGate'
 import { HomeGate } from './landing/HomeGate'
+import { isShortProductId } from '../shared/short-link.ts'
 
 /**
  * Application shell.
@@ -29,6 +30,9 @@ const DesignPreview = lazy(() => import('./design/DesignPreview'))
 
 // Public seller storefronts at /store/<handle>. No account needed; never gated.
 const PublicStore = lazy(() => import('./store/PublicStore'))
+// Shared desknoty.com/p/<shortId> links. This is the GitHub Pages bootstrap;
+// Express answers the same path with a real redirect when it hosts the site.
+const ShortLink = lazy(() => import('./store/ShortLink'))
 const NewHome = lazy(() => import('./landing/NewHome'))
 
 /** desknoty.com/home-preview: the new homepage, for signed-in admins only. */
@@ -152,6 +156,14 @@ function Routes() {
   }
   if (path === '/') return <HomeGate />
   if (path === '/landing') return <LandingGate />
+  const shortId = path.startsWith('/p/') ? path.slice(3) : ''
+  if (isShortProductId(shortId)) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <ShortLink shortId={shortId} />
+      </Suspense>
+    )
+  }
   // The new homepage before launch: admins only (everyone else goes back to the waitlist)
   if (path === '/home-preview') return <HomePreview />
   if (isAppRoute(path)) {

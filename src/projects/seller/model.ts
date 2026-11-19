@@ -1,6 +1,7 @@
 /** Seller Studio data, as the Desknoty server stores it. */
 import { apiUrl } from '../../lib/api-base'
-import { AMAZON_CTA_PRESETS, checkAmazonUrl, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../../../shared/amazon-link.ts'
+import { AMAZON_CTA_PRESETS, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../../../shared/amazon-link.ts'
+import { shortProductPath } from '../../../shared/short-link.ts'
 
 export { AMAZON_CTA_PRESETS, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType }
 
@@ -91,6 +92,8 @@ export type PaymentType = 'paid' | 'free'
 /** What the storefront renderer needs to know about a product. */
 export interface ShopProduct {
   id: string
+  /** Permanent public address: desknoty.com/p/<shortId>. */
+  shortId?: string | null
   title: string
   description: string
   cover: string | null
@@ -496,14 +499,13 @@ export { checkAmazonUrl as amazonUrlCheck, AMAZON_LINK_ERROR } from '../../../sh
  * old untyped affiliates keep their http(s) link, and a normal product ignores
  * any affiliate fields left over from a previous type.
  */
-export function affiliateHref(p: Pick<ShopProduct, 'productType' | 'affiliate'>): string | null {
-  const url = p.affiliate?.url?.trim()
-  if (!url || p.productType === 'normal') return null
-  if (p.productType === 'affiliate') {
-    const checked = checkAmazonUrl(url)
-    return checked.ok ? checked.url : null
-  }
-  return safeExternalUrl(url)
+export function affiliateHref(p: Pick<ShopProduct, 'productType' | 'affiliate' | 'shortId'>): string | null {
+  if (p.productType === 'normal') return null
+  // Explicit Amazon affiliates always go through Desknoty's own short link;
+  // the server rechecks the destination before sending anyone to Amazon.
+  if (p.productType === 'affiliate') return p.shortId ? shortProductPath(p.shortId) : null
+  // Old products without a type keep their original http(s) destination.
+  return safeExternalUrl(p.affiliate?.url?.trim() ?? '')
 }
 
 /** An empty affiliate URL is allowed while drafting; a filled one must be safe. */

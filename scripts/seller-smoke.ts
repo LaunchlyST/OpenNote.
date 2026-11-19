@@ -22,6 +22,7 @@ import Database from 'better-sqlite3'
 import pg from 'pg'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
 import { AMAZON_LINK_ERROR, checkAmazonUrl, productTypeOf } from '../shared/amazon-link.ts'
+import { isShortProductId } from '../shared/short-link.ts'
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-seller-'))
 const PORT = 4000 + Math.floor(Math.random() * 90)
@@ -241,6 +242,15 @@ try {
   check('public store never exposes file details', !live.text.includes('planner.pdf') && !live.text.includes('fil_'))
   check('checkout is off before payouts are ready', live.json.checkoutReady === false)
 
+  console.log('\n  Normal product short links')
+  const normalShort = p1.json?.product?.shortId as string
+  check('every product gets a permanent unpredictable short id', isShortProductId(normalShort) && normalShort !== pid)
+  const normalLink = await req('GET', `/api/p/${normalShort}`)
+  check('a normal short link resolves to the real Desknoty product page', normalLink.status === 200 && normalLink.json?.kind === 'normal' && normalLink.json?.path === `/ava-makes/p/${pid}`, JSON.stringify(normalLink.json))
+  check('a normal short link never exposes affiliate data', !normalLink.text.includes('affiliate') && !normalLink.text.includes('amazon'))
+  const dup = await req('POST', `/api/seller/products/${pid}/duplicate`, undefined, A)
+  check('a duplicated product gets its own short id', dup.status === 201 && isShortProductId(dup.json?.product?.shortId) && dup.json.product.shortId !== normalShort, JSON.stringify(dup.json?.product?.shortId))
+
   console.log('\n  Store pages, product slides and affiliate links')
   const trackUrl = 'https://partner.example/item?ref=ava&utm_source=desknoty'
   const pageDraft = {
@@ -339,9 +349,31 @@ try {
   const savedAff = await req('PATCH', `/api/seller/products/${aff.id}`, { extras: { productType: 'affiliate', category: 'Tech', cta: { text: 'Buy now', color: '' }, affiliate: { url: amazonUrl, cta: 'Shop on Amazon', disclosure: 'I earn from qualifying purchases.' } } }, A)
   const affExtras = savedAff.json?.product?.extras
   check('an Amazon product saves its type, category, custom CTA and disclosure', savedAff.status === 200 && affExtras?.productType === 'affiliate' && affExtras?.category === 'Tech' && affExtras?.affiliate?.cta === 'Shop on Amazon' && affExtras?.affiliate?.disclosure === 'I earn from qualifying purchases.' && affExtras?.affiliate?.url === amazonUrl, JSON.stringify(affExtras))
+  const unpublishedLink = await req('GET', `/api/p/${savedAff.json?.product?.shortId}`)
+  check('an unpublished product link is unavailable', unpublishedLink.status === 404, String(unpublishedLink.status))
   check('an Amazon product needs no uploaded file to publish', (await req('POST', '/api/seller/store/publish', undefined, A)).status === 200)
   const liveAff = (await req('GET', '/api/store/ava-makes')).json.products.find((p: { id: string }) => p.id === aff.id)
-  check('the live Amazon card has a custom CTA and disclosure, with no Desknoty checkout', liveAff?.productType === 'affiliate' && liveAff?.affiliate?.cta === 'Shop on Amazon' && liveAff?.affiliate?.disclosure === 'I earn from qualifying purchases.' && liveAff?.affiliate?.url === amazonUrl, JSON.stringify(liveAff))
+  check('the live Amazon card has a custom CTA and disclosure, with no Desknoty checkout', liveAff?.productType === 'affiliate' && liveAff?.affiliate?.cta === 'Shop on Amazon' && liveAff?.affiliate?.disclosure === 'I earn from qualifying purchases.' && liveAff?.affiliate?.url === '', JSON.stringify(liveAff))
+  const affShort = savedAff.json?.product?.shortId as string
+  check('an Amazon product keeps its short id through saves and publishing', isShortProductId(affShort) && liveAff?.shortId === affShort && affShort !== normalShort, JSON.stringify(liveAff?.shortId))
+  const affLink = await req('GET', `/api/p/${affShort}`)
+  check('an affiliate short link JSON never returns the stored Amazon URL', affLink.status === 200 && affLink.json?.kind === 'affiliate' && affLink.json?.path === `/api/p/${affShort}/redirect` && !affLink.text.includes('amazon.co.uk') && !affLink.text.includes('tag=ava-21'), JSON.stringify(affLink.json))
+  const aff302 = await req('GET', `/api/p/${affShort}/redirect`)
+  check('an affiliate short link 302s to the checked Amazon URL', aff302.status === 302 && aff302.headers.get('location') === amazonUrl, `${aff302.status} ${aff302.headers.get('location')}`)
+  const root302 = await req('GET', `/p/${affShort}`)
+  check('the root /p/<id> route issues the same safe redirect', root302.status === 302 && root302.headers.get('location') === amazonUrl, `${root302.status} ${root302.headers.get('location')}`)
+  check('tracking parameters survive the affiliate redirect', new URL(aff302.headers.get('location')!).searchParams.get('tag') === 'ava-21')
+  const republished = await req('PATCH', `/api/seller/products/${aff.id}`, { title: 'Amazon pick v2' }, A)
+  await req('POST', '/api/seller/store/publish', undefined, A)
+  const afterRepublish = await req('GET', `/api/p/${affShort}/redirect`)
+  check('editing and republishing keep the short link working', republished.json?.product?.shortId === affShort && afterRepublish.status === 302 && afterRepublish.headers.get('location') === amazonUrl)
+  const privateAff = await req('PATCH', `/api/seller/products/${aff.id}`, { extras: { productType: 'affiliate', affiliate: { url: 'http://127.0.0.1/dp/B0C1ABCDEF?tag=ava-21' } } }, A)
+  check('private-network Amazon destinations are refused', privateAff.status === 400 && privateAff.json?.error === AMAZON_LINK_ERROR, JSON.stringify(privateAff.json))
+  const gone = await req('POST', '/api/seller/products', { title: 'Temporary', priceMinor: 100, currency: 'gbp' }, A)
+  const goneShort = gone.json?.product?.shortId as string
+  await req('DELETE', `/api/seller/products/${gone.json?.product?.id}`, undefined, A)
+  check('a deleted product’s short link fails safely', isShortProductId(goneShort) && (await req('GET', `/api/p/${goneShort}`)).status === 404)
+  check('an unknown short id fails safely', (await req('GET', '/api/p/zzzzzz')).status === 404)
   const beforeAffOrders = (await dbGet<{ n: number }>(`SELECT COUNT(*) AS n FROM seller_order WHERE "productId" = ?`, aff.id)).n
   const checkoutAff = await req('POST', '/api/store/ava-makes/checkout', { productId: aff.id, email: 'buyer@affiliate.test' })
   const quoteAff = await req('POST', '/api/store/ava-makes/quote', { productId: aff.id })

@@ -1,4 +1,5 @@
 import { sql, authDatabase } from './db.ts'
+import { newShortProductId } from './short-id.ts'
 import type Database from 'better-sqlite3'
 
 /** Retain the store and purchase ledger when its owner closes their account. */
@@ -26,7 +27,7 @@ export async function migrateSeller() {
   for (const [table, columns] of Object.entries({
     email_outbox: { providerId: 'TEXT', deliveredAt: 'BIGINT', bouncedAt: 'BIGINT' },
     seller_store: { revision: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", payments: 'TEXT', draftToken: 'TEXT' },
-    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0', extras: 'TEXT', pubExtras: 'TEXT', archived: 'INTEGER NOT NULL DEFAULT 0', sampleFileId: 'TEXT', sampleName: 'TEXT', sampleSize: 'INTEGER', pubSampleFileId: 'TEXT', pubSampleName: 'TEXT', lastToken: 'TEXT', paymentType: 'TEXT' },
+    seller_product: { revision: 'INTEGER NOT NULL DEFAULT 0', extras: 'TEXT', pubExtras: 'TEXT', archived: 'INTEGER NOT NULL DEFAULT 0', sampleFileId: 'TEXT', sampleName: 'TEXT', sampleSize: 'INTEGER', pubSampleFileId: 'TEXT', pubSampleName: 'TEXT', lastToken: 'TEXT', paymentType: 'TEXT', shortId: 'TEXT' },
     seller_order: { checkoutKey: 'TEXT', checkoutUrl: 'TEXT', receiptId: 'INTEGER', paymentIntent: 'TEXT', refunded: 'INTEGER NOT NULL DEFAULT 0', disputed: 'INTEGER NOT NULL DEFAULT 0', stripeMode: "TEXT NOT NULL DEFAULT 'test'", method: "TEXT NOT NULL DEFAULT 'stripe'", reference: 'TEXT', providerOrderId: 'TEXT', buyerClaimedAt: 'TEXT', payerName: 'TEXT', payerBank: 'TEXT', payTo: 'TEXT', sellerHidden: 'INTEGER NOT NULL DEFAULT 0', listMinor: 'INTEGER', discountMinor: 'INTEGER NOT NULL DEFAULT 0', couponCode: 'TEXT', couponId: 'TEXT', resendCount: 'INTEGER NOT NULL DEFAULT 0', resendAt: 'TEXT', receiptError: 'TEXT' },
   })) {
     const existing = sql.dialect === 'sqlite'
@@ -38,6 +39,18 @@ export async function migrateSeller() {
   // happens to be typing. Backfill only old rows; from here on every write sets
   // the mode, and an unfinished price is never saved as 0.
   await sql.run(`UPDATE seller_product SET "paymentType" = CASE WHEN "priceMinor" = 0 THEN 'free' ELSE 'paid' END WHERE "paymentType" IS NULL`)
+  // Every product gets one permanent public address. Existing products are
+  // backfilled once; later edits never regenerate the id, and the unique index
+  // is the final guard against handing the same address to two products.
+  await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_product_short_id ON seller_product ("shortId") WHERE "shortId" IS NOT NULL')
+  for (const row of await sql.all<{ id: string }>(`SELECT id FROM seller_product WHERE "shortId" IS NULL OR "shortId" = ''`)) {
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const shortId = newShortProductId()
+      if (await sql.get(`SELECT 1 FROM seller_product WHERE "shortId" = ?`, shortId)) continue
+      await sql.run(`UPDATE seller_product SET "shortId" = ? WHERE id = ?`, shortId, row.id)
+      break
+    }
+  }
   // One Desknoty order per PayPal order and per bank reference: duplicate notifications can't fork an order.
   await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_order_provider ON seller_order ("providerOrderId") WHERE "providerOrderId" IS NOT NULL; CREATE UNIQUE INDEX IF NOT EXISTS seller_order_reference ON seller_order (reference) WHERE reference IS NOT NULL;')
   await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_checkout_key ON seller_order ("storeId", "checkoutKey"); CREATE TABLE IF NOT EXISTS seller_connections ("storeId" TEXT NOT NULL REFERENCES seller_store(id), mode TEXT NOT NULL, "accountId" TEXT NOT NULL, PRIMARY KEY ("storeId", mode));')

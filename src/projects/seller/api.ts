@@ -161,7 +161,15 @@ export interface PriceQuote {
   cardMinimum: number
 }
 
+/** The browser bootstrap only gets a route to follow, never an affiliate URL. */
+export interface ShortLinkInfo {
+  ok: true
+  kind: 'affiliate' | 'normal'
+  path: string
+}
+
 export const storeApi = {
+  shortLink: (shortId: string) => call<ShortLinkInfo>('GET', `/api/p/${encodeURIComponent(shortId)}`),
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
   checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) =>
     call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string; emailStatus?: EmailStatus; emailError?: string | null }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}) }),

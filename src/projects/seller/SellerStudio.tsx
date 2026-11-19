@@ -2663,7 +2663,11 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   const setOffer = (n: Partial<ProductExtras['offer']>) => setX({ offer: { ...x.offer, ...n } })
 
   const sym = CURRENCIES.find((c) => c.code === form.currency)?.symbol ?? '£'
-  const shareUrl = `${store.url}/p/${product.id}`
+  // The short id is created with the product and never changes on edit or
+  // republish. Older rows without one keep their original address.
+  const siteOrigin = (() => { try { return new URL(store.url).origin } catch { return store.url.replace(/\/$/, '') } })()
+  const productLink = product.shortId ? `${siteOrigin}/p/${product.shortId}` : `${store.url}/p/${product.id}`
+  const copyProductLink = () => void copyToClipboard(productLink).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1500) } })
   // The mode is explicit: typing 0 (or clearing the field) never flips it.
   // A recovered value from an older build has no mode; the saved product's mode
   // wins there, because its price is a valid saved price.
@@ -2691,6 +2695,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
     ...x,
     productType: ptype,
     id: product.id,
+    shortId: product.shortId,
     title: form.title.trim() || 'Untitled product',
     description: form.description,
     cover: form.cover,
@@ -2803,7 +2808,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
       )}
 
       {affiliate && (
-        <PSection icon={<ExternalLink className="h-4 w-4" />} title="Amazon link" sub={linkProblem ?? 'Ready to publish'} open>
+        <PSection icon={<Link2 className="h-4 w-4" />} title="Product link" sub={linkProblem ?? 'Amazon destination ready'} open>
           <Field label="Amazon product URL" hint="Amazon marketplace product pages and Amazon short links only. Associates tags are kept.">
             <input
               className="ss-input"
@@ -2821,7 +2826,15 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
             <button type="button" className="ss-ghost" disabled={!linkInput.trim() || busy} onClick={() => void testLink()}>Test link</button>
           </div>
           {linkTest && <p className="ss-hint" role="status">{linkTest.message}</p>}
-          <Field label="Button text" hint="Shown on your store instead of Buy now.">
+          <Field label="Your Desknoty link" hint="Share this on Instagram, TikTok, WhatsApp or anywhere else. It stays the same when you edit or republish.">
+            <div className="ss-row">
+              <code className="ss-code">{productLink.replace(/^https?:\/\//, '')}</code>
+              <button type="button" className="ss-ghost" aria-label={copied ? 'Copied' : 'Copy link'} onClick={copyProductLink}>
+                <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+          </Field>
+          <Field label="Affiliate button text" hint="Shown on your store instead of Buy now.">
             <div className="pe-chips">
               {AMAZON_CTA_PRESETS.map((t) => <button key={t} type="button" aria-pressed={(x.affiliate?.cta || DEFAULT_AMAZON_CTA) === t} onClick={() => setX({ affiliate: { ...x.affiliate, cta: t } })}>{t}</button>)}
             </div>
@@ -2846,6 +2859,21 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
           </>
         )}
       </PSection>
+
+      {!affiliate && (
+      <PSection icon={<Link2 className="h-4 w-4" />} title="Product link" sub="Permanent shareable address" open>
+        <Field label="Desknoty product URL" hint="This link opens the real product page with its images, description, price and secure checkout or download. It never redirects to Amazon.">
+          <div className="ss-row">
+            <code className="ss-code">{productLink.replace(/^https?:\/\//, '')}</code>
+            <a className="ss-ghost" href={productLink} target="_blank" rel="noreferrer" aria-label="Preview product"><ExternalLink className="h-3.5 w-3.5" /> Preview product</a>
+            <button type="button" className="ss-ghost" aria-label={copied ? 'Copied' : 'Copy link'} onClick={copyProductLink}>
+              <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy link'}
+            </button>
+          </div>
+        </Field>
+        <p className="ss-hint">The address is created once and keeps working after edits and republishing. It starts working when your store is published.</p>
+      </PSection>
+      )}
 
       {!affiliate && (
       <PSection icon={<Tag className="h-4 w-4" />} title="Pricing & offers" sub={offerLive ? `${fmt(sale)} · ${badgeText}` : free ? 'Free' : fmt(priceMinor)} open>
@@ -2982,15 +3010,6 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
             : vis === 'draft' ? 'Not on sale. Publish your page after switching to Published.' : vis === 'hidden' ? 'On sale by direct address only; not listed on your page.' : 'On sale once you press Publish on your page.'}
           {!affiliate && product.problem ? ` To sell it: ${product.problem}` : ''}
         </p>
-        {product.published && (
-          <div className="ss-row">
-            <code className="ss-code">{shareUrl.replace(/^https?:\/\//, '')}</code>
-            <a className="ss-ghost" href={shareUrl} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" /> Preview</a>
-            <button type="button" className="ss-ghost" onClick={() => void copyToClipboard(shareUrl).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1500) } })}>
-              <Copy className="h-3.5 w-3.5" /> {copied ? 'Copied' : 'Copy link'}
-            </button>
-          </div>
-        )}
         <div className="pe-actions">
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void saved.flush().then(() => setState('Saved ✓')).catch((e: Error) => setState(e.message))}>Save changes</button>
           <button type="button" className="ss-ghost" disabled={busy} onClick={() => void run(async () => { const r = await sellerApi.duplicateProduct(product.id); setStore(r.store) })}>Duplicate</button>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, MoreVertical, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
+import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -793,7 +793,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
         >
           {prod.productType === 'affiliate' ? (affiliate?.cta || DEFAULT_AMAZON_CTA) : (prod.cta?.text || 'View product ↗')}
         </a>
-        <small className="sp-aff-note">As an Amazon Associate, I earn from qualifying purchases.</small>
+        <small className="sp-aff-note">{affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE}</small>
       </div>
     )
   }
@@ -881,7 +881,7 @@ function ProductDetail({ p, ...props }: { p: ShopProduct } & StorePageProps) {
       {p.faq?.length ? <Faq heading="Questions" items={p.faq} /> : null}
       {external ? (
         <p className="sp-aff-note">
-          {p.affiliate?.disclosure || 'Paid partnership · payment and delivery happen on the external website.'}
+          {p.affiliate?.disclosure || (p.productType === 'affiliate' ? DEFAULT_AFFILIATE_DISCLOSURE : 'Paid partnership · payment and delivery happen on the external website.')}
         </p>
       ) : (
         <p className="sp-fine">{isFreeProduct(p) ? 'A private link is emailed to you. Open it to download.' : 'Instant download after payment. A copy of the link is emailed to you.'}</p>

@@ -33,6 +33,8 @@ import { env } from './env.ts'
 import { enqueueEmail, sendNow, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
 import { AMAZON_LINK_ERROR, checkAmazonUrl, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../shared/amazon-link.ts'
+import { isShortProductId } from '../shared/short-link.ts'
+import { newShortProductId } from './short-id.ts'
 import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices } from './payments.ts'
 import type { PaymentSettings } from './payments.ts'
 
@@ -129,6 +131,7 @@ export async function ensureSellerTables() {
 
     CREATE TABLE IF NOT EXISTS seller_product (
       id TEXT PRIMARY KEY,
+      "shortId" TEXT,
       "storeId" TEXT NOT NULL REFERENCES seller_store(id) ON DELETE CASCADE,
       title TEXT NOT NULL DEFAULT '',
       description TEXT NOT NULL DEFAULT '',
@@ -154,6 +157,8 @@ export async function ensureSellerTables() {
       "lastToken" TEXT
     );
     CREATE INDEX IF NOT EXISTS seller_product_store ON seller_product ("storeId");
+    -- The shortId index is created in migrateSeller(), after the column is added
+    -- to older tables. Creating it here breaks startup on existing databases.
 
     CREATE TABLE IF NOT EXISTS seller_media (
       id TEXT PRIMARY KEY,
@@ -323,6 +328,8 @@ interface StoreRow {
   draftToken?: string | null
 }
 interface ProductRow {
+  /** Permanent public address: /p/<shortId>. Set once, never regenerated on edit. */
+  shortId?: string | null
   sampleFileId?: string | null
   sampleName?: string | null
   sampleSize?: number | null
@@ -478,43 +485,48 @@ function safeRedirectUrl(location: string, base: string): string | null {
   }
 }
 /** Follow Amazon short links manually and check every hop; only a real Amazon
- *  product page at the end is accepted. No body is read and no page is executed. */
-async function resolveAmazonDestination(raw: string): Promise<boolean> {
+ *  product page at the end is accepted. No body is read and no page is executed.
+ *  Returns the final URL so the checked destination can be stored. */
+export async function resolveAmazonDestination(raw: string): Promise<string | null> {
   let current = raw
   const seen = new Set<string>()
   for (let hop = 0; hop < 5; hop++) {
     const amazon = checkAmazonUrl(current)
-    if (amazon.ok && !amazon.short) return true
+    if (amazon.ok && !amazon.short) return amazon.url
     const safe = safeRedirectUrl(current, 'https://amazon.com/')
-    if (!safe || seen.has(safe)) return false
+    if (!safe || seen.has(safe)) return null
     seen.add(safe)
     let res: Awaited<ReturnType<typeof fetch>>
     try {
       res = await fetch(safe, { method: 'GET', redirect: 'manual', headers: { 'User-Agent': 'Desknoty link check' }, signal: AbortSignal.timeout(4000) })
     } catch {
-      return false
+      return null
     }
     const location = res.headers.get('location')
-    if (!location) return false
+    if (!location) return null
     const next = safeRedirectUrl(location, safe)
-    if (!next || seen.has(next)) return false
+    if (!next || seen.has(next)) return null
     current = next
   }
-  return false
+  return null
 }
-/** Validate the raw request before cleaning strips an invalid link down to ''. */
-async function explicitAmazonError(body: Record<string, unknown>): Promise<string | null> {
+/** Validate the raw request before cleaning strips an invalid link down to ''.
+ *  An Amazon short link is replaced with its checked final marketplace URL, so
+ *  what we save (and later redirect to) is a real product page. */
+async function prepareAffiliateBody(body: Record<string, unknown>): Promise<{ error: string | null; body: Record<string, unknown> }> {
   const extras = (body ?? {})?.extras
-  if (!extras || typeof extras !== 'object') return null
+  if (!extras || typeof extras !== 'object') return { error: null, body }
   const e = extras as Record<string, unknown>
-  if (e.productType !== 'affiliate') return null
+  if (e.productType !== 'affiliate') return { error: null, body }
   const a = (e.affiliate ?? {}) as Record<string, unknown>
   const raw = String(a.url ?? '').trim() || String(a.input ?? '').trim()
-  if (!raw) return null
+  if (!raw) return { error: null, body }
   const checked = amazonLinkCheck(raw)
-  if (!checked.ok) return AMAZON_LINK_ERROR
-  if (checked.short && !(await resolveAmazonDestination(checked.url))) return AMAZON_LINK_ERROR
-  return null
+  if (!checked.ok) return { error: AMAZON_LINK_ERROR, body }
+  if (!checked.short) return { error: null, body }
+  const final = await resolveAmazonDestination(checked.url)
+  if (!final) return { error: AMAZON_LINK_ERROR, body }
+  return { error: null, body: { ...body, extras: { ...e, affiliate: { ...a, url: final, input: final } } } }
 }
 const mediaRef = (v: unknown) => (typeof v === 'string' && /^med_[a-f0-9]{24}$/.test(v) ? v : null)
 
@@ -776,6 +788,8 @@ const paymentOf = (p: ProductRow): 'paid' | 'free' => (p.paymentType === 'free' 
 function productDraftView(p: ProductRow) {
   return {
     id: p.id,
+    /** Permanent shareable address. Never regenerated, even after republishing. */
+    shortId: p.shortId ?? null,
     revision: p.revision,
     title: p.title,
     description: p.description,
@@ -1011,6 +1025,7 @@ function fileKind(name: string): string | null {
 function productPublicView(p: ProductRow) {
   return {
     id: p.id,
+    shortId: p.shortId ?? undefined,
     title: p.pubTitle ?? '',
     description: p.pubDescription ?? '',
     cover: p.pubCover,
@@ -1023,8 +1038,11 @@ function productPublicView(p: ProductRow) {
       const x = readExtras(p.pubExtras)
       const type = affiliateTypeOf(x)
       // Never publish an invalid or non-Amazon affiliate URL, even if an old
-      // draft still carries one. The storefront only sees the checked value.
-      const affiliate = type === 'affiliate' && x.affiliate?.url ? x.affiliate : undefined
+      // draft still carries one. Explicit Amazon destinations stay on the
+      // server: public pages get the short link (shortId) and the disclosure,
+      // never the raw marketplace URL. Legacy untyped affiliates keep theirs.
+      const raw = type === 'affiliate' && x.affiliate?.url ? x.affiliate : undefined
+      const affiliate = raw && x.productType === 'affiliate' ? { ...raw, url: '' } : raw
       return { productType: x.productType, category: x.category, offer: offerView(p.pubPriceMinor ?? 0, x), cta: x.cta, hidden: x.hidden, layout: x.layout, subtitle: x.subtitle, crop: x.crop, gallery: x.gallery, video: x.video, badges: x.badges, format: x.format, included: x.included, access: x.access, faq: x.faq, textPos: x.textPos, titleStyle: x.titleStyle, descStyle: x.descStyle, cardBg: x.cardBg, cardRadius: x.cardRadius, fileType: p.pubFileName ? fileKind(p.pubFileName) : null, sample: p.pubSampleFileId ? { name: p.pubSampleName ?? 'sample', url: `${seller.apiUrl}/api/store-sample/${p.id}` } : null, related: x.related, bundle: x.bundle, affiliate }
     })(),
   }
@@ -1085,6 +1103,58 @@ const q = {
   order: (id: string, via: Sql = sql) => via.get<OrderRow>(`SELECT * FROM seller_order WHERE id = ?`, id),
   orderBySession: (id: string, via: Sql = sql) => via.get<OrderRow>(`SELECT * FROM seller_order WHERE "sessionId" = ?`, id),
   coupon: (storeId: string, code: string, via: Sql = sql) => via.get<CouponRow>(`SELECT * FROM seller_coupon WHERE "storeId" = ? AND code = ?`, storeId, code),
+}
+
+/** A fresh public id. The unique index is the final authority; retry if a
+ *  concurrent insert took the candidate between the check and the insert. */
+async function uniqueShortId(): Promise<string> {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const candidate = newShortProductId()
+    if (!await sql.get(`SELECT 1 FROM seller_product WHERE "shortId" = ?`, candidate)) return candidate
+  }
+  throw new Error('Could not create a unique product link. Try again.')
+}
+
+export type ProductLinkResult =
+  | { ok: true; kind: 'affiliate' | 'normal'; path: string; url: string }
+  | { ok: false; status: number; reason: string }
+
+/**
+ * The single resolver behind both short-link doors. It only reads published
+ * data, rechecks an Amazon destination at redirect time, and returns either a
+ * safe absolute URL or a generic error. No unpublished product, private field
+ * or raw affiliate destination is ever returned to the browser.
+ */
+export async function resolveProductLink(shortId: string): Promise<ProductLinkResult> {
+  const unavailable = (): ProductLinkResult => ({ ok: false, status: 404, reason: 'This product link isn’t available.' })
+  if (!isShortProductId(shortId)) return unavailable()
+  const p = await sql.get<ProductRow & { storeHandle: string; storePublished: string | null }>(
+    `SELECT p.*, s."handle" AS "storeHandle", s."published" AS "storePublished" FROM seller_product p JOIN seller_store s ON s.id = p."storeId" WHERE p."shortId" = ?`,
+    shortId,
+  )
+  if (!p || !p.storePublished || !p.pubAt || p.archived || !p.listed) return unavailable()
+  const extras = readExtras(p.pubExtras)
+  let target: string
+  let kind: 'affiliate' | 'normal'
+  if (affiliateTypeOf(extras) === 'affiliate') {
+    const raw = extras.affiliate?.url?.trim() ?? ''
+    // Direct marketplace links are checked by hostname; short links are
+    // followed hop by hop with the same private-network guards as saving.
+    const destination = raw ? await resolveAmazonDestination(raw) : null
+    if (!destination) return unavailable()
+    const safe = safeRedirectUrl(destination, 'https://desknoty.com/')
+    if (!safe) return unavailable()
+    target = safe
+    kind = 'affiliate'
+  } else {
+    target = `${seller.siteUrl}/${p.storeHandle}/p/${p.id}`
+    kind = 'normal'
+  }
+  // A stored destination must never point back into this resolver.
+  let pathname = ''
+  try { pathname = new URL(target).pathname } catch { return unavailable() }
+  if (pathname === `/p/${shortId}` || pathname === `/api/p/${shortId}/redirect`) return unavailable()
+  return { ok: true, kind, path: kind === 'affiliate' ? `/api/p/${shortId}/redirect` : `/${p.storeHandle}/p/${p.id}`, url: target }
 }
 
 /* -------------------------------------------------------- auth guard --- */
@@ -1579,12 +1649,18 @@ export function sellerRouter() {
     if (!s) return
     // A published affiliate product must have a checked Amazon destination.
     // Short links resolve on the server; a failed check blocks the publish.
+    // The checked URL (not a short link) is what goes into the live snapshot.
+    const publishedExtras = new Map<string, string>()
     for (const p of await q.products(s.id)) {
       if (!p.listed || p.archived) continue
       const x = readExtras(p.extras)
       if (x.productType !== 'affiliate') continue
-      const checked = amazonLinkCheck(x.affiliate?.url ?? '')
-      if (!checked.ok || (checked.short && !(await resolveAmazonDestination(checked.url)))) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+      const prepared = await prepareAffiliateBody({ extras: x })
+      if (prepared.error) return void res.status(400).json({ error: prepared.error })
+      const checked = readExtras(JSON.stringify(prepared.body.extras))
+      const final = checked.affiliate?.url ? await resolveAmazonDestination(checked.affiliate.url) : null
+      if (!final || !safeRedirectUrl(final, 'https://desknoty.com/')) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+      publishedExtras.set(p.id, JSON.stringify({ ...checked, affiliate: { ...checked.affiliate, url: final, input: final } }))
     }
     const t = now()
     await sql.tx(async (tx) => {
@@ -1594,7 +1670,7 @@ export function sellerRouter() {
           // draft still carries. A paid product was checked above, so its price
           // is a complete, positive one here.
           const publishPrice = paymentOf(p) === 'free' ? 0 : p.priceMinor
-          await tx.run(`UPDATE seller_product SET "pubExtras" = extras, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = ?, "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubSampleFileId" = "sampleFileId", "pubSampleName" = "sampleName", "pubAt" = ? WHERE id = ?`, publishPrice, t, p.id)
+          await tx.run(`UPDATE seller_product SET "pubExtras" = ?, "pubTitle" = title, "pubDescription" = description, "pubCover" = cover, "pubPriceMinor" = ?, "pubCurrency" = currency, "pubFileId" = "fileId", "pubFileName" = "fileName", "pubSampleFileId" = "sampleFileId", "pubSampleName" = "sampleName", "pubAt" = ? WHERE id = ?`, publishedExtras.get(p.id) ?? p.extras, publishPrice, t, p.id)
         } else {
           await tx.run(`UPDATE seller_product SET "pubAt" = NULL WHERE id = ?`, p.id)
         }
@@ -1655,9 +1731,9 @@ export function sellerRouter() {
   me.post('/products', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
-    const linkError = await explicitAmazonError((req.body ?? {}) as Record<string, unknown>)
-    if (linkError) return void res.status(400).json({ error: linkError })
-    const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
+    const prepared = await prepareAffiliateBody((req.body ?? {}) as Record<string, unknown>)
+    if (prepared.error) return void res.status(400).json({ error: prepared.error })
+    const fields = cleanProduct(prepared.body)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const count = (await q.products(s.id)).length
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
@@ -1667,7 +1743,8 @@ export function sellerRouter() {
     if (mode === 'paid' && (fields.priceMinor ?? 900) <= 0) return void res.status(400).json({ error: 'A paid product needs a price above 0.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, mode, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
+    const shortId = await uniqueShortId()
+    await sql.run(`INSERT INTO seller_product (id, "shortId", "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, shortId, s.id, fields.title ?? '', fields.description ?? '', fields.cover ?? null, fields.priceMinor ?? 900, mode, fields.currency ?? 'gbp', fields.listed ?? 1, count, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 
@@ -1678,8 +1755,9 @@ export function sellerRouter() {
     const raw = String((req.body ?? {})?.url ?? '')
     const checked = amazonLinkCheck(raw)
     if (!checked.ok) return void res.status(400).json({ ok: false, error: AMAZON_LINK_ERROR })
-    if (checked.short && !(await resolveAmazonDestination(checked.url))) return void res.status(400).json({ ok: false, error: AMAZON_LINK_ERROR })
-    res.json({ ok: true, url: checked.url, short: checked.short })
+    const destination = checked.short ? await resolveAmazonDestination(checked.url) : checked.url
+    if (!destination) return void res.status(400).json({ ok: false, error: AMAZON_LINK_ERROR })
+    res.json({ ok: true, url: destination, short: checked.short })
   })
 
   me.patch('/products/:id', async (req: Authed, res) => {
@@ -1690,9 +1768,9 @@ export function sellerRouter() {
     // An explicitly typed Amazon affiliate may be drafted with an empty URL,
     // but anything filled in must be a real Amazon product link. This reads the
     // raw body: cleaning an invalid link turns it into '' and would hide it.
-    const linkError = await explicitAmazonError((req.body ?? {}) as Record<string, unknown>)
-    if (linkError) return void res.status(400).json({ error: linkError })
-    const fields = cleanProduct((req.body ?? {}) as Record<string, unknown>)
+    const prepared = await prepareAffiliateBody((req.body ?? {}) as Record<string, unknown>)
+    if (prepared.error) return void res.status(400).json({ error: prepared.error })
+    const fields = cleanProduct(prepared.body)
     if (typeof fields === 'string') return void res.status(400).json({ error: fields })
     const token = writerToken(req.body?.token)
     // Behind the server? Only this editor's own lost request is accepted here;
@@ -1829,7 +1907,9 @@ export function sellerRouter() {
     if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    await sql.run(`INSERT INTO seller_product (id, "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "sampleFileId", "sampleName", "sampleSize", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, paymentOf(p), p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, p.sampleFileId, p.sampleName, p.sampleSize, t, t)
+    // A copy is a different product: it gets its own permanent public address.
+    const shortId = await uniqueShortId()
+    await sql.run(`INSERT INTO seller_product (id, "shortId", "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, extras, "fileId", "fileName", "fileSize", "fileType", "sampleFileId", "sampleName", "sampleSize", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, id, shortId, s.id, `${p.title} (copy)`.slice(0, 80), p.description, p.cover, p.priceMinor, paymentOf(p), p.currency, count, p.extras ?? null, p.fileId, p.fileName, p.fileSize, p.fileType, p.sampleFileId, p.sampleName, p.sampleSize, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 

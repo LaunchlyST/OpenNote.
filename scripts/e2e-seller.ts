@@ -147,6 +147,14 @@ try {
   await page.locator('.pe-pill', { hasText: 'Ready to publish' }).waitFor()
   check('product is complete and ready to publish', true)
 
+  // The Product Link section owns the generated address; copy must use it.
+  const linkSection = page.locator('.pe-sec').filter({ hasText: 'Product link' }).first()
+  await linkSection.getByRole('button', { name: /Copy link/ }).click()
+  const studioLink = await page.evaluate(() => navigator.clipboard.readText())
+  const createdProduct = (await (await page.request.get(`${SITE}/api/seller/store`)).json()).store.products[0]
+  check('Product Link copies the generated short product link', studioLink === `${SITE}/p/${createdProduct.shortId}`, `${studioLink} vs ${createdProduct.shortId}`)
+  check('Product Link offers a product preview', await linkSection.getByRole('link', { name: /Preview product/ }).isVisible())
+
   // 3. Editor tools: drag a Text section from the panel into the phone, above the product grid
   await page.getByRole('tab', { name: 'Page' }).click()
   await page.getByRole('button', { name: 'Add block' }).waitFor()
@@ -226,6 +234,13 @@ try {
   await m.getByRole('heading', { name: 'Content planner' }).waitFor()
   check('a direct refresh of the product URL works', true)
   check('the product shows its published price', (await m.locator('.sp-price').first().textContent()) === '£12')
+
+  // A link shared in a chat opens the same product page on a phone.
+  const sharedProduct = (await (await m.request.get(`${SITE}/api/store/ava-makes`)).json()).products[0]
+  await m.goto(`${SITE}/p/${sharedProduct.shortId}`)
+  await m.waitForURL(/\/ava-makes\/p\/prd_/)
+  await m.getByRole('heading', { name: 'Content planner' }).waitFor()
+  check('a shared short link opens the Desknoty product page on mobile', m.url().endsWith(`/ava-makes/p/${firstId}`), m.url())
 
   await m.getByRole('button', { name: 'Buy now' }).click()
   const sheet = m.getByRole('dialog', { name: 'Pay for Content planner' })

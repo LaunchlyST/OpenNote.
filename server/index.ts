@@ -21,6 +21,7 @@ import { preferencesRouter } from './preferences.ts'
 import { earlyAccessRouter } from './early-access.ts'
 import { launchRouter } from './launch.ts'
 import { sellerRouter, stripeWebhookHandler } from './seller.ts'
+import { productLinksRouter } from './product-links.ts'
 
 // Additive only: adds missing tables/columns (e.g. user.role), never drops data.
 await applyMigrations({ quiet: true })
@@ -168,6 +169,10 @@ app.use(launchRouter)
 
 // Seller Studio: stores, products, payouts, checkout and downloads.
 app.use(sellerRouter())
+
+// Short product links. Mounted before the /api 404 and the SPA fallback so
+// Express can issue a real 302; GitHub Pages uses the SPA bootstrap instead.
+app.use(productLinksRouter())
 
 // Deployment controls. Gated on a signed-in account with the admin role, and inert while DEPLOY_ENABLED is not "true".
 app.use('/api/deploy', deployRouter())

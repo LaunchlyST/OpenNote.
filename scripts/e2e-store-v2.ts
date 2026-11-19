@@ -170,6 +170,24 @@ try {
   check('a shared ?p= link opens the product directly', true)
   check('the old product page still works', (await (await ctx.request.get(`${SITE}/ava-makes/p/${pid}`)).status()) === 200)
 
+  // ---- Affiliate product: the button opens our short link, never checkout
+  const amazonUrl = 'https://www.amazon.co.uk/dp/B0C1ABCDEF?tag=v2-21'
+  const affResponse = await page.request.post(`${SITE}/api/seller/products`, { data: { title: 'Amazon pick', priceMinor: 900, currency: 'gbp' }, headers: H })
+  let aff = (await affResponse.json()).product as any
+  check('affiliate test product was created', affResponse.ok() && Boolean(aff?.shortId), await affResponse.text())
+  const affSave = await page.request.patch(`${SITE}/api/seller/products/${aff.id}`, { data: { revision: aff.revision, extras: { productType: 'affiliate', affiliate: { url: amazonUrl, cta: 'View on Amazon', disclosure: 'As an Amazon Associate, I earn from qualifying purchases.' } } }, headers: H })
+  aff = (await affSave.json()).product as any
+  check('affiliate destination was saved', affSave.ok() && aff.extras?.productType === 'affiliate', await affSave.text())
+  const affPublish = await page.request.post(`${SITE}/api/seller/store/publish`, { headers: H })
+  const affLive = (await (await page.request.get(`${SITE}/api/store/ava-makes`)).json()).products as any[]
+  check('affiliate product is live after publishing', affPublish.ok() && affLive.some((x) => x.id === aff.id), `${affPublish.status()} ${affLive.map((x) => x.id).join(',')}`)
+  await shop.goto(`${SITE}/ava-makes/p/${aff.id}`)
+  await shop.getByRole('heading', { name: 'Amazon pick' }).waitFor()
+  const affButton = shop.getByRole('link', { name: 'View on Amazon' })
+  check('affiliate storefront button uses the generated Desknoty short link', (await affButton.getAttribute('href')) === `/p/${aff.shortId}` && (await affButton.getAttribute('rel'))?.includes('sponsored'), String(await affButton.getAttribute('href')))
+  check('affiliate disclosure stays visible', (await shop.getByText(/As an Amazon Associate/).count()) > 0)
+  check('affiliate product page has no payment form', (await shop.locator('.co3').count()) === 0 && (await shop.getByRole('button', { name: 'Buy now' }).count()) === 0)
+
   // ---- Stage B: offer with a real deadline, codes, and the checkout breakdown
   await page.request.put(`${SITE}/api/seller/payments`, { data: { bank: { enabled: true, bankName: 'Monzo', accountName: 'Ava Makes', sortCode: '040004', accountNumber: '12345678' } }, headers: H })
   const cur = (await (await page.request.get(`${SITE}/api/seller/store`)).json()).store.products.find((p: { id: string }) => p.id === pid)
@@ -392,7 +410,11 @@ try {
   // stop vite too, not just the npx wrapper
   try { process.kill(-web.pid!, 'SIGTERM') } catch { web.kill('SIGTERM') }
   await new Promise<void>((r) => (api.once('exit', () => r()), api.kill('SIGTERM')))
-  if (!SHOTS) rmSync(tmp, { recursive: true, force: true })
+  if (!SHOTS) {
+    // A browser or the OS can keep a handle on the temp DB for a moment on
+    // Windows. Never let cleanup hide the real test failure.
+    try { rmSync(tmp, { recursive: true, force: true, maxRetries: 8, retryDelay: 150 }) } catch (e) { console.warn(`Could not remove ${tmp}: ${(e as Error).message}`) }
+  }
 }
 console.log(failures ? `\n${failures} check(s) failed.` : '\nAll store V2 browser checks passed.')
 process.exit(failures ? 1 : 0)

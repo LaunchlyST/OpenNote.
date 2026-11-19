@@ -416,6 +416,8 @@ try {
       check(`${tag}: an Amazon product shows the switch and affiliate fields`, (await affiliateRadio.getAttribute('aria-checked')) === 'true' && (await amazonInput.count()) === 1 && (await page.locator('input[aria-label="Price"]').count()) === 0 && (await page.getByText('Digital delivery', { exact: true }).count()) === 0 && (await page.getByText('Checkout', { exact: true }).count()) === 0)
       const ctaChips = page.locator('.pe-chips button')
       check(`${tag}: the Affiliate editor shows the Amazon defaults`, (await ctaChips.filter({ hasText: 'View on Amazon' }).getAttribute('aria-pressed')) === 'true' && (await ctaChips.filter({ hasText: 'Check on Amazon' }).count()) === 1 && (await page.getByLabel('Affiliate disclosure').inputValue()).includes('Amazon Associate'))
+      const affLinkSection = page.locator('.pe-sec').filter({ hasText: 'Product link' }).first()
+      check(`${tag}: Product Link shows the generated link, Copy and Test`, await affLinkSection.getByText('Your Desknoty link').isVisible() && await affLinkSection.getByRole('button', { name: /Copy link/ }).isVisible() && await affLinkSection.getByRole('button', { name: 'Test link' }).isVisible() && (await affLinkSection.locator('code').innerText()).includes(`/p/${typeProduct.shortId}`))
       await categoryInput.fill('Tech')
       await amazonInput.fill('https://amazon.co.uk.evil.example/dp/B0C1ABCDEF')
       check(`${tag}: an Amazon lookalike shows the exact link error`, (await page.getByText(AMAZON_LINK_ERROR, { exact: true }).count()) > 0)
