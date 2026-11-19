@@ -976,6 +976,16 @@ function Studio({
     return made.product.id
   }
 
+  // Affiliate product from the Add product popup: a draft already set to Affiliate.
+  const createAffiliateProduct = async () => {
+    await flushSellerEdits()
+    const made = await sellerApi.addProduct({ title: '', priceMinor: 0, currency: 'gbp' })
+    const x = withExtras(made.product.extras)
+    await sellerApi.updateProduct(made.product.id, { extras: { ...x, productType: 'affiliate', affiliate: { ...x.affiliate, cta: x.affiliate?.cta || DEFAULT_AMAZON_CTA, disclosure: x.affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE } } }, made.product.revision)
+    await reload(true)
+    return made.product.id
+  }
+
   // Drag a section inside the phone preview: a drop line shows where it will land.
   const slideRef = useRef<HTMLDivElement>(null)
   const [dropAt, setDropAt] = useState<number | null>(null)
@@ -1182,6 +1192,7 @@ function Studio({
             onClose={() => { setPickReq(null); pendingAdd.current = null }}
             onPickExisting={(productId) => { setPickReq(null); onPickProduct(productId) }}
             createProduct={(f) => createProduct(f).then((id) => { setPickReq(null); onPickProduct(id) })}
+            createAffiliate={() => createAffiliateProduct().then((id) => { setPickReq(null); onPickProduct(id) })}
           />
         )}
         {tab === 'products' && (
@@ -1738,8 +1749,12 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }
 
 /** The add-product picker: choose an existing product or make a new one.
     Deliberately its own dialog — the block library must not appear here. */
-function AddProductDialog({ products, onClose, onPickExisting, createProduct }: { products: DraftProduct[]; onClose: () => void; onPickExisting: (productId: string) => void; createProduct: (f: NewProduct) => Promise<void> }) {
+function AddProductDialog({ products, onClose, onPickExisting, createProduct, createAffiliate }: { products: DraftProduct[]; onClose: () => void; onPickExisting: (productId: string) => void; createProduct: (f: NewProduct) => Promise<void>; createAffiliate?: () => Promise<void> }) {
   const [making, setMaking] = useState(false)
+  // First step: choose Digital or Affiliate.
+  const [kind, setKind] = useState<'digital' | null>(createAffiliate ? null : 'digital')
+  const [busy, setBusy] = useState(false)
+  const [kindErr, setKindErr] = useState<string | null>(null)
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', k)
@@ -1750,10 +1765,26 @@ function AddProductDialog({ products, onClose, onPickExisting, createProduct }: 
     <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ab ab-slim" role="dialog" aria-modal="true" aria-label="Add a product">
         <header className="ab-head">
-          <h2>{making ? 'New digital product' : 'Add a product'}</h2>
+          <h2>{!kind ? 'What are you adding?' : making ? 'New digital product' : 'Add a product'}</h2>
           <button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
         </header>
-        {making ? (
+        {!kind ? (
+          <div className="ab-body ab-body-pick">
+            <section className="ab-main">
+              <div className="ab-grid ab-grid-pick">
+                <button type="button" className="ab-item" disabled={busy} onClick={() => setKind('digital')}>
+                  <span className="ab-thumb"><Package className="h-5 w-5" /></span>
+                  <span><b>Digital product</b><small>Sell a file buyers download</small></span>
+                </button>
+                <button type="button" className="ab-item" disabled={busy} onClick={() => { setBusy(true); setKindErr(null); createAffiliate!().catch((e: Error) => { setKindErr(e.message); setBusy(false) }) }}>
+                  <span className="ab-thumb"><Globe className="h-5 w-5" /></span>
+                  <span><b>{busy ? 'Creating…' : 'Affiliate'}</b><small>Link to a product on Amazon</small></span>
+                </button>
+              </div>
+              {kindErr && <p className="ss-note" role="alert">{kindErr}</p>}
+            </section>
+          </div>
+        ) : making ? (
           <ProductMaker products={products} onBack={() => setMaking(false)} onPickExisting={onPickExisting} createProduct={createProduct} />
         ) : (
           <div className="ab-body ab-body-pick">
