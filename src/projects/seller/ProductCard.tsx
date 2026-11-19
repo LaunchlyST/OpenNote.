@@ -223,7 +223,7 @@ export type CardProps = {
   edit?: { part?: CardPart | null }
 }
 
-const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', title: 'Title', desc: 'Description', button: 'Button', card: 'Card background' }
+const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', title: 'Title', desc: 'Description', button: 'Button', price: 'Price', card: 'Card background' }
 const CARD_TONES = CARD_BACKGROUNDS.map((c) => c.id).filter((id): id is CardBg => Boolean(id))
 
 /** One product card in the seller's chosen layout. Unused fields are simply not rendered. */

@@ -22,7 +22,7 @@ const cn = (...c: Array<string | false | null | undefined>) => c.filter(Boolean)
 const CTA_TEXTS = ['Buy now', 'Get Instant Access', 'Download Now']
 const CTA_COLOURS = ['#e11d48', '#f97316', '#16a34a', '#2563eb', '#7c3aed', '#111114']
 
-const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', title: 'Title', desc: 'Description', button: 'Button', card: 'Card background' }
+const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', title: 'Title', desc: 'Description', button: 'Button', price: 'Price', card: 'Card background' }
 const PART_ORDER: CardPart[] = ['cover', 'title', 'desc', 'button', 'card']
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
