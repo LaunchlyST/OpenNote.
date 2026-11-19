@@ -472,7 +472,11 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       // the "Add product" action. The placeholders only exist while editing, so
       // the public store still lists the populated slides only.
       // The phone shows the slides the seller really has, like the live store.
-      const editorShown = shown
+      // Studio phone only: the block offers three swipe slots, empty ones with
+      // "+ Add product". Preview and the live store show real products only.
+      const editorShown = !p.live && p.onAddSlideProduct
+        ? [...shown, ...Array.from({ length: Math.max(0, 3 - shown.length) }, (_, i) => ({ ...newSlide('digital'), id: `sld_${block.id}_add_${i}` }))]
+        : shown
         ? [...shown, ...Array.from({ length: Math.max(0, 3 - shown.length) }, (_, i) => ({ ...newSlide('digital'), id: `sld_${block.id}_add_${i}` }))]
         : shown
       const list = editorShown.length ? editorShown : shown
