@@ -507,11 +507,7 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       const list = picked.length ? picked : p.products.filter((x) => !x.hidden)
       if (list.length === 0)
         return p.live ? (
-          <section className="sp-block sp-soon">
-            <span aria-hidden="true">✦</span>
-            <h2>New products are on the way</h2>
-            <p>Check back soon, or follow along on socials.</p>
-          </section>
+          <ComingSoon />
         ) : (
           <div className="sp-block sp-empty">Product grid: add products to show them here</div>
         )
@@ -687,11 +683,7 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
                   <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) }}>+ Add product</button>
                 </div>
               ) : (
-                <div className="sp-block sp-soon sp-slide-soon">
-                  <span aria-hidden="true">✦</span>
-                  <h2>Coming soon</h2>
-                  <p>A new product is on its way. Swipe to see what's here now.</p>
-                </div>
+<ComingSoon className="sp-slide-soon" note="Swipe to see what's here now" />
               )
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
@@ -716,14 +708,23 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
  * A product block with nothing in it. The seller gets a drop target; a visitor
  * gets a finished "Coming soon" card with nothing to buy.
  */
+/** "Coming soon": a shop window with hand-painted lettering. */
+function ComingSoon({ className, note = 'This is not a pop-up' }: { className?: string; note?: string }) {
+  return (
+    <section className={'sp-block sp-soon' + (className ? ' ' + className : '')} aria-label="Coming soon">
+      <span className="sp-soon-awning" aria-hidden="true" />
+      <div className="sp-soon-glass">
+        <p className="sp-soon-paint" aria-hidden="true"><span>Coming</span><span>soon<i>...</i></span></p>
+        <p className="sp-soon-note">{note}</p>
+      </div>
+    </section>
+  )
+}
+
 function EmptyProduct({ block, ...p }: { block: Block } & StorePageProps) {
   if (p.live || !p.onAddSlide)
     return (
-      <section className="sp-block sp-soon">
-        <span aria-hidden="true">✦</span>
-        <h2>Coming soon</h2>
-        <p>Something new is on its way. Check back soon.</p>
-      </section>
+      <ComingSoon />
     )
   return (
     <div className="sp-block sp-drop">
