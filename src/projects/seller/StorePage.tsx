@@ -683,7 +683,7 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
                   <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) }}>+ Add product</button>
                 </div>
               ) : (
-<ComingSoon className="sp-slide-soon" note="A new product is on its way. Swipe to see what's here now." />
+<ComingSoon className="sp-slide-soon" />
               )
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
@@ -708,20 +708,20 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
  * A product block with nothing in it. The seller gets a drop target; a visitor
  * gets a finished "Coming soon" card with nothing to buy.
  */
-/** "Coming soon": a teaser card shaped like a product card, with a frosted mystery cover and hand-painted lettering. */
-function ComingSoon({ className, note = 'Something new is on its way. Check back soon.' }: { className?: string; note?: string }) {
+/** "Coming soon": crossing caution-tape marquees over a floating wrapped gift. */
+function ComingSoon({ className }: { className?: string; note?: string }) {
+  const run = Array.from({ length: 8 }, (_, i) => <span key={i}>Coming soon <b>✦</b></span>)
   return (
     <section className={'sp-block sp-soon' + (className ? ' ' + className : '')} aria-label="Coming soon">
-      <div className="sp-soon-cover" aria-hidden="true">
-        <span className="sp-soon-blob a" /><span className="sp-soon-blob b" />
-        <span className="sp-soon-q">?</span>
+      <span className="sp-soon-mesh" aria-hidden="true" />
+      <div className="sp-soon-tape t1" aria-hidden="true"><div>{run}{run}</div></div>
+      <div className="sp-soon-gift" aria-hidden="true">
+        <span className="lid" /><span className="box" /><span className="rib-v" /><span className="rib-h" />
+        <span className="bow l" /><span className="bow r" /><span className="knot" />
       </div>
-      <div className="sp-soon-body">
-        <span className="sp-soon-tag"><i />Next drop</span>
-        <h2 className="sp-soon-title">Coming soon</h2>
-        <svg className="sp-soon-line" viewBox="0 0 160 12" aria-hidden="true"><path d="M3 8c30-6 62-7 96-4 20 2 38 3 58 0" /></svg>
-        <p className="sp-soon-note">{note}</p>
-      </div>
+      <div className="sp-soon-tape t2" aria-hidden="true"><div>{run}{run}</div></div>
+      {[0, 1, 2, 3, 4, 5].map((i) => <i key={i} className={`sp-soon-spark s${i}`} aria-hidden="true">✦</i>)}
+      <span className="sp-soon-tag"><i />Next drop</span>
     </section>
   )
 }
