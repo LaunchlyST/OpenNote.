@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, MoreVertical, Play, X as XIcon } from 'lucide-react'
-import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, newSlide } from './model'
+import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, MAX_PRODUCT_SLIDES } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
@@ -467,38 +467,19 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       const slides = slidesOf(block)
       const usable = slides.filter((s) => (s.kind === 'digital' ? p.products.some((x) => x.id === s.productId) : amazonUrlCheck(s.affiliate.url).ok))
       const shown = p.live ? usable : slides
-      // In the editor the block always offers the full three slots: the populated
-      // slides, then one empty slide per free slot (Product 3 included), each with
-      // the "Add product" action. The placeholders only exist while editing, so
-      // the public store still lists the populated slides only.
-      // The phone shows the slides the seller really has, like the live store.
-      // Studio phone only: the block offers three swipe slots, empty ones with
-      // "+ Add product". Preview and the live store show real products only.
-      const editorShown = !p.live && p.onAddSlideProduct
-        ? [...shown, ...Array.from({ length: Math.max(0, 3 - shown.length) }, (_, i) => ({ ...newSlide('digital'), id: `sld_${block.id}_add_${i}` }))]
-        : shown
-        ? [...shown, ...Array.from({ length: Math.max(0, 3 - shown.length) }, (_, i) => ({ ...newSlide('digital'), id: `sld_${block.id}_add_${i}` }))]
-        : shown
-      const list = editorShown.length ? editorShown : shown
-      if (!list.length) return <EmptyProduct block={block} {...p} />
-      if (list.length === 1) {
-        const one = list[0]
-        const oneEmpty = !one.productId && !amazonUrlCheck(one.affiliate.url).ok
-        if (oneEmpty) {
-          // The owner is building this first slide: offer the picker.
+      // Zero products: the empty state straight away (Studio: the add picker).
+      if (!shown.length) {
+        if (!p.live && (p.onAddSlideProduct || p.onAddSlide)) {
           return (
             <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id) } }}>
               <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id) }}>+ Add product</button>
             </div>
           )
         }
-        return (
-          <section className="sp-block sp-featured-v2">
-            {one.kind === 'digital' ? <DigitalSlide slide={one} blockId={block.id} {...p} /> : <AffiliateSlide slide={one} {...p} />}
-          </section>
-        )
+        return p.live ? <ComingSoon /> : <EmptyProduct block={block} {...p} />
       }
-      return <SlideCarousel {...p} slides={list} blockId={block.id} interactive={!p.live} activeSlide={p.activeSlideBlock === block.id ? p.activeSlide : undefined} onCarouselSlideChange={(i) => p.onSlideChange?.(block.id, i)} />
+      // Real products, then exactly one "Coming soon" card at the end.
+      return <SlideCarousel {...p} slides={shown} withEnd blockId={block.id} interactive={!p.live} activeSlide={p.activeSlideBlock === block.id ? p.activeSlide : undefined} onCarouselSlideChange={(i) => p.onSlideChange?.(block.id, i)} />
     }
     case 'grid': {
       const ids: string[] = d.productIds ?? []
@@ -606,18 +587,19 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
  * editor an empty slide shows the "Add product slide" action; on the public
  * store only populated slides are shown.
  */
-function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSlideChange, ...p }: { slides: ProductSlide[]; blockId?: string; interactive?: boolean; activeSlide?: number; onCarouselSlideChange?: (i: number) => void } & StorePageProps) {
+function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onCarouselSlideChange, ...p }: { slides: ProductSlide[]; withEnd?: boolean; blockId?: string; interactive?: boolean; activeSlide?: number; onCarouselSlideChange?: (i: number) => void } & StorePageProps) {
+  const count = slides.length + (withEnd ? 1 : 0)
   const track = useRef<HTMLDivElement>(null)
-  const [at, setAt] = useState(() => Math.min(slides.length - 1, Math.max(0, activeSlide ?? 0)))
+  const [at, setAt] = useState(() => Math.min(count - 1, Math.max(0, activeSlide ?? 0)))
   const scrolledAt = useRef(0)
   const lastScrollLeft = useRef<number | null>(null)
   const mountedAt = useRef(performance.now())
   // The studio owns `activeSlide`: use it directly whenever it is supplied so
   // the preview and the left editor can never disagree about the current slide.
-  const current = activeSlide !== undefined ? Math.min(slides.length - 1, Math.max(0, activeSlide)) : at
+  const current = activeSlide !== undefined ? Math.min(count - 1, Math.max(0, activeSlide)) : at
   useEffect(() => {
     if (activeSlide === undefined) return
-    const next = Math.min(slides.length - 1, Math.max(0, activeSlide))
+    const next = Math.min(count - 1, Math.max(0, activeSlide))
     const el = track.current
     if (el && Math.abs(el.scrollLeft - next * el.clientWidth) > 1) {
       // An external slide change is not a swipe: move the track without going
@@ -626,11 +608,11 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
       el.scrollLeft = next * el.clientWidth
     }
     setAt(next)
-  }, [activeSlide, slides.length])
+  }, [activeSlide, count])
   const goTo = (i: number) => {
     const el = track.current
     if (!el) return
-    const next = Math.min(slides.length - 1, Math.max(0, i))
+    const next = Math.min(count - 1, Math.max(0, i))
     if (Math.abs(el.scrollLeft - next * el.clientWidth) > 1) {
       lastScrollLeft.current = next * el.clientWidth
       el.scrollLeft = next * el.clientWidth
@@ -648,6 +630,8 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
     if (lastScrollLeft.current === null) { lastScrollLeft.current = el.scrollLeft; return }
     if (el.scrollLeft === lastScrollLeft.current) return
     lastScrollLeft.current = el.scrollLeft
+    // Swipe progress towards the teaser (0 = one slide away, 1 = on it).
+    if (withEnd) el.style.setProperty('--sw', Math.min(1, Math.max(0, el.scrollLeft / Math.max(1, el.clientWidth) - (count - 2))).toFixed(3))
     const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
     if (i !== current) {
       setAt(i)
@@ -673,10 +657,10 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
   }
   const isEmpty = (s: ProductSlide) => (s.kind === 'digital' ? !p.products.some((x) => x.id === s.productId) : !safeExternalUrl(s.affiliate.url))
   return (
-    <section className="sp-block sp-carousel" aria-roledescription="carousel" aria-label={`${slides.length} products`} tabIndex={interactive ? 0 : undefined} onKeyDown={interactive ? onKey : undefined}>
+    <section className="sp-block sp-carousel" aria-roledescription="carousel" aria-label={`${count} slides`} tabIndex={interactive ? 0 : undefined} onKeyDown={interactive ? onKey : undefined}>
       <div className="sp-track" ref={track} onScroll={onScroll} onClickCapture={swallow}>
         {slides.map((s, i) => (
-          <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${slides.length}`}>
+          <div className="sp-slide" key={s.id} role="group" aria-roledescription="slide" aria-label={`${i + 1} of ${count}`}>
             {isEmpty(s) ? (
               !p.live && p.onAddSlideProduct && blockId ? (
                 <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) } }}>
@@ -688,16 +672,21 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
         ))}
+        {withEnd && (
+          <div className="sp-slide" role="group" aria-roledescription="slide" aria-label={`${count} of ${count}`}>
+            <ComingSoon className="sp-slide-soon" in={current === slides.length} onAdd={!p.live && p.onAddSlideProduct && blockId && slides.length < MAX_PRODUCT_SLIDES ? () => p.onAddSlideProduct!(blockId, slides.length) : undefined} />
+          </div>
+        )}
       </div>
-      {slides.length > 1 && (
+      {count > 1 && (
         <div className="sp-car-nav">
           <button type="button" className="sp-arrow" aria-label="Previous product" disabled={current === 0} onClick={() => goTo(current - 1)}>‹</button>
           <div className="sp-dots" role="tablist" aria-label="Choose a product">
-            {slides.map((s, i) => (
-              <button key={s.id} type="button" role="tab" aria-selected={i === current} aria-label={`Product ${i + 1}`} className={i === current ? 'sp-dot on' : 'sp-dot'} onClick={() => goTo(i)} />
+            {Array.from({ length: count }, (_, i) => (
+              <button key={i} type="button" role="tab" aria-selected={i === current} aria-label={i < slides.length ? `Product ${i + 1}` : 'Coming soon'} className={i === current ? 'sp-dot on' : 'sp-dot'} onClick={() => goTo(i)} />
             ))}
           </div>
-          <button type="button" className="sp-arrow" aria-label="Next product" disabled={current === slides.length - 1} onClick={() => goTo(current + 1)}>›</button>
+          <button type="button" className="sp-arrow" aria-label="Next product" disabled={current === count - 1} onClick={() => goTo(current + 1)}>›</button>
         </div>
       )}
     </section>
@@ -708,20 +697,45 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
  * A product block with nothing in it. The seller gets a drop target; a visitor
  * gets a finished "Coming soon" card with nothing to buy.
  */
-/** "Coming soon": crossing caution-tape marquees over a floating wrapped gift. */
-function ComingSoon({ className }: { className?: string; note?: string }) {
-  const run = Array.from({ length: 8 }, (_, i) => <span key={i}>Coming soon <b>✦</b></span>)
+/**
+ * "Next drop": the single teaser after the last real product (or the empty
+ * state). A concealed 3D package under a moving spotlight, with a timed arrival
+ * when the card comes into view. Desktop: pointer parallax and a light that
+ * follows the cursor. Mobile: motion follows swipe progress (--sw, set by the
+ * carousel). Pure CSS transforms and opacity; nothing loads.
+ */
+function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
+  const ref = useRef<HTMLElement>(null)
+  const move = (e: ReactPointerEvent<HTMLElement>) => {
+    if (e.pointerType !== 'mouse') return
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    el.style.setProperty('--px', ((e.clientX - r.left) / r.width - 0.5).toFixed(3))
+    el.style.setProperty('--py', ((e.clientY - r.top) / r.height - 0.5).toFixed(3))
+  }
+  const leave = () => { ref.current?.style.setProperty('--px', '0'); ref.current?.style.setProperty('--py', '0') }
   return (
-    <section className={'sp-block sp-soon' + (className ? ' ' + className : '')} aria-label="Coming soon">
-      <span className="sp-soon-mesh" aria-hidden="true" />
-      <div className="sp-soon-tape t1" aria-hidden="true"><div>{run}{run}</div></div>
-      <div className="sp-soon-gift" aria-hidden="true">
-        <span className="lid" /><span className="box" /><span className="rib-v" /><span className="rib-h" />
-        <span className="bow l" /><span className="bow r" /><span className="knot" />
+    <section ref={ref} className={'sp-block sp-drop2' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Next drop: something is coming" onPointerMove={move} onPointerLeave={leave}>
+      <div className="dr-stage" aria-hidden="true">
+        <span className="dr-spot" />
+        <span className="dr-floor" />
+        <div className="dr-float"><div className="dr-bob">
+          <div className="dr-obj">
+            <span className="f fr"><b /></span><span className="f bk" /><span className="f lf" /><span className="f rt" /><span className="f tp" /><span className="f bt" />
+          </div>
+        </div></div>
+        <span className="dr-shadow" />
+        <span className="dr-sweep" />
+        <span className="dr-glint" />
       </div>
-      <div className="sp-soon-tape t2" aria-hidden="true"><div>{run}{run}</div></div>
-      {[0, 1, 2, 3, 4, 5].map((i) => <i key={i} className={`sp-soon-spark s${i}`} aria-hidden="true">✦</i>)}
-      <span className="sp-soon-tag"><i />Next drop</span>
+      <span className="dr-status"><i />In the works</span>
+      <div className="dr-copy">
+        <span className="dr-eyebrow">Next drop</span>
+        <h2 className="dr-title">Something is coming.</h2>
+        <p className="dr-sub">Your next favourite find is almost here.</p>
+        {onAdd && <button type="button" className="dr-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
+      </div>
     </section>
   )
 }
