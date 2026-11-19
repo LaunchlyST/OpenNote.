@@ -1075,7 +1075,7 @@ function Studio({
     const ex = withExtras(live ? live.extras : p.extras)
     return {
       ...p,
-      ...(live ? { title: live.title, description: live.description, cover: live.cover } : null),
+      ...(live ? { title: live.title, description: live.description, cover: live.cover, ...(typeof live.priceMinor === 'number' ? { priceMinor: live.priceMinor } : null) } : null),
       ...ex,
       // The phone preview follows the seller's explicit choice. Older data
       // without it falls back to the saved (last valid) price.
@@ -1294,12 +1294,15 @@ function Studio({
                   //    just that element's settings, in place;
                   //  - the card's own background opens the product's full editor.
                   if (pid) {
-                    // Keep the block and its slide: the full editor can return here.
+                    // One selection (product + part) drives both the outline in
+                    // the phone and the panel. A click on an element opens only
+                    // that element's settings; the card itself opens the card
+                    // settings. The full editor opens only from "Edit full product".
                     setPicked(id)
                     setActiveSlideBlock(id)
                     setFromCarousel(true)
                     setOpenProduct(pid)
-                    setEditPart(null)
+                    setEditPart({ productId: pid, part: _part ?? 'card' })
                     setTab('products')
                     return
                   }
@@ -2450,7 +2453,7 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
             setStore={setStore}
             part={focus.part}
             onPart={(part) => onFocus?.({ productId: selected.id, part })}
-            onClose={() => choose(null)}
+            onClose={() => { onFocus?.(null); if (backToCarousel && onBackToCarousel) onBackToCarousel(); else choose(null) }}
             onFull={() => onFocus?.(null)}
             onPreview={(value) => onPreview?.(selected.id, value)}
           />

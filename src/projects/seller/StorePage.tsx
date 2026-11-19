@@ -589,6 +589,9 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
  */
 function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onCarouselSlideChange, ...p }: { slides: ProductSlide[]; withEnd?: boolean; blockId?: string; interactive?: boolean; activeSlide?: number; onCarouselSlideChange?: (i: number) => void } & StorePageProps) {
   const count = slides.length + (withEnd ? 1 : 0)
+  // One slide step = the slide's width plus the track's gap. Using the width
+  // alone drifts by the gap on every slide and leaves a card cut off.
+  const stepOf = (el: HTMLElement) => Math.max(1, el.clientWidth + (parseFloat(getComputedStyle(el).columnGap) || 0))
   const track = useRef<HTMLDivElement>(null)
   const [at, setAt] = useState(() => Math.min(count - 1, Math.max(0, activeSlide ?? 0)))
   const scrolledAt = useRef(0)
@@ -601,11 +604,11 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
     if (activeSlide === undefined) return
     const next = Math.min(count - 1, Math.max(0, activeSlide))
     const el = track.current
-    if (el && Math.abs(el.scrollLeft - next * el.clientWidth) > 1) {
+    if (el && Math.abs(el.scrollLeft - next * stepOf(el)) > 1) {
       // An external slide change is not a swipe: move the track without going
       // through the scroll handler, which would report it back as a new swipe.
-      lastScrollLeft.current = next * el.clientWidth
-      el.scrollLeft = next * el.clientWidth
+      lastScrollLeft.current = next * stepOf(el)
+      el.scrollLeft = next * stepOf(el)
     }
     setAt(next)
   }, [activeSlide, count])
@@ -613,9 +616,9 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
     const el = track.current
     if (!el) return
     const next = Math.min(count - 1, Math.max(0, i))
-    if (Math.abs(el.scrollLeft - next * el.clientWidth) > 1) {
-      lastScrollLeft.current = next * el.clientWidth
-      el.scrollLeft = next * el.clientWidth
+    if (Math.abs(el.scrollLeft - next * stepOf(el)) > 1) {
+      lastScrollLeft.current = next * stepOf(el)
+      el.scrollLeft = next * stepOf(el)
     }
     if (next !== current) {
       setAt(next)
@@ -631,8 +634,8 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
     if (el.scrollLeft === lastScrollLeft.current) return
     lastScrollLeft.current = el.scrollLeft
     // Swipe progress towards the teaser (0 = one slide away, 1 = on it).
-    if (withEnd) el.style.setProperty('--sw', Math.min(1, Math.max(0, el.scrollLeft / Math.max(1, el.clientWidth) - (count - 2))).toFixed(3))
-    const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
+    if (withEnd) el.style.setProperty('--sw', Math.min(1, Math.max(0, el.scrollLeft / stepOf(el) - (count - 2))).toFixed(3))
+    const i = Math.round(el.scrollLeft / stepOf(el))
     if (i !== current) {
       setAt(i)
       onCarouselSlideChange?.(i)
@@ -879,7 +882,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
   return (
     <div className="sp-buyrow">
       <PriceTag prod={prod} edit={!live} />
-      <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={disabled} onClick={() => onBuy?.(prod)} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
+      <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={live ? disabled : undefined} aria-disabled={disabled || undefined} onClick={() => { if (!disabled) onBuy?.(prod) }} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
         {buying === prod.id ? 'Opening checkout…' : prod.cta?.text || 'Buy now'}
       </button>
     </div>

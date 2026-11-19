@@ -23,7 +23,6 @@ const CTA_TEXTS = ['Buy now', 'Get Instant Access', 'Download Now']
 const CTA_COLOURS = ['#e11d48', '#f97316', '#16a34a', '#2563eb', '#7c3aed', '#111114']
 
 const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', price: 'Price', title: 'Title', desc: 'Description', button: 'Button', card: 'Card background' }
-const PART_ORDER: CardPart[] = ['cover', 'title', 'desc', 'button', 'card']
 
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -38,14 +37,14 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 /** The store's own font, so "Store theme" looks like the card does today. */
 const themeFontCss = (store: StoreView) => FONTS.find((f) => f.id === store.draft.theme.font)?.css ?? FONTS[0].css
 
-export type PartDraft = { title: string; description: string; cover: string | null; extras: ProductExtras }
+export type PartDraft = { title: string; description: string; cover: string | null; priceMinor?: number; extras: ProductExtras }
 
 export function ProductPartPanel({
   product,
   store,
   setStore,
   part,
-  onPart,
+  onPart: _onPart,
   onClose,
   onFull,
   onPreview,
@@ -62,10 +61,10 @@ export function ProductPartPanel({
 }) {
   const saved = useSellerSave<PartDraft>(
     `desknoty.seller.recovery.${store.id}.${product.id}.part`,
-    { title: product.title, description: product.description, cover: product.cover, extras: withExtras(product.extras) },
+    { title: product.title, description: product.description, cover: product.cover, priceMinor: product.priceMinor, extras: withExtras(product.extras) },
     product.revision,
     async (value, revision, token) => {
-      const r = await sellerApi.updateProduct(product.id, { title: value.title, description: value.description, cover: value.cover, extras: value.extras }, revision, token)
+      const r = await sellerApi.updateProduct(product.id, { title: value.title, description: value.description, cover: value.cover, extras: value.extras, ...(typeof value.priceMinor === 'number' ? { priceMinor: value.priceMinor } : null) }, revision, token)
       setStore(r.store)
       return r.product.revision
     },
@@ -78,29 +77,27 @@ export function ProductPartPanel({
   // keep the caller's callback fresh without re-running the preview on every render
   const preview = useRef(onPreview)
   preview.current = onPreview
-  useEffect(() => { preview.current?.({ title: form.title, description: form.description, cover: form.cover, extras: form.extras }) }, [form])
+  useEffect(() => { preview.current?.({ title: form.title, description: form.description, cover: form.cover, priceMinor: form.priceMinor, extras: form.extras }) }, [form])
 
   return (
     <section className="pe-part" aria-label={`Edit ${PART_LABEL[part]}`}>
       <header className="pe-part-head">
         <div className="pe-part-name">
-          <span>Editing card</span>
-          <b>{form.title.trim() || 'Untitled product'}</b>
+          <span>{PART_LABEL[part]} · {form.title.trim() || 'Untitled product'}</span>
+          <b>{PART_LABEL[part]}</b>
         </div>
-        <button type="button" className="ss-ghost" onClick={onFull}>All product settings</button>
+        <button type="button" className="ss-ghost" onClick={onFull}>Edit full product</button>
         <button type="button" className="pe-part-x" aria-label="Close card editing" onClick={onClose}><X className="h-4 w-4" /></button>
       </header>
-      <div className="pe-part-tabs" role="tablist" aria-label="Card part">
-        {PART_ORDER.map((p) => (
-          <button key={p} type="button" role="tab" aria-selected={part === p} onClick={() => onPart(p)}>{PART_LABEL[p]}</button>
-        ))}
-      </div>
-
       {part === 'cover' && (
         <div className="pe-part-body">
           <CoverEditor cover={form.cover} crop={x.crop} onCover={(cover) => setForm({ ...form, cover })} onCrop={(crop) => setX({ crop })} />
           <p className="ss-hint">Click the picture to set the focal point. The card keeps its square shape.</p>
         </div>
+      )}
+
+      {part === 'price' && (
+        <PricePart priceMinor={form.priceMinor ?? product.priceMinor} currency={product.currency} onChange={(priceMinor) => setForm({ ...form, priceMinor })} />
       )}
 
       {part === 'title' && (
@@ -176,6 +173,19 @@ export function ProductPartPanel({
 
       <footer className="pe-part-foot" aria-live="polite">{saved.state}</footer>
     </section>
+  )
+}
+
+/** Price only: the amount buyers pay. 0 makes the product free. */
+function PricePart({ priceMinor, currency, onChange }: { priceMinor: number; currency: string; onChange: (v: number) => void }) {
+  const [text, setText] = useState(() => (priceMinor / 100).toFixed(2))
+  const sym = currency.toLowerCase() === 'gbp' ? '£' : currency.toLowerCase() === 'eur' ? '€' : '$'
+  return (
+    <div className="pe-part-body">
+      <Field label={`Price (${sym})`} hint="0 makes it free. Checkout uses this price.">
+        <input className="ss-input" inputMode="decimal" value={text} onChange={(e) => { const v = e.target.value.replace(/[^0-9.]/g, ''); setText(v); if (/^\d+(\.\d{0,2})?$/.test(v)) onChange(Math.round(Number(v) * 100)) }} placeholder="9.99" />
+      </Field>
+    </div>
   )
 }
 
