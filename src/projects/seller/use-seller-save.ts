@@ -75,8 +75,14 @@ export function useSellerSave<T>(
     return () => window.clearTimeout(timer)
   }, [value, queue])
   // Nothing pending: a newer revision from the server is simply the new base.
+  // Take the server's value too, so a stale copy can never be saved over it.
+  const latest = useRef(initial)
+  latest.current = initial
   useEffect(() => {
-    if (!queue.dirty && revision > queue.revision) queue.revision = revision
+    if (!queue.dirty && revision > queue.revision) {
+      queue.reset(latest.current, revision)
+      setValue(latest.current)
+    }
   }, [revision, queue])
   return {
     value,
