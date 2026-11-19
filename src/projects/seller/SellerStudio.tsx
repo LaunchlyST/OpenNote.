@@ -2351,10 +2351,17 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
     }
   }, [open])
 
-  const add = async () => {
+  // "Add Product" first asks which kind: a digital product or an affiliate link.
+  const [choosing, setChoosing] = useState(false)
+  const add = async (kind: ProductType = 'normal') => {
+    setChoosing(false)
     try {
       await flushSellerEdits()
-      const r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
+      let r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
+      if (kind === 'affiliate') {
+        const x = withExtras(r.product.extras)
+        r = await sellerApi.updateProduct(r.product.id, { extras: { ...x, productType: 'affiliate', affiliate: { ...x.affiliate, cta: x.affiliate?.cta || DEFAULT_AMAZON_CTA, disclosure: x.affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE } } }, r.product.revision)
+      }
       setStore(r.store)
       // A product on its own is invisible on the store. Put it straight into the
       // next free slide of the first product block, so it shows in the phone at once.
@@ -2428,8 +2435,32 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
     <div className="ss-stack">
       <div className="pg-bar">
         <h2>Products <small>{store.products.filter((p) => !p.archived).length}</small></h2>
-        <button type="button" className="pg-addbtn" onClick={() => void add()}><Plus className="h-4 w-4" /> Add Product</button>
+        <button type="button" className="pg-addbtn" onClick={() => setChoosing(true)}><Plus className="h-4 w-4" /> Add Product</button>
       </div>
+      {choosing && (
+        <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && setChoosing(false)}>
+          <div className="ab ab-slim" role="dialog" aria-modal="true" aria-label="Choose product type">
+            <header className="ab-head">
+              <h2>What are you adding?</h2>
+              <button type="button" className="ab-x" onClick={() => setChoosing(false)} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
+            </header>
+            <div className="ab-body ab-body-pick">
+              <section className="ab-main">
+                <div className="ab-grid ab-grid-pick">
+                  <button type="button" className="ab-item" onClick={() => void add('normal')}>
+                    <span className="ab-thumb"><Package className="h-5 w-5" /></span>
+                    <span><b>Digital product</b><small>Sell a file buyers download</small></span>
+                  </button>
+                  <button type="button" className="ab-item" onClick={() => void add('affiliate')}>
+                    <span className="ab-thumb"><Globe className="h-5 w-5" /></span>
+                    <span><b>Affiliate</b><small>Link to a product on Amazon</small></span>
+                  </button>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      )}
       {err && <div className="ss-note" role="alert">{err}</div>}
 
       {/* Product blocks on the selected page. */}
