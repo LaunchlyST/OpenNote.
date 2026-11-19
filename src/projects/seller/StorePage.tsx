@@ -683,7 +683,7 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
                   <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) }}>+ Add product</button>
                 </div>
               ) : (
-<ComingSoon className="sp-slide-soon" note="Swipe to see what's here now" />
+<ComingSoon className="sp-slide-soon" note="A new product is on its way. Swipe to see what's here now." />
               )
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
@@ -708,13 +708,18 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
  * A product block with nothing in it. The seller gets a drop target; a visitor
  * gets a finished "Coming soon" card with nothing to buy.
  */
-/** "Coming soon": a shop window with hand-painted lettering. */
-function ComingSoon({ className, note = 'This is not a pop-up' }: { className?: string; note?: string }) {
+/** "Coming soon": a teaser card shaped like a product card, with a frosted mystery cover and hand-painted lettering. */
+function ComingSoon({ className, note = 'Something new is on its way. Check back soon.' }: { className?: string; note?: string }) {
   return (
     <section className={'sp-block sp-soon' + (className ? ' ' + className : '')} aria-label="Coming soon">
-      <span className="sp-soon-awning" aria-hidden="true" />
-      <div className="sp-soon-glass">
-        <p className="sp-soon-paint" aria-hidden="true"><span>Coming</span><span>soon<i>...</i></span></p>
+      <div className="sp-soon-cover" aria-hidden="true">
+        <span className="sp-soon-blob a" /><span className="sp-soon-blob b" />
+        <span className="sp-soon-q">?</span>
+      </div>
+      <div className="sp-soon-body">
+        <span className="sp-soon-tag"><i />Next drop</span>
+        <h2 className="sp-soon-title">Coming soon</h2>
+        <svg className="sp-soon-line" viewBox="0 0 160 12" aria-hidden="true"><path d="M3 8c30-6 62-7 96-4 20 2 38 3 58 0" /></svg>
         <p className="sp-soon-note">{note}</p>
       </div>
     </section>
