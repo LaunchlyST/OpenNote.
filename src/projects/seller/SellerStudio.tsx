@@ -1067,7 +1067,9 @@ function Studio({
     setPublishing(false)
   }
 
-  const productsForPreview = store.products.filter((p) => p.title.trim() && !p.archived).map((p) => {
+  // Untitled drafts still show in the phone (as "Untitled product"), so a product
+  // just added to a swipe appears in its slide straight away.
+  const productsForPreview = store.products.filter((p) => !p.archived).map((p) => ({ ...p, title: p.title.trim() ? p.title : 'Untitled product' })).map((p) => {
     // an open part panel shows its change straight away, before the save returns
     const live = partPreview?.id === p.id ? partPreview : null
     const ex = withExtras(live ? live.extras : p.extras)
@@ -1247,7 +1249,10 @@ function Studio({
           <div
             className="ss-screen ss-slides"
             onPointerDown={(e) => {
-              // swipe the page inside the phone: left for Style 2, right back to Style 1
+              // Swiping inside the phone no longer switches style: use the
+              // Style 1 / Style 2 buttons. Swipes stay for product carousels.
+              if (e.button === 0) return
+              // (old swipe: left for Style 2, right back to Style 1)
               // A product carousel owns its own horizontal drag, so leave it alone.
               if (e.button !== 0 || (e.target as HTMLElement).closest('.sp-grip, .sp-track, .sp-carousel, .sp-car-nav, .sp-slide-empty, input, textarea, select')) return
               const scr = e.currentTarget
@@ -2064,14 +2069,22 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSe
   }
   return (
     <div className="sb-edit">
-      <span className="ss-label">Product slides</span>
-      <div role="tablist" aria-label="Slides" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-        {slides.map((sl, i) => (
-          <button key={sl.id} type="button" role="tab" aria-selected={i === a} className={cn('ss-ghost', i === a && 'on')} onClick={() => setActiveIdx(i)}>
-            Slide {i + 1}
-          </button>
-        ))}
-        {slides.length < MAX_PRODUCT_SLIDES && (onAddEmptySlide ?? onAddSlide) && (
+      <span className="ss-label">Swipe: product 1, 2 and 3</span>
+      <p className="ss-muted" style={{ marginTop: 0 }}>Each slot is one product in the swipe on your phone. Tap a slot to see or change it.</p>
+      <div role="tablist" aria-label="Slides" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 10 }}>
+        {Array.from({ length: Math.max(3, slides.length) }, (_, i) => {
+          const sl = slides[i]
+          const name = !sl ? 'Empty' : sl.kind === 'affiliate' ? (sl.affiliate.title.trim() || 'Affiliate') : (products.find((x) => x.id === sl.productId)?.title.trim() || (sl.productId ? 'Untitled product' : 'Empty'))
+          return (
+            <button key={sl?.id ?? `empty-${i}`} type="button" role="tab" aria-selected={i === a} className={cn('ss-ghost', i === a && 'on')} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, borderStyle: sl ? undefined : 'dashed' }} onClick={() => setActiveIdx(i)}>
+              <b style={{ fontSize: 12 }}>Product {i + 1}</b>
+              <small style={{ fontSize: 11, opacity: 0.7, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</small>
+            </button>
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {slides.length >= 3 && slides.length < MAX_PRODUCT_SLIDES && (onAddEmptySlide ?? onAddSlide) && (
           <button type="button" className="ss-ghost" onClick={() => (onAddEmptySlide ?? onAddSlide)!(blockId, slides.length)}>+ Add product slide</button>
         )}
       </div>
@@ -2079,9 +2092,9 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSe
         <div className="sld-card">
           <div className="sld-head">
             <span className="sld-num" aria-hidden="true">{a + 1}</span>
-            <span className="ss-label">Empty slide</span>
+            <span className="ss-label">Product {a + 1} is empty</span>
           </div>
-          <p className="ss-muted">This slide is empty. Choose a product to fill it.</p>
+          <p className="ss-muted">Add a product here and it shows as product {a + 1} in the swipe.</p>
           {onAddSlide && (
             <button type="button" className="ss-ghost self-start" onClick={() => onAddSlide(blockId, a)}>+ Add product</button>
           )}
@@ -2132,7 +2145,7 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSe
           )}
         </div>
       )}
-      <p className="ss-muted">One slide shows on its own; two or more become a carousel. A carousel counts as one product block.</p>
+      <p className="ss-muted">Your visitors swipe left and right between these products.</p>
     </div>
   )
 }
