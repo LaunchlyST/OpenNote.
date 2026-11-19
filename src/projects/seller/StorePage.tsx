@@ -471,7 +471,8 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       // slides, then one empty slide per free slot (Product 3 included), each with
       // the "Add product" action. The placeholders only exist while editing, so
       // the public store still lists the populated slides only.
-      const editorShown = !p.live && (p.onAddSlideProduct || shown.length > 0)
+      // The phone shows the slides the seller really has, like the live store.
+      const editorShown = shown
         ? [...shown, ...Array.from({ length: Math.max(0, 3 - shown.length) }, (_, i) => ({ ...newSlide('digital'), id: `sld_${block.id}_add_${i}` }))]
         : shown
       const list = editorShown.length ? editorShown : shown
