@@ -7619,6 +7619,7 @@ select.ss-input option {
 .sp-soon { display: grid; justify-items: center; gap: 6px; padding: 26px 20px; border-radius: calc(var(--r) + 6px); text-align: center; border: 1.5px solid color-mix(in srgb, var(--ac) 40%, transparent); background: color-mix(in srgb, var(--ac) 14%, var(--on, #fff)); }
 .sp-soon > span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 999px; font-size: 18px; color: var(--on, #fff); background: var(--ac); }
 .sp-soon h2 { font-size: 17px; font-weight: 700; }
+.sp-slide-soon { height: 100%; min-height: 220px; align-content: center; margin: 0; }
 .sp-soon p { font-size: 14px; opacity: 0.7; }
 
 /* ---- store pages: tabs under the banner ---- */

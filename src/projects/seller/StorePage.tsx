@@ -682,7 +682,13 @@ function SlideCarousel({ slides, blockId, interactive, activeSlide, onCarouselSl
                 <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) } }}>
                   <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(blockId, i) : p.onAddSlide?.(blockId) }}>+ Add product</button>
                 </div>
-              ) : null
+              ) : (
+                <div className="sp-block sp-soon sp-slide-soon">
+                  <span aria-hidden="true">✦</span>
+                  <h2>Coming soon</h2>
+                  <p>A new product is on its way. Swipe to see what's here now.</p>
+                </div>
+              )
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
         ))}
