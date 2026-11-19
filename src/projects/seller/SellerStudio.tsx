@@ -1069,7 +1069,7 @@ function Studio({
 
   // Untitled drafts still show in the phone (as "Untitled product"), so a product
   // just added to a swipe appears in its slide straight away.
-  const productsForPreview = store.products.filter((p) => !p.archived).map((p) => ({ ...p, title: p.title.trim() ? p.title : 'Untitled product' })).map((p) => {
+  const productsForPreview = store.products.filter((p) => !p.archived).map((p) => ({ ...p, title: p.title?.trim() ? p.title : 'Untitled product' })).map((p) => {
     // an open part panel shows its change straight away, before the save returns
     const live = partPreview?.id === p.id ? partPreview : null
     const ex = withExtras(live ? live.extras : p.extras)
@@ -2074,7 +2074,7 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSe
       <div role="tablist" aria-label="Slides" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 10 }}>
         {Array.from({ length: Math.max(3, slides.length) }, (_, i) => {
           const sl = slides[i]
-          const name = !sl ? 'Empty' : sl.kind === 'affiliate' ? (sl.affiliate.title.trim() || 'Affiliate') : (products.find((x) => x.id === sl.productId)?.title.trim() || (sl.productId ? 'Untitled product' : 'Empty'))
+          const name = !sl ? 'Empty' : sl.kind === 'affiliate' ? (sl.affiliate?.title?.trim() || 'Affiliate') : (products.find((x) => x.id === sl.productId)?.title?.trim() || (sl.productId ? 'Untitled product' : 'Empty'))
           return (
             <button key={sl?.id ?? `empty-${i}`} type="button" role="tab" aria-selected={i === a} className={cn('ss-ghost', i === a && 'on')} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, borderStyle: sl ? undefined : 'dashed' }} onClick={() => setActiveIdx(i)}>
               <b style={{ fontSize: 12 }}>Product {i + 1}</b>
