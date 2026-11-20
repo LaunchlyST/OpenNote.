@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { liquidArt, liquidArtUrl } from './liquidArt'
+
+const RippleDistortion = lazy(() => import('./RippleDistortion'))
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, MoreVertical, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, MAX_PRODUCT_SLIDES } from './model'
@@ -469,14 +472,8 @@ function BlockView({ block, ...p }: { block: Block } & StorePageProps) {
       const shown = p.live ? usable : slides
       // Zero products: the empty state straight away (Studio: the add picker).
       if (!shown.length) {
-        if (!p.live && (p.onAddSlideProduct || p.onAddSlide)) {
-          return (
-            <div className="sp-block sp-featured-v2 sp-slide-empty" role="button" tabIndex={0} onClick={() => p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id) } }}>
-              <button type="button" className="sp-btn sp-btn-sm sp-slide-empty-btn" onClick={(e) => { e.stopPropagation(); p.onAddSlideProduct ? p.onAddSlideProduct(block.id, 0) : p.onAddSlide?.(block.id) }}>+ Add product</button>
-            </div>
-          )
-        }
-        return p.live ? <ComingSoon /> : <EmptyProduct block={block} {...p} />
+        if (!p.onAddSlideProduct && p.onAddSlide && !p.live) return <ComingSoon onAdd={() => p.onAddSlide?.(block.id)} />
+        return <SlideCarousel {...p} slides={[]} withEnd blockId={block.id} interactive={!p.live} activeSlide={p.activeSlideBlock === block.id ? p.activeSlide : undefined} onCarouselSlideChange={(i) => p.onSlideChange?.(block.id, i)} />
       }
       // Real products, then exactly one "Coming soon" card at the end.
       return <SlideCarousel {...p} slides={shown} withEnd blockId={block.id} interactive={!p.live} activeSlide={p.activeSlideBlock === block.id ? p.activeSlide : undefined} onCarouselSlideChange={(i) => p.onSlideChange?.(block.id, i)} />
@@ -588,7 +585,10 @@ function AffiliateSlide({ slide, live }: { slide: ProductSlide } & StorePageProp
  * store only populated slides are shown.
  */
 function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onCarouselSlideChange, ...p }: { slides: ProductSlide[]; withEnd?: boolean; blockId?: string; interactive?: boolean; activeSlide?: number; onCarouselSlideChange?: (i: number) => void } & StorePageProps) {
-  const count = slides.length + (withEnd ? 1 : 0)
+  // Every swipe shows at least three pages: real products, then Coming soon
+  // cards fill the rest (at least one, always after the last product).
+  const ends = withEnd ? Math.max(1, 3 - slides.length) : 0
+  const count = slides.length + ends
   // One slide step = the slide's width plus the track's gap. Using the width
   // alone drifts by the gap on every slide and leaves a card cut off.
   const stepOf = (el: HTMLElement) => Math.max(1, el.clientWidth + (parseFloat(getComputedStyle(el).columnGap) || 0))
@@ -675,21 +675,31 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
             ) : s.kind === 'digital' ? <DigitalSlide slide={s} blockId={blockId} {...p} /> : <AffiliateSlide slide={s} {...p} />}
           </div>
         ))}
-        {withEnd && (
-          <div className="sp-slide" role="group" aria-roledescription="slide" aria-label={`${count} of ${count}`}>
-            <ComingSoon className="sp-slide-soon" in={current === slides.length} onAdd={!p.live && p.onAddSlideProduct && blockId && slides.length < MAX_PRODUCT_SLIDES ? () => p.onAddSlideProduct!(blockId, slides.length) : undefined} />
+        {Array.from({ length: ends }, (_, k) => (
+          <div key={`end-${k}`} className="sp-slide" role="group" aria-roledescription="slide" aria-label={`${slides.length + k + 1} of ${count}`}>
+            <ComingSoon className="sp-slide-soon" in={current === slides.length + k} onAdd={!p.live && p.onAddSlideProduct && blockId && slides.length < MAX_PRODUCT_SLIDES ? () => p.onAddSlideProduct!(blockId, slides.length) : undefined} />
           </div>
-        )}
+        ))}
       </div>
       {count > 1 && (
         <div className="sp-car-nav">
-          <button type="button" className="sp-arrow" aria-label="Previous product" disabled={current === 0} onClick={() => goTo(current - 1)}>‹</button>
-          <div className="sp-dots" role="tablist" aria-label="Choose a product">
-            {Array.from({ length: count }, (_, i) => (
-              <button key={i} type="button" role="tab" aria-selected={i === current} aria-label={i < slides.length ? `Product ${i + 1}` : 'Coming soon'} className={i === current ? 'sp-dot on' : 'sp-dot'} onClick={() => goTo(i)} />
+          <div className="sp-pager" role="tablist" aria-label="Choose a product">
+            <button type="button" className="sp-pg-arrow" aria-label="Previous product" disabled={current === 0} onClick={() => goTo(current - 1)}>‹</button>
+            {Array.from({ length: count }, (_, i) => i).filter((i) => Math.abs(i - current) <= 2).map((i) => (
+              <button key={i} type="button" role="tab" aria-selected={i === current} aria-label={i < slides.length ? `Product ${i + 1}` : `Coming soon (page ${i + 1})`} className={'sp-pg-num' + (i === current ? ' on' : '') + (Math.abs(i - current) === 2 ? ' far' : '')} onClick={() => goTo(i)}>{i + 1}</button>
             ))}
+            <button type="button" className="sp-pg-arrow" aria-label="Next product" disabled={current === count - 1} onClick={() => goTo(current + 1)}>›</button>
           </div>
-          <button type="button" className="sp-arrow" aria-label="Next product" disabled={current === count - 1} onClick={() => goTo(current + 1)}>›</button>
+          <label className="sp-pg-select">
+            <span>Select page:</span>
+            <span className="sp-pg-pick">
+              <select value={current} onChange={(e) => goTo(Number(e.target.value))} aria-label="Select page">
+                {Array.from({ length: count }, (_, i) => <option key={i} value={i}>{i < slides.length ? i + 1 : `${i + 1} · Coming soon`}</option>)}
+              </select>
+              <b aria-hidden="true">{current + 1}</b>
+              <i aria-hidden="true">⌃</i>
+            </span>
+          </label>
         </div>
       )}
     </section>
@@ -702,47 +712,28 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
  */
 /**
  * "Coming soon": the single teaser after the last real product (or the empty
- * state). A glossy red retro TV against a grainy sky, the message on a ribbed
- * cream screen. Drawn in CSS, nothing to load.
+ * state). A glossy red retro TV in front of a moving red/cream/black liquid
+ * artwork (WebGL ripple distortion, loaded only when this card renders). The
+ * TV itself is plain DOM, so it stays sharp while only the background moves.
  */
 function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
+  const [art] = useState(() => (typeof document === 'undefined' ? null : liquidArt()))
   return (
     <section className={'sp-block sp-tv' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Coming soon">
-      <div className="tv-lift" aria-hidden="true">
-        <svg className="tv-balloons" viewBox="0 0 200 150">
-          <defs>
-            <radialGradient id="tvb1" cx="35%" cy="30%" r="70%"><stop offset="0" stopColor="#fff7ef" /><stop offset=".55" stopColor="#efe2d0" /><stop offset="1" stopColor="#cdb9a0" /></radialGradient>
-            <radialGradient id="tvb2" cx="35%" cy="30%" r="70%"><stop offset="0" stopColor="#ff8a8a" /><stop offset=".5" stopColor="#d1232c" /><stop offset="1" stopColor="#8a0d15" /></radialGradient>
-            <radialGradient id="tvb3" cx="35%" cy="30%" r="70%"><stop offset="0" stopColor="#ffffff" /><stop offset=".55" stopColor="#dfe7ef" /><stop offset="1" stopColor="#a9b9c9" /></radialGradient>
-          </defs>
-          <path d="M100 150 C96 120 70 96 62 66" /><path d="M100 150 C100 116 102 84 104 48" /><path d="M100 150 C106 122 128 100 140 72" />
-          <g className="b b1"><ellipse cx="62" cy="44" rx="25" ry="30" fill="url(#tvb1)" /><path d="M58 74 l4 -3 4 3z" fill="#cdb9a0" /></g>
-          <g className="b b3"><ellipse cx="140" cy="50" rx="23" ry="28" fill="url(#tvb3)" /><path d="M136 78 l4 -3 4 3z" fill="#a9b9c9" /></g>
-          <g className="b b2"><ellipse cx="104" cy="28" rx="26" ry="31" fill="url(#tvb2)" /><path d="M100 59 l4 -3 4 3z" fill="#8a0d15" /></g>
-        </svg>
-        <div className="tv-set">
-          <div className="tv-screen"><span className="tv-text">Coming soon</span></div>
-        </div>
+      {art && !shown && <div className="tv-bg" style={{ backgroundImage: `url(${liquidArtUrl()})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />}
+      {art && shown && (
+        <Suspense fallback={<div className="tv-bg" style={{ backgroundImage: `url(${liquidArtUrl()})`, backgroundSize: 'cover', backgroundPosition: 'center' }} />}>
+          <RippleDistortion source={art} className="tv-bg" brushSize={180} strength={0.12} swirl={0.6} rings={3} spread={3} fade={2.5} dispersion={0.015} glint={0.08} grayscale={false} quality="medium" flow={0.035} ambientEvery={900} />
+        </Suspense>
+      )}
+      <div className="tv-set" aria-hidden="true">
+        <div className="tv-screen"><span className="tv-text">Coming soon</span></div>
       </div>
       {onAdd && <button type="button" className="tv-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
     </section>
   )
 }
 
-function EmptyProduct({ block, ...p }: { block: Block } & StorePageProps) {
-  if (p.live || !p.onAddSlide)
-    return (
-      <ComingSoon />
-    )
-  return (
-    <div className="sp-block sp-drop">
-      <span className="sp-drop-ico" aria-hidden="true">＋</span>
-      <b>Drop your digital product here</b>
-      <p>Drag a product in from the left, or pick one to show it big.</p>
-      <button type="button" className="sp-btn sp-btn-sm" onClick={() => p.onAddSlide!(block.id)}>Add or select a product</button>
-    </div>
-  )
-}
 
 /** A TikTok video: a poster until tapped, then TikTok's own player (nothing loads from TikTok before that). */
 function TikTokCard({ url, live }: { url: string; live?: boolean }) {

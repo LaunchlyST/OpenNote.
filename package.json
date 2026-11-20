@@ -43,14 +43,15 @@
     "test:launch": "tsx scripts/launch-smoke.ts"
   },
   "dependencies": {
-    "@types/three": "^0.187.0",
     "@tailwindcss/vite": "^4.3.3",
+    "@types/three": "^0.187.0",
     "better-auth": "^1.7.7",
     "better-sqlite3": "^12.11.1",
     "express": "^5.3.0",
     "gsap": "^3.12.5",
     "lucide-react": "^1.55.0",
     "nodemailer": "^10.0.13",
+    "ogl": "^1.0.11",
     "pg": "^8.23.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
