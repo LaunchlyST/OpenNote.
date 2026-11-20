@@ -3428,11 +3428,13 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const cur = main?.currency ?? data?.balance?.available[0]?.currency ?? 'gbp'
   const avail = data?.balance?.available.find((x) => x.currency === cur)?.amountMinor ?? 0
   const pending = data?.balance?.pending.find((x) => x.currency === cur)?.amountMinor ?? 0
-  const banks = data?.banks ?? []
   // Stripe's payout account and a saved bank-transfer account can be the same
   // bank account: show it once, labelled with both jobs.
   const sameBank = (b: { last4: string; sortCode?: string | null }, sb: { accountNumber: string; iban: string; sortCode: string }) =>
     b.last4 === (sb.accountNumber.slice(-4) || sb.iban.slice(-4)) && (!b.sortCode || !sb.sortCode || b.sortCode.replace(/\D/g, '') === sb.sortCode.replace(/\D/g, ''))
+  // One name everywhere: the name the seller saved ("Revolut"), not Stripe's legal one ("REVOLUT LTD").
+  const tidyBank = (n: string) => n.replace(/\b(LTD|LIMITED|PLC|UK|BANK PLC)\.?$/i, '').trim().toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) || 'Bank account'
+  const banks = (data?.banks ?? []).map((b) => ({ ...b, bankName: saved.find((sb) => sameBank(b, sb))?.bankName || tidyBank(b.bankName) }))
   /** Card earnings are paid out to this Stripe bank account from now on. */
   const useStripeBank = async (id: string) => {
     try { await sellerApi.defaultBank(id); await load() } catch (e) { setErr((e as Error).message) }
