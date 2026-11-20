@@ -1096,7 +1096,8 @@ function payoutView(s: StoreRow) {
     methods,
     // The seller's own settings (only ever sent to the seller).
     payments: p,
-    bankVerify: Boolean(trueLayer()),
+    // Verification is required only once TrueLayer is live (test mode can't verify real banks).
+    bankVerify: Boolean(trueLayer()?.live),
   }
 }
 
@@ -2163,7 +2164,7 @@ export function sellerRouter() {
     const cur = readPayments(s.payments)
     // With bank verification on, only an account proven to be the seller's can be chosen.
     const use = (req.body as { useBank?: unknown })?.useBank
-    if (typeof use === 'number' && trueLayer() && cur.savedBanks[use] && !cur.verified.includes(bankKey(cur.savedBanks[use]))) return void res.status(409).json({ error: 'Verify this bank account first: press Verify and approve it in your bank app.', verify: true })
+    if (typeof use === 'number' && trueLayer()?.live && cur.savedBanks[use] && !cur.verified.includes(bankKey(cur.savedBanks[use]))) return void res.status(409).json({ error: 'Verify this bank account first: press Verify and approve it in your bank app.', verify: true })
     const next = cleanPayments(req.body, cur)
     if (typeof next === 'string') return void res.status(400).json({ error: next })
     await sql.run(`UPDATE seller_store SET payments = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(next), now(), s.id)
@@ -2293,7 +2294,7 @@ export function sellerRouter() {
     const i = Number((req.body as { index?: unknown })?.index)
     const sb = Number.isInteger(i) && i >= 0 ? readPayments(s.payments).savedBanks[i] : undefined
     if (!sb) return void res.status(404).json({ error: 'Bank account not found.' })
-    if (trueLayer() && !readPayments(s.payments).verified.includes(bankKey(sb))) return void res.status(409).json({ error: 'Verify this bank account first: press Verify and approve it in your bank app.', verify: true })
+    if (trueLayer()?.live && !readPayments(s.payments).verified.includes(bankKey(sb))) return void res.status(409).json({ error: 'Verify this bank account first: press Verify and approve it in your bank app.', verify: true })
     const digits = (v: string) => (v || '').replace(/\D/g, '')
     const acct = digits(sb.accountNumber)
     const sort = digits(sb.sortCode)
