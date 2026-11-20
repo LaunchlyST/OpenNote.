@@ -6,6 +6,8 @@ import { Style2Page } from '../projects/seller/Style2'
 import { affiliateHref, formatPrice, isFreeProduct, mediaUrl } from '../projects/seller/model'
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
+import { CardPayForm } from './CardPayForm'
+import type { CardPayHandle } from './CardPayForm'
 import type { ClaimState, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
 
@@ -185,6 +187,8 @@ export default function PublicStore({ path }: { path: string }) {
       product={choosing}
       methods={store.methods ?? ['stripe']}
       payByBank={store.payByBank}
+      stripePk={store.stripePk}
+      stripeAccount={store.stripeAccount}
       banks={store.banks ?? []}
       busy={buying === choosing.id}
       error={buyErr}
@@ -554,7 +558,7 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, payByBank, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; payByBank?: boolean; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) => void; onClose: () => void }) {
+function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; payByBank?: boolean; stripePk?: string | null; stripeAccount?: string | null; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) => void; onClose: () => void }) {
   // The server's quote is the price: list price, live offer, then the code. The card's price is only a first guess.
   const [quote, setQuote] = useState<PriceQuote | null>(null)
   const [code, setCode] = useState('')
@@ -601,6 +605,10 @@ function PayChooser({ product, methods, payByBank, banks, busy, error, seller, o
   const [wallet, setWallet] = useState<Wallet>('card')
   const [payTo, setPayTo] = useState<number>(() => (banks.find((b) => b.inUse) ?? banks[0])?.index ?? -1)
   const [remember, setRemember] = useState(true)
+  // Card typed right here (Stripe Payment Element) when the server offers it; otherwise Stripe's page.
+  const cardRef = useRef<CardPayHandle>(null)
+  const [cardReady, setCardReady] = useState(false)
+  const [cardBusy, setCardBusy] = useState(false)
   const [hasSaved, setHasSaved] = useState(() => { try { return Boolean(localStorage.getItem('desknoty.payer')) } catch { return false } })
   // Only the email, bank name and account name are remembered (never bank logins or numbers).
   const forget = () => { try { localStorage.removeItem('desknoty.payer') } catch { /* blocked */ } setHasSaved(false); setRemember(false); setEmail(''); setPayerBank(''); setPayerName('') }
@@ -616,7 +624,8 @@ function PayChooser({ product, methods, payByBank, banks, busy, error, seller, o
   const needsEmail = Boolean(quote?.needsEmail)
   // free (also when a code makes it free) and per-customer codes need an email; bank transfer needs the payer's details
   const ready = free ? valid : isBank ? valid && !noBank && payTo >= 0 && payerBank !== '' && payerName.trim().length >= 2 : needsEmail ? valid : valid || !email.trim()
-  const canPay = !busy && ready
+  const inlineCard = choice === 'card' && !free && Boolean(stripePk && stripeAccount)
+  const canPay = !busy && !cardBusy && ready && (!inlineCard || cardReady)
   const price = formatPrice(totalMinor, product.currency)
   const money = (m: number) => formatPrice(m, product.currency)
   useEffect(() => {
@@ -628,6 +637,7 @@ function PayChooser({ product, methods, payByBank, banks, busy, error, seller, o
   }, [onClose])
   const submit = () => {
     if (!canPay) return
+    if (inlineCard) { try { if (remember) localStorage.setItem('desknoty.payer', JSON.stringify({ email: email.trim() })) } catch { /* storage blocked */ } void cardRef.current?.pay(); return }
     try {
       if (remember) localStorage.setItem('desknoty.payer', JSON.stringify({ email: email.trim(), ...(isBank ? { payerBank, payerName: payerName.trim() } : (() => { try { const o = JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null'); return o ? { payerBank: o.payerBank, payerName: o.payerName } : {} } catch { return {} } })()) }))
       else localStorage.removeItem('desknoty.payer')
@@ -699,6 +709,8 @@ function PayChooser({ product, methods, payByBank, banks, busy, error, seller, o
                   <p className="co3-hint">This product is free. Enter your email and we’ll send you the download link.</p>
                 ) : choice === 'bankapp' ? (
                   <div className="co3-cardnote"><p>Pick your bank on Stripe’s secure page, then approve the payment in your bank’s own app or website. Desknoty never sees your bank login, and your download unlocks only once your bank confirms the payment.</p></div>
+                ) : inlineCard ? (
+                  <CardPayForm ref={cardRef} pk={stripePk!} account={stripeAccount!} handle={handle} productId={product.id} amountMinor={totalMinor} currency={product.currency} email={email.trim()} coupon={applied ?? undefined} onReady={setCardReady} onBusy={setCardBusy} />
                 ) : method === 'paypal' ? (
                   <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
                 ) : (
@@ -759,7 +771,7 @@ function PayChooser({ product, methods, payByBank, banks, busy, error, seller, o
             {quote && quote.savedMinor > 0 && <p className="co3-saved">You save {money(quote.savedMinor)}</p>}
             {needsEmail && !free && <p className="co3-hint-line">This code is once per customer, so we need your email.</p>}
             {error && <p className="co-err" role="alert">{error}</p>}
-            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy ? (free ? 'Sending…' : 'Opening…') : free ? 'Send digital product' : 'Pay Now'}</button>
+            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy || cardBusy ? (free ? 'Sending…' : inlineCard ? 'Paying…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `Secure pay ${price}` : 'Pay Now'}</button>
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>
           </section>
         </div>

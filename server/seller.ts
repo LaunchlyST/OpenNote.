@@ -47,6 +47,8 @@ const modeKey = process.env[stripeMode === 'live' ? 'STRIPE_LIVE_SECRET_KEY' : '
 const legacyKey = process.env.STRIPE_SECRET_KEY ?? ''
 const seller = {
   stripeSecret: (modeKey || (legacyKey.includes(`_${stripeMode}_`) ? legacyKey : '')).trim(),
+  // Public key for Stripe.js (the card form inside Desknoty's checkout). Safe to send to browsers.
+  publishableKey: (process.env[stripeMode === 'live' ? 'STRIPE_LIVE_PUBLISHABLE_KEY' : 'STRIPE_TEST_PUBLISHABLE_KEY'] || '').trim(),
   webhookSecret: (process.env[stripeMode === 'live' ? 'STRIPE_LIVE_WEBHOOK_SECRET' : 'STRIPE_TEST_WEBHOOK_SECRET'] || (stripeMode === 'test' ? process.env.STRIPE_WEBHOOK_SECRET : '') || '').trim(),
   /** Test-only: point the Stripe SDK at a local stand-in. Ignored in production. */
   stripeApiBase: env.isProduction ? '' : (process.env.STRIPE_API_BASE ?? '').trim(),
@@ -2492,7 +2494,9 @@ export function sellerRouter() {
       return { ...v, rating: ratings.get(p.id) ?? null, related: v.related.filter((id) => liveIds.has(id) || titles.has(id)), bundle: v.bundle.length ? { items: items.map((id) => ({ id, title: titles.get(id) ?? '' })), available: items.length === v.bundle.length && items.length >= 2 } : null }
     })
     const payByBank = readyMethods(s).includes('stripe') ? await payByBankReady((await activeConnection(s)).stripeAccountId).catch(() => false) : false
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products, checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), payByBank, banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
+    // In-checkout card form: Stripe.js needs the public key and the seller's account (direct charges).
+    const inline = readyMethods(s).includes('stripe') && seller.publishableKey ? { stripePk: seller.publishableKey, stripeAccount: (await activeConnection(s)).stripeAccountId } : { stripePk: null, stripeAccount: null }
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products, checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), payByBank, ...inline, banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
   /* ---- V3: free products by email ---- */
@@ -2733,6 +2737,27 @@ export function sellerRouter() {
     if (!samePurchase(order, 'stripe') || order.stripeMode !== stripeMode) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     if (Date.now() - Date.parse(order.createdAt) > 23 * 60 * 60 * 1000) return void res.status(409).json({ error: 'This checkout attempt expired. Start a new purchase.' })
+    // In-checkout card form (Stripe Payment Element): a PaymentIntent on the seller's account.
+    // The order is only marked paid after the server reads the payment from Stripe (see the order page).
+    if (req.body?.inline === true && seller.publishableKey) {
+      try {
+        const pi = order.sessionId?.startsWith('pi_')
+          ? await st.paymentIntents.retrieve(order.sessionId, {}, { stripeAccount: order.accountId })
+          : await st.paymentIntents.create({
+              amount: order.amountMinor, currency: order.currency,
+              automatic_payment_methods: { enabled: true },
+              description: order.productTitle,
+              ...(validEmail ? { receipt_email: validEmail } : {}),
+              metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
+              ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
+            }, { stripeAccount: order.accountId, idempotencyKey: `pi_${order.id}` })
+        if (!order.sessionId) await sql.run('UPDATE seller_order SET "sessionId" = ? WHERE id = ? AND "sessionId" IS NULL', pi.id, order.id)
+        return void res.json({ clientSecret: pi.client_secret, orderUrl: retrievalUrl(order) })
+      } catch (err) {
+        console.error('[seller] Stripe payment could not be started', order.id, (err as Error).message)
+        return void res.status(502).json({ error: 'We could not start the payment. Please try again.' })
+      }
+    }
     // Pay by Bank: Stripe hosts the bank list and sends the buyer to their own
     // bank to approve. GBP only, and only when the seller's account has it on.
     const wantsBank = req.body?.payByBank === true
@@ -2904,7 +2929,18 @@ export function sellerRouter() {
     if (!ownerStore || !o || k.length !== o.accessKey.length || !timingSafeEqual(k, Buffer.from(o.accessKey))) {
       return void res.status(404).json({ error: 'Order not found.' })
     }
-    res.json({ order: await orderView(o, ownerStore) })
+    // A card paid in the checkout form: ask Stripe (never the browser) whether it succeeded.
+    let cur = o
+    const st = stripe()
+    if (st && o.status === 'pending' && o.sessionId?.startsWith('pi_')) {
+      try {
+        const pi = await st.paymentIntents.retrieve(o.sessionId, {}, { stripeAccount: o.accountId })
+        cur = await fulfil(o, { id: pi.id, payment_status: pi.status === 'succeeded' ? 'paid' : 'unpaid', amount_total: pi.amount_received, currency: pi.currency, customer_details: { email: pi.receipt_email ?? o.buyerEmail ?? null } as Stripe.Checkout.Session.CustomerDetails, payment_intent: pi.id })
+      } catch (err) {
+        console.error('[seller] could not read the payment', o.id, (err as Error).message)
+      }
+    }
+    res.json({ order: await orderView(cur, ownerStore) })
   })
 
   /**
