@@ -47,6 +47,8 @@ export function Style2Page(props: StorePageProps) {
         </section>
       )}
 
+      {!only && list.length > 0 && <Rail list={list} {...props} />}
+
       <section id="s2-shop" className="s2k-shop" aria-label="Products">
         {list.map((p, i) => <Card key={p.id} p={p} n={i} {...props} />)}
       </section>
@@ -58,6 +60,43 @@ export function Style2Page(props: StorePageProps) {
         <a href="https://desknoty.com" target="_blank" rel="noopener">Made with Desknoty</a>
       </footer>
     </div>
+  )
+}
+
+/** Virtual-store rail: products hang on a rail; pick one to bring it forward. Pill tabs filter. */
+function Rail({ list, ...props }: { list: ShopProduct[] } & StorePageProps) {
+  const [tab, setTab] = useState<'all' | 'paid' | 'free'>('all')
+  const shown = list.filter((p) => tab === 'all' || (tab === 'free' ? isFreeProduct(p) : !isFreeProduct(p)))
+  const [at, setAt] = useState(0)
+  const cur = shown[Math.min(at, shown.length - 1)]
+  const hasFree = list.some(isFreeProduct), hasPaid = list.some((p) => !isFreeProduct(p))
+  return (
+    <section className="s2k-rail" aria-label="Pick a product">
+      <div className="s2k-bar" aria-hidden="true" />
+      <div className="s2k-hang" role="listbox" aria-label="Products">
+        {shown.map((p, i) => {
+          const src = mediaUrl(p.cover)
+          return (
+            <button key={p.id} type="button" role="option" aria-selected={p === cur} className={p === cur ? 'on' : ''} onClick={() => setAt(i)} onMouseEnter={() => setAt(i)} style={{ ['--d' as string]: `${(i % 5) * 0.4}s` }}>
+              <i className="s2k-hook" aria-hidden="true" />
+              <span className="s2k-tag">{src ? <img src={src} alt="" draggable={false} /> : <b>{p.title.charAt(0).toUpperCase()}</b>}</span>
+              <span className="s2k-sr">{p.title}</span>
+            </button>
+          )
+        })}
+      </div>
+      {cur && (
+        <div className="s2k-pick" key={cur.id}>
+          <h2>{props.live ? <a href={`/${props.handle}/p/${cur.id}`}>{cur.title}</a> : cur.title}</h2>
+          <Buy p={cur} {...props} />
+        </div>
+      )}
+      {hasFree && hasPaid && (
+        <div className="s2k-pills" role="tablist" aria-label="Filter">
+          {(['all', 'paid', 'free'] as const).map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => { setTab(t); setAt(0) }}>{t === 'all' ? 'All' : t === 'paid' ? 'Paid' : 'Free'}</button>)}
+        </div>
+      )}
+    </section>
   )
 }
 
