@@ -1,7 +1,5 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-const RippleDistortion = lazy(() => import('./RippleDistortion'))
-const DEFAULT_RIPPLE_SRC = 'https://images.unsplash.com/photo-1782977389500-dd7adad33ebe?q=80&w=3416&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import { AtSign, ChevronDown, Globe, MoreVertical, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, MAX_PRODUCT_SLIDES } from './model'
@@ -714,32 +712,18 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
  * gets a finished "Coming soon" card with nothing to buy.
  */
 /**
- * "Coming soon": shown after the last real product (or for an empty block).
- * The card background is the RippleDistortion effect with its own photo; the
- * red retro TV sits in front, and its screen shows the red liquid artwork with
- * the same ripple effect behind "COMING SOON". The live WebGL effects run only
- * for the page currently in view; the others show the still artwork.
+ * "Coming soon": the approved teaser artwork, shown as-is (headline, red TV,
+ * holographic glass tiles). It fits the card without cropping. When the slide
+ * settles into view, one soft glint sweeps across the glass tiles only; the
+ * headline and TV never move. No glint with reduced motion.
  */
-const SOON_ART = '/coming-soon-art.webp'
+const SOON_ART = '/coming-soon.webp'
 function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
-  const [client] = useState(() => typeof window !== 'undefined')
-  const live = client && shown
   return (
-    <section className={'sp-block sp-tv' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Coming soon">
-      {live ? (
-        <Suspense fallback={<div className="tv-bg" />}>
-          <RippleDistortion source={DEFAULT_RIPPLE_SRC} className="tv-bg" ambientEvery={1400} flow={0.008} />
-        </Suspense>
-      ) : <div className="tv-bg" />}
-      <div className="tv-set" aria-hidden="true">
-        <div className="tv-screen">
-          {live ? (
-            <Suspense fallback={<div className="tv-art" style={{ backgroundImage: `url(${SOON_ART})` }} />}>
-              <RippleDistortion source={SOON_ART} className="tv-art" brushSize={180} strength={0.12} swirl={0.6} rings={3} spread={3} fade={2.5} dispersion={0.015} glint={0.08} grayscale={false} tintAmount={0} quality="medium" flow={0.012} ambientEvery={800} />
-            </Suspense>
-          ) : <div className="tv-art" style={{ backgroundImage: `url(${SOON_ART})` }} />}
-          <span className="tv-text">Coming soon</span>
-        </div>
+    <section className={'sp-block sp-soon2' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Coming soon">
+      <div className="soon2-frame">
+        <img src={SOON_ART} alt="Coming soon — our next product." width={1774} height={887} decoding="async" draggable={false} />
+        <span className="soon2-glint" aria-hidden="true" />
       </div>
       {onAdd && <button type="button" className="tv-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
     </section>

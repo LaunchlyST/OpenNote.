@@ -7617,33 +7617,21 @@ select.ss-input option {
 .sp-card .sp-price { font-size: 14px; font-weight: 750; }
 .sp-card .sp-btn-sm { min-height: 34px; padding: 0 14px; }
 .sp-featured { padding: 14px; border: 1.5px solid color-mix(in srgb, var(--ac) 45%, transparent); background: color-mix(in srgb, var(--ac) 12%, var(--on, #fff)); }
-/* Coming soon: the red retro TV in front of a moving liquid artwork */
-.sp-tv { position: relative; display: grid; place-items: center; min-height: 300px; padding: 26px 18px; border-radius: calc(var(--r) + 6px); overflow: hidden; isolation: isolate; background: #3a3d40; perspective: 900px; }
-.tv-bg { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: #3a3d40; }
-.tv-art { position: absolute; inset: 0; z-index: 0; pointer-events: none; background: #d8381f center / cover no-repeat; }
-.tv-art canvas { display: block; width: 100%; height: 100%; }
-.tv-bg canvas { display: block; width: 100%; height: 100%; }
-.sp-tv.is-in .tv-bg { animation: tv-bg-in 700ms ease-out both; }
-.tv-set { position: relative; z-index: 1; width: min(78%, 250px); aspect-ratio: 1.3; padding: 5.5% 6%; border-radius: 11% / 14%;
-  background: linear-gradient(170deg, #d6343c 0%, #b3161f 45%, #880c14 100%);
-  box-shadow: inset 0 2px 1px #ff9a9a88, inset 0 -5px 8px #4a040966, inset 4px 0 8px #ff6a6a22, 0 30px 40px -18px #1a0606cc, 0 12px 18px -10px #1a0606aa, 0 0 0 1px #4a0409; }
-.tv-set::before { content: ''; position: absolute; left: 7%; right: 7%; top: 2.5%; height: 7%; border-radius: 50%; background: linear-gradient(180deg, #ffffff80, transparent); }
-.tv-set::after { content: ''; position: absolute; left: 10%; right: 10%; bottom: -3%; height: 4%; border-radius: 0 0 6px 6px; background: #5e080d; z-index: -1; }
-.tv-screen { position: relative; container-type: inline-size; height: 100%; display: grid; place-items: center; border-radius: 9% / 11%; overflow: hidden; isolation: isolate;
-  background: #d8381f;
-  box-shadow: 0 0 0 4px #1d1416, inset 0 0 26px #5a4a3a66, inset 0 0 70px #3a2a1a33; }
-.tv-screen::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none; background: radial-gradient(120% 90% at 30% 15%, #ffffff40, transparent 45%), radial-gradient(130% 120% at 50% 50%, transparent 60%, #00000055); }
-.tv-text { position: relative; z-index: 1; font: italic 400 clamp(14px, 9cqw, 28px)/1 'Instrument Serif', Georgia, serif; letter-spacing: .12em; text-transform: uppercase; color: #f6ead8; text-shadow: 0 1px 2px #3a0a0699, 0 0 18px #3a0a0666; z-index: 2; }
+/* Coming soon: the approved teaser artwork, shown whole inside the card */
+.sp-soon2 { position: relative; display: grid; place-items: center; min-height: 240px; border-radius: calc(var(--r) + 6px); overflow: hidden; isolation: isolate; background: #1a0913; contain: paint; }
+.soon2-frame { position: relative; width: 100%; aspect-ratio: 1774 / 887; overflow: hidden; -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 9%, #000 91%, transparent 100%); mask-image: linear-gradient(180deg, transparent 0, #000 9%, #000 91%, transparent 100%); }
+/* Tall cards (phones): a soft, blurred copy of the same artwork fills the space around it. */
+.sp-soon2::before { content: ''; position: absolute; inset: -12%; z-index: -1; background: #1a0913 url('/coming-soon.webp') center / cover no-repeat; filter: blur(28px) saturate(1.1) brightness(0.55); }
+.soon2-frame img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+/* One soft holographic glint across the glass tiles only (clipped away from the headline and the TV). */
+.soon2-glint { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: 0;
+  clip-path: polygon(42% 2%, 100% 0%, 100% 24%, 86% 22%, 62% 24%, 57% 32%, 52% 52%, 50% 70%, 49% 86%, 18% 86%, 28% 64%, 40% 52%, 44% 40%);
+  background: linear-gradient(105deg, transparent 42%, rgba(255, 228, 250, 0.16) 47%, rgba(255, 245, 255, 0.5) 50%, rgba(200, 220, 255, 0.18) 53%, transparent 58%) no-repeat;
+  background-size: 260% 100%; background-position: 130% 0; will-change: background-position, opacity; }
+.sp-soon2.is-in .soon2-glint { animation: soon2-glint 1.25s 0.35s cubic-bezier(.4, 0, .2, 1) 1 both; }
+@keyframes soon2-glint { 0% { opacity: 0; background-position: 130% 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; background-position: -30% 0; } }
+@media (prefers-reduced-motion: reduce) { .sp-soon2.is-in .soon2-glint { animation: none; opacity: 0; } }
 .tv-add { position: absolute; bottom: 12px; z-index: 4; padding: 7px 13px; border-radius: 999px; border: 1px solid #ffffffaa; background: #ffffffe6; color: #1f1c18; font-size: 12.5px; font-weight: 500; cursor: pointer; }
-/* Entrance: background flows in · TV rises with a slight tilt · screen flickers on · text fades in · settles */
-.sp-tv.is-in .tv-set { animation: tv-rise 700ms 150ms cubic-bezier(.2,.75,.25,1) both; }
-.sp-tv.is-in .tv-screen { animation: tv-flicker 420ms 650ms steps(1, end) both; }
-.sp-tv.is-in .tv-text { animation: tv-on 500ms 950ms ease-out both; }
-@keyframes tv-bg-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes tv-rise { from { opacity: 0; transform: translateY(26px) rotateX(16deg) rotateZ(-2deg); } 70% { opacity: 1; } to { opacity: 1; transform: none; } }
-@keyframes tv-flicker { 0% { filter: brightness(.35); } 20% { filter: brightness(1.15); } 35% { filter: brightness(.6); } 55% { filter: brightness(1.08); } 100% { filter: none; } }
-@keyframes tv-on { from { opacity: 0; filter: blur(3px); } to { opacity: 1; filter: none; } }
-@media (prefers-reduced-motion: reduce) { .sp-tv.is-in .tv-set, .sp-tv.is-in .tv-screen, .sp-tv.is-in .tv-text, .sp-tv.is-in .tv-bg { animation: none; } }
 .sp-slide-soon { margin: 0; min-height: 0; height: 100%; }
 .sp-slide:has(> .sp-slide-soon) { display: grid; }
 .sp-track:has(.sp-slide-soon) .sp-slide-soon { min-height: 300px; }
