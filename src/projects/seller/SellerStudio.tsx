@@ -3405,6 +3405,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const autoText = data?.schedule && !manual ? `Paid out automatically · ${data.schedule.interval === 'daily' ? 'daily' : data.schedule.interval === 'weekly' ? 'weekly' : data.schedule.interval === 'monthly' ? 'monthly' : data.schedule.interval}` : null
   const canWithdraw = s === 'ready' && Boolean(data?.withdrawals) && avail > 0 && banks.length > 0 && (manual || !data?.schedule)
   const payouts = data?.balance?.payouts ?? []
+  // Where card money is paid out: the Stripe bank chosen with "Use this account".
+  const payTo = banks.find((b) => b.isDefault) ?? banks[0] ?? null
   const PAYOUT_STATUS: Record<string, string> = { paid: 'Paid', in_transit: 'On the way', pending: 'Pending', failed: 'Failed', canceled: 'Cancelled' }
   const STATUS: Record<string, string> = { paid: 'Paid', pending: 'Pending', failed: 'Failed', cancelled: 'Cancelled', refunded: 'Refunded', disputed: 'Disputed' }
 
@@ -3555,7 +3557,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           <span className="ss-paycard-icon"><Landmark className="h-4 w-4" /></span>
           <div className="min-w-0">
             <h3>Card payments · Stripe</h3>
-            <p className="ss-muted">{copy.text}</p>
+            <p className="ss-muted">{s === 'ready' && payTo ? `Buyers pay by card, and their money is paid out to ${payTo.bankName} ••${payTo.last4}.` : copy.text}</p>
           </div>
           <b className={cn('ss-pay', `ss-pay-${s}`)}>{copy.label}</b>
         </div>
@@ -3563,10 +3565,23 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           <div className="ss-note">Stripe isn’t switched on for this Desknoty server yet.</div>
         ) : (
           <div className="ss-paycard-actions">
-            <button type="button" className="ss-primary" onClick={() => void go()} disabled={busy}>
-              {busy ? 'Opening Stripe…' : copy.action} <ExternalLink className="h-3.5 w-3.5" />
-            </button>
-            <button type="button" className="ss-ghost" onClick={() => void reload(true)}>Refresh</button>
+            {s === 'ready' ? (
+              <>
+                {/* Ready: the bank is chosen here in Desknoty (Use this account), not in Stripe. */}
+                <button type="button" className="ss-primary" onClick={() => document.querySelector('.wl-banks')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+                  {payTo ? <><BankMark name={payTo.bankName} /> Paid to {payTo.bankName} ••{payTo.last4} · Change</> : 'Choose payout bank'}
+                </button>
+                <button type="button" className="ss-ghost" onClick={() => void reload(true)}>Refresh</button>
+                <button type="button" className="wl-link" onClick={() => void go()} disabled={busy}>{busy ? 'Opening…' : 'Stripe settings'} <ExternalLink className="h-3 w-3" /></button>
+              </>
+            ) : (
+              <>
+                <button type="button" className="ss-primary" onClick={() => void go()} disabled={busy}>
+                  {busy ? 'Opening Stripe…' : copy.action} <ExternalLink className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" className="ss-ghost" onClick={() => void reload(true)}>Refresh</button>
+              </>
+            )}
           </div>
         )}
         {err && <div className="ss-note" role="alert">{err}</div>}

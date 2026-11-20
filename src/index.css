@@ -9022,3 +9022,4 @@ select.ss-input option {
 .wl-pbank .wl-mark { width: 20px; height: 20px; border-radius: 6px; font-size: 10px; }
 .wl-pamt { font-weight: 700; }
 @media (max-width: 520px) { .wl-plist li { grid-template-columns: 1fr auto; } .wl-pbank { grid-column: 1; } }
+.ss-paycard-actions .ss-primary .wl-mark { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; } .ss-paycard-actions .ss-primary .wl-mark svg { width: 12px; height: 12px; } .ss-paycard-actions .ss-primary { display: inline-flex; align-items: center; gap: 8px; } .ss-paycard-actions { align-items: center; flex-wrap: wrap; }
