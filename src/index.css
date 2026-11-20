@@ -9009,3 +9009,6 @@ select.ss-input option {
 /* Checkout: remember / forget saved details */
 .co3-remember { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .co3-forget { font-size: 12.5px; color: #64748b; text-decoration: underline; text-underline-offset: 2px; background: none; border: 0; padding: 0; cursor: pointer; }
+.wl-balance-foot .wl-link .wl-mark { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
+.wl-balance-foot .wl-link .wl-mark svg { width: 12px; height: 12px; }
+.wl-balance-foot .wl-link { display: inline-flex; align-items: center; gap: 6px; }

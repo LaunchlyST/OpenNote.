@@ -3421,7 +3421,13 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
                 Withdraw <span aria-hidden="true">→</span>
               </button>
             )}
-            {s === 'ready' && <button type="button" className="wl-link" onClick={() => void go()}>Stripe dashboard <ExternalLink className="h-3 w-3" /></button>}
+            {s === 'ready' && (() => {
+              // The account you chose under "Your Bank Accounts" is where card money goes.
+              const to = banks.find((b) => b.isDefault) ?? banks[0]
+              return to
+                ? <button type="button" className="wl-link" onClick={() => document.querySelector('.wl-banks')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} title="Change it under Your Bank Accounts"><BankMark name={to.bankName} /> Paid to {to.bankName} ••{to.last4}</button>
+                : null
+            })()}
           </div>
           </>
           )}
