@@ -37,6 +37,9 @@ export interface StorePageProps {
   picked?: string | null
   /** Editor preview: which card part is selected, so it stays highlighted. */
   editCard?: { productId: string | null; part: CardPart | null } | null
+  /** Style 2 editor: open a product to edit/replace it, or hide it from the store. */
+  onEditProduct?: (productId: string) => void
+  onHideProduct?: (productId: string) => void
   /** Editor: typing into the selected title/description on the card. */
   onCardText?: (productId: string, field: 'title' | 'desc', value: string) => void
   /** Editor preview: pressing the grip starts dragging that section. */

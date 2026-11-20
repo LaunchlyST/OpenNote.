@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ComingSoon, PriceTag } from './StorePage'
 import { Daisy, Flower, Sticky } from '../../landing/AeroPage'
 import type { StorePageProps } from './StorePage'
-import { affiliateHref, DEFAULT_AMAZON_CTA, ensureFont, isFreeProduct, mediaUrl } from './model'
+import { affiliateHref, ensureFont, isFreeProduct, mediaUrl } from './model'
 import type { ShopProduct } from './model'
 import './style2.css'
 
@@ -21,7 +21,6 @@ import './style2.css'
 export function Style2Page(props: StorePageProps) {
   const { page, products, handle, only } = props
   useEffect(() => { ensureFont(page.theme.font) }, [page.theme.font])
-  const avatar = mediaUrl(page.avatar)
   const list = only ? [only] : products.filter((p) => !p.hidden)
   const name = (page.name || handle).trim()
   const [glyphs] = useState(makeGlyphs)
@@ -30,7 +29,7 @@ export function Style2Page(props: StorePageProps) {
       <pre className="s2k-glyphs" aria-hidden="true">{glyphs}</pre>
       <header className="s2k-top">
         <a className="s2k-brand" href={props.live ? `/${handle}` : undefined}>
-          <span className="s2k-ava" style={avatar ? { backgroundImage: `url(${avatar})` } : undefined}>{!avatar && name.charAt(0).toUpperCase()}</span>
+          <span className="s2k-ava" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
           {name}
         </a>
         <span className="s2k-status"><i />Open · {list.length} {list.length === 1 ? 'product' : 'products'}</span>
@@ -53,6 +52,15 @@ export function Style2Page(props: StorePageProps) {
         {list.map((p, i) => <Card key={p.id} p={p} n={i} {...props} />)}
       </section>
       {!only && <div className="s2k-next"><span className="s2k-hand s2k-next-note">psst… next one’s on the way</span><Teaser /></div>}
+      {!only && (
+        <section className="s2k-promo" aria-label="Stay in the loop">
+          <div className="s2k-promo-in">
+            <span className="s2k-promo-kicker">New drops, every month</span>
+            <h2>Good things take<br />a little time.</h2>
+            <a className="s2k-promo-btn" href="#s2-shop">Shop {list.length} {list.length === 1 ? 'product' : 'products'} →</a>
+          </div>
+        </section>
+      )}
 
       <footer className="s2k-foot">
         <span>© {new Date().getFullYear()} {name}</span>
@@ -109,17 +117,6 @@ function makeGlyphs() {
   return out
 }
 
-/** Only useful facts: file type and a verified rating. */
-function Facts({ p }: { p: ShopProduct }) {
-  const type = p.format || p.fileType
-  if (!type && !(p.rating && p.rating.count > 0)) return null
-  return (
-    <div className="s2-facts">
-      {type && <span>{type}</span>}
-      {p.rating && p.rating.count > 0 && <span>★ {p.rating.average.toFixed(1)} · {p.rating.count} verified</span>}
-    </div>
-  )
-}
 
 /** Price + action, using the store's existing purchase flow (paid, free, owned, affiliate). */
 function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePageProps) {
@@ -129,14 +126,14 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
   if (external) {
     return (
       <div className="s2-buyrow">
-        <span className="s2-price">Amazon</span>
         <a className={cls} href={external} target="_blank" rel="sponsored noopener noreferrer" onClick={props.live ? undefined : (e) => e.preventDefault()}>
-          {p.productType === 'affiliate' ? (p.affiliate?.cta || DEFAULT_AMAZON_CTA) : (p.cta?.text || 'View product ↗')}
+          {p.cta?.text && !/amazon/i.test(p.cta.text) ? p.cta.text : 'View product'}
         </a>
-        <small className="s2-aff">{p.affiliate?.disclosure || 'As an Amazon Associate, I earn from qualifying purchases.'}</small>
+        <small className="s2-aff" title={p.affiliate?.disclosure || 'As an Amazon Associate, I earn from qualifying purchases.'}>Paid link</small>
       </div>
     )
   }
+
   if (props.live && props.owned?.[p.id] && p.priceMinor > 0) {
     return (
       <div className="s2-buyrow">
@@ -161,15 +158,27 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
 function Card({ p, n, ...props }: { p: ShopProduct; n: number } & StorePageProps) {
   const src = mediaUrl(p.cover)
   const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
+  const type = p.format || p.fileType
   return (
     <article className={`s2k-card s2k-r${n % 3}`}>
-      <a className="s2k-img" href={link} tabIndex={-1} aria-hidden="true">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}</a>
+      <a className="s2k-img" href={link} tabIndex={-1} aria-hidden="true">
+        {src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}
+        {p.rating && p.rating.count > 0 && <em className="s2k-badge">★ {p.rating.average.toFixed(1)}</em>}
+      </a>
       <div className="s2k-body">
-        <Facts p={p} />
         <h2>{link ? <a href={link}>{p.title}</a> : p.title}</h2>
         {p.description && <p>{p.description.split('\n')[0]}</p>}
       </div>
-      <Buy p={p} {...props} />
+      <div className="s2k-foot2">
+        <Buy p={p} {...props} />
+        <small className="s2k-note">{affiliateHref(p) ? 'Ships from the store' : type ? `Instant download · ${type}` : 'Instant download'}</small>
+      </div>
+      {!props.live && (props.onEditProduct || props.onHideProduct) && (
+        <div className="s2k-admin">
+          {props.onEditProduct && <button type="button" onClick={() => props.onEditProduct!(p.id)}>Edit / replace</button>}
+          {props.onHideProduct && <button type="button" onClick={() => props.onHideProduct!(p.id)}>Remove</button>}
+        </div>
+      )}
     </article>
   )
 }

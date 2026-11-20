@@ -1359,7 +1359,7 @@ function Studio({
                 {dropAt !== null && <div className="ss-dropline" style={{ top: dropAt }} aria-hidden="true" />}
               </div>
               <div className="ss-slide" aria-label="Style 2 preview" aria-hidden={slide !== 1}>
-                <Style2Page page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} hiddenPages={hiddenPages} />
+                <Style2Page page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} hiddenPages={hiddenPages} onEditProduct={(id) => { setOpenProduct(id); setEditPart(null); setTab('products') }} onHideProduct={(id) => { const pr = store.products.find((x) => x.id === id); if (!pr || !window.confirm('Remove this product from your store? It stays in your Products list and you can show it again there.')) return; void sellerApi.updateProduct(id, { extras: { ...withExtras(pr.extras), hidden: true } }, pr.revision).then((r) => setStore(r.store)).catch((e: Error) => setErr(e.message)) }} />
               </div>
             </div>
           </div>

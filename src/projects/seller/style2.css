@@ -116,3 +116,36 @@
 .s2k-pills button.on { background: var(--ink); color: #fff; }
 @media (prefers-reduced-motion: reduce) { .s2k-hang button { animation: none; } }
 .s2k-hang { padding-top: 14px; margin-top: -16px; }
+/* ===== round 3: logo, reference card, promo glow ===== */
+.s2k-ava { background: var(--ink) !important; color: var(--lime) !important; font: 400 18px/1 var(--serif) !important; box-shadow: 0 0 0 3px var(--lime) !important; }
+
+/* Card: white frame, image panel, title + description, divider, footer (button left, note right) */
+.s2k-card { display: grid !important; grid-template-rows: auto 1fr auto !important; padding: 8px; border-radius: 26px !important; background: #fff !important; box-shadow: 0 0 0 1px rgba(21,19,11,.06), 0 1px 2px rgba(21,19,11,.04), 0 20px 44px -30px rgba(21,19,11,.35) !important; overflow: hidden; position: relative; }
+.s2k-img { position: relative; margin: 0 !important; border-radius: 18px !important; background: #f3f2ee !important; aspect-ratio: 16 / 10 !important; }
+.s2k-img img { object-fit: contain !important; }
+.s2k-badge { position: absolute; top: 12px; right: 12px; padding: 7px 10px; border-radius: 10px; background: var(--ink); color: #fff; font: 500 12px/1 var(--mono); font-style: normal; }
+.s2k-body { padding: 18px 14px 14px !important; gap: 8px !important; }
+.s2k-body h2 { font: 500 20px/1.25 var(--sans) !important; letter-spacing: -.01em !important; }
+.s2k-body p { font-size: 14px !important; color: #6b6b6b !important; }
+.s2k-foot2 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 6px; padding: 14px 8px 8px; border-top: 1px solid #eee; }
+.s2k .s2k-foot2 .s2-buyrow { display: flex; align-items: center; gap: 8px; padding: 0; border: 0; flex-wrap: nowrap; }
+.s2k .s2k-foot2 .s2-price { transform: none; margin: 0; padding: 0 2px; background: none; box-shadow: none; font: 600 15px/1 var(--sans); }
+.s2k .s2k-foot2 .s2-buy { transform: none; margin: 0; flex: none; padding: 10px 16px; border-radius: 12px; background: #fff; font: 500 14px/1 var(--sans); box-shadow: 0 0 0 1px #e4e4e4, 0 2px 4px -2px #0002; }
+.s2k .s2k-foot2 .s2-buy:hover:not(:disabled) { background: var(--lime); box-shadow: 0 0 0 1px #9ccf2c; }
+.s2k-note { font-size: 12.5px; color: #6b6b6b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s2k .s2k-foot2 .s2-aff { order: 0; flex-basis: auto; padding: 0; font-size: 11px; }
+.s2k-admin { position: absolute; top: 14px; left: 14px; display: flex; gap: 6px; }
+.s2k-admin button { padding: 6px 10px; border: 0; border-radius: 9px; background: rgba(255,255,255,.92); box-shadow: 0 0 0 1px #0001, 0 4px 10px -4px #0003; font: 500 12px/1 var(--sans); cursor: pointer; }
+.s2k-admin button:last-child { color: #c4473f; }
+
+/* Bottom promo: dark card in a soft neon glow on grain (like the reference) */
+.s2k-promo { position: relative; margin-top: 60px; padding: 70px 24px 80px; overflow: hidden; isolation: isolate; background: #a8873f;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .22 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.s2k-promo-in { position: relative; max-width: 640px; margin: 0 auto; padding: 48px 32px; border-radius: 34px; background: #2a2a2a; color: #f2f2ec; text-align: center; font-family: var(--mono);
+  box-shadow: 0 0 0 1px #ffffff14, 0 0 40px 18px rgba(176, 255, 120, .55), 0 0 110px 50px rgba(210, 255, 150, .35); animation: s2k-glow 5s ease-in-out infinite; }
+.s2k-promo-kicker { display: block; font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: #c8f59a; }
+.s2k-promo h2 { margin: 14px 0 22px; font: 400 clamp(40px, 6cqi, 64px)/.95 var(--serif); letter-spacing: -.02em; }
+.s2k-promo-btn { display: inline-block; padding: 14px 24px; border-radius: 999px; background: var(--lime); color: var(--ink); font: 500 15px/1 var(--sans); text-decoration: none; }
+@keyframes s2k-glow { 50% { box-shadow: 0 0 0 1px #ffffff14, 0 0 54px 24px rgba(176, 255, 120, .65), 0 0 140px 60px rgba(210, 255, 150, .4); } }
+.s2k-foot { margin-top: 0 !important; }
+@media (prefers-reduced-motion: reduce) { .s2k-promo-in { animation: none; } }
