@@ -9050,3 +9050,23 @@ select.ss-input option {
 .co3-bp .co2-bi, .co3-bankbtn .co2-bi { position: static; flex: 0 0 32px; width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; transform: none; }
 .co3-bp .co2-bi svg, .co3-bankbtn .co2-bi svg { width: 18px; height: 18px; }
 .co3-bp li button span, .co3-bankbtn b, .co3-bp header b { color: #0f172a; font-size: 15px; }
+/* Checkout, one column like other stores: product, details, payment, total, pay */
+.co3-grid { grid-template-columns: 1fr !important; max-width: 560px; margin: 0 auto; }
+.co3-head { padding: 4px 2px 14px; border-bottom: 1px solid var(--bd); }
+.co3-head .co3-item { margin: 0; }
+.co3-pay { border: 0 !important; padding: 0 !important; }
+.co3-sum { background: transparent !important; padding: 0 !important; }
+.co3-sum > h2 { display: none; }
+.co3-lines, .co3-total { padding: 0 14px; }
+.co3-sum .co3-lines { border: 1px solid var(--bd); border-bottom: 0; border-radius: 12px 12px 0 0; padding-top: 12px; margin: 0; }
+.co3-sum .co3-total { border: 1px solid var(--bd); border-radius: 0 0 12px 12px; padding: 12px 14px; margin-top: 0; }
+.co3-h3 { margin: 10px 0 2px; font-size: 15px; font-weight: 700; color: var(--ink); }
+.co3-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 420px) { .co3-two { grid-template-columns: 1fr; } }
+.co3-quick.off { display: none; }
+.co3-quick { margin-bottom: 6px; }
+.co3-or { display: flex; align-items: center; gap: 10px; margin: 8px 0; color: var(--mut); font-size: 12.5px; }
+.co3-or::before, .co3-or::after { content: ''; flex: 1; height: 1px; background: var(--bd); }
+.co3-secure { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin: 2px 0 0; font-size: 12.5px; color: var(--mut); text-align: center; }
+.co3-logos { display: inline-flex; gap: 6px; margin-left: 4px; }
+.co3-amex { font-style: normal; font-weight: 800; font-size: 10px; color: #fff; background: #2e77bc; border-radius: 3px; padding: 2px 4px; }

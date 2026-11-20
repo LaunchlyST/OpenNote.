@@ -3403,7 +3403,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const useStripe = async (on: boolean) => {
     setErr(null)
     // One place the money goes: choosing Stripe turns bank transfer off, and the reverse.
-    try { afterSave((await sellerApi.savePayments(on ? { stripe: { enabled: true }, bank: { enabled: false } } : { stripe: { enabled: false } })).store) } catch (e) { setErr((e as Error).message) }
+    // Cards and bank transfer can both be on: buyers choose at checkout.
+    try { afterSave((await sellerApi.savePayments({ stripe: { enabled: on } })).store) } catch (e) { setErr((e as Error).message) }
   }
   const afterSave = (v: StoreView) => {
     setPayments(v.payouts.payments ?? payments)
@@ -3429,7 +3430,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   }
   const isActive = (b: SavedBank) => (Boolean(b.iban) && b.iban === payments.bank.iban) || (Boolean(b.accountNumber) && b.accountNumber === payments.bank.accountNumber && b.sortCode === payments.bank.sortCode)
   // Where the money goes is one choice: Stripe (cards) or the bank box in use.
-  const stripeInUse = payments.stripe.enabled && !payments.bank.enabled
+  const stripeInUse = payments.stripe.enabled
   const bank = payments.bank
   const bankSet = bankComplete(payments)
   const main = data?.totals[0]
@@ -3491,8 +3492,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             {s === 'ready' && (() => {
               // The account you chose under "Your Bank Accounts" is where card money goes.
               // Shows what you chose: Stripe, or the bank box that's in use.
-              if (stripeInUse) return <span className="wl-link wl-dest"><span className="wl-stripe-mark" aria-hidden="true">S</span> Connected to Stripe</span>
-              const inUse = saved.find((x) => isActive(x)) ?? null
+              const inUse = payments.bank.enabled ? saved.find((x) => isActive(x)) ?? null : null
+              if (!inUse && stripeInUse) return <span className="wl-link wl-dest"><span className="wl-stripe-mark" aria-hidden="true">S</span> Connected to Stripe</span>
               return inUse ? <span className="wl-link wl-dest"><BankMark name={inUse.bankName} /> Paid to {inUse.bankName} ••{inUse.accountNumber.slice(-4) || inUse.iban.slice(-4)}</span> : null
             })()}
           </div>
@@ -3552,11 +3553,9 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         {saved.map((sb, i) => {
           const twin = banks.find((b) => sameBank(b, sb))
           // In use = buyers pay into it, and (when Stripe has the same account) card payouts go there too.
-          const active = isActive(sb) && payments.bank.enabled && !payments.stripe.enabled
+          const active = isActive(sb) && payments.bank.enabled
           const choose = async () => {
             if (!isActive(sb) || !payments.bank.enabled) await pickBank(i)
-            // One place the money goes: choosing a bank turns card payments (Stripe) off.
-            if (payments.stripe.enabled) { try { afterSave((await sellerApi.savePayments({ stripe: { enabled: false } })).store) } catch (e) { setBankErr((e as Error).message) } }
             // Stripe pays card earnings to the same account (added to Stripe if it isn't there yet).
             if (s === 'ready' && (!twin || !twin.isDefault)) {
               try { await sellerApi.useSavedBankInStripe(i); await load() } catch (e) { setErr((e as Error).message) }
@@ -3621,7 +3620,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
               <>
                 {/* Ready: the bank is chosen here in Desknoty (Use this account), not in Stripe. */}
                 {/* Like the bank boxes: Use Stripe switches card payments on; In use when it is. */}
-                {stripeInUse ? <em className="wl-tag on">In use</em> : <button type="button" className="ss-primary" onClick={() => void useStripe(true)}>Use Stripe</button>}
+                {stripeInUse ? <><em className="wl-tag on">In use</em><button type="button" className="ss-ghost" onClick={() => void useStripe(false)}>Turn off cards</button></> : <button type="button" className="ss-primary" onClick={() => void useStripe(true)}>Use Stripe</button>}
                 <button type="button" className="wl-link" onClick={() => void go()} disabled={busy}>{busy ? 'Opening…' : 'Open Stripe'} <ExternalLink className="h-3 w-3" /></button>
               </>
             ) : (

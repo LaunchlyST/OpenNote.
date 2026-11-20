@@ -654,7 +654,7 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
   // free (also when a code makes it free) and per-customer codes need an email; bank transfer needs the payer's details
   const ready = free ? valid : isBank ? valid && !noBank && payTo >= 0 && payerBank !== '' && payerName.trim().length >= 2 : needsEmail ? valid : valid || !email.trim()
   const inlineCard = choice === 'card' && !free && Boolean(stripePk && stripeAccount)
-  const canPay = !busy && !cardBusy && ready && (!inlineCard || cardReady)
+  const canPay = !busy && !cardBusy && ready && (!inlineCard || (cardReady && valid))
   const price = formatPrice(totalMinor, product.currency)
   const money = (m: number) => formatPrice(m, product.currency)
   useEffect(() => {
@@ -689,8 +689,17 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
           <FreeClaim handle={handle} product={product} coupon={applied ?? undefined} onClose={onClose} />
         ) : (
         <div className="co3-grid">
+          <div className="co3-head">
+              <div className="co3-item">
+              <span className="co3-thumb" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && (product.title.charAt(0).toUpperCase() || '✦')}</span>
+              <div>
+                <div className="co3-itemtop"><b>{product.title}</b><strong>{price}</strong></div>
+                {product.description && <small>{product.description.split('\n')[0].slice(0, 90)}</small>}
+                <div className="co3-meta"><span>Format: {product.format || product.fileType || 'Digital download'}</span><span>Quantity: 1</span></div>
+              </div>
+            </div>
+          </div>
           <section className="co3-pay" aria-label="Payment details">
-            <h2>Payment Details</h2>
             {choices.length > 1 && !free && (
               <div className="co3-tabs" role="radiogroup" aria-label="Payment method">
                 {choices.map((c) => (
@@ -730,13 +739,24 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
               </>
             ) : (
               <>
-                <label className="co3-field"><span>{free ? 'Your email (we send the download here)' : 'Email for your receipt'}</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={free} aria-label="Email" /></label>
+                {inlineCard ? (
+                  <>
+                    <h3 className="co3-h3">Who should we send the file to?</h3>
+                    <div className="co3-two">
+                      <label className="co3-field"><span>Name</span><input autoComplete="name" placeholder="Jane Smith" value={payerName} onChange={(e) => setPayerName(e.target.value)} maxLength={80} aria-label="Name" /></label>
+                      <label className="co3-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" /></label>
+                    </div>
+                    <h3 className="co3-h3">Payment details</h3>
+                  </>
+                ) : (
+                  <label className="co3-field"><span>{free ? 'Your email (we send the download here)' : 'Email for your receipt'}</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={free} aria-label="Email" /></label>
+                )}
                 {free ? (
                   <p className="co3-hint">This product is free. Enter your email and we’ll send you the download link.</p>
                 ) : choice === 'bankapp' ? (
                   <div className="co3-cardnote"><p>Pick your bank on Stripe’s secure page, then approve the payment in your bank’s own app or website. Desknoty never sees your bank login, and your download unlocks only once your bank confirms the payment.</p></div>
                 ) : inlineCard ? (
-                  <CardPayForm ref={cardRef} pk={stripePk!} account={stripeAccount!} handle={handle} productId={product.id} amountMinor={totalMinor} currency={product.currency} email={email.trim()} coupon={applied ?? undefined} onReady={setCardReady} onBusy={setCardBusy} />
+                  <CardPayForm ref={cardRef} pk={stripePk!} account={stripeAccount!} handle={handle} productId={product.id} amountMinor={totalMinor} currency={product.currency} email={email.trim()} name={payerName.trim() || undefined} coupon={applied ?? undefined} onReady={setCardReady} onBusy={setCardBusy} />
                 ) : method === 'paypal' ? (
                   <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
                 ) : (
@@ -759,15 +779,7 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
           </section>
 
           <section className="co3-sum" aria-label="Order summary">
-            <h2>Order Summary</h2>
-            <div className="co3-item">
-              <span className="co3-thumb" style={cover ? { backgroundImage: `url(${cover})` } : undefined}>{!cover && (product.title.charAt(0).toUpperCase() || '✦')}</span>
-              <div>
-                <div className="co3-itemtop"><b>{product.title}</b><strong>{price}</strong></div>
-                {product.description && <small>{product.description.split('\n')[0].slice(0, 90)}</small>}
-                <div className="co3-meta"><span>Format: {product.format || product.fileType || 'Digital download'}</span><span>Quantity: 1</span></div>
-              </div>
-            </div>
+            <h2>Order summary</h2>
             {!noQuotes && (quote?.listMinor ?? product.priceMinor) > 0 && (
               <div className="co3-code">
                 {applied ? (
@@ -797,7 +809,8 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
             {quote && quote.savedMinor > 0 && <p className="co3-saved">You save {money(quote.savedMinor)}</p>}
             {needsEmail && !free && <p className="co3-hint-line">This code is once per customer, so we need your email.</p>}
             {error && <p className="co-err" role="alert">{error}</p>}
-            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy || cardBusy ? (free ? 'Sending…' : inlineCard ? 'Paying…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `Secure pay ${price}` : 'Pay Now'}</button>
+            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy || cardBusy ? (free ? 'Sending…' : inlineCard ? 'Paying…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `🔒 Secure pay ${price}` : 'Pay Now'}</button>
+            {inlineCard && <p className="co3-secure"><span aria-hidden="true">🔒</span> Your card is secured by Stripe. Desknoty never sees it.<span className="co3-logos" aria-hidden="true"><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i><i className="co3-amex">AMEX</i></span></p>}
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>
           </section>
         </div>
