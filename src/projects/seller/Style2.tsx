@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { ComingSoon, PriceTag } from './StorePage'
+import { Daisy, Flower, Sticky } from '../../landing/AeroPage'
 import type { StorePageProps } from './StorePage'
-import { FONTS, affiliateHref, DEFAULT_AMAZON_CTA, ensureFont, fontById, isFreeProduct, mediaUrl } from './model'
+import { affiliateHref, DEFAULT_AMAZON_CTA, ensureFont, isFreeProduct, mediaUrl } from './model'
 import type { ShopProduct } from './model'
 import './style2.css'
 
@@ -19,69 +20,54 @@ import './style2.css'
  */
 export function Style2Page(props: StorePageProps) {
   const { page, products, handle, only } = props
-  const body = fontById(page.theme.font)?.css ?? FONTS[0].css
-  // Display type: bold condensed caps (loaded on demand, like the store fonts).
-  useEffect(() => { ensureFont(page.theme.font); ensureFont('anton'); ensureFont('oswald') }, [page.theme.font])
+  useEffect(() => { ensureFont(page.theme.font) }, [page.theme.font])
   const avatar = mediaUrl(page.avatar)
   const list = only ? [only] : products.filter((p) => !p.hidden)
   const name = (page.name || handle).trim()
-  const freeOne = !only && list.find((p) => isFreeProduct(p) && !affiliateHref(p))
-
+  const [glyphs] = useState(makeGlyphs)
   return (
-    <div className="s2p" style={{ fontFamily: body }}>
-      <header className="s2-bar">
-        <a className="s2-stamp" href={props.live ? `/${handle}` : undefined}>
-          {avatar && <span className="s2-ava" style={{ backgroundImage: `url(${avatar})` }} />}
-          <span><small>the shop of</small><b>{name}</b></span>
+    <div className="s2k">
+      <pre className="s2k-glyphs" aria-hidden="true">{glyphs}</pre>
+      <header className="s2k-top">
+        <a className="s2k-brand" href={props.live ? `/${handle}` : undefined}>
+          <span className="s2k-ava" style={avatar ? { backgroundImage: `url(${avatar})` } : undefined}>{!avatar && name.charAt(0).toUpperCase()}</span>
+          {name}
         </a>
-        {!only && (
-          <nav className="s2-links" aria-label="Shop">
-            <a href="#s2-shop">Shop all</a>
-            {freeOne && <a href="#s2-shop">Free stuff</a>}
-          </nav>
-        )}
+        <span className="s2k-status"><i />Open · {list.length} {list.length === 1 ? 'product' : 'products'}</span>
       </header>
 
       {!only && (
-        <section className="s2-wall" aria-label="Featured">
-          <div className="s2-wall-in">
-            {list.slice(0, 3).map((p, i) => <Poster key={p.id} p={p} n={i} {...props} />)}
-          </div>
+        <section className="s2k-hero">
+          <span className="s2k-st s2k-daisy" aria-hidden="true"><Daisy /></span>
+          <span className="s2k-st s2k-f1" aria-hidden="true"><Flower c="#e36b62" /></span>
+          <span className="s2k-st s2k-f2" aria-hidden="true"><Flower c="#7aa35a" m="#f2c94c" /></span>
+          <span className="s2k-st s2k-sticky" aria-hidden="true"><Sticky /></span>
+          <h1>Good things<br />from <em>{name}</em><span className="s2k-dot" aria-hidden="true" /></h1>
+          <p className="s2k-hand">{page.bio?.trim() || 'made with care, ready to download'}</p>
         </section>
       )}
 
-      {/* The wall shows the first three; the shelf holds the rest (no product is shown twice). */}
-      <section id="s2-shop" className="s2-shelf" aria-label="More products">
-        {(only || list.length > 3) && (
-          <>
-            {!only && <h2 className="s2-h2">More goods <span>· {list.length - 3}</span></h2>}
-            <div className="s2-grid">{(only ? [only] : list.slice(3)).map((p) => <Card key={p.id} p={p} {...props} />)}</div>
-          </>
-        )}
-        {!only && <Teaser />}
+      <section id="s2-shop" className="s2k-shop" aria-label="Products">
+        {list.map((p, i) => <Card key={p.id} p={p} n={i} {...props} />)}
       </section>
+      {!only && <div className="s2k-next"><span className="s2k-hand s2k-next-note">psst… next one’s on the way</span><Teaser /></div>}
 
-      <footer className="s2-foot">
-        <span>© {name}</span>
+      <footer className="s2k-foot">
+        <span>© {new Date().getFullYear()} {name}</span>
+        <span className="s2k-word" aria-hidden="true">{name}</span>
         <a href="https://desknoty.com" target="_blank" rel="noopener">Made with Desknoty</a>
       </footer>
-      {freeOne && list.length > 3 && <a className="s2-promo" href="#s2-shop">Free download inside →</a>}
     </div>
   )
 }
 
-/** A product as a pasted-up paper poster on the board: artwork, big condensed title, price sticker, action. */
-function Poster({ p, n, ...props }: { p: ShopProduct; n: number } & StorePageProps) {
-  const src = mediaUrl(p.cover)
-  const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
-  return (
-    <article className={`s2-poster s2-tilt${n % 3}`}>
-      <a className="s2-pimg" href={link} tabIndex={-1} aria-hidden="true">{src ? <img src={src} alt="" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}</a>
-      <h3>{link ? <a href={link}>{p.title}</a> : p.title}</h3>
-      {p.description && <p className="s2-pdesc">{p.description.split('\n')[0]}</p>}
-      <Buy p={p} {...props} />
-    </article>
-  )
+/** The waitlist-style tile field: rows of faint typewriter characters (same feel as desknoty.com). */
+function makeGlyphs() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789'
+  let seed = 7, out = ''
+  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
+  for (let y = 0; y < 90; y++) { for (let x = 0; x < 260; x++) out += A[Math.floor(r() * A.length)]; out += '\n' }
+  return out
 }
 
 /** Only useful facts: file type and a verified rating. */
@@ -133,17 +119,18 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
   )
 }
 
-function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
+function Card({ p, n, ...props }: { p: ShopProduct; n: number } & StorePageProps) {
   const src = mediaUrl(p.cover)
   const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
   return (
-    <article className="s2-card">
-      <a className="s2-cimg" href={link} tabIndex={-1} aria-hidden="true">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}</a>
-      <div className="s2-cbody">
+    <article className={`s2k-card s2k-r${n % 3}`}>
+      <a className="s2k-img" href={link} tabIndex={-1} aria-hidden="true">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}</a>
+      <div className="s2k-body">
         <Facts p={p} />
-        <h3>{link ? <a href={link}>{p.title}</a> : p.title}</h3>
-        <Buy p={p} {...props} />
+        <h2>{link ? <a href={link}>{p.title}</a> : p.title}</h2>
+        {p.description && <p>{p.description.split('\n')[0]}</p>}
       </div>
+      <Buy p={p} {...props} />
     </article>
   )
 }

@@ -38,16 +38,16 @@ function Mark({ size = 28 }: { size?: number }) {
 }
 
 /* ---- hand drawn stickers ---- */
-const Daisy = ({ c = '#f2c94c' }: { c?: string }) => (
+export const Daisy = ({ c = '#f2c94c' }: { c?: string }) => (
   <svg viewBox="0 0 120 120"><path d="M60 46c-4-18-2-34 6-36s10 18 2 34c10-14 26-22 31-15s-8 19-25 24c17-2 32 4 31 12s-19 9-32 0c13 11 18 27 11 31s-17-11-19-28c-1 17-9 32-17 30s-6-19 6-31c-14 9-31 9-32 1s15-15 31-15c-16-6-27-18-21-24s20 1 28 17Z" fill="none" stroke={c} strokeWidth="7" strokeLinejoin="round" strokeLinecap="round" /></svg>
 )
-const Flower = ({ c, m = '#e2a93b' }: { c: string; m?: string }) => (
+export const Flower = ({ c, m = '#e2a93b' }: { c: string; m?: string }) => (
   <svg viewBox="0 0 100 100"><g fill={c}>{[0, 72, 144, 216, 288].map((r) => <ellipse key={r} cx="50" cy="27" rx="15" ry="22" transform={`rotate(${r} 50 50)`} />)}</g><circle cx="50" cy="50" r="8" fill={m} /></svg>
 )
-const Heart = () => (
+export const Heart = () => (
   <svg viewBox="0 0 100 100"><path d="M50 86C22 66 10 50 12 34c2-14 18-22 30-14 4 3 6 6 8 10 2-4 4-7 8-10 12-8 28 0 30 14 2 16-10 32-38 52Z" fill="#f6d36b" stroke="#e86a6a" strokeWidth="5" strokeLinejoin="round" /><circle cx="38" cy="44" r="3.5" fill="#c4473f" /><circle cx="60" cy="44" r="3.5" fill="#c4473f" /><path d="M40 56c5 6 13 6 18 0" fill="none" stroke="#c4473f" strokeWidth="4" strokeLinecap="round" /></svg>
 )
-const Sticky = () => (
+export const Sticky = () => (
   <svg viewBox="0 0 150 130"><path d="M10 14 140 6l4 104-120 14Z" fill="#fff27a" /><path d="M24 124l120-14-14 20Z" fill="#e2d35c" opacity=".7" /><path d="M54 2h46v18H54Z" fill="rgba(200,230,255,.75)" transform="rotate(-4 77 11)" /><path d="M30 46c20-3 50-6 86-6M30 66c24-3 46-4 70-4M30 86c16-2 30-2 44-2" stroke="#7a6a1c" strokeWidth="5" strokeLinecap="round" opacity=".55" fill="none" /><path d="M96 82l8 8 18-22" fill="none" stroke="#3a7d2c" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" /></svg>
 )
 
