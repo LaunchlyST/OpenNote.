@@ -3610,11 +3610,11 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             {s === 'ready' ? (
               <>
                 {/* Ready: the bank is chosen here in Desknoty (Use this account), not in Stripe. */}
-                <button type="button" className="ss-primary" onClick={() => document.querySelector('.wl-banks')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-                  {payTo ? <><BankMark name={payTo.bankName} /> Paid to {payTo.bankName} ••{payTo.last4} · Change</> : 'Choose payout bank'}
+                {/* The green button is Stripe (it opens Stripe); bank names only live on the bank boxes. */}
+                <button type="button" className="ss-primary" onClick={() => void go()} disabled={busy}>
+                  {busy ? 'Opening Stripe…' : 'Open Stripe'} <ExternalLink className="h-3.5 w-3.5" />
                 </button>
                 <button type="button" className="ss-ghost" onClick={() => void reload(true)}>Refresh</button>
-                <button type="button" className="wl-link" onClick={() => void go()} disabled={busy}>{busy ? 'Opening…' : 'Stripe settings'} <ExternalLink className="h-3 w-3" /></button>
               </>
             ) : (
               <>
