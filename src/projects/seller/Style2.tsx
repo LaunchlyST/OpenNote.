@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ComingSoon, PriceTag, accentOf, ctaStyle } from './StorePage'
+import { ComingSoon, PriceTag } from './StorePage'
 import type { StorePageProps } from './StorePage'
 import { FONTS, affiliateHref, DEFAULT_AMAZON_CTA, ensureFont, fontById, isFreeProduct, mediaUrl } from './model'
 import type { ShopProduct } from './model'
@@ -19,100 +19,68 @@ import './style2.css'
  */
 export function Style2Page(props: StorePageProps) {
   const { page, products, handle, only } = props
-  const font = fontById(page.theme.font)?.css ?? FONTS[0].css
-  useEffect(() => { ensureFont(page.theme.font) }, [page.theme.font])
-  const accent = accentOf(page)
+  const body = fontById(page.theme.font)?.css ?? FONTS[0].css
+  // Display type: bold condensed caps (loaded on demand, like the store fonts).
+  useEffect(() => { ensureFont(page.theme.font); ensureFont('anton'); ensureFont('oswald') }, [page.theme.font])
   const avatar = mediaUrl(page.avatar)
   const list = only ? [only] : products.filter((p) => !p.hidden)
-  // The hero steps through every product (01 / 03 ← →); the catalogue lists them all below.
-  const [pick, setPick] = useState(0)
-  const featured = list[Math.min(pick, list.length - 1)]
-  const rest = only ? [] : list
+  const name = (page.name || handle).trim()
+  const freeOne = !only && list.find((p) => isFreeProduct(p) && !affiliateHref(p))
 
   return (
-    <div className="s2p" style={{ fontFamily: font, ['--s2-ac' as string]: accent }}>
-      <section className="s2-hero" aria-label={featured ? `Featured: ${featured.title}` : 'Store'}>
-        <HeroBackdrop banner={page.banner} />
-        <header className="s2-nav">
-          <a className="s2-brand" href={props.live ? `/${handle}` : undefined}>
-            <span className="s2-logo" style={avatar ? { backgroundImage: `url(${avatar})` } : undefined}>{!avatar && (page.name || handle).charAt(0).toUpperCase()}</span>
-            <span>{page.name || handle}</span>
-          </a>
-          {!only && list.length > 1 && <a className="s2-navlink" href="#s2-shop">Browse products</a>}
-        </header>
-        {featured ? <Showroom key={featured.id} p={featured} {...props} step={!only && list.length > 1 ? { at: Math.min(pick, list.length - 1), of: list.length, go: (d: number) => setPick((i) => (i + d + list.length) % list.length) } : undefined} /> : (
-          <div className="s2-empty-hero"><h1>{page.name || handle}</h1>{page.bio && <p>{page.bio}</p>}</div>
+    <div className="s2p" style={{ fontFamily: body }}>
+      <header className="s2-bar">
+        <a className="s2-stamp" href={props.live ? `/${handle}` : undefined}>
+          {avatar && <span className="s2-ava" style={{ backgroundImage: `url(${avatar})` }} />}
+          <span><small>the shop of</small><b>{name}</b></span>
+        </a>
+        {!only && (
+          <nav className="s2-links" aria-label="Shop">
+            <a href="#s2-shop">Shop all</a>
+            {freeOne && <a href="#s2-shop">Free stuff</a>}
+          </nav>
         )}
-        <span className="s2-crt" aria-hidden="true" />
-      </section>
+      </header>
 
       {!only && (
-        <section id="s2-shop" className="s2-cat" aria-label="All products">
-          <div className="s2-cat-head">
-            <h2>The shop</h2>
-            {page.bio && <p>{page.bio}</p>}
+        <section className="s2-wall" aria-label="Featured">
+          <div className="s2-wall-in">
+            {list.slice(0, 3).map((p, i) => <Poster key={p.id} p={p} n={i} {...props} />)}
           </div>
-          {rest.length > 0 && <div className="s2-grid">{rest.map((p) => <Card key={p.id} p={p} {...props} />)}</div>}
-          <Teaser />
         </section>
       )}
 
+      {/* The wall shows the first three; the shelf holds the rest (no product is shown twice). */}
+      <section id="s2-shop" className="s2-shelf" aria-label="More products">
+        {(only || list.length > 3) && (
+          <>
+            {!only && <h2 className="s2-h2">More goods <span>· {list.length - 3}</span></h2>}
+            <div className="s2-grid">{(only ? [only] : list.slice(3)).map((p) => <Card key={p.id} p={p} {...props} />)}</div>
+          </>
+        )}
+        {!only && <Teaser />}
+      </section>
+
       <footer className="s2-foot">
-        <span>© {page.name || handle}</span>
-        <a href="https://desknoty.com" target="_blank" rel="noopener">desknoty.com</a>
+        <span>© {name}</span>
+        <a href="https://desknoty.com" target="_blank" rel="noopener">Made with Desknoty</a>
       </footer>
+      {freeOne && list.length > 3 && <a className="s2-promo" href="#s2-shop">Free download inside →</a>}
     </div>
   )
 }
 
-/** The seller's pixel-art banner, softly lit behind the hero. Muted, no controls, never required. */
-function HeroBackdrop({ banner }: { banner: StorePageProps['page']['banner'] }) {
-  const src = banner ? mediaUrl(banner.media) : null
-  const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-  if (!src) return <span className="s2-bg s2-bg-plain" aria-hidden="true" />
-  return banner!.kind === 'video' && !reduce
-    ? <video className="s2-bg" src={src} muted playsInline autoPlay loop preload="metadata" aria-hidden="true" />
-    : banner!.kind === 'video'
-      ? <video className="s2-bg" src={src} muted playsInline preload="metadata" aria-hidden="true" />
-      : <span className="s2-bg" style={{ backgroundImage: `url(${src})` }} aria-hidden="true" />
-}
-
-/** Featured product: large preview (+ real thumbnails) beside title, description, price and action. */
-function Showroom({ p, step, ...props }: { p: ShopProduct; step?: { at: number; of: number; go: (d: number) => void } } & StorePageProps) {
-  const shots = [p.cover, ...(p.gallery ?? [])].map((m) => mediaUrl(m)).filter((u): u is string => Boolean(u))
-  const [at, setAt] = useState(0)
-  const cur = shots[at] ?? null
+/** A product as a pasted-up paper poster on the board: artwork, big condensed title, price sticker, action. */
+function Poster({ p, n, ...props }: { p: ShopProduct; n: number } & StorePageProps) {
+  const src = mediaUrl(p.cover)
+  const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
   return (
-    <div className="s2-show">
-      <div className="s2-stage">
-        <div className="s2-art">
-          {shots.map((u, i) => <img key={u} src={u} alt={i === 0 ? p.title : ''} className={i === at ? 'on' : ''} draggable={false} />)}
-          {!cur && <span className="s2-art-ph">{p.title.charAt(0).toUpperCase() || '✦'}</span>}
-          <span className="s2-sheen" aria-hidden="true" />
-        </div>
-        {shots.length > 1 && (
-          <div className="s2-thumbs" role="tablist" aria-label="Previews">
-            {shots.map((u, i) => (
-              <button key={u} type="button" role="tab" aria-selected={i === at} className={i === at ? 'on' : ''} onClick={() => setAt(i)} style={{ backgroundImage: `url(${u})` }} aria-label={`Preview ${i + 1}`} />
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="s2-glass">
-        {step && (
-          <div className="s2-step">
-            <span>{String(step.at + 1).padStart(2, '0')} / {String(step.of).padStart(2, '0')}</span>
-            <button type="button" onClick={() => step.go(-1)} aria-label="Previous product">←</button>
-            <button type="button" onClick={() => step.go(1)} aria-label="Next product">→</button>
-          </div>
-        )}
-        <Facts p={p} />
-        <h1>{p.title}</h1>
-        {p.description && <p className="s2-desc">{p.description.split('\n')[0]}</p>}
-        <Buy p={p} {...props} big />
-        {props.live && !props.only && <a className="s2-more" href={`/${props.handle}/p/${p.id}`}>Product details →</a>}
-      </div>
-    </div>
+    <article className={`s2-poster s2-tilt${n % 3}`}>
+      <a className="s2-pimg" href={link} tabIndex={-1} aria-hidden="true">{src ? <img src={src} alt="" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}</a>
+      <h3>{link ? <a href={link}>{p.title}</a> : p.title}</h3>
+      {p.description && <p className="s2-pdesc">{p.description.split('\n')[0]}</p>}
+      <Buy p={p} {...props} />
+    </article>
   )
 }
 
@@ -137,7 +105,7 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
     return (
       <div className="s2-buyrow">
         <span className="s2-price">Amazon</span>
-        <a className={cls} style={ctaStyle(p)} href={external} target="_blank" rel="sponsored noopener noreferrer" onClick={props.live ? undefined : (e) => e.preventDefault()}>
+        <a className={cls} href={external} target="_blank" rel="sponsored noopener noreferrer" onClick={props.live ? undefined : (e) => e.preventDefault()}>
           {p.productType === 'affiliate' ? (p.affiliate?.cta || DEFAULT_AMAZON_CTA) : (p.cta?.text || 'View product ↗')}
         </a>
         <small className="s2-aff">{p.affiliate?.disclosure || 'As an Amazon Associate, I earn from qualifying purchases.'}</small>
@@ -158,8 +126,8 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
   return (
     <div className="s2-buyrow">
       {free ? <span className="s2-price">Free</span> : <span className="s2-price"><PriceTag prod={p} /></span>}
-      <button type="button" className={cls} style={ctaStyle(p)} disabled={disabled} onClick={() => (free && props.claims?.[p.id] ? props.onClaimAgain?.(p) : props.onBuy?.(p))}>
-        {props.buying === p.id ? 'Opening checkout…' : props.claims?.[p.id] ? 'Send again' : (p.cta?.text || (free ? 'Get it free' : 'Buy now'))}
+      <button type="button" className={cls} disabled={disabled} onClick={() => (free && props.claims?.[p.id] ? props.onClaimAgain?.(p) : props.onBuy?.(p))}>
+        {props.buying === p.id ? 'Opening checkout…' : props.claims?.[p.id] ? 'Send again' : (free ? (p.cta?.text && !/^\s*buy/i.test(p.cta.text) ? p.cta.text : 'Get it free') : (p.cta?.text || 'Buy now'))}
       </button>
     </div>
   )
@@ -167,14 +135,13 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
 
 function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
   const src = mediaUrl(p.cover)
-  const img = <span className="s2-cimg" style={src ? { backgroundImage: `url(${src})` } : undefined}>{!src && (p.title.charAt(0).toUpperCase() || '✦')}</span>
+  const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
   return (
     <article className="s2-card">
-      {props.live ? <a href={`/${props.handle}/p/${p.id}`} aria-label={p.title}>{img}</a> : img}
+      <a className="s2-cimg" href={link} tabIndex={-1} aria-hidden="true">{src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}</a>
       <div className="s2-cbody">
         <Facts p={p} />
-        <h3>{p.title}</h3>
-        {p.included?.length ? <ul className="s2-incl">{p.included.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}</ul> : null}
+        <h3>{link ? <a href={link}>{p.title}</a> : p.title}</h3>
         <Buy p={p} {...props} />
       </div>
     </article>
