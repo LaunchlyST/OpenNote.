@@ -534,6 +534,9 @@ function Studio({
   useEffect(() => { if (tab !== 'products') setOpenProduct(null) }, [tab])
   /** Click-to-edit: which product card part is open in the Page tab. */
   const [editPart, setEditPart] = useState<{ productId: string; part: CardPart } | null>(null)
+  // Text typed straight into the selected title/description on the phone card;
+  // the open part panel applies it to its save queue (the one source of truth).
+  const [inlineText, setInlineText] = useState<{ productId: string; field: 'title' | 'desc'; value: string; n: number } | null>(null)
   /** Unsaved change from that panel, so the phone shows it before the save lands. */
   const [partPreview, setPartPreview] = useState<({ id: string } & PartDraft) | null>(null)
   /** Store pages the owner hid in the phone preview (Page 2 and Page 3). */
@@ -1199,6 +1202,7 @@ function Studio({
         )}
         {tab === 'products' && (
           <ProductsEditor
+            inlineText={inlineText}
             store={store}
             setStore={setStore}
             open={openProduct}
@@ -1288,7 +1292,7 @@ function Studio({
               {/* Style 1: the whole phone screen takes the store's colours, top strip included */}
               <div className="ss-slide" ref={slideRef} style={storeStyle(page)} aria-hidden={slide !== 0}>
                 <div className="ss-addr">Draft · {store.url.replace(/^https?:\/\//, '')}</div>
-                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={(id) => tab === 'page' ? openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : requestAddSlotForBlock(id)} onAddSlideProduct={(blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex })} activeSlideBlock={activeSlideBlock} activeSlide={activeSlide} onSlideChange={(blockId, i) => { setActiveSlideBlock(blockId); setActiveSlide(Math.max(0, Math.min(MAX_PRODUCT_SLIDES - 1, i))) }} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
+                <StorePage page={page} products={productsForPreview} handle={store.handle} checkoutReady={store.payouts.checkoutReady} pageIndex={safePageIndex} onPageChange={setPageIndex} picked={tab === 'page' ? picked : null} onGrab={tab === 'page' ? grab : undefined} onAddSlide={(id) => tab === 'page' ? openEditor(id, slideRef.current?.querySelector<HTMLElement>(`.sp-pick[data-id="${id}"]`) ?? undefined) : requestAddSlotForBlock(id)} onAddSlideProduct={(blockId, slideIndex) => requestAdd({ kind: 'slide', blockId, slideIndex })} activeSlideBlock={activeSlideBlock} activeSlide={activeSlide} onSlideChange={(blockId, i) => { setActiveSlideBlock(blockId); setActiveSlide(Math.max(0, Math.min(MAX_PRODUCT_SLIDES - 1, i))) }} editCard={editPart ? { productId: editPart.productId ?? null, part: editPart.part ?? null } : { productId: null, part: null }} onCardText={(productId, field, value) => setInlineText({ productId, field, value, n: Date.now() + Math.random() })} hiddenPages={hiddenPages} onHide={(i) => toggleHiddenPage(i)} onPick={(id, el, pid, _part) => {
                   // Clicking a product in the owner's preview:
                   //  - one of its elements (image, title, description, button) opens
                   //    just that element's settings, in place;
@@ -2384,7 +2388,7 @@ function ThemeEditor({ page, onChange }: { page: Page; onChange: (p: Page) => vo
 
 /* -------------------------------------------------------- products --- */
 
-function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onAddSlideAt, onRemoveSlide, onPlaceNew, backToCarousel, onBackToCarousel }: { store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onAddSlideAt?: (blockId: string, slideIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void; backToCarousel?: boolean; onBackToCarousel?: () => void }) {
+function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onFocus, onPreview, onAddSlot, onAddSlideAt, onRemoveSlide, onPlaceNew, backToCarousel, onBackToCarousel }: { inlineText?: { productId: string; field: 'title' | 'desc'; value: string; n: number } | null; store: StoreView; setStore: (s: StoreView) => void; open: string | null; setOpen: (id: string | null) => void; focus?: { productId: string; part: CardPart } | null; onFocus?: (f: { productId: string; part: CardPart } | null) => void; onPreview?: (productId: string, value: PartDraft) => void; onAddSlot?: (pageIndex: number, blockIndex: number) => void; onAddSlideAt?: (blockId: string, slideIndex: number) => void; onRemoveSlide?: (pageIndex: number, blockId: string, slideIndex: number) => void; onPlaceNew?: (blockId: string, slideIndex: number, productId: string) => void; backToCarousel?: boolean; onBackToCarousel?: () => void }) {
   const [err, setErr] = useState<string | null>(null)
   const panel = useRef<HTMLDivElement>(null)
   // Switching between the list and a product is a view change, so the panel
@@ -2452,6 +2456,7 @@ function ProductsEditor({ store, setStore, open, setOpen, focus, onFocus, onPrev
             store={store}
             setStore={setStore}
             part={focus.part}
+            inlineText={inlineText}
             onPart={(part) => onFocus?.({ productId: selected.id, part })}
             onClose={() => { onFocus?.(null); if (backToCarousel && onBackToCarousel) onBackToCarousel(); else choose(null) }}
             onFull={() => onFocus?.(null)}

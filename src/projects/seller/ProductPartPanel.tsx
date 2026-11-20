@@ -45,6 +45,7 @@ export function ProductPartPanel({
   setStore,
   part,
   onPart: _onPart,
+  inlineText,
   onClose,
   onFull,
   onPreview,
@@ -54,6 +55,8 @@ export function ProductPartPanel({
   setStore: (s: StoreView) => void
   part: CardPart
   onPart: (part: CardPart) => void
+  /** Text typed on the card itself; applied to this panel's save queue. */
+  inlineText?: { productId: string; field: 'title' | 'desc'; value: string; n: number } | null
   onClose: () => void
   onFull: () => void
   /** Instant preview: the phone shows the change before the save round-trip lands. */
@@ -73,6 +76,14 @@ export function ProductPartPanel({
   const setForm = saved.edit
   const x = withExtras(form.extras)
   const setX = (n: Partial<ProductExtras>) => setForm({ ...form, extras: { ...x, ...n } })
+
+  // Typing on the card goes through the same draft + autosave as this panel.
+  const seen = useRef(0)
+  useEffect(() => {
+    if (!inlineText || inlineText.n === seen.current || inlineText.productId !== product.id) return
+    seen.current = inlineText.n
+    setForm(inlineText.field === 'title' ? { ...form, title: inlineText.value } : { ...form, description: inlineText.value })
+  }, [inlineText]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // keep the caller's callback fresh without re-running the preview on every render
   const preview = useRef(onPreview)

@@ -8998,3 +8998,10 @@ select.ss-input option {
 .fp-row.on { color: #2563eb; background: color-mix(in srgb, #2563eb 10%, #fff); }
 .fp-empty { padding: 12px; font-size: 13px; color: #6b7280; text-align: center; }
 @media (max-width: 520px) { .typo-grid { grid-template-columns: 1fr; } }
+
+/* Editor: the selected title/description becomes a real field in place. */
+.sp-inline-edit { display: block; width: 100%; max-width: 100%; box-sizing: border-box; margin: 0; padding: 2px 4px; border: 0; border-radius: 6px; font: inherit; color: inherit; background: #ffffffb3; outline: none; resize: none; touch-action: pan-y; position: relative; z-index: 4; }
+.sp-inline-title { font-size: 1.15em; font-weight: 700; line-height: 1.25; }
+.sp-inline-desc { font-size: 13px; line-height: 1.45; }
+.sp-inline-edit { overflow: hidden; }
+.sp-card-edit .sp-part.sel::after { top: -16px; }

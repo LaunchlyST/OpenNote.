@@ -204,6 +204,40 @@ export function MovableText({ pos, onMove, label, as: Tag = 'span', className, s
   )
 }
 
+/**
+ * Editor only: the selected title or description becomes a real text field in
+ * place. It keeps its own text while typing (so the caret never jumps) and
+ * reports every change up to the one save queue. Its keys and pointer gestures
+ * stay inside the field, so the carousel never treats typing or selecting text
+ * as a swipe or slide change.
+ */
+function InlineText({ as, value, placeholder, style, onText }: { as: 'title' | 'desc'; value: string; placeholder: string; style?: CSSProperties; onText: (v: string) => void }) {
+  const [text, setText] = useState(value)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  // Focus after the side panel has opened (it mounts a moment later).
+  useEffect(() => {
+    const t = window.setTimeout(() => { const el = ref.current; if (el) { el.focus({ preventScroll: true }); el.setSelectionRange(el.value.length, el.value.length) } }, 120)
+    return () => window.clearTimeout(t)
+  }, [])
+  // Edits made in the side panel show here too (unless this field is being typed in).
+  useEffect(() => { if (document.activeElement !== ref.current) setText(value) }, [value])
+  const keep = (e: { stopPropagation: () => void }) => e.stopPropagation()
+  const common = {
+    ref,
+    value: text,
+    placeholder,
+    style,
+    'aria-label': as === 'title' ? 'Product title' : 'Product description',
+    onChange: (e: { target: { value: string } }) => { setText(e.target.value); onText(e.target.value) },
+    onKeyDown: (e: ReactKeyboardEvent<HTMLTextAreaElement>) => { e.stopPropagation(); if (as === 'title' && e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } },
+    onPointerDown: keep,
+    onTouchStart: keep,
+  }
+  // Grow with the text, wrapping like the card's own title/description.
+  useEffect(() => { const el = ref.current; if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` } }, [text])
+  return <textarea {...common} className={as === 'title' ? 'sp-inline-edit sp-inline-title' : 'sp-inline-edit sp-inline-desc'} rows={1} maxLength={as === 'title' ? 80 : 2000} />
+}
+
 export type CardProps = {
   p: ShopProduct
   /** Opens the product (detail panel on the live store). */
@@ -220,7 +254,7 @@ export type CardProps = {
    * labels while hovering, and `data-edit-part` markers the preview uses to open
    * that part's settings. Public cards never pass it, so buyers see no trace.
    */
-  edit?: { part?: CardPart | null }
+  edit?: { part?: CardPart | null; onText?: (field: 'title' | 'desc', value: string) => void }
 }
 
 const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', price: 'Price', title: 'Title', desc: 'Description', button: 'Button', card: 'Card background' }
@@ -275,13 +309,19 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
       </div>
       <div className="sp-card-body">
         <div className={cn('sp-move-box', part('title'))} {...mark('title')}>
-          {onMoveText ? (
+          {edit?.part === 'title' && edit.onText ? (
+            <InlineText key={p.id} as="title" value={p.title} placeholder="Product title" style={titleStyle} onText={(v) => edit.onText!('title', v)} />
+          ) : onMoveText ? (
             <MovableText as="h3" pos={tp.title} onMove={(v) => onMoveText('title', v)} label="Title" style={titleStyle}>{p.title}</MovableText>
           ) : (
             <MovableText as="h3" pos={tp.title} label="Title" style={titleStyle}><Link>{p.title}</Link></MovableText>
           )}
         </div>
-        {sub && (
+        {edit?.part === 'desc' && edit.onText ? (
+          <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
+            <InlineText key={p.id} as="desc" value={p.description ?? ''} placeholder="Describe the product" style={descStyle} onText={(v) => edit.onText!('desc', v)} />
+          </div>
+        ) : sub && (
           <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
             <MovableText as="p" pos={tp.desc} onMove={onMoveText ? (v) => onMoveText('desc', v) : undefined} label="Description" className="sp-card-sub" style={descStyle}>{sub}</MovableText>
           </div>

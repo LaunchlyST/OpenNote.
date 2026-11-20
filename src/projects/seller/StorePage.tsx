@@ -39,6 +39,8 @@ export interface StorePageProps {
   picked?: string | null
   /** Editor preview: which card part is selected, so it stays highlighted. */
   editCard?: { productId: string | null; part: CardPart | null } | null
+  /** Editor: typing into the selected title/description on the card. */
+  onCardText?: (productId: string, field: 'title' | 'desc', value: string) => void
   /** Editor preview: pressing the grip starts dragging that section. */
   onGrab?: (blockId: string, e: ReactPointerEvent) => void
   /** Live store: products this browser has paid for (product id → order page with the download). */
@@ -514,6 +516,7 @@ function cardEdit(p: StorePageProps, id: string, title?: string, blockId?: strin
   if (!p.editCard) return undefined
   return {
     part: p.editCard.productId === id ? p.editCard.part : null,
+    onText: p.onCardText ? (field: 'title' | 'desc', value: string) => p.onCardText!(id, field, value) : undefined,
     // The card's ⋯ button (the touch-friendly twin of right-click).
     onMenu: p.onContextMenu
       ? (e: ReactMouseEvent<HTMLButtonElement>) => {
