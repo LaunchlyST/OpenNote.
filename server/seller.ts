@@ -2180,6 +2180,8 @@ export function sellerRouter() {
     if (o.method !== 'bank') return void res.status(400).json({ error: 'Only bank transfers are confirmed by hand.' })
     if (o.status === 'paid') return void res.json({ order: { id: o.id, status: o.status } })
     if (o.status !== 'pending') return void res.status(409).json({ error: `This order is ${o.status}.` })
+    // Who confirmed the money arrived, and when (only the store owner can reach this route).
+    await sql.run(`UPDATE seller_order SET "confirmedAt" = COALESCE("confirmedAt", ?), "confirmedBy" = COALESCE("confirmedBy", ?) WHERE id = ? AND status = 'pending'`, now(), req.userId!, o.id)
     const done = await completeOrder(o, null, null)
     res.json({ order: { id: done.id, status: done.status } })
   })
@@ -2892,6 +2894,8 @@ export function sellerRouter() {
       // Bank transfer: what to pay and where, until the seller confirms it arrived.
       bank: o.method === 'bank' && o.status === 'pending' ? { ...(o.payTo ? bankDetailsOf(JSON.parse(o.payTo), readPayments(s.payments).bank.instructions) : bankDetails(readPayments(s.payments))), reference: o.reference } : null,
       buyerClaimedAt: o.buyerClaimedAt,
+      createdAt: o.createdAt,
+      paidAt: o.paidAt ?? null,
       payerBank: o.method === 'bank' ? o.payerBank ?? null : null,
       receiptSent: receipt?.status === 'sent',
       receiptStatus: receipt?.status === 'sent' ? 'accepted' : receipt?.status ?? 'not_queued',

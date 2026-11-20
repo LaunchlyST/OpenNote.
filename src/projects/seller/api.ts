@@ -129,6 +129,8 @@ export interface PublicOrder {
   /** Bank transfer still to pay: where, how much and the reference. */
   bank?: { bankName?: string | null; accountName: string; sortCode: string | null; accountNumber: string | null; iban: string | null; bic: string | null; instructions: string | null; reference: string | null } | null
   buyerClaimedAt?: string | null
+  createdAt?: string
+  paidAt?: string | null
   /** Bank transfer: the bank the buyer said they pay from. */
   payerBank?: string | null
 }

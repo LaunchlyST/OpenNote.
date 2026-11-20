@@ -823,40 +823,53 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
 /** Bank transfer still owed: details, amount, reference. "I've paid" only tells the seller; it never unlocks. */
 function BankPending({ order, claim }: { order: PublicOrder; claim?: () => Promise<{ order: PublicOrder }> }) {
   const [claimed, setClaimed] = useState(Boolean(order.buyerClaimedAt))
+  const [sending, setSending] = useState(false)
+  const [open, setOpen] = useState(!order.buyerClaimedAt)
   const b = order.bank!
   const amount = formatPrice(order.amountMinor, order.currency)
   const from = order.payerBank && order.payerBank !== 'Other bank' ? order.payerBank : null
+  const when = order.createdAt ? new Date(order.createdAt).toLocaleString(undefined, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+  // Never "paid" here: only the seller's confirmation (server side) marks a bank transfer paid.
+  const status = claimed ? 'Payment reported' : 'Awaiting payment'
   return (
-    <div className="ps-msg ps-bank bp">
-      <div className="bp-head">
-        {from ? <BankIcon name={from} /> : null}
-        <div>
-          <h1>Pay {amount} from your {from ?? 'bank'} app</h1>
-          <p>Open {from ? `the ${from}` : 'your banking'} app, send a payment to the details below, and use the reference exactly.</p>
-          {from && APP_LINK[from.toLowerCase()] && <a className="sp-btn bp-open" href={APP_LINK[from.toLowerCase()]}>Open {from} app</a>}
-        </div>
-      </div>
-      <dl className="bp-details">
-        {b.bankName && <CopyRow label="Bank" value={b.bankName} />}
-        <CopyRow label="Account name" value={b.accountName} />
-        {b.sortCode && <CopyRow label="Sort code" value={b.sortCode} />}
-        {b.accountNumber && <CopyRow label="Account number" value={b.accountNumber} />}
-        {b.iban && <CopyRow label="IBAN" value={b.iban} />}
-        {b.bic && <CopyRow label="BIC / SWIFT" value={b.bic} />}
-        <CopyRow label="Amount" value={amount} />
-        {b.reference && <CopyRow label="Reference" value={b.reference} strong />}
-      </dl>
-      {b.instructions && <p>{b.instructions}</p>}
-      <p className="ps-fine">Your download unlocks when the seller confirms the money arrived. Keep this page’s address to come back to it.</p>
-      {claimed ? (
-        <p className="ps-fine" role="status">Thanks: the seller has been told you sent it. Your download unlocks once they confirm it arrived.</p>
-      ) : (
-        claim && (
-          <button type="button" className="sp-btn bp-sent" onClick={() => void claim().then(() => setClaimed(true))}>
-            I’ve sent the payment
+    <div className="oc">
+      <div className="oc-card">
+        <span className="oc-check" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.2 4.2L19 7" /></svg></span>
+        <h1>Your order has been successfully submitted</h1>
+        <dl className="oc-rows">
+          <div><dt>Order ID</dt><dd>{(b.reference || order.id).replace(/^ord_/, '').toUpperCase()}</dd></div>
+          <div><dt>Payment method</dt><dd>{b.bankName ? `${b.bankName} · Bank transfer` : 'Bank transfer'}</dd></div>
+          {when && <div><dt>Date &amp; time</dt><dd>{when}</dd></div>}
+          <div><dt>Product</dt><dd>{order.product}</dd></div>
+          <div><dt>Total</dt><dd><b>{amount}</b></dd></div>
+          <div><dt>Payment status</dt><dd><em className={claimed ? 'oc-st oc-st-rep' : 'oc-st'}>{status}</em></dd></div>
+        </dl>
+        <details className="oc-bank" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
+          <summary>View bank transfer details</summary>
+          <p className="oc-hint">Open {from ? `your ${from}` : 'your banking'} app and send exactly {amount} with this reference.</p>
+          {from && APP_LINK[from.toLowerCase()] && <a className="oc-app" href={APP_LINK[from.toLowerCase()]}>Open {from} app</a>}
+          <dl className="bp-details oc-details">
+            {b.bankName && <CopyRow label="Bank" value={b.bankName} />}
+            <CopyRow label="Account holder" value={b.accountName} />
+            {b.sortCode && <CopyRow label="Sort code" value={b.sortCode} />}
+            {b.accountNumber && <CopyRow label="Account number" value={b.accountNumber} />}
+            {b.iban && <CopyRow label="IBAN" value={b.iban} />}
+            {b.bic && <CopyRow label="BIC / SWIFT" value={b.bic} />}
+            <CopyRow label="Amount" value={amount} />
+            {b.reference && <CopyRow label="Reference" value={b.reference} strong />}
+          </dl>
+          {b.instructions && <p className="oc-hint">{b.instructions}</p>}
+        </details>
+        {claimed ? (
+          <p className="oc-wait" role="status">Waiting for the seller to confirm your payment. Your download unlocks here, and by email, as soon as they do.</p>
+        ) : claim && (
+          <button type="button" className="oc-sent" disabled={sending} onClick={() => { setSending(true); void claim().then(() => { setClaimed(true); setOpen(false) }).finally(() => setSending(false)) }}>
+            {sending ? 'Saving…' : 'I’ve sent the payment'}
           </button>
-        )
-      )}
+        )}
+        <a className="oc-go" href={typeof window !== 'undefined' ? window.location.href : '#'} onClick={(e) => { e.preventDefault(); window.location.reload() }}>Check order status</a>
+        <p className="oc-fine">Keep this page’s link: it’s your order. It shows your download once the payment is confirmed.</p>
+      </div>
     </div>
   )
 }
