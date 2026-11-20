@@ -369,6 +369,11 @@ try {
       await page.waitForTimeout(1200)
       const blockPopupAfterAddProduct = await page.getByRole('dialog', { name: 'Add a block' }).count()
       check(`${tag}: Add Product does not open the Add block popup`, blockPopupAfterAddProduct === 0, `popup=${blockPopupAfterAddProduct}`)
+      // The Products tab now opens its own Digital/Affiliate chooser. Close it
+      // before returning to the Page tab, otherwise the overlay blocks the click.
+      const chooser = page.getByRole('dialog', { name: 'Choose product type' })
+      if (await chooser.count()) await chooser.getByRole('button', { name: 'Close' }).click()
+      await page.waitForTimeout(200)
 
       await page.getByText(/^Page$/).first().click()
       await page.waitForTimeout(1000)
@@ -730,7 +735,11 @@ try {
       await page.reload()
       await page.getByText(/^Products \(/).first().waitFor({ timeout: 20000 })
       await page.getByText(/^Products \(/).first().click()
-      await page.locator('details.pg-archived summary').filter({ hasText: 'Product library' }).first().click()
+      const openProductLibrary = async () => {
+        const lib = page.locator('details.pg-archived').filter({ hasText: 'Product library' }).first()
+        if (await lib.count() && !(await lib.evaluate((el: HTMLDetailsElement) => el.open))) await lib.locator('summary').click()
+      }
+      await openProductLibrary()
       await page.getByRole('button', { name: /Type warning test/ }).first().click()
       let typeWarned = false
       page.once('dialog', async (d) => { typeWarned = d.type() === 'confirm' && /published affiliate product to a normal product/i.test(d.message()); await d.dismiss() })
@@ -739,7 +748,7 @@ try {
       check(`${tag}: changing a published product type warns and can be cancelled`, typeWarned && (await page.getByRole('radio', { name: /Affiliate Product/ }).getAttribute('aria-checked')) === 'true', `warned=${typeWarned}`)
       await page.getByRole('button', { name: /Back to Products/ }).first().click()
       await page.waitForTimeout(600)
-      await page.locator('details.pg-archived summary').filter({ hasText: 'Product library' }).first().click()
+      await openProductLibrary()
       await page.getByRole('button', { name: /Pricing guard/ }).first().click()
       await price.waitFor()
 
