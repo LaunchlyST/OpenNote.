@@ -701,44 +701,17 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
  * gets a finished "Coming soon" card with nothing to buy.
  */
 /**
- * "Next drop": the single teaser after the last real product (or the empty
- * state). A concealed 3D package under a moving spotlight, with a timed arrival
- * when the card comes into view. Desktop: pointer parallax and a light that
- * follows the cursor. Mobile: motion follows swipe progress (--sw, set by the
- * carousel). Pure CSS transforms and opacity; nothing loads.
+ * "Coming soon": the single teaser after the last real product (or the empty
+ * state). A glossy red retro TV against a grainy sky, the message on a ribbed
+ * cream screen. Drawn in CSS, nothing to load.
  */
 function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
-  const ref = useRef<HTMLElement>(null)
-  const move = (e: ReactPointerEvent<HTMLElement>) => {
-    if (e.pointerType !== 'mouse') return
-    const el = ref.current
-    if (!el) return
-    const r = el.getBoundingClientRect()
-    el.style.setProperty('--px', ((e.clientX - r.left) / r.width - 0.5).toFixed(3))
-    el.style.setProperty('--py', ((e.clientY - r.top) / r.height - 0.5).toFixed(3))
-  }
-  const leave = () => { ref.current?.style.setProperty('--px', '0'); ref.current?.style.setProperty('--py', '0') }
   return (
-    <section ref={ref} className={'sp-block sp-drop2' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Next drop: something is coming" onPointerMove={move} onPointerLeave={leave}>
-      <div className="dr-stage" aria-hidden="true">
-        <span className="dr-spot" />
-        <span className="dr-floor" />
-        <div className="dr-float"><div className="dr-bob">
-          <div className="dr-obj">
-            <span className="f fr"><b /></span><span className="f bk" /><span className="f lf" /><span className="f rt" /><span className="f tp" /><span className="f bt" />
-          </div>
-        </div></div>
-        <span className="dr-shadow" />
-        <span className="dr-sweep" />
-        <span className="dr-glint" />
+    <section className={'sp-block sp-tv' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Coming soon">
+      <div className="tv-set" aria-hidden="true">
+        <div className="tv-screen"><span className="tv-text">Coming soon</span></div>
       </div>
-      <span className="dr-status"><i />In the works</span>
-      <div className="dr-copy">
-        <span className="dr-eyebrow">Next drop</span>
-        <h2 className="dr-title">Something is coming.</h2>
-        <p className="dr-sub">Your next favourite find is almost here.</p>
-        {onAdd && <button type="button" className="dr-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
-      </div>
+      {onAdd && <button type="button" className="tv-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
     </section>
   )
 }
