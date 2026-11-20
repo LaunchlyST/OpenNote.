@@ -93,17 +93,17 @@ export default function PublicStore({ path }: { path: string }) {
     // every product, free or paid, opens the checkout popup first
     setChoosing(p)
   }
-  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => {
+  const pay = async (p: ShopProduct, method: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) => {
     if (checkoutBusy.current) return
     checkoutBusy.current = true
     setBuying(p.id)
     setBuyErr(null)
     try {
       // One key per product, method and code: a retry or double click reuses the same order.
-      const keyName = `desknoty.checkout.${handle}.${p.id}.${method}${coupon ? `.${coupon}` : ''}`
+      const keyName = `desknoty.checkout.${handle}.${p.id}.${method}${opts?.payByBank ? '.bankapp' : ''}${coupon ? `.${coupon}` : ''}`
       const key = sessionStorage.getItem(keyName) ?? crypto.randomUUID()
       sessionStorage.setItem(keyName, key)
-      const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon)
+      const r = await storeApi.checkout(handle, p.id, key, method, email, payer, coupon, opts)
       // Free (or otherwise already confirmed): download right here, no page change.
       // Only a paid product with a real price is remembered as owned: free ones stay email-only.
       if (!isFreeProduct(p) && r.order?.status === 'paid' && r.order.downloadUrl && r.orderUrl) {
@@ -184,12 +184,13 @@ export default function PublicStore({ path }: { path: string }) {
     <PayChooser
       product={choosing}
       methods={store.methods ?? ['stripe']}
+      payByBank={store.payByBank}
       banks={store.banks ?? []}
       busy={buying === choosing.id}
       error={buyErr}
       seller={store.page.name || store.handle}
       handle={store.handle}
-      onPay={(m, email, payer, coupon) => void pay(choosing, m, email, payer, coupon)}
+      onPay={(m, email, payer, coupon, opts) => void pay(choosing, m, email, payer, coupon, opts)}
       onClose={() => setChoosing(null)}
     />
   )
@@ -223,10 +224,10 @@ export default function PublicStore({ path }: { path: string }) {
 
 
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
-type Choice = 'card' | 'paypal' | 'bank'
+type Choice = 'card' | 'paypal' | 'bank' | 'bankapp'
 type Wallet = 'card' | 'apple' | 'google'
 const WALLET_LABEL: Record<Wallet, string> = { card: 'Debit or credit card', apple: 'Apple Pay', google: 'Google Pay' }
-const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', paypal: 'paypal', bank: 'bank' }
+const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', paypal: 'paypal', bank: 'bank', bankapp: 'stripe' }
 
 /** A bank's app icon when we have its logo; otherwise a neat initial. */
 function BankIcon({ name }: { name: string }) {
@@ -553,7 +554,7 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) => void; onClose: () => void }) {
+function PayChooser({ product, methods, payByBank, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; payByBank?: boolean; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) => void; onClose: () => void }) {
   // The server's quote is the price: list price, live offer, then the code. The card's price is only a first guess.
   const [quote, setQuote] = useState<PriceQuote | null>(null)
   const [code, setCode] = useState('')
@@ -580,6 +581,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
   const totalMinor = quote ? quote.totalMinor : (product.offer?.priceMinor ?? product.priceMinor)
   const free = totalMinor === 0
   const choices: Choice[] = free ? ['card'] : [
+    ...(payByBank && methods.includes('stripe') && product.currency.toLowerCase() === 'gbp' ? (['bankapp'] as Choice[]) : []),
     ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
     ...(methods.includes('stripe') ? (['card'] as Choice[]) : []),
     ...(methods.includes('paypal') ? (['paypal'] as Choice[]) : []),
@@ -594,6 +596,9 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
   const [wallet, setWallet] = useState<Wallet>('card')
   const [payTo, setPayTo] = useState<number>(() => (banks.find((b) => b.inUse) ?? banks[0])?.index ?? -1)
   const [remember, setRemember] = useState(true)
+  const [hasSaved, setHasSaved] = useState(() => { try { return Boolean(localStorage.getItem('desknoty.payer')) } catch { return false } })
+  // Only the email, bank name and account name are remembered (never bank logins or numbers).
+  const forget = () => { try { localStorage.removeItem('desknoty.payer') } catch { /* blocked */ } setHasSaved(false); setRemember(false); setEmail(''); setPayerBank(''); setPayerName('') }
   useEffect(() => {
     // details this buyer chose to remember on this device
     try { const j = JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null'); if (j) { setEmail(j.email ?? ''); setPayerBank(j.payerBank ?? ''); setPayerName(j.payerName ?? '') } } catch { /* none */ }
@@ -622,7 +627,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
       if (remember) localStorage.setItem('desknoty.payer', JSON.stringify({ email: email.trim(), ...(isBank ? { payerBank, payerName: payerName.trim() } : (() => { try { const o = JSON.parse(localStorage.getItem('desknoty.payer') ?? 'null'); return o ? { payerBank: o.payerBank, payerName: o.payerName } : {} } catch { return {} } })()) }))
       else localStorage.removeItem('desknoty.payer')
     } catch { /* storage blocked */ }
-    onPay(method, email.trim() || undefined, isBank && !free ? { bankIndex: payTo, payerBank, payerName: payerName.trim() } : undefined, applied ?? undefined)
+    onPay(method, email.trim() || undefined, isBank && !free ? { bankIndex: payTo, payerBank, payerName: payerName.trim() } : undefined, applied ?? undefined, choice === 'bankapp' ? { payByBank: true } : undefined)
   }
   const cover = product.cover ? mediaUrl(product.cover) : null
   return (
@@ -646,8 +651,8 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
               <div className="co3-tabs" role="radiogroup" aria-label="Payment method">
                 {choices.map((c) => (
                   <label key={c} className={choice === c ? 'on' : undefined}>
-                    <input type="radio" name="pm" checked={choice === c} onChange={() => setChoice(c)} aria-label={c === 'card' ? 'Credit / Debit Card' : c === 'paypal' ? 'PayPal' : 'Bank transfer'} />
-                    {c === 'card' ? 'Card' : c === 'paypal' ? 'PayPal' : 'Bank transfer'}
+                    <input type="radio" name="pm" checked={choice === c} onChange={() => setChoice(c)} aria-label={c === 'card' ? 'Credit / Debit Card' : c === 'paypal' ? 'PayPal' : c === 'bankapp' ? 'Pay by bank' : 'Bank transfer'} />
+                    {c === 'card' ? 'Card' : c === 'paypal' ? 'PayPal' : c === 'bankapp' ? 'Pay by bank' : 'Bank transfer'}
                   </label>
                 ))}
               </div>
@@ -687,6 +692,8 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
                 <label className="co3-field"><span>{free ? 'Your email (we send the download here)' : 'Email for your receipt'}</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={free} aria-label="Email" /></label>
                 {free ? (
                   <p className="co3-hint">This product is free. Enter your email and we’ll send you the download link.</p>
+                ) : choice === 'bankapp' ? (
+                  <div className="co3-cardnote"><p>Pick your bank on Stripe’s secure page, then approve the payment in your bank’s own app or website. Desknoty never sees your bank login, and your download unlocks only once your bank confirms the payment.</p></div>
                 ) : method === 'paypal' ? (
                   <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
                 ) : (
@@ -705,7 +712,7 @@ function PayChooser({ product, methods, banks, busy, error, seller, onPay, onClo
                 )}
               </>
             )}
-            <label className="co3-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Save my details on this device</label>
+            <div className="co3-remember"><label className="co3-check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Save my details on this device</label>{hasSaved && <button type="button" className="co3-forget" onClick={forget}>Forget saved details</button>}</div>
           </section>
 
           <section className="co3-sum" aria-label="Order summary">

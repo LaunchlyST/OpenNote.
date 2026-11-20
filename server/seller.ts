@@ -1199,6 +1199,26 @@ async function activeConnection(s: StoreRow): Promise<StoreRow> {
   return { ...s, stripeMode, stripeAccountId: connection?.accountId ?? null, stripeStatus: 'not_connected', chargesReady: 0 }
 }
 
+/**
+ * UK Pay by Bank (Open Banking through Stripe) on a seller's connected account.
+ * Only offered when Stripe reports the capability active; cached briefly so the
+ * public store doesn't ask Stripe on every page view.
+ */
+const payByBankCache = new Map<string, { ok: boolean; at: number }>()
+async function payByBankReady(accountId: string | null): Promise<boolean> {
+  const st = stripe()
+  if (!st || !accountId) return false
+  const hit = payByBankCache.get(accountId)
+  if (hit && Date.now() - hit.at < 10 * 60 * 1000) return hit.ok
+  let ok = false
+  try {
+    const a = await st.accounts.retrieve(accountId)
+    ok = (a.capabilities as Record<string, string | undefined> | undefined)?.pay_by_bank_payments === 'active'
+  } catch { ok = false }
+  payByBankCache.set(accountId, { ok, at: Date.now() })
+  return ok
+}
+
 async function refreshAccount(s: StoreRow): Promise<StoreRow> {
   s = await activeConnection(s)
   const st = stripe()
@@ -2335,7 +2355,8 @@ export function sellerRouter() {
       const items = v.bundle.filter((id) => liveIds.has(id))
       return { ...v, rating: ratings.get(p.id) ?? null, related: v.related.filter((id) => liveIds.has(id) || titles.has(id)), bundle: v.bundle.length ? { items: items.map((id) => ({ id, title: titles.get(id) ?? '' })), available: items.length === v.bundle.length && items.length >= 2 } : null }
     })
-    res.json({ handle: s.handle, page: JSON.parse(s.published!), products, checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
+    const payByBank = readyMethods(s).includes('stripe') ? await payByBankReady((await activeConnection(s)).stripeAccountId).catch(() => false) : false
+    res.json({ handle: s.handle, page: JSON.parse(s.published!), products, checkoutReady: readyMethods(s).length > 0, methods: readyMethods(s), payByBank, banks: readyMethods(s).includes('bank') ? bankChoices(readPayments(s.payments)) : [], testMode: sellerSetup().stripeMode !== 'live' || paypalMode() !== 'live' })
   })
 
   /* ---- V3: free products by email ---- */
@@ -2576,10 +2597,15 @@ export function sellerRouter() {
     if (!samePurchase(order, 'stripe') || order.stripeMode !== stripeMode) return void res.status(409).json({ error: 'This checkout key belongs to a different purchase.' })
     if (order.checkoutUrl) return void res.json({ url: order.checkoutUrl })
     if (Date.now() - Date.parse(order.createdAt) > 23 * 60 * 60 * 1000) return void res.status(409).json({ error: 'This checkout attempt expired. Start a new purchase.' })
+    // Pay by Bank: Stripe hosts the bank list and sends the buyer to their own
+    // bank to approve. GBP only, and only when the seller's account has it on.
+    const wantsBank = req.body?.payByBank === true
+    if (wantsBank && (order.currency.toLowerCase() !== 'gbp' || !(await payByBankReady(order.accountId)))) return void res.status(409).json({ error: 'Pay by bank isn’t available for this purchase. Choose another way to pay.' })
     let session: Stripe.Checkout.Session
     try {
       session = await st.checkout.sessions.create({
         mode: 'payment', adaptive_pricing: { enabled: false },
+        ...(wantsBank ? { payment_method_types: ['pay_by_bank'] as Stripe.Checkout.SessionCreateParams.PaymentMethodType[] } : {}),
         line_items: [{ quantity: 1, price_data: { currency: order.currency, unit_amount: order.amountMinor, product_data: { name: order.productTitle } } }],
         success_url: `${seller.siteUrl}/store/${s.id}/thanks?session_id={CHECKOUT_SESSION_ID}`,
         // back to the product being bought, at the store's public address (not its internal id)
@@ -2590,7 +2616,7 @@ export function sellerRouter() {
           metadata: { desknotyOrderId: order.id },
           ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
         },
-      }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}` })
+      }, { stripeAccount: order.accountId, idempotencyKey: `checkout_${order.id}${wantsBank ? '_bank' : ''}` })
     } catch (err) {
       // No payment page was created, so this purchase never happened: the code
       // it reserved goes back now instead of being held for a day.

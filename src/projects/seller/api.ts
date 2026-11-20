@@ -92,6 +92,8 @@ export interface PublicStore {
   checkoutReady: boolean
   /** Payment methods this seller accepts right now. */
   methods?: PayMethod[]
+  /** UK Pay by Bank (Open Banking via Stripe) is switched on for this seller. */
+  payByBank?: boolean
   /** The seller's bank accounts a buyer can pay into (bank name and last 4 digits only). */
   banks?: Array<{ index: number; bankName: string; last4: string; inUse: boolean }>
   /** Payments go through Stripe Sandbox: no real money moves. */
@@ -171,8 +173,8 @@ export interface ShortLinkInfo {
 export const storeApi = {
   shortLink: (shortId: string) => call<ShortLinkInfo>('GET', `/api/p/${encodeURIComponent(shortId)}`),
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
-  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string) =>
-    call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string; emailStatus?: EmailStatus; emailError?: string | null }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}) }),
+  checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) =>
+    call<{ url?: string; orderUrl?: string; order?: PublicOrder; emailed?: boolean; email?: string; emailStatus?: EmailStatus; emailError?: string | null }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}), ...(opts?.payByBank ? { payByBank: true } : {}) }),
   /** The authoritative price right now, optionally with a discount code. Nothing is reserved. */
   quote: (handle: string, productId: string, coupon?: string) => call<{ quote: PriceQuote }>('POST', `/api/store/${encodeURIComponent(handle)}/quote`, { productId, coupon: coupon || undefined }),
   /** Send the download email again for an existing order (rate limited by the server). */
