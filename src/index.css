@@ -7645,6 +7645,24 @@ select.ss-input option {
 /* One light sweep across the whole card. */
 .soon2-sweep { position: absolute; inset: -10% -40%; pointer-events: none; background: linear-gradient(100deg, transparent 40%, rgba(255, 220, 235, .22) 50%, transparent 60%); translate: -70% 0; opacity: 0; }
 .sp-soon2.is-in .soon2-sweep { animation: soon2-sweep 1.3s 1.7s cubic-bezier(.4, 0, .2, 1) both; }
+/* Glass shards flying out of the TV screen, up along the same arc as the artwork's pieces. */
+.soon2-shard { position: absolute; left: 56%; top: 46%; width: 3.4%; aspect-ratio: 1; pointer-events: none; opacity: 0; transform-style: preserve-3d;
+  background: linear-gradient(135deg, rgba(255, 235, 250, .55), rgba(255, 140, 170, .18) 45%, rgba(160, 120, 255, .25)); border: 1px solid rgba(255, 230, 245, .7); border-radius: 2px;
+  box-shadow: 0 0 10px rgba(255, 120, 160, .35), inset 0 0 6px rgba(255, 255, 255, .35); backdrop-filter: blur(1px); }
+.sp-soon2.is-in .soon2-shard { animation: soon2-fly 4.2s cubic-bezier(.25, .6, .35, 1) infinite; }
+.soon2-shard.d0 { animation-delay: 1.8s !important; }
+.soon2-shard.d1 { animation-delay: 2.4s !important; width: 2.6%; }
+.soon2-shard.d2 { animation-delay: 3s !important; width: 3.8%; }
+.soon2-shard.d3 { animation-delay: 3.6s !important; width: 2.2%; }
+.soon2-shard.d4 { animation-delay: 4.2s !important; width: 3%; }
+.soon2-shard.d5 { animation-delay: 4.8s !important; width: 2.6%; }
+.soon2-shard.d6 { animation-delay: 5.4s !important; width: 3.4%; }
+@keyframes soon2-fly {
+  0% { opacity: 0; transform: translate(0, 0) rotateX(20deg) rotateY(-30deg) rotate(10deg) scale(.4); }
+  12% { opacity: .95; }
+  50% { transform: translate(-260%, -520%) rotateX(50deg) rotateY(40deg) rotate(-25deg) scale(.95); }
+  85% { opacity: .7; }
+  100% { opacity: 0; transform: translate(-140%, -1100%) rotateX(80deg) rotateY(120deg) rotate(-60deg) scale(.7); } }
 @keyframes soon2-push { from { transform: scale(1.14); filter: blur(10px) brightness(.35); } to { transform: scale(1); filter: none; } }
 @keyframes soon2-drift-cam { from { transform: scale(1); } to { transform: scale(1.045) translate(-.6%, .4%); } }
 @keyframes soon2-wipe { from { -webkit-mask-position: 100% 0, 0 0; mask-position: 100% 0, 0 0; } to { -webkit-mask-position: 0% 0, 0 0; mask-position: 0% 0, 0 0; } }
@@ -7654,7 +7672,7 @@ select.ss-input option {
 @keyframes soon2-glow { 0%, 100% { opacity: .35; } 50% { opacity: .7; } }
 @keyframes soon2-sweep { 0% { opacity: 0; translate: -70% 0; } 25% { opacity: 1; } 100% { opacity: 0; translate: 70% 0; } }
 @keyframes soon2-glint { 0% { opacity: 0; background-position: 130% 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { opacity: 0; background-position: -30% 0; } }
-@media (prefers-reduced-motion: reduce) { .sp-soon2 .soon2-cam, .sp-soon2 .soon2-head, .sp-soon2 .soon2-head i, .sp-soon2 .soon2-glint, .sp-soon2 .soon2-crt, .sp-soon2 .soon2-sweep { animation: none !important; } .soon2-glint, .soon2-crt, .soon2-sweep { opacity: 0; } .soon2-head { display: none; } }
+@media (prefers-reduced-motion: reduce) { .sp-soon2 .soon2-cam, .sp-soon2 .soon2-head, .sp-soon2 .soon2-head i, .sp-soon2 .soon2-glint, .sp-soon2 .soon2-crt, .sp-soon2 .soon2-sweep, .sp-soon2 .soon2-shard { animation: none !important; } .soon2-glint, .soon2-crt, .soon2-sweep, .soon2-shard { opacity: 0; } .soon2-head { display: none; } }
 .tv-add { position: absolute; bottom: 12px; z-index: 4; padding: 7px 13px; border-radius: 999px; border: 1px solid #ffffffaa; background: #ffffffe6; color: #1f1c18; font-size: 12.5px; font-weight: 500; cursor: pointer; }
 .sp-slide-soon { margin: 0; min-height: 0; height: 100%; }
 .sp-slide:has(> .sp-slide-soon) { display: grid; }

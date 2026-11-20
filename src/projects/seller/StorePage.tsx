@@ -727,6 +727,7 @@ function ComingSoon({ className, in: shown = true, onAdd }: { className?: string
           {/* The headline is revealed left to right by a dark panel sliding off it, with a glowing edge. */}
           <span className="soon2-head" aria-hidden="true" />
           <span className="soon2-crt" aria-hidden="true" />
+          {[0, 1, 2, 3, 4, 5, 6].map((i) => <i key={i} className={`soon2-shard d${i}`} aria-hidden="true" />)}
           <span className="soon2-glint" aria-hidden="true" />
         </div>
         <span className="soon2-sweep" aria-hidden="true" />
