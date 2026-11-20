@@ -580,13 +580,18 @@ function PayChooser({ product, methods, payByBank, banks, busy, error, seller, o
   useEffect(() => { void loadQuote() }, [product.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const totalMinor = quote ? quote.totalMinor : (product.offer?.priceMinor ?? product.priceMinor)
   const free = totalMinor === 0
+  // Like Stan Store: card first (Apple Pay / Google Pay / Link on Stripe's page), then the rest.
+  // Stripe can't take cards under 0.50, so card is only offered from there.
+  const cardOk = methods.includes('stripe') && totalMinor >= 50
   const choices: Choice[] = free ? ['card'] : [
-    ...(payByBank && methods.includes('stripe') && product.currency.toLowerCase() === 'gbp' ? (['bankapp'] as Choice[]) : []),
-    ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
-    ...(methods.includes('stripe') ? (['card'] as Choice[]) : []),
+    ...(cardOk ? (['card'] as Choice[]) : []),
+    ...(payByBank && cardOk && product.currency.toLowerCase() === 'gbp' ? (['bankapp'] as Choice[]) : []),
     ...(methods.includes('paypal') ? (['paypal'] as Choice[]) : []),
+    ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
   ]
   const [choice, setChoice] = useState<Choice>(choices[0] ?? 'card')
+  // The price can change once the quote arrives (or a code applies): keep the choice valid.
+  useEffect(() => { if (choices.length && !choices.includes(choice)) setChoice(choices[0]) }, [choices.join(','), choice]) // eslint-disable-line react-hooks/exhaustive-deps
   const [email, setEmail] = useState('')
   // the buyer's own bank and name (never their account number); remembered on this device if they choose
   const [payerBank, setPayerBank] = useState('')
