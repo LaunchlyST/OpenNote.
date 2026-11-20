@@ -311,18 +311,15 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
         <Badges p={p} />
         {p.offer && <em className="sp-badge sp-badge-float" style={{ background: p.offer.badgeColor }}>{p.offer.badge}</em>}
         {onToggleSave && <SaveButton saved={Boolean(saved)} onToggle={onToggleSave} label={p.title} />}
-        {kind === 'featured' && (
-          <>
-            {/* The price sits in a notch cut into the image's top-right corner. */}
-            <span className={cn('sp-notch', part('price'))} {...mark('price')}>
-              {(p.offer?.priceMinor ?? p.priceMinor) === 0 ? 'Free' : formatPrice(p.offer?.priceMinor ?? p.priceMinor, p.currency)}
-              {p.offer && p.offer.priceMinor < p.priceMinor && <s>{formatPrice(p.priceMinor, p.currency)}</s>}
-            </span>
-            <span className="sp-band"><Download className="h-3.5 w-3.5" aria-hidden="true" /> Instant download{p.format || p.fileType ? ` · ${p.format || p.fileType}` : ''}</span>
-          </>
-        )}
       </div>
       <div className="sp-card-body">
+        {kind === 'featured' && (
+          // Title row's partner: the price on the right.
+          <span className={cn('sp-cprice', part('price'))} {...mark('price')}>
+            {(p.offer?.priceMinor ?? p.priceMinor) === 0 ? 'Free' : formatPrice(p.offer?.priceMinor ?? p.priceMinor, p.currency)}
+            {p.offer && p.offer.priceMinor < p.priceMinor && <s>{formatPrice(p.priceMinor, p.currency)}</s>}
+          </span>
+        )}
         <div className={cn('sp-move-box', part('title'))} {...mark('title')}>
           {edit?.part === 'title' && edit.onText ? (
             <InlineText key={p.id} as="title" value={p.title} placeholder="Product title" style={titleStyle} onText={(v) => edit.onText!('title', v)} />
