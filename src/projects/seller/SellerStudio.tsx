@@ -3378,6 +3378,10 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const avail = data?.balance?.available.find((x) => x.currency === cur)?.amountMinor ?? 0
   const pending = data?.balance?.pending.find((x) => x.currency === cur)?.amountMinor ?? 0
   const banks = data?.banks ?? []
+  // Stripe's payout account and a saved bank-transfer account can be the same
+  // bank account: show it once, labelled with both jobs.
+  const sameBank = (b: { last4: string; sortCode?: string | null }, sb: { accountNumber: string; iban: string; sortCode: string }) =>
+    b.last4 === (sb.accountNumber.slice(-4) || sb.iban.slice(-4)) && (!b.sortCode || !sb.sortCode || b.sortCode.replace(/\D/g, '') === sb.sortCode.replace(/\D/g, ''))
   const canWithdraw = s === 'ready' && Boolean(data?.withdrawals) && avail > 0 && banks.length > 0
   const STATUS: Record<string, string> = { paid: 'Paid', pending: 'Pending', failed: 'Failed', cancelled: 'Cancelled', refunded: 'Refunded', disputed: 'Disputed' }
 
@@ -3425,7 +3429,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         <button type="button" className="wl-add" onClick={() => setBankOpen(bankSet ? 'new' : 'edit')}>+ Add bank account</button>
       </div>
       <div className="wl-banks">
-        {banks.map((b) => (
+        {banks.filter((b) => !saved.some((sb) => sameBank(b, sb))).map((b) => (
           <article key={b.id} className="wl-bank">
             <header><BankMark name={b.bankName} /><b>{b.bankName}</b>{b.isDefault && <em className="wl-tag">Default</em>}</header>
             <dl>
@@ -3453,7 +3457,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
                 {sb.sortCode && <><dt>Sort code</dt><dd>{formatSort(sb.sortCode)}</dd></>}
               </dl>
               <footer>
-                <small>{active ? 'Buyers pay here' : ''}</small>
+                <small>{[active ? 'Buyers pay here' : '', banks.some((b) => sameBank(b, sb)) ? 'Stripe payouts' : ''].filter(Boolean).join(' · ')}</small>
                 {active
                   ? <button type="button" className="wl-btn" onClick={() => setBankOpen('edit')}>Edit bank details</button>
                   : <button type="button" className="wl-btn wl-btn-main" onClick={() => void pickBank(i)}>Use this account</button>}
