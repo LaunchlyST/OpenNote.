@@ -223,18 +223,24 @@ try {
       //     three of them and the third one reaches the empty slot.
       await page.getByText(/^Page$/).first().click()
       await page.waitForTimeout(1500)
+      const editorTabs = page.locator('.bl-inline').getByRole('tab', { name: /^Product \d/ })
+      const slideTab = (n: number) => page.locator('.bl-inline').getByRole('tab', { name: new RegExp(`^Product ${n}\\b`) })
       // The slide tabs live in the block editor. Depending on what was open
       // before, the block row click can either open or toggle it shut, so click
       // until the tabs are actually present.
       const blockMain = page.locator(`[data-block="${feat.id}"] .bl-main`)
-      for (let attempt = 0; attempt < 3 && (await page.getByRole('tab', { name: 'Slide 1' }).count()) === 0; attempt++) {
+      for (let attempt = 0; attempt < 3 && (await slideTab(1).count()) === 0; attempt++) {
         if (await blockMain.count()) await blockMain.click()
         await page.waitForTimeout(600)
       }
-      const dots = page.locator('.ss-slide .sp-dot')
-      const dotCount = await dots.count()
+      const pager = page.locator('.ss-slide .sp-pg-num')
+      const dotCount = await pager.count()
       check(`${tag}: the carousel shows three dots for its three slots`, dotCount === 3, `dots=${dotCount}`)
-      const slideTab = (n: number) => page.getByRole('tab', { name: `Slide ${n}` })
+      const chooseDigital = async () => {
+        const dialog = page.getByRole('dialog', { name: 'Add a product' })
+        const digital = dialog.getByRole('button', { name: /Digital product/ })
+        if (await digital.count()) await digital.first().click()
+      }
       const swipeTo = async (i: number) => {
         const track = page.locator('.ss-slide .sp-track').first()
         // A touch swipe on mobile; a scroll gesture on desktop. Both go through
@@ -260,26 +266,26 @@ try {
       if (dotCount === 3) {
         // The third preview slot is a placeholder until a real third slide is
         // added: the editor shows "Empty slide" but has no third tab yet.
-        await dots.nth(2).click({ force: true })
+        await pager.nth(2).click({ force: true })
         await page.waitForTimeout(900)
-        const thirdSelected = (await dots.nth(2).getAttribute('aria-selected')) === 'true'
-        const emptyInThird = await page.locator('.ss-slide .sp-slide').nth(2).locator('.sp-slide-empty').count()
-        const editorShowsEmpty = (await page.getByText('Empty slide', { exact: true }).count()) > 0
-        check(`${tag}: the third dot selects the empty Product 3 slide`, thirdSelected && emptyInThird === 1, `selected=${thirdSelected} empty=${emptyInThird}`)
+        const thirdSelected = (await pager.nth(2).getAttribute('aria-selected')) === 'true'
+        const comingInThird = await page.locator('.ss-slide .sp-slide').nth(2).locator('.sp-slide-soon').count()
+        const editorShowsEmpty = (await page.getByText(/Product 3 is empty/).count()) > 0
+        check(`${tag}: the third dot selects the empty Product 3 slot`, thirdSelected && comingInThird === 1, `selected=${thirdSelected} coming=${comingInThird}`)
         check(`${tag}: the slide editor follows the active empty slide`, editorShowsEmpty, `editor=${editorShowsEmpty}`)
-        await dots.nth(0).click({ force: true })
+        await pager.nth(0).click({ force: true })
         await page.waitForTimeout(600)
 
         // Arrows and a real swipe must move the preview AND the open editor.
         await page.getByRole('button', { name: 'Next product' }).first().click({ force: true })
         await page.waitForTimeout(700)
-        check(`${tag}: the Next arrow moves the carousel and the editor together`, (await dots.nth(1).getAttribute('aria-selected')) === 'true' && (await slideTab(2).getAttribute('aria-selected')) === 'true')
+        check(`${tag}: the Next arrow moves the carousel and the editor together`, (await pager.nth(1).getAttribute('aria-selected')) === 'true' && (await slideTab(2).getAttribute('aria-selected')) === 'true')
         await swipeTo(2)
-        check(`${tag}: swiping with the editor open reaches the empty slide`, (await dots.nth(2).getAttribute('aria-selected')) === 'true' && (await page.getByText('Empty slide', { exact: true }).count()) > 0)
+        check(`${tag}: swiping with the editor open reaches the empty slide`, (await pager.nth(2).getAttribute('aria-selected')) === 'true' && (await page.getByText(/Product 3 is empty/).count()) > 0)
         await page.getByRole('button', { name: 'Previous product' }).first().click({ force: true })
         await page.waitForTimeout(700)
-        check(`${tag}: the Previous arrow returns to the populated slide`, (await dots.nth(1).getAttribute('aria-selected')) === 'true' && (await slideTab(2).getAttribute('aria-selected')) === 'true')
-        await dots.nth(0).click({ force: true })
+        check(`${tag}: the Previous arrow returns to the populated slide`, (await pager.nth(1).getAttribute('aria-selected')) === 'true' && (await slideTab(2).getAttribute('aria-selected')) === 'true')
+        await pager.nth(0).click({ force: true })
         await page.waitForTimeout(600)
       }
 
@@ -298,6 +304,7 @@ try {
         const libraryOpen = await page.getByRole('dialog', { name: 'Add a block' }).count()
         check(`${tag}: the empty third slot opens the product picker, not the block library`, pickerOpen === 1 && libraryOpen === 0, `picker=${pickerOpen} library=${libraryOpen}`)
 
+        await chooseDigital()
         await page.getByRole('dialog', { name: 'Add a product' }).getByRole('button', { name: /Third product/ }).first().click()
         await page.waitForTimeout(2200)
         const blocksNow = (await api('GET', '/api/seller/store', undefined, C)).json.store.draft.blocks
@@ -309,7 +316,7 @@ try {
         )
 
         const slideEditorStillOpen = (await page.locator('.bl-inline').count()) > 0
-        const thirdSelected = page.getByRole('tab', { name: 'Slide 3' }).getAttribute('aria-selected')
+        const thirdSelected = slideTab(3).getAttribute('aria-selected')
         const thirdProductSelected = await page.locator('select[aria-label="Product for slide 3"]').inputValue().catch(() => '')
         check(
           `${tag}: picking Product 3 fills its slide and keeps the block editor open`,
@@ -331,24 +338,27 @@ try {
         )
         await page.getByRole('button', { name: /Back to carousel/ }).first().click()
         await page.waitForTimeout(1200)
-        const returnedSlide = page.getByRole('tab', { name: 'Slide 3' }).getAttribute('aria-selected')
+        const returnedSlide = slideTab(3).getAttribute('aria-selected')
         check(`${tag}: Back to carousel preserves the active slide`, (await returnedSlide) === 'true', `slide=${await returnedSlide}`)
 
         // "+ Add product slide" creates a fourth, empty slide and selects it.
+        // The picker opens first; cancelling it leaves the empty slide in place.
         const addFourth = page.getByRole('button', { name: '+ Add product slide' })
         if ((await addFourth.count()) === 1) {
           await addFourth.click()
-          await page.waitForTimeout(1800)
-          const fourthSelected = (await page.getByRole('tab', { name: 'Slide 4' }).getAttribute('aria-selected')) === 'true'
-          // A real empty slide shows a product picker (not the preview-only
-          // "Empty slide" placeholder), with no product chosen yet.
+          await page.waitForTimeout(900)
+          await page.keyboard.press('Escape')
+          await page.waitForTimeout(600)
+          if ((await slideTab(4).getAttribute('aria-selected')) !== 'true') await slideTab(4).click()
+          await page.waitForTimeout(400)
+          const fourthSelected = (await slideTab(4).getAttribute('aria-selected')) === 'true'
           const fourthEmpty = (await page.locator('select[aria-label="Product for slide 4"]').inputValue().catch(() => 'missing')) === ''
-          const fourDots = (await page.locator('.ss-slide .sp-dot').count()) === 4
-          check(`${tag}: + Add product slide creates and selects an empty fourth slide`, fourthSelected && fourthEmpty && fourDots, `selected=${fourthSelected} empty=${fourthEmpty} dots=${fourDots}`)
+          const fourTabs = (await editorTabs.count()) === 4
+          check(`${tag}: + Add product slide creates and selects an empty fourth slide`, fourthSelected && fourthEmpty && fourTabs, `selected=${fourthSelected} empty=${fourthEmpty} tabs=${await editorTabs.count()}`)
           // Remove that empty slide again so the next check sees three products.
           await page.getByRole('button', { name: 'Remove slide 4' }).first().click()
           await page.waitForTimeout(1600)
-          check(`${tag}: an empty slide can be removed independently`, (await page.locator('.ss-slide .sp-dot').count()) === 3)
+          check(`${tag}: an empty slide can be removed independently`, (await editorTabs.count()) === 3)
         }
         await page.getByRole('tab', { name: /^Products/ }).first().click()
         await page.waitForTimeout(1000)
@@ -604,7 +614,7 @@ try {
       await page.unroute('**/api/seller/products/**')
 
       // 5. Undo must never swap the store's style.
-      await page.getByRole('tab', { name: 'Page' }).click()
+      await page.getByRole('tab', { name: 'Page', exact: true }).click()
       await page.getByRole('button', { name: 'Add block' }).click()
       const addDialog = page.getByRole('dialog', { name: 'Add a block' })
       await addDialog.locator('.ab-q', { hasText: 'Text' }).click()
