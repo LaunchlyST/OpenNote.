@@ -68,6 +68,7 @@ export const sellerApi = {
   uploadMedia: (file: Blob) => call<{ id: string; url: string }>('POST', '/api/seller/media', file, { 'Content-Type': file.type }),
   onboard: (returnTo: string) => call<{ url: string }>('POST', '/api/seller/stripe/onboard', { returnTo }),
   manage: () => call<{ url: string }>('POST', '/api/seller/stripe/manage'),
+  defaultBank: (bankId: string) => call<{ ok: true }>('POST', '/api/seller/stripe/default-bank', { bankId }),
   /** TikTok by bio code: get a code for a username, then check the bio. */
   tiktokCode: (username: string) => call<{ username: string; code: string; expiresInMinutes: number }>('POST', '/api/seller/tiktok/code', { username }),
   tiktokDisconnect: () => call<{ store: StoreView }>('POST', '/api/seller/tiktok/disconnect'),

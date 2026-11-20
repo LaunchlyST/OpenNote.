@@ -3383,6 +3383,10 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   // bank account: show it once, labelled with both jobs.
   const sameBank = (b: { last4: string; sortCode?: string | null }, sb: { accountNumber: string; iban: string; sortCode: string }) =>
     b.last4 === (sb.accountNumber.slice(-4) || sb.iban.slice(-4)) && (!b.sortCode || !sb.sortCode || b.sortCode.replace(/\D/g, '') === sb.sortCode.replace(/\D/g, ''))
+  /** Card earnings are paid out to this Stripe bank account from now on. */
+  const useStripeBank = async (id: string) => {
+    try { await sellerApi.defaultBank(id); await load() } catch (e) { setErr((e as Error).message) }
+  }
   const canWithdraw = s === 'ready' && Boolean(data?.withdrawals) && avail > 0 && banks.length > 0
   const STATUS: Record<string, string> = { paid: 'Paid', pending: 'Pending', failed: 'Failed', cancelled: 'Cancelled', refunded: 'Refunded', disputed: 'Disputed' }
 
@@ -3443,15 +3447,21 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
               <dt>Account number</dt><dd>•••• {b.last4}</dd>
               {b.sortCode && <><dt>Sort code</dt><dd>{b.sortCode}</dd></>}
             </dl>
-            <footer><small>For withdrawals</small></footer>
+            <footer>
+              <small>{b.isDefault ? 'Card payouts go here' : 'Card payouts'}</small>
+              {!b.isDefault && <button type="button" className="wl-btn wl-btn-main" onClick={() => void useStripeBank(b.id)}>Use this account</button>}
+            </footer>
           </article>
         ))}
         {/* the seller's own bank accounts: the one "In use" is where buyers pay */}
         {saved.map((sb, i) => {
-          const active = isActive(sb)
+          const twin = banks.find((b) => sameBank(b, sb))
+          // In use = buyers pay into it, and (when Stripe has the same account) card payouts go there too.
+          const active = isActive(sb) && (!twin || twin.isDefault)
+          const choose = async () => { if (!isActive(sb)) await pickBank(i); if (twin && !twin.isDefault) await useStripeBank(twin.id) }
           return (
             <article key={`${sb.sortCode}${sb.accountNumber}${sb.iban}`} className={cn('wl-bank', active && 'wl-bank-active', !active && 'wl-bank-pick')} aria-label={`${sb.bankName || 'Bank'} ending ${sb.accountNumber.slice(-4) || sb.iban.slice(-4)}`}
-              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void pickBank(i) }}>
+              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void choose() }}>
               <header>
                 <BankMark name={sb.bankName} />
                 <b>{sb.bankName || 'Bank account'}</b>
@@ -3463,10 +3473,10 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
                 {sb.sortCode && <><dt>Sort code</dt><dd>{formatSort(sb.sortCode)}</dd></>}
               </dl>
               <footer>
-                <small>{[active ? 'Buyers pay here' : '', banks.some((b) => sameBank(b, sb)) ? 'Stripe payouts' : ''].filter(Boolean).join(' · ')}</small>
+                <small>{active ? ['Buyers pay here', twin ? 'card payouts' : ''].filter(Boolean).join(' · ') : ''}</small>
                 {active
-                  ? <button type="button" className="wl-btn" onClick={() => setBankOpen('edit')}>Edit bank details</button>
-                  : <button type="button" className="wl-btn wl-btn-main" onClick={() => void pickBank(i)}>Use this account</button>}
+                  ? <button type="button" className="wl-link" onClick={() => setBankOpen('edit')}>Edit</button>
+                  : <button type="button" className="wl-btn wl-btn-main" onClick={() => void choose()}>Use this account</button>}
               </footer>
             </article>
           )

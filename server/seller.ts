@@ -2226,6 +2226,24 @@ export function sellerRouter() {
     }
   })
 
+  /** Make one of the seller's Stripe bank accounts the one card earnings are paid out to. */
+  me.post('/stripe/default-bank', async (req: Authed, res) => {
+    const found = await mine(req, res)
+    if (!found) return
+    const s = await activeConnection(found)
+    const st = stripe()
+    const bankId = String((req.body as { bankId?: unknown })?.bankId ?? '')
+    if (!st || !s.stripeAccountId) return void res.status(400).json({ error: 'Connect Stripe first.' })
+    if (!/^ba_[A-Za-z0-9]+$/.test(bankId)) return void res.status(400).json({ error: 'Choose a bank account.' })
+    try {
+      await st.accounts.updateExternalAccount(s.stripeAccountId, bankId, { default_for_currency: true } as Stripe.AccountUpdateExternalAccountParams)
+      res.json({ ok: true })
+    } catch (err) {
+      const e = err as { message?: string }
+      res.status(502).json({ error: `Stripe: ${e.message ?? 'could not change the payout account.'}` })
+    }
+  })
+
   me.post('/stripe/manage', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
