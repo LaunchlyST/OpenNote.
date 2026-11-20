@@ -2183,6 +2183,7 @@ export function sellerRouter() {
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Payouts are not set up on this Desknoty server yet (STRIPE_SECRET_KEY).', setup: true })
     const returnTo = safeReturn((req.body as { returnTo?: unknown })?.returnTo)
+    try {
     let accountId = s.stripeAccountId
     if (!accountId) {
       // Accounts v2: Stripe no longer lets new platforms create v1 accounts. A full-dashboard
@@ -2216,6 +2217,12 @@ export function sellerRouter() {
       return_url: `${seller.siteUrl}${returnTo}${sep}stripe=return`,
     })
     res.json({ url: link.url })
+    } catch (err) {
+      // Show the seller Stripe's own reason (it never contains secrets) instead of a generic failure.
+      const e = err as { message?: string; code?: string; type?: string }
+      console.error('[seller] Stripe onboarding failed', stripeMode, s.id, e.type, e.code, e.message)
+      res.status(502).json({ error: `Stripe (${stripeMode}): ${e.message ?? 'could not start onboarding.'}`, code: e.code ?? null })
+    }
   })
 
   me.post('/stripe/manage', async (req: Authed, res) => {
