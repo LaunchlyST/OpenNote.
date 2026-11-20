@@ -218,4 +218,6 @@ export interface Earnings {
   } | null
   banks: Array<{ id: string; bankName: string; holder: string; last4: string; sortCode: string; currency: string; isDefault: boolean }>
   withdrawals: boolean
+  /** Stripe payout schedule: "manual" means the seller withdraws themselves. */
+  schedule?: { interval: string; delayDays: number | null } | null
 }

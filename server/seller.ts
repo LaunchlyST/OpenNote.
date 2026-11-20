@@ -2072,6 +2072,8 @@ export function sellerRouter() {
     }
     let balance: { available: Array<{ amountMinor: number; currency: string }>; pending: Array<{ amountMinor: number; currency: string }>; payouts: Array<{ id: string; amountMinor: number; currency: string; status: string; arrival: string; bank: string | null }> } | null = null
     let banks: Array<{ id: string; bankName: string; holder: string; last4: string; sortCode: string; currency: string; isDefault: boolean }> = []
+    // Stripe's payout schedule for this seller ('manual' means the seller withdraws themselves).
+    let schedule: { interval: string; delayDays: number | null } | null = null
     const st = stripe()
     if (st && s.stripeAccountId && s.chargesReady) {
       try {
@@ -2082,6 +2084,9 @@ export function sellerRouter() {
           pending: b.pending.map((x) => ({ amountMinor: x.amount, currency: x.currency })),
           payouts: list.data.map((p) => ({ id: p.id, amountMinor: p.amount, currency: p.currency, status: p.status, arrival: new Date(p.arrival_date * 1000).toISOString(), bank: typeof p.destination === 'string' ? p.destination : null })),
         }
+        const acct = await st.accounts.retrieve(s.stripeAccountId).catch(() => null)
+        const sch = acct?.settings?.payouts?.schedule
+        if (sch) schedule = { interval: sch.interval, delayDays: typeof sch.delay_days === 'number' ? sch.delay_days : null }
         // the bank accounts the seller added in Stripe: where withdrawals can go (never full numbers)
         const ext = await st.accounts.listExternalAccounts(s.stripeAccountId, { object: 'bank_account', limit: 10 }).catch(() => ({ data: [] as Stripe.BankAccount[] }))
         banks = (ext.data as Stripe.BankAccount[]).map((b) => ({
@@ -2101,7 +2106,7 @@ export function sellerRouter() {
     const days: string[] = []
     for (let i = 29; i >= 0; i--) days.push(dayKey(new Date(Date.now() - i * 86400000)))
     const out = [...totals.values()].map(({ daily, ...t }) => ({ ...t, days: days.map((date) => ({ date, amountMinor: daily[date] ?? 0 })) }))
-    res.set('Cache-Control', 'no-store').json({ totals: out, balance, banks, withdrawals: payoutsAllowed() })
+    res.set('Cache-Control', 'no-store').json({ totals: out, balance, banks, schedule, withdrawals: payoutsAllowed() })
   })
 
   /** Send the available Stripe balance to the seller's bank. Sandbox only unless SELLER_LIVE_PAYOUTS=true. */

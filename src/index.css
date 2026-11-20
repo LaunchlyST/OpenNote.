@@ -9012,3 +9012,13 @@ select.ss-input option {
 .wl-balance-foot .wl-link .wl-mark { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; }
 .wl-balance-foot .wl-link .wl-mark svg { width: 12px; height: 12px; }
 .wl-balance-foot .wl-link { display: inline-flex; align-items: center; gap: 6px; }
+/* Payouts: history list */
+.wl-payouts { margin: 18px 0; }
+.wl-plist { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid #ececec; border-radius: 14px; overflow: hidden; background: #fff; }
+.wl-plist li { display: grid; grid-template-columns: 1fr 1.4fr auto auto; align-items: center; gap: 12px; padding: 12px 14px; font-size: 13.5px; }
+.wl-plist li + li { border-top: 1px solid #f0f0f0; }
+.wl-pdate { color: #6b7280; }
+.wl-pbank { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.wl-pbank .wl-mark { width: 20px; height: 20px; border-radius: 6px; font-size: 10px; }
+.wl-pamt { font-weight: 700; }
+@media (max-width: 520px) { .wl-plist li { grid-template-columns: 1fr auto; } .wl-pbank { grid-column: 1; } }

@@ -3387,7 +3387,12 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   const useStripeBank = async (id: string) => {
     try { await sellerApi.defaultBank(id); await load() } catch (e) { setErr((e as Error).message) }
   }
-  const canWithdraw = s === 'ready' && Boolean(data?.withdrawals) && avail > 0 && banks.length > 0
+  // Stripe pays out on its own unless the schedule is manual; then the seller presses Withdraw.
+  const manual = data?.schedule?.interval === 'manual'
+  const autoText = data?.schedule && !manual ? `Paid out automatically · ${data.schedule.interval === 'daily' ? 'daily' : data.schedule.interval === 'weekly' ? 'weekly' : data.schedule.interval === 'monthly' ? 'monthly' : data.schedule.interval}` : null
+  const canWithdraw = s === 'ready' && Boolean(data?.withdrawals) && avail > 0 && banks.length > 0 && (manual || !data?.schedule)
+  const payouts = data?.balance?.payouts ?? []
+  const PAYOUT_STATUS: Record<string, string> = { paid: 'Paid', in_transit: 'On the way', pending: 'Pending', failed: 'Failed', canceled: 'Cancelled' }
   const STATUS: Record<string, string> = { paid: 'Paid', pending: 'Pending', failed: 'Failed', cancelled: 'Cancelled', refunded: 'Refunded', disputed: 'Disputed' }
 
   return (
@@ -3411,13 +3416,13 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           <>
           <span className="wl-label">Wallet balance</span>
           <b className="wl-big">{data?.balance ? formatPrice(avail, cur) : formatPrice(0, cur)}</b>
-          <small className="wl-sub">{data?.balance ? (pending > 0 ? `${formatPrice(pending, cur)} on the way from Stripe` : 'Ready to withdraw') : s === 'ready' ? 'Loading…' : 'Card sales land here once Stripe is set up'}</small>
+          <small className="wl-sub">{data?.balance ? [pending > 0 ? `${formatPrice(pending, cur)} on the way from Stripe` : manual ? 'Ready to withdraw' : '', autoText ?? ''].filter(Boolean).join(' · ') || 'Ready to withdraw' : s === 'ready' ? 'Loading…' : 'Card sales land here once Stripe is set up'}</small>
           <div className="wl-balance-foot">
             {s === 'ready' && banks.length === 0 ? (
               // No bank account yet: set one up first (in Stripe, which keeps the full details).
               <button type="button" className="wl-link" onClick={() => void go()}>Add bank account <span aria-hidden="true">→</span></button>
             ) : (
-              <button type="button" className="wl-link" disabled={!canWithdraw} onClick={() => (setSent(null), setWithdrawing(true))} title={!canWithdraw ? (s !== 'ready' ? 'Finish Stripe setup first' : !data?.withdrawals ? 'Withdrawals are switched off on this server' : avail <= 0 ? 'Nothing ready to withdraw yet' : undefined) : undefined}>
+              <button type="button" className="wl-link" disabled={!canWithdraw} onClick={() => (setSent(null), setWithdrawing(true))} title={!canWithdraw ? (s !== 'ready' ? 'Finish Stripe setup first' : data?.schedule && !manual ? 'Stripe pays you out automatically. Set your Stripe payout schedule to Manual to withdraw yourself.' : !data?.withdrawals ? 'Withdrawals are switched off on this server' : avail <= 0 ? 'Nothing ready to withdraw yet' : undefined) : undefined}>
                 Withdraw <span aria-hidden="true">→</span>
               </button>
             )}
@@ -3440,6 +3445,28 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       </div>
       {sent && <p className="wl-ok" role="status">✓ {sent}</p>}
 
+      {s === 'ready' && (
+        <section className="wl-payouts" aria-label="Payout history">
+          <h2 className="wl-h">Payouts</h2>
+          {payouts.length === 0 ? (
+            <p className="ss-muted">No payouts yet. {manual ? 'Press Withdraw when you have a balance.' : 'Stripe sends your card earnings to your chosen bank automatically.'}</p>
+          ) : (
+            <ul className="wl-plist">
+              {payouts.map((p) => {
+                const b = banks.find((x) => x.id === p.bank)
+                return (
+                  <li key={p.id}>
+                    <span className="wl-pdate">{new Date(p.arrival).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    <span className="wl-pbank">{b ? <><BankMark name={b.bankName} /> {b.bankName} ••{b.last4}</> : 'Your bank'}</span>
+                    <b className="wl-pamt">{formatPrice(p.amountMinor, p.currency)}</b>
+                    <em className={cn('wl-tag', p.status === 'paid' ? 'on' : p.status === 'failed' || p.status === 'canceled' ? 'off' : '')}>{PAYOUT_STATUS[p.status] ?? p.status}</em>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
+      )}
       <div className="wl-row">
         <h2 className="wl-h">Your Bank Accounts</h2>
         <button type="button" className="wl-add" onClick={() => setBankOpen(bankSet ? 'new' : 'edit')}>+ Add bank account</button>
