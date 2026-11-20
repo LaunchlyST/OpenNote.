@@ -2292,7 +2292,9 @@ export function sellerRouter() {
     const cur = await activeConnection(s)
     if (!st || !cur.stripeAccountId) return void res.status(400).json({ error: 'Connect a bank account first.' })
     // Full-dashboard sellers sign in to their own Stripe Dashboard to manage payouts.
-    res.json({ url: seller.stripeApiBase ? `${seller.stripeApiBase}/dashboard/${cur.stripeAccountId}` : 'https://dashboard.stripe.com/settings/payouts' })
+    // Open the seller's own account (not whichever one is signed in) at its payout settings.
+    const where = encodeURIComponent(String((req.body as { to?: unknown })?.to ?? '') === 'balance' ? '/balance/overview' : '/settings/payouts')
+    res.json({ url: seller.stripeApiBase ? `${seller.stripeApiBase}/dashboard/${cur.stripeAccountId}` : `https://dashboard.stripe.com/b/${cur.stripeAccountId}?destination=${where}` })
   })
 
   /* TikTok Login Kit (web): optional */
