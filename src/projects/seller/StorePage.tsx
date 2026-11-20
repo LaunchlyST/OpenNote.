@@ -724,6 +724,9 @@ function ComingSoon({ className, in: shown = true, onAdd }: { className?: string
       <div className="soon2-frame">
         <img src={SOON_ART} alt="Coming soon — our next product." width={1774} height={887} decoding="async" draggable={false} />
         <span className="soon2-glint" aria-hidden="true" />
+        <span className="soon2-screen" aria-hidden="true" />
+        <span className="soon2-star" aria-hidden="true" />
+        {[0, 1, 2, 3, 4, 5].map((i) => <i key={i} className={`soon2-spark s${i}`} aria-hidden="true" />)}
       </div>
       {onAdd && <button type="button" className="tv-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
     </section>
