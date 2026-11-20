@@ -718,7 +718,7 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
  * headline and TV never move. No glint with reduced motion.
  */
 const SOON_ART = '/coming-soon.webp'
-function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
+export function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
   return (
     <section className={'sp-block sp-soon2' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Coming soon">
       <div className="soon2-frame">
