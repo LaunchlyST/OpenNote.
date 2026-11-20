@@ -3150,7 +3150,7 @@ const PAYOUT_COPY: Record<StoreView['payouts']['status'], { label: string; text:
 type Bank = Earnings['banks'][number]
 
 /** Send the Stripe balance to one of the seller's own bank accounts (chosen here). */
-function WithdrawDialog({ amount, currency, banks, onClose, onSent }: { amount: number; currency: string; banks: Bank[]; onClose: () => void; onSent: (msg: string) => void }) {
+function WithdrawDialog({ amount, currency, banks, onClose, onSent, onAddBank }: { amount: number; currency: string; banks: Bank[]; onClose: () => void; onSent: (msg: string) => void; onAddBank?: () => void }) {
   const [pick, setPick] = useState(() => banks.find((b) => b.isDefault)?.id ?? banks[0]?.id ?? '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -3188,6 +3188,7 @@ function WithdrawDialog({ amount, currency, banks, onClose, onSent }: { amount: 
               </label>
             ))}
           </div>
+          {onAddBank && <button type="button" className="ss-ghost self-start" style={{ marginTop: 8 }} onClick={onAddBank}>+ Add another bank account</button>}
           {err && <div className="ss-note" role="alert">{err}</div>}
         </div>
         <div className="ss-modal-foot">
@@ -3408,9 +3409,14 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           <b className="wl-big">{data?.balance ? formatPrice(avail, cur) : formatPrice(0, cur)}</b>
           <small className="wl-sub">{data?.balance ? (pending > 0 ? `${formatPrice(pending, cur)} on the way from Stripe` : 'Ready to withdraw') : s === 'ready' ? 'Loading…' : 'Card sales land here once Stripe is set up'}</small>
           <div className="wl-balance-foot">
-            <button type="button" className="wl-link" disabled={!canWithdraw} onClick={() => (setSent(null), setWithdrawing(true))} title={!canWithdraw ? (s !== 'ready' ? 'Finish Stripe setup first' : avail <= 0 ? 'Nothing ready to withdraw yet' : 'Add a bank account in Stripe first') : undefined}>
-              Withdraw <span aria-hidden="true">→</span>
-            </button>
+            {s === 'ready' && banks.length === 0 ? (
+              // No bank account yet: set one up first (in Stripe, which keeps the full details).
+              <button type="button" className="wl-link" onClick={() => void go()}>Add bank account <span aria-hidden="true">→</span></button>
+            ) : (
+              <button type="button" className="wl-link" disabled={!canWithdraw} onClick={() => (setSent(null), setWithdrawing(true))} title={!canWithdraw ? (s !== 'ready' ? 'Finish Stripe setup first' : !data?.withdrawals ? 'Withdrawals are switched off on this server' : avail <= 0 ? 'Nothing ready to withdraw yet' : undefined) : undefined}>
+                Withdraw <span aria-hidden="true">→</span>
+              </button>
+            )}
             {s === 'ready' && <button type="button" className="wl-link" onClick={() => void go()}>Stripe dashboard <ExternalLink className="h-3 w-3" /></button>}
           </div>
           </>
@@ -3550,7 +3556,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         <ChooseBankDialog saved={saved} activeIndex={saved.findIndex(isActive)} onClose={() => setChoosing(false)} onAdd={() => (setChoosing(false), setBankOpen('new'))}
           onPick={async (i) => { await pickBank(i); setChoosing(false) }} />
       )}
-      {withdrawing && <WithdrawDialog amount={avail} currency={cur} banks={banks} onClose={() => setWithdrawing(false)} onSent={(m) => (setSent(m), setWithdrawing(false), void load())} />}
+      {withdrawing && <WithdrawDialog amount={avail} currency={cur} banks={banks} onAddBank={() => void go()} onClose={() => setWithdrawing(false)} onSent={(m) => (setSent(m), setWithdrawing(false), void load())} />}
     </div>
   )
 }
