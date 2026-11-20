@@ -2198,8 +2198,9 @@ export function sellerRouter() {
           dashboard: 'full',
           defaults: { responsibilities: { fees_collector: 'stripe', losses_collector: 'stripe' } },
           configuration: {
+            // Direct charges: the seller takes payments on their own account, so only
+            // the merchant configuration is needed (no platform transfers).
             merchant: { capabilities: { card_payments: { requested: true } } },
-            recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } },
           },
           metadata: { desknotyStoreId: s.id },
         },
