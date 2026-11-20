@@ -3,7 +3,7 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as 
 import { Check, ChevronLeft, ChevronRight, Download, Flag, Heart, MoreVertical, Share2, X as XIcon } from 'lucide-react'
 import { storeApi } from './api'
 import type { PublicReview } from './api'
-import { CARD_BACKGROUNDS, ensureFonts, mediaUrl, textStyleCss } from './model'
+import { CARD_BACKGROUNDS, ensureFonts, formatPrice, mediaUrl, textStyleCss } from './model'
 import type { CardBg, CardPart, ShopProduct } from './model'
 
 /**
@@ -311,6 +311,16 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
         <Badges p={p} />
         {p.offer && <em className="sp-badge sp-badge-float" style={{ background: p.offer.badgeColor }}>{p.offer.badge}</em>}
         {onToggleSave && <SaveButton saved={Boolean(saved)} onToggle={onToggleSave} label={p.title} />}
+        {kind === 'featured' && (
+          <>
+            {/* The price sits in a notch cut into the image's top-right corner. */}
+            <span className={cn('sp-notch', part('price'))} {...mark('price')}>
+              {(p.offer?.priceMinor ?? p.priceMinor) === 0 ? 'Free' : formatPrice(p.offer?.priceMinor ?? p.priceMinor, p.currency)}
+              {p.offer && p.offer.priceMinor < p.priceMinor && <s>{formatPrice(p.priceMinor, p.currency)}</s>}
+            </span>
+            <span className="sp-band"><Download className="h-3.5 w-3.5" aria-hidden="true" /> Instant download{p.format || p.fileType ? ` · ${p.format || p.fileType}` : ''}</span>
+          </>
+        )}
       </div>
       <div className="sp-card-body">
         <div className={cn('sp-move-box', part('title'))} {...mark('title')}>
@@ -334,7 +344,7 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
         {p.rating && p.rating.count > 0 && <Stars value={p.rating.average} count={p.rating.count} />}
         {kind !== 'compact' && <FactLine p={p} />}
         {kind === 'featured' && p.included?.length ? (
-          <ul className="sp-incl sp-incl-card">{p.included.slice(0, 3).map((x, i) => <li key={i}><Check className="h-3.5 w-3.5" aria-hidden="true" />{x}</li>)}</ul>
+          <ul className="sp-incl sp-incl-card sp-chips">{p.included.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}</ul>
         ) : null}
         {edit ? <div className={cn('sp-part-btn', part('button'))} {...mark('button')}>{buy}</div> : buy}
       </div>
