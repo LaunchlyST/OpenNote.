@@ -2244,6 +2244,42 @@ export function sellerRouter() {
     }
   })
 
+  /**
+   * "Use this account" for a bank the seller saved in Desknoty: make Stripe pay
+   * card earnings to the same account. Adds it to the seller's Stripe account
+   * when Stripe doesn't have it yet, then makes it the default for its currency.
+   */
+  me.post('/stripe/use-saved-bank', async (req: Authed, res) => {
+    const found = await mine(req, res)
+    if (!found) return
+    const s = await activeConnection(found)
+    const st = stripe()
+    if (!st || !s.stripeAccountId) return void res.json({ stripe: false })
+    const i = Number((req.body as { index?: unknown })?.index)
+    const sb = Number.isInteger(i) && i >= 0 ? readPayments(s.payments).savedBanks[i] : undefined
+    if (!sb) return void res.status(404).json({ error: 'Bank account not found.' })
+    const digits = (v: string) => (v || '').replace(/\D/g, '')
+    const acct = digits(sb.accountNumber)
+    const sort = digits(sb.sortCode)
+    try {
+      const ext = await st.accounts.listExternalAccounts(s.stripeAccountId, { object: 'bank_account', limit: 20 })
+      let target = (ext.data as Stripe.BankAccount[]).find((b) => acct.length >= 4 && b.last4 === acct.slice(-4) && (!sort || digits(b.routing_number ?? '') === sort))
+      if (!target) {
+        if (!(acct.length === 8 && sort.length === 6)) return void res.status(409).json({ error: 'Stripe needs a UK sort code and 8-digit account number for this bank. Add it in Stripe instead.' })
+        target = (await st.accounts.createExternalAccount(s.stripeAccountId, {
+          external_account: { object: 'bank_account', country: 'GB', currency: 'gbp', account_number: acct, routing_number: sort, account_holder_name: sb.accountName || undefined },
+          default_for_currency: true,
+        } as Stripe.AccountCreateExternalAccountParams)) as Stripe.BankAccount
+      } else if (!target.default_for_currency) {
+        await st.accounts.updateExternalAccount(s.stripeAccountId, target.id, { default_for_currency: true } as Stripe.AccountUpdateExternalAccountParams)
+      }
+      res.json({ stripe: true, bankId: target.id })
+    } catch (err) {
+      const e = err as { message?: string }
+      res.status(502).json({ error: `Stripe: ${e.message ?? 'could not change the payout account.'}` })
+    }
+  })
+
   me.post('/stripe/manage', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return

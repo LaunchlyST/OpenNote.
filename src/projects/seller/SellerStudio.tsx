@@ -3457,8 +3457,14 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         {saved.map((sb, i) => {
           const twin = banks.find((b) => sameBank(b, sb))
           // In use = buyers pay into it, and (when Stripe has the same account) card payouts go there too.
-          const active = isActive(sb) && (!twin || twin.isDefault)
-          const choose = async () => { if (!isActive(sb)) await pickBank(i); if (twin && !twin.isDefault) await useStripeBank(twin.id) }
+          const active = isActive(sb) && (s !== 'ready' || Boolean(twin?.isDefault))
+          const choose = async () => {
+            if (!isActive(sb)) await pickBank(i)
+            // Stripe pays card earnings to the same account (added to Stripe if it isn't there yet).
+            if (s === 'ready' && (!twin || !twin.isDefault)) {
+              try { await sellerApi.useSavedBankInStripe(i); await load() } catch (e) { setErr((e as Error).message) }
+            }
+          }
           return (
             <article key={`${sb.sortCode}${sb.accountNumber}${sb.iban}`} className={cn('wl-bank', active && 'wl-bank-active', !active && 'wl-bank-pick')} aria-label={`${sb.bankName || 'Bank'} ending ${sb.accountNumber.slice(-4) || sb.iban.slice(-4)}`}
               onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void choose() }}>
