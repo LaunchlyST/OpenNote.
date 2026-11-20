@@ -2176,8 +2176,10 @@ export function sellerRouter() {
 
   /* payouts: Stripe-hosted Connect onboarding */
   me.post('/stripe/onboard', async (req: Authed, res) => {
-    const s = await mine(req, res)
-    if (!s) return
+    const found = await mine(req, res)
+    if (!found) return
+    // Use this mode's connection only: a test account id must never be sent to live Stripe (or the reverse).
+    const s = await activeConnection(found)
     const st = stripe()
     if (!st) return void res.status(503).json({ error: 'Payouts are not set up on this Desknoty server yet (STRIPE_SECRET_KEY).', setup: true })
     const returnTo = safeReturn((req.body as { returnTo?: unknown })?.returnTo)
@@ -2220,9 +2222,10 @@ export function sellerRouter() {
     const s = await mine(req, res)
     if (!s) return
     const st = stripe()
-    if (!st || !s.stripeAccountId) return void res.status(400).json({ error: 'Connect a bank account first.' })
+    const cur = await activeConnection(s)
+    if (!st || !cur.stripeAccountId) return void res.status(400).json({ error: 'Connect a bank account first.' })
     // Full-dashboard sellers sign in to their own Stripe Dashboard to manage payouts.
-    res.json({ url: seller.stripeApiBase ? `${seller.stripeApiBase}/dashboard/${s.stripeAccountId}` : 'https://dashboard.stripe.com/settings/payouts' })
+    res.json({ url: seller.stripeApiBase ? `${seller.stripeApiBase}/dashboard/${cur.stripeAccountId}` : 'https://dashboard.stripe.com/settings/payouts' })
   })
 
   /* TikTok Login Kit (web): optional */
