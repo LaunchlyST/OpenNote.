@@ -32,6 +32,8 @@ export interface PaymentSettings {
   }
   /** Every bank account the seller saved. `bank` above is the one buyers pay into. */
   savedBanks: SavedBank[]
+  /** Accounts proven to belong to the seller through their bank (Open Banking via TrueLayer): "sortcode:account" keys. */
+  verified: string[]
 }
 export type SavedBank = Omit<PaymentSettings['bank'], 'enabled'>
 const BANK_FIELDS = ['bankName', 'accountName', 'sortCode', 'accountNumber', 'iban', 'bic', 'instructions'] as const
@@ -43,6 +45,7 @@ export const defaultPayments = (): PaymentSettings => ({
   paypal: { enabled: false, email: '' },
   bank: { enabled: false, bankName: '', accountName: '', sortCode: '', accountNumber: '', iban: '', bic: '', instructions: '' },
   savedBanks: [],
+  verified: [],
 })
 
 export function readPayments(raw: string | null | undefined): PaymentSettings {
@@ -55,6 +58,7 @@ export function readPayments(raw: string | null | undefined): PaymentSettings {
       paypal: { ...d.paypal, ...(j.paypal ?? {}) },
       bank: { ...d.bank, ...(j.bank ?? {}) },
       savedBanks: Array.isArray(j.savedBanks) ? j.savedBanks.slice(0, 10).map((x) => pickBank(x as SavedBank)) : [],
+      verified: Array.isArray(j.verified) ? j.verified.filter((x): x is string => typeof x === 'string').slice(0, 20) : [],
     }
     // older stores saved just one account: it becomes the first saved one
     if (!out.savedBanks.length && bankComplete(out)) out.savedBanks = [pickBank(out.bank)]
@@ -288,3 +292,6 @@ export async function verifyPaypalWebhook(headers: Record<string, string | strin
   })
   return r.json.verification_status === 'SUCCESS'
 }
+
+/** The key a verified bank account is remembered by (digits only). Changing the details unverifies it. */
+export const bankKey = (b: { sortCode: string; accountNumber: string }) => `${(b.sortCode || '').replace(/\D/g, '')}:${(b.accountNumber || '').replace(/\D/g, '')}`

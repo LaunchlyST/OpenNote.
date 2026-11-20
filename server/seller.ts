@@ -35,7 +35,7 @@ import { migrateSeller } from './seller-migrations.ts'
 import { AMAZON_LINK_ERROR, checkAmazonUrl, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../shared/amazon-link.ts'
 import { isShortProductId } from '../shared/short-link.ts'
 import { newShortProductId } from './short-id.ts'
-import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices } from './payments.ts'
+import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices, bankKey } from './payments.ts'
 import type { PaymentSettings } from './payments.ts'
 
 /* ------------------------------------------------------------- config --- */
@@ -63,6 +63,13 @@ const seller = {
   accountCountry: (process.env.STRIPE_ACCOUNT_COUNTRY || 'GB').toUpperCase(),
 }
 const STRIPE_V2_VERSION = '2026-10-28.endive'
+/* TrueLayer (Open Banking): proves a bank account belongs to the seller. */
+const trueLayer = () => {
+  const id = (process.env.TRUELAYER_CLIENT_ID ?? '').trim()
+  const secret = (process.env.TRUELAYER_CLIENT_SECRET ?? '').trim()
+  const live = (process.env.TRUELAYER_ENV ?? 'sandbox').trim() === 'live'
+  return id && secret ? { id, secret, live, auth: live ? 'https://auth.truelayer.com' : 'https://auth.truelayer-sandbox.com', api: live ? 'https://api.truelayer.com' : 'https://api.truelayer-sandbox.com', redirect: `${seller.apiUrl}/api/truelayer/callback` } : null
+}
 const tiktokRedirect = () => (process.env.TIKTOK_REDIRECT_URI ?? `${seller.apiUrl}/api/seller/tiktok/callback`).trim()
 
 /**
@@ -1087,6 +1094,7 @@ function payoutView(s: StoreRow) {
     methods,
     // The seller's own settings (only ever sent to the seller).
     payments: p,
+    bankVerify: Boolean(trueLayer()),
   }
 }
 
@@ -2145,12 +2153,16 @@ export function sellerRouter() {
   me.get('/payments', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
-    res.set('Cache-Control', 'no-store').json({ payments: readPayments(s.payments), methods: readyMethods(s), paypalAvailable: paypalConfigured() })
+    res.set('Cache-Control', 'no-store').json({ payments: readPayments(s.payments), methods: readyMethods(s), paypalAvailable: paypalConfigured(), bankVerify: Boolean(trueLayer()) })
   })
   me.put('/payments', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
-    const next = cleanPayments(req.body, readPayments(s.payments))
+    const cur = readPayments(s.payments)
+    // With bank verification on, only an account proven to be the seller's can be chosen.
+    const use = (req.body as { useBank?: unknown })?.useBank
+    if (typeof use === 'number' && trueLayer() && cur.savedBanks[use] && !cur.verified.includes(bankKey(cur.savedBanks[use]))) return void res.status(409).json({ error: 'Verify this bank account first: press Verify and approve it in your bank app.', verify: true })
+    const next = cleanPayments(req.body, cur)
     if (typeof next === 'string') return void res.status(400).json({ error: next })
     await sql.run(`UPDATE seller_store SET payments = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(next), now(), s.id)
     res.json({ store: await storeView((await q.storeById(s.id))!) })
@@ -2231,6 +2243,22 @@ export function sellerRouter() {
     }
   })
 
+  /** Start proving a saved bank account is the seller's: they approve read access in their bank app. */
+  me.post('/bank/verify', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const tl = trueLayer()
+    if (!tl) return void res.status(503).json({ error: 'Bank verification isn’t switched on for this Desknoty server yet.' })
+    const i = Number((req.body as { index?: unknown })?.index)
+    const sb = Number.isInteger(i) && i >= 0 ? readPayments(s.payments).savedBanks[i] : undefined
+    if (!sb || !sb.sortCode || !sb.accountNumber) return void res.status(400).json({ error: 'Add the sort code and account number first.' })
+    const state = randomBytes(24).toString('base64url')
+    await sql.run(`DELETE FROM oauth_state WHERE "expiresAt" < ?`, Date.now())
+    await sql.run(`INSERT INTO oauth_state (state, "userId", provider, "returnTo", "expiresAt") VALUES (?, ?, ?, ?, ?)`, state, req.userId!, 'truelayer', `${bankKey(sb)}|${safeReturn((req.body as { returnTo?: unknown })?.returnTo)}`, Date.now() + 15 * 60 * 1000)
+    const q = new URLSearchParams({ response_type: 'code', client_id: tl.id, scope: 'info accounts', redirect_uri: tl.redirect, providers: tl.live ? 'uk-ob-all uk-oauth-all' : 'uk-cs-mock uk-ob-all uk-oauth-all', state })
+    res.json({ url: `${tl.auth}/?${q}` })
+  })
+
   /** Make one of the seller's Stripe bank accounts the one card earnings are paid out to. */
   me.post('/stripe/default-bank', async (req: Authed, res) => {
     const found = await mine(req, res)
@@ -2263,6 +2291,7 @@ export function sellerRouter() {
     const i = Number((req.body as { index?: unknown })?.index)
     const sb = Number.isInteger(i) && i >= 0 ? readPayments(s.payments).savedBanks[i] : undefined
     if (!sb) return void res.status(404).json({ error: 'Bank account not found.' })
+    if (trueLayer() && !readPayments(s.payments).verified.includes(bankKey(sb))) return void res.status(409).json({ error: 'Verify this bank account first: press Verify and approve it in your bank app.', verify: true })
     const digits = (v: string) => (v || '').replace(/\D/g, '')
     const acct = digits(sb.accountNumber)
     const sort = digits(sb.sortCode)
@@ -2355,6 +2384,41 @@ export function sellerRouter() {
   r.use('/api/seller', me)
 
   /** TikTok sends the browser back here. The state must match one we issued, for this signed-in user. */
+  r.get('/api/truelayer/callback', async (req: Authed, res) => {
+    const state = String(req.query.state ?? '')
+    const row = await sql.get<{ userId: string; returnTo: string; expiresAt: number }>(`SELECT "userId", "returnTo", "expiresAt" FROM oauth_state WHERE state = ? AND provider = 'truelayer'`, state)
+    if (row) await sql.run(`DELETE FROM oauth_state WHERE state = ?`, state)
+    const [key, to = '/app/pro'] = (row?.returnTo ?? '').split('|')
+    const back = (result: string) => res.redirect(302, `${seller.siteUrl}${to}${to.includes('?') ? '&' : '?'}bank=${result}`)
+    const tl = trueLayer()
+    if (!tl || !row || row.expiresAt < Date.now()) return back('expired')
+    const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) }).catch(() => null)
+    if (!session || session.user.id !== row.userId) return back('wrong-account')
+    if (req.query.error || !req.query.code) return back('cancelled')
+    try {
+      const tok = await fetch(`${tl.auth}/connect/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: tl.id, client_secret: tl.secret, redirect_uri: tl.redirect, code: String(req.query.code) }),
+      }).then((r2) => r2.json() as Promise<{ access_token?: string }>)
+      if (!tok.access_token) return back('failed')
+      const accts = await fetch(`${tl.api}/data/v1/accounts`, { headers: { Authorization: `Bearer ${tok.access_token}` } })
+        .then((r2) => r2.json() as Promise<{ results?: Array<{ account_number?: { number?: string; sort_code?: string } }> }>)
+      // Read-only: the bank lists the accounts this person can access; only the numbers are compared.
+      const owned = new Set((accts.results ?? []).map((a) => bankKey({ sortCode: a.account_number?.sort_code ?? '', accountNumber: a.account_number?.number ?? '' })))
+      if (!owned.has(key)) return back('mismatch')
+      const st = await sql.get<StoreRow>(`SELECT * FROM seller_store WHERE "userId" = ?`, row.userId)
+      if (!st) return back('failed')
+      const pay = readPayments(st.payments)
+      if (!pay.verified.includes(key)) pay.verified.push(key)
+      await sql.run(`UPDATE seller_store SET payments = ?, "updatedAt" = ? WHERE id = ?`, JSON.stringify(pay), now(), st.id)
+      back('verified')
+    } catch (err) {
+      console.error('[seller] TrueLayer verification failed', (err as Error).message)
+      back('failed')
+    }
+  })
+
   r.get('/api/seller/tiktok/callback', async (req: Authed, res) => {
     const state = String(req.query.state ?? '')
     const row = await sql.get<{ userId: string; returnTo: string; expiresAt: number }>(`SELECT "userId", "returnTo", "expiresAt" FROM oauth_state WHERE state = ? AND provider = 'tiktok'`, state)

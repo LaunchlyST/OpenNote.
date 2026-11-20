@@ -196,9 +196,19 @@ export function SellerStudio() {
       setNotice(
         tiktok === 'connected' ? 'TikTok connected.' : tiktok === 'cancelled' ? 'TikTok connection was cancelled.' : 'TikTok connection failed. You can try again, or continue without TikTok.',
       )
-    if (stripe || tiktok) {
+    const bank = q.get('bank')
+    if (bank)
+      setNotice(
+        bank === 'verified' ? 'Bank account verified ✓ You can now choose it under Payouts → Your Bank Accounts.'
+          : bank === 'cancelled' ? 'Bank verification was cancelled. Nothing changed.'
+          : bank === 'mismatch' ? 'Your bank didn’t list that sort code and account number, so it wasn’t verified. Check the details (Edit) and try again with the bank that holds this account.'
+          : bank === 'wrong-account' ? 'You were signed in to a different Desknoty account. Sign in to the right one and verify again.'
+          : 'Bank verification didn’t finish. Please try again.',
+      )
+    if (stripe || tiktok || bank) {
       q.delete('stripe')
       q.delete('tiktok')
+      q.delete('bank')
       window.history.replaceState(window.history.state, '', `${window.location.pathname}?${q}`)
     }
   }, [load])
@@ -3384,6 +3394,14 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
     try { afterSave((await sellerApi.removeBank(i)).store) } catch (e) { setBankErr((e as Error).message) }
   }
   const saved = payments.savedBanks ?? []
+  // Open Banking verification: an account is verified once the seller approved it in their bank app.
+  const verifyOn = Boolean(store.payouts.bankVerify)
+  const keyOf = (b: { sortCode: string; accountNumber: string }) => `${(b.sortCode || '').replace(/\D/g, '')}:${(b.accountNumber || '').replace(/\D/g, '')}`
+  const isVerified = (b: { sortCode: string; accountNumber: string }) => (payments.verified ?? []).includes(keyOf(b))
+  const verify = async (i: number) => {
+    setBankErr(null)
+    try { window.location.assign((await sellerApi.verifyBank(i, returnPath())).url) } catch (e) { setBankErr((e as Error).message) }
+  }
   const isActive = (b: SavedBank) => (Boolean(b.iban) && b.iban === payments.bank.iban) || (Boolean(b.accountNumber) && b.accountNumber === payments.bank.accountNumber && b.sortCode === payments.bank.sortCode)
   const bank = payments.bank
   const bankSet = bankComplete(payments)
@@ -3515,10 +3533,11 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           }
           return (
             <article key={`${sb.sortCode}${sb.accountNumber}${sb.iban}`} className={cn('wl-bank', active && 'wl-bank-active', !active && 'wl-bank-pick')} aria-label={`${sb.bankName || 'Bank'} ending ${sb.accountNumber.slice(-4) || sb.iban.slice(-4)}`}
-              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button')) void choose() }}>
+              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button') && (!verifyOn || isVerified(sb))) void choose() }}>
               <header>
                 <BankMark name={sb.bankName} />
                 <b>{sb.bankName || 'Bank account'}</b>
+                {verifyOn && isVerified(sb) && <em className="wl-tag wl-verified" title="Proven through your bank app">Verified ✓</em>}
                 {active ? <em className={cn('wl-tag', methods.includes('bank') ? 'on' : 'off')}>{methods.includes('bank') ? 'In use' : 'Off'}</em> : <button type="button" className="wl-x" aria-label={`Remove ${sb.bankName || 'this bank account'}`} onClick={() => void removeBank(i)}>✕</button>}
               </header>
               <dl>
@@ -3528,9 +3547,11 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
               </dl>
               <footer>
                 <small>{active ? ['Buyers pay here', twin ? 'card payouts' : ''].filter(Boolean).join(' · ') : ''}</small>
-                {active
-                  ? <button type="button" className="wl-link" onClick={() => setBankOpen('edit')}>Edit</button>
-                  : <button type="button" className="wl-btn wl-btn-main" onClick={() => void choose()}>Use this account</button>}
+                {verifyOn && !isVerified(sb) && !isActive(sb)
+                  ? <button type="button" className="wl-btn wl-btn-main" onClick={() => void verify(i)}>Verify in bank app</button>
+                  : active
+                    ? <span className="wl-foot-acts">{verifyOn && !isVerified(sb) && <button type="button" className="wl-link" onClick={() => void verify(i)}>Verify</button>}<button type="button" className="wl-link" onClick={() => setBankOpen('edit')}>Edit</button></span>
+                    : <button type="button" className="wl-btn wl-btn-main" onClick={() => void choose()}>Use this account</button>}
               </footer>
             </article>
           )

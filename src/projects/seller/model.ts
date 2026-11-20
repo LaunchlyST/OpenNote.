@@ -297,6 +297,8 @@ export interface StoreView {
     /** Any payment method is ready (Stripe, PayPal or bank transfer). */
     checkoutReady: boolean
     stripeReady?: boolean
+    /** Open Banking bank verification (TrueLayer) is switched on. */
+    bankVerify?: boolean
     methods?: PayMethod[]
     payments?: PaymentSettings
   }
@@ -310,6 +312,8 @@ export interface PaymentSettings {
   bank: { enabled: boolean; bankName: string; accountName: string; sortCode: string; accountNumber: string; iban: string; bic: string; instructions: string }
   /** Every saved bank account; `bank` is the one buyers pay into. */
   savedBanks?: SavedBank[]
+  /** Bank accounts proven to be the seller's ("sortcode:account" digits). */
+  verified?: string[]
 }
 export type SavedBank = Omit<PaymentSettings['bank'], 'enabled'>
 

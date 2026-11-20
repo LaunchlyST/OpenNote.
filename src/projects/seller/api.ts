@@ -79,6 +79,7 @@ export const sellerApi = {
   withdraw: (currency: string, bankId?: string) => call<{ payout: { id: string; amountMinor: number; currency: string; status: string; arrival: string } }>('POST', '/api/seller/payouts', { currency, bankId }),
   orders: (offset = 0) => call<{ nextOffset: number | null; orders: Array<{ id: string; product: string; amountMinor: number; currency: string; status: string; buyer: string | null; createdAt: string; method?: PayMethod; reference?: string | null; buyerClaimedAt?: string | null; payerName?: string | null; payerBank?: string | null; hidden?: boolean }> }>('GET', `/api/seller/orders?offset=${offset}`),
   hideOrder: (id: string) => call<{ ok: true }>('DELETE', `/api/seller/orders/${encodeURIComponent(id)}`),
+  verifyBank: (index: number, returnTo?: string) => call<{ url: string }>('POST', '/api/seller/bank/verify', { index, returnTo }),
   useBank: (index: number) => call<{ store: StoreView }>('PUT', '/api/seller/payments', { useBank: index }),
   removeBank: (index: number) => call<{ store: StoreView }>('PUT', '/api/seller/payments', { removeBank: index }),
   savePayments: (p: Partial<{ [K in keyof PaymentSettings]: Partial<PaymentSettings[K]> }>) => call<{ store: StoreView }>('PUT', '/api/seller/payments', p),
