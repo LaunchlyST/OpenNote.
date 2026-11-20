@@ -598,6 +598,19 @@ function Studio({
     }
   }, [activeSlide, activeSlideBlock])
   const closePart = useCallback(() => { setEditPart(null); setPartPreview(null) }, [])
+  // Clicking outside the selected card and its settings panel deselects it.
+  useEffect(() => {
+    if (!editPart) return
+    const down = (e: PointerEvent) => {
+      const t = e.target as HTMLElement | null
+      if (!t || !t.isConnected) return
+      if (t.closest('.sp-card, .pe-part, .ss-preview, .ss-modal, .ab, [role="dialog"], [role="menu"], .pg-bar, .ss-tabs')) return
+      setEditPart(null)
+      setPartPreview(null)
+    }
+    document.addEventListener('pointerdown', down)
+    return () => document.removeEventListener('pointerdown', down)
+  }, [editPart])
   /** Double-tapping a page tab hides that page; the add-page button brings a page back. */
   const toggleHiddenPage = useCallback((i: number) => {
     // Home (0) is never hidden.

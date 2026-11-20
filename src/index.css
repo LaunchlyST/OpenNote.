@@ -4975,7 +4975,7 @@ select.ss-input option {
     inset 0 1px 0 rgba(255, 255, 255, 0.12),
     0 40px 80px -30px rgba(0, 0, 0, 0.8),
     0 0 0 1px #0b0b0f;
-  animation: ss-float 6s ease-in-out infinite;
+  /* no floating: the editing preview must stay still under the pointer */
 }
 @keyframes ss-float {
   50% {
