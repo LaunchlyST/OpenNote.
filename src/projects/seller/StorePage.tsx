@@ -862,7 +862,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
   return (
     <div className="sp-buyrow">
       <PriceTag prod={prod} edit={!live} />
-      <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={live ? disabled : undefined} aria-disabled={disabled || undefined} onClick={() => { if (!disabled) onBuy?.(prod) }} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
+      <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={live ? disabled : undefined} aria-disabled={(live && disabled) || undefined} onClick={() => { if (!disabled) onBuy?.(prod) }} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
         {buying === prod.id ? 'Opening checkout…' : prod.cta?.text || 'Buy now'}
       </button>
     </div>
