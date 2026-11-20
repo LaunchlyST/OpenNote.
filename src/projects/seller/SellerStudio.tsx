@@ -3402,7 +3402,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
   /** Turn card payments (Stripe) on or off at checkout. */
   const useStripe = async (on: boolean) => {
     setErr(null)
-    try { afterSave((await sellerApi.savePayments({ stripe: { enabled: on } })).store) } catch (e) { setErr((e as Error).message) }
+    // One place the money goes: choosing Stripe turns bank transfer off, and the reverse.
+    try { afterSave((await sellerApi.savePayments(on ? { stripe: { enabled: true }, bank: { enabled: false } } : { stripe: { enabled: false } })).store) } catch (e) { setErr((e as Error).message) }
   }
   const afterSave = (v: StoreView) => {
     setPayments(v.payouts.payments ?? payments)
@@ -3427,6 +3428,8 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
     try { window.location.assign((await sellerApi.verifyBank(i, returnPath())).url) } catch (e) { setBankErr((e as Error).message) }
   }
   const isActive = (b: SavedBank) => (Boolean(b.iban) && b.iban === payments.bank.iban) || (Boolean(b.accountNumber) && b.accountNumber === payments.bank.accountNumber && b.sortCode === payments.bank.sortCode)
+  // Where the money goes is one choice: Stripe (cards) or the bank box in use.
+  const stripeInUse = payments.stripe.enabled && !payments.bank.enabled
   const bank = payments.bank
   const bankSet = bankComplete(payments)
   const main = data?.totals[0]
@@ -3487,10 +3490,10 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             )}
             {s === 'ready' && (() => {
               // The account you chose under "Your Bank Accounts" is where card money goes.
-              const to = banks.find((b) => b.isDefault) ?? banks[0]
-              return to
-                ? <button type="button" className="wl-link" onClick={() => document.querySelector('.wl-banks')?.scrollIntoView({ behavior: 'smooth', block: 'center' })} title="Change it under Your Bank Accounts"><BankMark name={to.bankName} /> Paid to {to.bankName} ••{to.last4}</button>
-                : null
+              // Shows what you chose: Stripe, or the bank box that's in use.
+              if (stripeInUse) return <span className="wl-link wl-dest"><span className="wl-stripe-mark" aria-hidden="true">S</span> Connected to Stripe</span>
+              const inUse = saved.find((x) => isActive(x)) ?? null
+              return inUse ? <span className="wl-link wl-dest"><BankMark name={inUse.bankName} /> Paid to {inUse.bankName} ••{inUse.accountNumber.slice(-4) || inUse.iban.slice(-4)}</span> : null
             })()}
           </div>
           </>
@@ -3549,9 +3552,11 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
         {saved.map((sb, i) => {
           const twin = banks.find((b) => sameBank(b, sb))
           // In use = buyers pay into it, and (when Stripe has the same account) card payouts go there too.
-          const active = isActive(sb) && (s !== 'ready' || Boolean(twin?.isDefault))
+          const active = isActive(sb) && payments.bank.enabled && !payments.stripe.enabled
           const choose = async () => {
-            if (!isActive(sb)) await pickBank(i)
+            if (!isActive(sb) || !payments.bank.enabled) await pickBank(i)
+            // One place the money goes: choosing a bank turns card payments (Stripe) off.
+            if (payments.stripe.enabled) { try { afterSave((await sellerApi.savePayments({ stripe: { enabled: false } })).store) } catch (e) { setBankErr((e as Error).message) } }
             // Stripe pays card earnings to the same account (added to Stripe if it isn't there yet).
             if (s === 'ready' && (!twin || !twin.isDefault)) {
               try { await sellerApi.useSavedBankInStripe(i); await load() } catch (e) { setErr((e as Error).message) }
@@ -3559,7 +3564,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           }
           return (
             <article key={`${sb.sortCode}${sb.accountNumber}${sb.iban}`} className={cn('wl-bank', active && 'wl-bank-active', !active && 'wl-bank-pick')} aria-label={`${sb.bankName || 'Bank'} ending ${sb.accountNumber.slice(-4) || sb.iban.slice(-4)}`}
-              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button') && (!verifyOn || isVerified(sb))) void choose() }}>
+              onClick={(e) => { if (!active && !(e.target as HTMLElement).closest('button') && (!verifyOn || isVerified(sb) || isActive(sb))) void choose() }}>
               <header>
                 <BankMark name={sb.bankName} />
                 <b>{sb.bankName || 'Bank account'}</b>
@@ -3573,7 +3578,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
               </dl>
               <footer>
                 <small>{active ? ['Buyers pay here', twin ? 'card payouts' : ''].filter(Boolean).join(' · ') : ''}</small>
-                {verifyOn && !isVerified(sb) && !isActive(sb)
+                {verifyOn && !isVerified(sb) && !isActive(sb) && !active
                   ? <button type="button" className="wl-btn wl-btn-main" onClick={() => void verify(i)}>Verify in bank app</button>
                   : active
                     ? <span className="wl-foot-acts">{verifyOn && !isVerified(sb) && <button type="button" className="wl-link" onClick={() => void verify(i)}>Verify</button>}<button type="button" className="wl-link" onClick={() => setBankOpen('edit')}>Edit</button></span>
@@ -3599,7 +3604,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       </div>
 
       {/* Stripe: status, refresh and the one action, together */}
-      <section className="ss-paycard wl-stripe" aria-label="Card payments with Stripe">
+      <section className={cn('ss-paycard wl-stripe', stripeInUse && 'wl-stripe-on', !stripeInUse && s === 'ready' && 'wl-bank-pick')} aria-label="Card payments with Stripe" onClick={(e) => { if (!stripeInUse && s === 'ready' && !(e.target as HTMLElement).closest('button')) void useStripe(true) }}>
         <div className="ss-paycard-head">
           <span className="ss-paycard-icon"><Landmark className="h-4 w-4" /></span>
           <div className="min-w-0">
@@ -3616,14 +3621,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
               <>
                 {/* Ready: the bank is chosen here in Desknoty (Use this account), not in Stripe. */}
                 {/* Like the bank boxes: Use Stripe switches card payments on; In use when it is. */}
-                {payments.stripe.enabled ? (
-                  <>
-                    <em className="wl-tag on">In use</em>
-                    <button type="button" className="ss-ghost" onClick={() => void useStripe(false)}>Stop using Stripe</button>
-                  </>
-                ) : (
-                  <button type="button" className="ss-primary" onClick={() => void useStripe(true)}>Use Stripe</button>
-                )}
+                {stripeInUse ? <em className="wl-tag on">In use</em> : <button type="button" className="ss-primary" onClick={() => void useStripe(true)}>Use Stripe</button>}
                 <button type="button" className="wl-link" onClick={() => void go()} disabled={busy}>{busy ? 'Opening…' : 'Open Stripe'} <ExternalLink className="h-3 w-3" /></button>
               </>
             ) : (

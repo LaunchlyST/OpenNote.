@@ -9024,3 +9024,7 @@ select.ss-input option {
 @media (max-width: 520px) { .wl-plist li { grid-template-columns: 1fr auto; } .wl-pbank { grid-column: 1; } }
 .ss-paycard-actions .ss-primary .wl-mark { width: 18px; height: 18px; border-radius: 5px; font-size: 10px; } .ss-paycard-actions .ss-primary .wl-mark svg { width: 12px; height: 12px; } .ss-paycard-actions .ss-primary { display: inline-flex; align-items: center; gap: 8px; } .ss-paycard-actions { align-items: center; flex-wrap: wrap; }
 .wl-verified { background: #dcfce7; color: #166534; } .wl-foot-acts { display: inline-flex; gap: 10px; }
+.wl-dest { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+.wl-stripe-mark { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 5px; background: #635bff; color: #fff; font: 800 11px/1 system-ui, sans-serif; }
+.wl-stripe-on { outline: 2px solid #111; outline-offset: -2px; }
+.wl-stripe.wl-bank-pick { cursor: pointer; }
