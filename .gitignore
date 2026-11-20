@@ -30,6 +30,13 @@ dist-ssr
 *.sln
 *.sw?
 
+# Machine-local artifacts: the Supabase CLI's cache and loose notes kept beside
+# the repo. They stay on disk but are never part of a commit.
+supabase/.temp/
+BP-OJBS/
+review-bp-ojbs.txt
+active-agents-check.txt
+
 # Secrets and local database (never commit)
 .env
 .env.*

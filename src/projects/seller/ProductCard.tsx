@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
-import { Check, ChevronLeft, ChevronRight, Download, Flag, Heart, Share2, X as XIcon } from 'lucide-react'
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
+import { Check, ChevronLeft, ChevronRight, Download, Flag, Heart, MoreVertical, Share2, X as XIcon } from 'lucide-react'
 import { storeApi } from './api'
 import type { PublicReview } from './api'
 import { CARD_BACKGROUNDS, ensureFonts, mediaUrl, textStyleCss } from './model'
@@ -251,10 +251,15 @@ export type CardProps = {
   onToggleSave?: () => void
   /**
    * Editor only. Passing this switches the card into editing mode: outlines and
-   * labels while hovering, and `data-edit-part` markers the preview uses to open
-   * that part's settings. Public cards never pass it, so buyers see no trace.
+   * labels while hovering, `data-edit-part` markers the preview uses to open
+   * that part's settings, in-place title/description editing, and the ⋯ menu
+   * (right-click's accessible twin).
    */
-  edit?: { part?: CardPart | null; onText?: (field: 'title' | 'desc', value: string) => void }
+  edit?: {
+    part?: CardPart | null
+    onText?: (field: 'title' | 'desc', value: string) => void
+    onMenu?: (e: ReactMouseEvent<HTMLButtonElement>) => void
+  }
 }
 
 const PART_LABEL: Record<CardPart, string> = { cover: 'Cover', price: 'Price', title: 'Title', desc: 'Description', button: 'Button', card: 'Card background' }
@@ -333,6 +338,18 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
         ) : null}
         {edit ? <div className={cn('sp-part-btn', part('button'))} {...mark('button')}>{buy}</div> : buy}
       </div>
+      {edit?.onMenu && (
+        <button
+          type="button"
+          className="sp-card-menu"
+          aria-label={`More for ${p.title}`}
+          aria-haspopup="menu"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); edit.onMenu!(e) }}
+        >
+          <MoreVertical className="h-3.5 w-3.5" />
+        </button>
+      )}
     </article>
   )
 }
