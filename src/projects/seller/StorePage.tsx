@@ -708,8 +708,21 @@ function SlideCarousel({ slides, withEnd, blockId, interactive, activeSlide, onC
 function ComingSoon({ className, in: shown = true, onAdd }: { className?: string; in?: boolean; onAdd?: () => void }) {
   return (
     <section className={'sp-block sp-tv' + (shown ? ' is-in' : '') + (className ? ' ' + className : '')} aria-label="Coming soon">
-      <div className="tv-set" aria-hidden="true">
-        <div className="tv-screen"><span className="tv-text">Coming soon</span></div>
+      <div className="tv-lift" aria-hidden="true">
+        <svg className="tv-balloons" viewBox="0 0 200 150">
+          <defs>
+            <radialGradient id="tvb1" cx="35%" cy="30%" r="70%"><stop offset="0" stopColor="#fff7ef" /><stop offset=".55" stopColor="#efe2d0" /><stop offset="1" stopColor="#cdb9a0" /></radialGradient>
+            <radialGradient id="tvb2" cx="35%" cy="30%" r="70%"><stop offset="0" stopColor="#ff8a8a" /><stop offset=".5" stopColor="#d1232c" /><stop offset="1" stopColor="#8a0d15" /></radialGradient>
+            <radialGradient id="tvb3" cx="35%" cy="30%" r="70%"><stop offset="0" stopColor="#ffffff" /><stop offset=".55" stopColor="#dfe7ef" /><stop offset="1" stopColor="#a9b9c9" /></radialGradient>
+          </defs>
+          <path d="M100 150 C96 120 70 96 62 66" /><path d="M100 150 C100 116 102 84 104 48" /><path d="M100 150 C106 122 128 100 140 72" />
+          <g className="b b1"><ellipse cx="62" cy="44" rx="25" ry="30" fill="url(#tvb1)" /><path d="M58 74 l4 -3 4 3z" fill="#cdb9a0" /></g>
+          <g className="b b3"><ellipse cx="140" cy="50" rx="23" ry="28" fill="url(#tvb3)" /><path d="M136 78 l4 -3 4 3z" fill="#a9b9c9" /></g>
+          <g className="b b2"><ellipse cx="104" cy="28" rx="26" ry="31" fill="url(#tvb2)" /><path d="M100 59 l4 -3 4 3z" fill="#8a0d15" /></g>
+        </svg>
+        <div className="tv-set">
+          <div className="tv-screen"><span className="tv-text">Coming soon</span></div>
+        </div>
       </div>
       {onAdd && <button type="button" className="tv-add" onClick={(e) => { e.stopPropagation(); onAdd() }}>+ Add product</button>}
     </section>
