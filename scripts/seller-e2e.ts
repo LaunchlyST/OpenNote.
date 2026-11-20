@@ -205,6 +205,19 @@ try {
         check(`${tag}: Back to Products returns to the list`, backToList, 'list did not come back')
       }
 
+      // 3b2. Cancelling "Add product block" must not leave an empty block behind.
+      const countProductBlocks = async () => {
+        const store = (await api('GET', '/api/seller/store', undefined, C)).json.store
+        return (store.draft.blocks as Array<{ type: string }>).filter((b) => b.type === 'featured' || b.type === 'grid').length
+      }
+      const blocksBeforeCancel = await countProductBlocks()
+      await page.getByRole('button', { name: 'Add product block' }).first().click()
+      const pickerVisible = await page.getByRole('dialog', { name: 'Add a product' }).isVisible()
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(2200)
+      const blocksAfterCancel = await countProductBlocks()
+      check(`${tag}: cancelling Add product block leaves no empty block`, pickerVisible && blocksAfterCancel === blocksBeforeCancel, `before=${blocksBeforeCancel} after=${blocksAfterCancel}`)
+
       // 3c. The product block is a three-slot carousel: the two products, then the
       //     empty Product 3 slot. The dots follow the real slides, so there are
       //     three of them and the third one reaches the empty slot.

@@ -627,13 +627,25 @@ function Studio({
     if (i <= 0) return
     setHiddenPages((h) => (h.includes(i) ? h.filter((x) => x !== i) : [...h, i]))
   }, [])
-  /** Where the product picker should place the product it chooses: into a slide, or as a new block below. */
-  const pendingAdd = useRef<{ kind: 'slide'; blockId: string; slideIndex: number } | { kind: 'below'; blockId: string } | null>(null)
+  /** Where the product picker should place the product it chooses: a slide, a new block below, or a brand-new block. */
+  type PendingAdd = { kind: 'slide'; blockId: string; slideIndex: number } | { kind: 'below'; blockId: string } | { kind: 'newBlock'; pageIndex: number; blockIndex: number }
+  const pendingAdd = useRef<PendingAdd | null>(null)
   /** The picker chose a product: place it where the owner asked for it. */
   const onPickProduct = (productId: string) => {
     const p = pendingAdd.current
     pendingAdd.current = null
     if (!p) return
+    if (p.kind === 'newBlock') {
+      const blockId = addProductToNewBlock(p.pageIndex, p.blockIndex, productId)
+      if (!blockId) return
+      setPicked(blockId)
+      setActiveSlideBlock(blockId)
+      setActiveSlide(0)
+      setFromCarousel(false)
+      setTab('page')
+      setEditPart(null)
+      return
+    }
     if (p.kind === 'slide') {
       void addProductToSlide(p.blockId, p.slideIndex, productId)
       // Stay in the block editor: the chosen product must appear in this slide
@@ -805,11 +817,10 @@ function Studio({
   }
 
   /**
-   * Add a product to slide `slideIndex` of the product block `blockId` — the
-   * "add product slide" flow. The chosen product lands in that slide; the others
-   * keep theirs.
+   * Create a product block only once a product has been chosen. Previously the
+   * picker pre-created an empty block, and cancelling left it behind as empty space.
    */
-  const ensureProductBlock = (pageIndex: number, blockIndex: number): string | null => {
+  function addProductToNewBlock(pageIndex: number, blockIndex: number, productId: string): string | null {
     const blocks = blocksOf(page, pageIndex)
     const productBlocks = blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
     if (productBlocks[blockIndex]) return productBlocks[blockIndex].id
@@ -817,7 +828,8 @@ function Studio({
       setErr(`${pageLabel(pageIndex)} already has ${MAX_PRODUCT_BLOCKS_PER_PAGE} product blocks. Move one away first.`)
       return null
     }
-    const nb = newBlock('featured')
+    const base = newBlock('featured')
+    const nb = { ...base, data: { ...base.data, productId, slides: [{ ...newSlide('digital', productId) }] } } as Block
     const lastProductIdx = blocks.reduce((acc, b, i) => (b.type === 'featured' || b.type === 'grid') ? i : acc, -1)
     const insertAtIdx = lastProductIdx >= 0 ? lastProductIdx + 1 : (pageIndex === 0 ? Math.max(0, blocks.length - 1) : blocks.length)
     const next = insertAt(blocks, nb, insertAtIdx)
@@ -826,12 +838,19 @@ function Studio({
     return nb.id
   }
   const requestAddSlot = (pageIndex: number, blockIndex: number) => {
-    const blockId = ensureProductBlock(pageIndex, blockIndex)
-    if (!blockId) return
-    const blk = storePages(page)[pageIndex]?.blocks.find((b) => b.id === blockId)
-    const slides = blk ? slidesOf(blk) : []
-    pendingAdd.current = { kind: 'slide', blockId, slideIndex: slides.length }
-    requestAdd({ kind: 'slide', blockId, slideIndex: slides.length })
+    const blocks = blocksOf(page, pageIndex)
+    const productBlocks = blocks.filter((b) => b.type === 'featured' || b.type === 'grid')
+    const existing = productBlocks[blockIndex]
+    if (existing) {
+      const slides = slidesOf(existing)
+      const req = { kind: 'slide' as const, blockId: existing.id, slideIndex: slides.length }
+      pendingAdd.current = req
+      requestAdd(req)
+      return
+    }
+    // Don't write an empty block before the picker is answered: cancel must leave no trace.
+    pendingAdd.current = { kind: 'newBlock', pageIndex, blockIndex }
+    setPickReq({ kind: 'slide', blockId: '', slideIndex: 0 })
   }
   /** requestAddSlot, addressed by block id — the phone preview only knows the block. */
   const requestAddSlotForBlock = (blockId: string) => {
