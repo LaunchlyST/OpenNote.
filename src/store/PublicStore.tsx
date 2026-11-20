@@ -234,6 +234,34 @@ const WALLET_LABEL: Record<Wallet, string> = { card: 'Debit or credit card', app
 const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', paypal: 'paypal', bank: 'bank', bankapp: 'stripe' }
 
 /** A bank's app icon when we have its logo; otherwise a neat initial. */
+// Banks whose app can be opened from a phone browser (the buyer still types the payment themselves).
+const APP_LINK: Record<string, string> = { revolut: 'revolut://', monzo: 'monzo://' }
+const PAYER_BANKS = [...BANK_ICONS.map((b) => b.name), 'Lloyds', 'NatWest', 'Santander', 'Nationwide', 'Halifax', 'Starling Bank', 'TSB', 'Virgin Money', 'Co-operative Bank', 'Metro Bank', 'Chase'].filter((v, i, a) => a.indexOf(v) === i)
+/** "Choose your bank": logos, search, a clear selected state. Only the bank's name is kept (never account numbers). */
+function BankPicker({ value, onPick, onClose }: { value: string; onPick: (n: string) => void; onClose: () => void }) {
+  const [q, setQ] = useState('')
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }
+    document.addEventListener('keydown', k, true)
+    return () => document.removeEventListener('keydown', k, true)
+  }, [onClose])
+  const list = PAYER_BANKS.filter((n) => n.toLowerCase().includes(q.trim().toLowerCase()))
+  return (
+    <div className="co3-bp-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="co3-bp" role="dialog" aria-modal="true" aria-label="Choose your bank">
+        <header><b>Choose your bank</b><button type="button" onClick={onClose} aria-label="Close">✕</button></header>
+        <input autoFocus className="co3-bp-search" placeholder="Search for your bank" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search for your bank" />
+        <ul role="listbox" aria-label="Banks">
+          {list.map((n) => (
+            <li key={n}><button type="button" role="option" aria-selected={value === n} className={value === n ? 'on' : undefined} onClick={() => onPick(n)}><BankIcon name={n} /><span>{n}</span>{value === n && <i aria-hidden="true">✓</i>}</button></li>
+          ))}
+          <li><button type="button" role="option" aria-selected={value === 'Other bank'} className={value === 'Other bank' ? 'on' : undefined} onClick={() => onPick('Other bank')}><BankIcon name="Other bank" /><span>{q.trim() && !list.length ? `My bank isn’t listed` : 'Other bank'}</span>{value === 'Other bank' && <i aria-hidden="true">✓</i>}</button></li>
+        </ul>
+      </div>
+    </div>
+  )
+}
+
 function BankIcon({ name }: { name: string }) {
   const icon = bankIcon(name)
   if (icon) return <span className="co2-bi" style={{ background: icon.bg, color: icon.fg }} aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor"><path d={icon.path} /></svg></span>
@@ -605,6 +633,7 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
   const [wallet, setWallet] = useState<Wallet>('card')
   const [payTo, setPayTo] = useState<number>(() => (banks.find((b) => b.inUse) ?? banks[0])?.index ?? -1)
   const [remember, setRemember] = useState(true)
+  const [pickingBank, setPickingBank] = useState(false)
   // Card typed right here (Stripe Payment Element) when the server offers it; otherwise Stripe's page.
   const cardRef = useRef<CardPayHandle>(null)
   const [cardReady, setCardReady] = useState(false)
@@ -688,16 +717,13 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
                     </div>
                   </label>
                 )}
-                <label className="co3-field">
+                <div className="co3-field">
                   <span>Your bank (you’ll pay from its app)</span>
-                  <div className="co3-selectwrap">
-                    <select value={payerBank} onChange={(e) => setPayerBank(e.target.value)} required aria-label="Your bank">
-                      <option value="" disabled>Choose your bank</option>
-                      {[...BANK_ICONS.map((b) => b.name), 'Lloyds', 'NatWest', 'Santander', 'Nationwide', 'Halifax', 'Other bank'].filter((v, i, a) => a.indexOf(v) === i).map((n) => <option key={n} value={n}>{n}</option>)}
-                    </select>
-                    {payerBank && payerBank !== 'Other bank' && <BankIcon name={payerBank} />}
-                  </div>
-                </label>
+                  <button type="button" className={'co3-bankbtn' + (payerBank ? ' on' : '')} onClick={() => setPickingBank(true)} aria-haspopup="dialog">
+                    {payerBank ? <><BankIcon name={payerBank} /><b>{payerBank}</b><small>Change</small></> : <><span className="co3-bankq" aria-hidden="true">?</span><b>Choose your bank</b><small>›</small></>}
+                  </button>
+                  {pickingBank && <BankPicker value={payerBank} onPick={(n) => { setPayerBank(n); setPickingBank(false) }} onClose={() => setPickingBank(false)} />}
+                </div>
                 <label className="co3-field"><span>Name on your bank account</span><input autoComplete="name" placeholder="Jane Smith" value={payerName} onChange={(e) => setPayerName(e.target.value)} required maxLength={80} aria-label="Name on your bank account" /></label>
                 <label className="co3-field"><span>Email for your download</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" /></label>
                 
@@ -794,6 +820,7 @@ function BankPending({ order, claim }: { order: PublicOrder; claim?: () => Promi
         <div>
           <h1>Pay {amount} from your {from ?? 'bank'} app</h1>
           <p>Open {from ? `the ${from}` : 'your banking'} app, send a payment to the details below, and use the reference exactly.</p>
+          {from && APP_LINK[from.toLowerCase()] && <a className="sp-btn bp-open" href={APP_LINK[from.toLowerCase()]}>Open {from} app</a>}
         </div>
       </div>
       <dl className="bp-details">
