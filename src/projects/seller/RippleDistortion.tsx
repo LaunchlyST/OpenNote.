@@ -132,6 +132,10 @@ void main() {
 
 type Quality = 'low' | 'medium' | 'high'
 
+/** The original component's default photo. */
+export const DEFAULT_RIPPLE_SRC =
+  'https://images.unsplash.com/photo-1782977389500-dd7adad33ebe?q=80&w=3416&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
+
 export interface RippleDistortionProps {
   /** An image URL, or a canvas to use as the texture. */
   source: string | HTMLCanvasElement
@@ -206,14 +210,14 @@ export default function RippleDistortion(props: RippleDistortionProps) {
       uResolution: { value: [1, 1] },
       uTextureSize: { value: [1, 1] },
       uTexel: { value: [1, 1] },
-      uTint: { value: hexToRGB(p0.tint ?? '#ffffff') },
+      uTint: { value: hexToRGB(p0.tint ?? '#6ec9f7') },
       uHighlight: { value: hexToRGB(p0.highlightColor ?? '#ffffff') },
       uStrength: { value: p0.strength ?? 0.2 },
       uSwirl: { value: p0.swirl ?? 1 },
       uDispersion: { value: p0.dispersion ?? 0 },
       uGlint: { value: p0.glint ?? 0 },
-      uTintAmount: { value: p0.tintAmount ?? 0 },
-      uGrayscale: { value: p0.grayscale ? 1 : 0 },
+      uTintAmount: { value: p0.tintAmount ?? 0.1 },
+      uGrayscale: { value: (p0.grayscale ?? true) ? 1 : 0 },
       uTime: { value: 0 },
       uFlow: { value: reduceMotion ? 0 : p0.flow ?? 0 },
     }
