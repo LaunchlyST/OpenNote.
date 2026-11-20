@@ -3399,6 +3399,11 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
       setBusy(false)
     }
   }
+  /** Turn card payments (Stripe) on or off at checkout. */
+  const useStripe = async (on: boolean) => {
+    setErr(null)
+    try { afterSave((await sellerApi.savePayments({ stripe: { enabled: on } })).store) } catch (e) { setErr((e as Error).message) }
+  }
   const afterSave = (v: StoreView) => {
     setPayments(v.payouts.payments ?? payments)
     setMethods(v.payouts.methods ?? [])
@@ -3599,7 +3604,7 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
           <span className="ss-paycard-icon"><Landmark className="h-4 w-4" /></span>
           <div className="min-w-0">
             <h3>Card payments · Stripe</h3>
-            <p className="ss-muted">{s === 'ready' && payTo ? `Buyers pay by card, and their money is paid out to ${payTo.bankName} ••${payTo.last4}.` : copy.text}</p>
+            <p className="ss-muted">{s === 'ready' ? (payments.stripe.enabled ? `Buyers can pay by card. Their money is paid out to ${payTo ? `${payTo.bankName} ••${payTo.last4}` : 'your bank'}.` : 'Card payments are off. Press Use Stripe to let buyers pay by card.') : copy.text}</p>
           </div>
           <b className={cn('ss-pay', `ss-pay-${s}`)}>{copy.label}</b>
         </div>
@@ -3610,11 +3615,16 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             {s === 'ready' ? (
               <>
                 {/* Ready: the bank is chosen here in Desknoty (Use this account), not in Stripe. */}
-                {/* The green button is Stripe (it opens Stripe); bank names only live on the bank boxes. */}
-                <button type="button" className="ss-primary" onClick={() => void go()} disabled={busy}>
-                  {busy ? 'Opening Stripe…' : 'Open Stripe'} <ExternalLink className="h-3.5 w-3.5" />
-                </button>
-                <button type="button" className="ss-ghost" onClick={() => void reload(true)}>Refresh</button>
+                {/* Like the bank boxes: Use Stripe switches card payments on; In use when it is. */}
+                {payments.stripe.enabled ? (
+                  <>
+                    <em className="wl-tag on">In use</em>
+                    <button type="button" className="ss-ghost" onClick={() => void useStripe(false)}>Stop using Stripe</button>
+                  </>
+                ) : (
+                  <button type="button" className="ss-primary" onClick={() => void useStripe(true)}>Use Stripe</button>
+                )}
+                <button type="button" className="wl-link" onClick={() => void go()} disabled={busy}>{busy ? 'Opening…' : 'Open Stripe'} <ExternalLink className="h-3 w-3" /></button>
               </>
             ) : (
               <>
