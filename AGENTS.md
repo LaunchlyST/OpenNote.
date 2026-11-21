@@ -81,6 +81,11 @@ elayadesign/ai-design-skills (MIT, see the LICENSE beside it).
   the task truly needs it.
 - Work section by section and check desktop and 390px mobile before finishing.
 
+## Design brain: read first
+
+Before any storefront or design work, read `docs/design-brain/README.md`, then
+`DESKNOTY_MISTAKES.md` and the relevant spec. Add new findings and mistakes there.
+
 ## Hard rules
 
 - **Never** force-push, `git reset --hard`, `git checkout .`, or `git stash`.
