@@ -24,15 +24,21 @@ import './style2.css'
  * website use (https://backgrounds.supply/license-agreement):
  *   garden — Viridian: https://app.backgrounds.supply/api/r2-public/previews/viridian/image-1.webp
  *   dune   — Serenox:  https://app.backgrounds.supply/api/r2-public/previews/serenox/image-8.webp
+ *   hill   — Zephyr:   https://app.backgrounds.supply/api/r2-public/previews/zephyr/image-32.webp
  */
 const SCENES = {
   garden: { src: '/scenes/viridian-garden.webp', tint: '#2f3b1f' },
   dune: { src: '/scenes/serenox-dune.webp', tint: '#3a2618' },
+  hill: { src: '/scenes/zephyr-hillside.webp', tint: '#2c4a6b' },
 } as const
 type SceneId = keyof typeof SCENES
-const SCENE_ORDER: SceneId[] = ['garden', 'dune']
-/** Scenes chosen for specific live products (x--x039's lemon cleaner → the sunlit garden). */
-const PINNED: Record<string, SceneId> = { prd_32afe7a32e425e47793b: 'garden' }
+const SCENE_ORDER: SceneId[] = ['garden', 'dune', 'hill']
+/** Scenes chosen for x--x039's live products: one scene each, so every swipe changes the background. */
+const PINNED: Record<string, SceneId> = {
+  prd_4fa03ef1c2370c9aa6f7: 'dune', // hi my name is
+  prd_17d36fb55900205394cc: 'hill', // DADAW
+  prd_32afe7a32e425e47793b: 'garden', // freedaw (lemon cleaner)
+}
 const BOTANICAL = /lemon|citrus|lime|orange|fruit|flower|floral|garden|botanic|plant|leaf|spring|summer/i
 
 /** A product's scene is fixed by its id (and botanical products get the garden), so swiping back restores it. */
