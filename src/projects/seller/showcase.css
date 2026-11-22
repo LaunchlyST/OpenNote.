@@ -431,3 +431,7 @@
 .sx-count:hover { transform: translateY(-2px); }
 .sx-count span { transition: transform .2s; }
 .sx-count:hover span { transform: translateY(2px); }
+/* An open ⋮ menu sits above the rows below it. */
+.sx-row { position: relative; }
+.sx-row:has(.sx-menu-pop) { z-index: 20; }
+.sx-menu-pop { z-index: 30; }
