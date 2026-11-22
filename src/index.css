@@ -9186,3 +9186,9 @@ select.ss-input option {
 .ss.ss-desk > .ss-preview { min-width: 0; overflow: hidden; padding-bottom: 30px; }
 .ss-preview .ss-device.ss-device-desk { width: 92%; }
 .ss-device-desk .sx-panel { min-height: calc(var(--ph, 900px) - 84px); } .ss-device-desk .sx { background: #0c0b0a; }
+/* Checkout: the main button must never look disabled when it isn't. */
+.co3-pay-btn { height: 52px; border-radius: 12px; font-size: 15.5px; font-weight: 700; color: #fff; background: #141312; box-shadow: 0 10px 24px -14px rgba(0,0,0,.6); }
+.co3-pay-btn:disabled { opacity: 1; color: #8a8a93; background: #e7e7ec; box-shadow: none; }
+.co3-sum .co3-lines { padding-bottom: 12px; }
+.co3-field-err { display: block; margin-top: 6px; color: #c2333f; font-size: 12.5px; }
+.co3-banknext { margin-top: 2px; padding: 12px 14px; border-radius: 12px; background: #f4f6ff; line-height: 1.5; font-size: 13px; }
