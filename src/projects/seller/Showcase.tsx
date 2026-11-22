@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { gsap } from 'gsap'
-import { AtSign, Check, ChevronDown, Download, Globe, Heart, MessageSquare, Play, Search, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
+import { AtSign, Check, ChevronDown, Download, Globe, Heart, MessageSquare, Play, Search, MoreVertical, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
 import { isFreeProduct, mediaUrl } from './model'
 import type { Block, CardPart, Page, ShopProduct } from './model'
 import { storeApi } from './api'
@@ -21,7 +21,10 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const products = props.products.filter((p) => !p.hidden)
   const cats = useMemo(() => [...new Set(products.map((p) => p.category?.trim()).filter(Boolean) as string[])], [products])
   const [cat, setCat] = useState<string | null>(null)
-  const list = cat ? products.filter((p) => p.category?.trim() === cat) : products
+  const [searching, setSearching] = useState(false)
+  const [q, setQ] = useState('')
+  const needle = q.trim().toLowerCase()
+  const list = (cat ? products.filter((p) => p.category?.trim() === cat) : products).filter((p) => !needle || p.title.toLowerCase().includes(needle))
   const [drawer, setDrawer] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const head = page.blocks.find((b) => b.type === 'header') ?? { id: 'header', type: 'header', hidden: false, data: {} } as Block
@@ -73,6 +76,12 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           {products.length > 0 && <button type="button" onClick={shop}>Products</button>}
           {products.length > 0 && live && <button type="button" onClick={() => setDrawer(true)}>Reviews</button>}
         </span>
+        {products.length > 1 && (
+          <span className={searching ? 'sx-search on' : 'sx-search'}>
+            {searching && <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); shop() }} placeholder="Search products" aria-label="Search products" onBlur={() => { if (!q) setSearching(false) }} />}
+            <button type="button" aria-label="Search products" onClick={() => setSearching((v) => !v)}><Search aria-hidden="true" /></button>
+          </span>
+        )}
         {products.length > 0 && <button type="button" className="sx-top-cta" onClick={shop}>Shop now <span aria-hidden="true">→</span></button>}
       </nav>
       <aside className="sx-stage" ref={stage} onMouseMove={move} onMouseLeave={() => { stage.current?.style.setProperty('--mx', '0'); stage.current?.style.setProperty('--my', '0') }}>
@@ -112,6 +121,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
                 ))}
               </div>
             )}
+            {needle && !list.length && <p className="sx-none">No products match “{q}”.</p>}
             <ol className="sx-list">
               {list.map((p) => <Row key={p.id} p={p} blockId={gridId} {...props} />)}
             </ol>
@@ -195,12 +205,37 @@ function Stars({ value, size = 14 }: { value: number; size?: number }) {
   )
 }
 
+function RowMenu({ p, ...props }: { p: ShopProduct } & StorePageProps) {
+  const [open, setOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
+    addEventListener('mousedown', off)
+    return () => removeEventListener('mousedown', off)
+  }, [open])
+  const saved = props.savedIds?.includes(p.id)
+  const link = `${location.origin}/${props.handle}/p/${p.id}`
+  return (
+    <div className="sx-menu" ref={ref}>
+      <button type="button" className="sx-menu-btn" aria-label={`More options for ${p.title}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}><MoreVertical aria-hidden="true" /></button>
+      {open && (
+        <div className="sx-menu-pop" role="menu">
+          {props.onOpenProduct && <button type="button" role="menuitem" onClick={() => { setOpen(false); props.onOpenProduct?.(p) }}>View details</button>}
+          {props.onToggleSave && <button type="button" role="menuitem" onClick={() => { props.onToggleSave?.(p); setOpen(false) }}><Heart aria-hidden="true" className={saved ? 'on' : ''} />{saved ? 'Remove from saved' : 'Save for later'}</button>}
+          <button type="button" role="menuitem" onClick={() => { void navigator.clipboard?.writeText(link).then(() => { setCopied(true); setTimeout(() => { setCopied(false); setOpen(false) }, 900) }) }}>{copied ? 'Link copied' : 'Copy link'}</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Row({ p, blockId, ...props }: { p: ShopProduct; blockId: string } & StorePageProps) {
   const { live } = props
   const [open, setOpen] = useState(false)
   const body = useRef<HTMLDivElement>(null)
   const cover = mediaUrl(p.cover) ?? mediaUrl(p.affiliate?.image ?? null)
-  const saved = props.savedIds?.includes(p.id)
   const meta = [p.format, p.fileType].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i)
   const extra = (p.included?.length ?? 0) > 0 || (p.description?.length ?? 0) > 110
   // Editor: a click on a part opens that part's settings in the Studio panel.
@@ -225,7 +260,7 @@ function Row({ p, blockId, ...props }: { p: ShopProduct; blockId: string } & Sto
       </button>
       <div className="sx-info">
         <h3 className={'sx-title' + picked('title')} onClick={live ? openIt : pick('title')}>{p.title}</h3>
-        {p.description && <p className={'sx-desc' + picked('desc')} onClick={live ? undefined : pick('desc')}>{p.description}</p>}
+        {(p.subtitle || p.description) && <p className={'sx-desc' + picked('desc')} onClick={live ? undefined : pick('desc')}>{p.subtitle || p.description}</p>}
         <p className="sx-meta">
           {p.affiliate?.url || p.productType === 'affiliate' ? <span>Partner product</span> : <span>Digital download</span>}
           {meta.map((m) => <span key={m}>{m}</span>)}
@@ -238,9 +273,7 @@ function Row({ p, blockId, ...props }: { p: ShopProduct; blockId: string } & Sto
         )}
       </div>
       <div className={'sx-buy' + picked('button')} onClickCapture={live ? undefined : pick('button')}>
-        {props.onToggleSave && live && (
-          <button type="button" className={saved ? 'sx-fav on' : 'sx-fav'} aria-pressed={!!saved} aria-label={saved ? 'Remove from saved' : 'Save'} onClick={() => props.onToggleSave?.(p)}><Heart aria-hidden="true" /></button>
-        )}
+        {live && <RowMenu p={p} {...props} />}
         <BuyRow prod={p} {...props} />
       </div>
       {extra && (
