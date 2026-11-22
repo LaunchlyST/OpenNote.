@@ -547,3 +547,26 @@
   .sx-buy .sp-price-sale { max-width: 170px; }
   .sx-buy .sp-btn { padding: 0 14px; }
 }
+
+/* ============ v5: Home is the whole screen ============ */
+.sx-top { z-index: 7; }
+.sx-home { position: fixed; inset: 0; z-index: 6; background: #0f0e0c; }
+.sx-home-inline { position: absolute; inset: 0 0 auto 0; height: 100%; min-height: 640px; }
+.sx-home .sx-mo { height: 100vh; height: 100dvh; padding: 88px 14px 14px; gap: 12px; border-radius: 0; background: #0f0e0c; box-shadow: none; grid-template-rows: 25fr 50fr 25fr; }
+.sx-home-inline .sx-mo { height: 100%; min-height: 640px; }
+.sx-home .sx-mo-tile { border-radius: 18px; }
+.sx-home .sx-mo-slot, .sx-home .sx-mo-hero { border-radius: 22px; }
+.sx-home .sx-mo-copy { max-width: 760px; gap: 16px; }
+.sx-home .sx-mo-kicker { font-size: 12px; }
+.sx-home .sx-mo-title { font-size: clamp(48px, 6vw, 104px); line-height: .95; text-shadow: 0 10px 40px rgba(0,0,0,.35); }
+.sx-home .sx-mo-bio { font-size: clamp(15px, 1.15vw, 18px); max-width: 52ch; }
+.sx-home .sx-mo-cta { height: 56px; padding: 0 30px; font-size: 15px; margin-top: 10px; }
+.sx-home .sx-mo-veil { background: radial-gradient(80% 70% at 50% 50%, rgba(10,9,8,.25), rgba(10,9,8,.65)); }
+/* the nav reads on the dark intro */
+.sx-home ~ .sx-top .sx-count { box-shadow: none; }
+@container (max-width: 900px) {
+  .sx-home .sx-mo { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: 1fr 2.4fr 1fr; padding: 12px; gap: 8px; min-height: 0; }
+  .sx-home .sx-mo-title { font-size: clamp(40px, 12vw, 64px); }
+  .sx-home .sx-mo-copy { padding: 18px; }
+}
+.sx { overflow-x: clip; }
