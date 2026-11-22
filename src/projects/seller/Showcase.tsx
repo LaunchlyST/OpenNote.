@@ -107,6 +107,14 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
             <button type="button" aria-label="Search products" onClick={() => setSearching((v) => !v)}><Search aria-hidden="true" /></button>
           </span>
         )}
+        <span className="sx-top-right">
+          {head.data?.showSocials !== false && <Socials page={page} />}
+          {products.length > 0 && (
+            <button type="button" className="sx-count" onClick={() => { setSection('products'); shop() }}>
+              <b>{products.length}</b> digital product{products.length === 1 ? '' : 's'} <span aria-hidden="true">↓</span>
+            </button>
+          )}
+        </span>
       </nav>
       <aside className="sx-stage" ref={stage} onMouseMove={move} onMouseLeave={() => { stage.current?.style.setProperty('--mx', '0'); stage.current?.style.setProperty('--my', '0') }}>
         <div className="sx-stage-art">
@@ -125,7 +133,6 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           </ul>
           <div className="sx-stage-actions">
             {products.length > 0 && <button type="button" className="sx-cta" onClick={shop}><ShoppingBag aria-hidden="true" /> Shop collection <span aria-hidden="true">→</span></button>}
-            {head.data?.showSocials !== false && <Socials page={page} dark />}
           </div>
         </div>
       </aside>
