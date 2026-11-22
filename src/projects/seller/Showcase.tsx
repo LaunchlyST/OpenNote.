@@ -101,13 +101,12 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           {products.length > 0 && live && <button type="button" data-k="reviews" className={active === 'reviews' ? 'on' : ''} aria-current={active === 'reviews' || undefined} onClick={() => setDrawer(true)}>Reviews</button>}
           <i className="sx-ind" style={ind} aria-hidden="true" />
         </span>
-        {products.length > 1 && (
+        {products.length > 8 && (
           <span className={searching ? 'sx-search on' : 'sx-search'}>
             {searching && <input autoFocus value={q} onChange={(e) => { setQ(e.target.value); shop() }} placeholder="Search products" aria-label="Search products" onBlur={() => { if (!q) setSearching(false) }} />}
             <button type="button" aria-label="Search products" onClick={() => setSearching((v) => !v)}><Search aria-hidden="true" /></button>
           </span>
         )}
-        {products.length > 0 && <button type="button" className="sx-top-cta" onClick={shop}>Shop now <span aria-hidden="true">→</span></button>}
       </nav>
       <aside className="sx-stage" ref={stage} onMouseMove={move} onMouseLeave={() => { stage.current?.style.setProperty('--mx', '0'); stage.current?.style.setProperty('--my', '0') }}>
         <div className="sx-stage-art">
