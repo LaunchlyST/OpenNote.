@@ -284,3 +284,56 @@
   .sx-buy .sp-buyrow > .sp-aff-tag, .sx-buy .sp-buyrow > .sp-aff-note { grid-column: 1 / -1; justify-self: end; }
   .sx-meta { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
 }
+
+/* ===== v3: match the approved mock ===== */
+.sx-menu { position: relative; }
+.sx-menu-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--ink); }
+.sx-menu-btn:hover { background: #f0ece6; }
+.sx-menu-btn svg { width: 20px; height: 20px; }
+.sx-menu-pop { position: absolute; right: 0; top: 36px; z-index: 6; min-width: 190px; padding: 6px; border-radius: 14px; background: #fff; border: 1px solid #ece6dd; box-shadow: 0 20px 40px -18px rgba(0,0,0,.35); animation: sx-in .2s ease; }
+.sx-menu-pop button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 0; border-radius: 10px; background: none; font-weight: 600; font-size: 14px; text-align: left; cursor: pointer; }
+.sx-menu-pop button:hover { background: #f6f3ee; }
+.sx-menu-pop svg.on { fill: #e23d4b; color: #e23d4b; }
+.sx-none { color: var(--mute); margin: 20px 0 0; }
+.sx-search { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.sx-search input { width: 220px; height: 42px; padding: 0 16px; border-radius: 999px; border: 1px solid #ddd6cc; background: #fff; font: inherit; outline: none; animation: sx-in .2s ease; }
+.sx-search button { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--ink); }
+.sx-search button svg { width: 24px; height: 24px; }
+.sx-search ~ .sx-top-cta { margin-left: 8px; }
+
+@container (min-width: 901px) {
+  .sx { background: linear-gradient(100deg, #0b0a0a 0%, #0b0a0a 46%, #3a3631 58%, #ebe8e3 70%, #f7f5f2 100%); }
+  .sx-stage { grid-column: 1 / 3; grid-row: 1; background: transparent; }
+  .sx-stage-art { right: 30%; -webkit-mask-image: linear-gradient(90deg, #000 62%, transparent 100%); mask-image: linear-gradient(90deg, #000 62%, transparent 100%); }
+  .sx-stage-copy { right: auto; width: min(520px, 32vw); }
+  .sx-panel { grid-column: 2; grid-row: 1; margin: 84px 0 0; padding: 40px clamp(24px, 3vw, 48px) 120px clamp(56px, 6vw, 96px); clip-path: none; background: none; min-height: calc(100vh - 84px); }
+  .sx-panel::before { content: ''; position: absolute; inset: 0 -40px 0 0; height: auto; z-index: -1; background: #fbfaf8; border-radius: 56px 0 0 0; transform: skewX(-6deg); transform-origin: top left; box-shadow: -30px 0 60px -30px rgba(0,0,0,.5); }
+  .sx-panel > * { z-index: 1; }
+  .sx-top { background: linear-gradient(180deg, rgba(0,0,0,.35), transparent); }
+  .sx-search button, .sx-top-cta { color: inherit; }
+  .sx-kicker-dark span:last-child:not(:first-child) { width: 36px; }
+  .sx-row { grid-template-columns: 190px minmax(0, 1fr) auto; column-gap: 24px; padding: 18px 0; }
+  .sx-art { aspect-ratio: 4 / 3; border-radius: 16px; box-shadow: 0 18px 30px -20px rgba(0,0,0,.55); }
+  .sx-title { font-size: 22px; }
+  .sx-desc { -webkit-line-clamp: 1; font-size: 15px; margin-top: 8px; }
+  .sx-meta { display: none; }
+  .sx-buy { grid-template-columns: auto 32px; row-gap: 14px; }
+  .sx-buy .sx-menu { grid-row: 1; grid-column: 2; }
+  .sx-buy .sp-buyrow > .sp-price { font-size: 23px; }
+  .sx-buy .sp-btn { height: 42px; min-width: 0; padding: 0 18px; font-size: 15px; }
+  .sx-dock { background: transparent !important; }
+}
+@container (min-width: 1320px) {
+  .sx.sx-has-fb { grid-template-columns: minmax(0, 34fr) minmax(0, 42fr) minmax(360px, 24fr); }
+  .sx-has-fb .sx-dock { height: auto; max-height: calc(100vh - 92px); top: 92px; margin-top: 92px; padding: 0 20px 0 12px; align-self: start; }
+  .sx-has-fb .sx-dock .sx-fb-sheet { max-height: calc(100vh - 112px); height: auto; min-height: 560px; }
+  .sx-has-fb .sx-top-cta { display: inline-flex; align-items: center; gap: 8px; }
+  .sx-has-fb .sx-fab { display: inline-flex; }
+}
+@container (max-width: 900px) {
+  .sx-buy { grid-template-columns: 1fr auto; }
+  .sx-buy .sx-menu { position: absolute; right: 0; top: 14px; }
+  .sx-search input { width: 160px; }
+}
+@container (min-width: 1320px) { .sx.sx-has-fb { grid-template-columns: minmax(0, 32fr) minmax(0, 45fr) minmax(360px, 23fr); } }
+@container (min-width: 901px) { .sx-row { grid-template-columns: 172px minmax(0, 1fr) auto; column-gap: 20px; } .sx-title { font-size: 21px; } }
