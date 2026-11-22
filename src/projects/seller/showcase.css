@@ -690,3 +690,4 @@
 }
 @container (max-width: 900px) { .sx-panel { background: #0c0b0a !important; } }
 @container (min-width: 901px) { .sx-card { width: min(380px, 56%); } .sx-track { clip-path: inset(-80px -24px -90px -24px); } }
+.ss-device-desk .sx-home-inline, .ss-device-desk .sx-home-inline .sx-mo { min-height: 900px; } .ss-device-desk .sx { min-height: 900px; }
