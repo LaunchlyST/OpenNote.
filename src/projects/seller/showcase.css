@@ -211,3 +211,76 @@
 .sx-buy .sp-price-sale .sp-save { flex-basis: 100%; text-align: right; font-size: 12px; color: #1a7f4b; font-weight: 600; }
 @container (max-width: 900px) { .sx-buy .sp-price-sale { justify-content: flex-start; } .sx-buy .sp-price-sale .sp-save { text-align: left; } }
 .sx-buy .sp-buyrow > .sp-price:not(.sp-price-sale) { text-transform: uppercase; }
+
+/* ===== v2: closer to the approved mock (top bar, profile on the stage, docked feedback) ===== */
+.sx { position: relative; }
+.sx-top { position: absolute; z-index: 5; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 36px; height: 76px; padding: 0 clamp(24px, 3vw, 44px); pointer-events: none; }
+.sx-top > * { pointer-events: auto; }
+.sx-logo { display: flex; align-items: center; gap: 12px; color: #fff; font-weight: 800; font-size: 22px; letter-spacing: -.02em; white-space: nowrap; }
+.sx-logo-av { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; background: rgba(255,255,255,.14) center / cover; font-size: 15px; border: 1px solid rgba(255,255,255,.25); }
+.sx-top-links { display: flex; gap: 28px; padding-left: 24px; border-left: 1px solid rgba(255,255,255,.2); }
+.sx-top-links button { position: relative; padding: 8px 0; border: 0; background: none; color: rgba(255,255,255,.82) !important; font-weight: 600; font-size: 15px; cursor: pointer; }
+.sx-top-links button:hover, .sx-top-links button.on { color: #fff !important; }
+.sx-top-links button.on::after { content: ''; position: absolute; left: 0; right: 0; bottom: -2px; height: 2px; border-radius: 2px; background: var(--orange); }
+.sx-top-cta { margin-left: auto; height: 46px; padding: 0 24px; border: 0; border-radius: 999px; background: var(--ink); color: #fff !important; font-weight: 700; cursor: pointer; transition: transform .2s; }
+.sx-top-cta:hover { transform: translateY(-2px); }
+
+.sx-stage-copy { bottom: clamp(28px, 5vh, 56px); }
+.sx-kicker span:last-child:not(:first-child) { width: 40px; background: rgba(255,255,255,.35); }
+.sx-kicker-dark span:last-child:not(:first-child) { background: var(--orange); }
+.sx-stage-sub { font-size: clamp(24px, 2.2vw, 34px); font-weight: 700; opacity: 1; letter-spacing: -.02em; }
+.sx-stage-bio { margin: 14px 0 0; max-width: 44ch; font-size: 17px; line-height: 1.5; color: rgba(255,255,255,.82); white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.sx-trust { gap: 0; margin: 24px 0 26px; }
+.sx-trust li { gap: 10px; padding-right: 22px; margin-right: 22px; border-right: 1px solid rgba(255,255,255,.2); line-height: 1.25; }
+.sx-trust li:last-child { border: 0; }
+.sx-trust svg { width: 26px; height: 26px; }
+.sx-stage-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.sx-cta svg { width: 22px; height: 22px; }
+.sx-socials-dark { margin: 0; }
+.sx-socials-dark a { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.28); color: #fff; backdrop-filter: blur(6px); }
+.sx-socials-dark a:hover { background: #fff; color: var(--ink); }
+
+/* Desktop: the profile lives on the stage, so the right side starts with the products. */
+@container (min-width: 901px) {
+  .sx-profile { display: none; }
+  .sx-panel { padding-top: 110px; margin-left: -64px; padding-left: clamp(60px, 6vw, 100px); clip-path: polygon(64px 0, 100% 0, 100% 100%, 0 100%); background: radial-gradient(circle at 1px 1px, rgba(20,19,18,.06) 1px, transparent 1.2px) 0 0 / 22px 22px, #fbfaf8; border-radius: 0; }
+  .sx-collection { margin-top: 0; }
+  .sx-collection h2 { font-size: clamp(34px, 3vw, 46px); }
+  .sx-row { grid-template-columns: 180px minmax(0, 1fr) auto; column-gap: 22px; padding: 18px 0; align-items: center; }
+  .sx-row:first-child { border-top: 0; }
+  .sx-art { aspect-ratio: 3 / 2; border-radius: 14px; }
+  .sx-title { font-size: 21px; }
+  .sx-desc { -webkit-line-clamp: 1; font-size: 14px; }
+  .sx-meta { margin-top: 6px; }
+  .sx-buy { min-width: 150px; }
+  .sx-buy .sp-price { font-size: 21px; }
+  .sx-fav { position: static; order: -1; justify-self: end; width: 32px; height: 32px; margin-bottom: -4px; }
+}
+.sx-buy .sp-buyrow > .sp-btn { gap: 8px; }
+.sx-buy .sp-buyrow > button.sp-btn::before { content: ''; width: 17px; height: 17px; background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M16 10a4 4 0 0 1-8 0'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z'/%3E%3Cpath d='M3 6h18'/%3E%3Cpath d='M16 10a4 4 0 0 1-8 0'/%3E%3C/svg%3E") center / contain no-repeat; }
+.sx-buy .sp-buyrow > button.sp-btn::after { content: '→'; }
+
+/* Wide screens: feedback docked as a third column, like the mock. */
+.sx-dock { display: none; }
+@container (min-width: 1320px) {
+  .sx.sx-has-fb { grid-template-columns: minmax(0, 36fr) minmax(0, 42fr) minmax(360px, 24fr); }
+  .sx-has-fb .sx-dock { display: block; position: sticky; top: 0; height: 100vh; padding: 96px 20px 20px 0; background: #fbfaf8; z-index: 2; }
+  .sx-has-fb .sx-fab { display: none; }
+  .sx-has-fb .sx-top-cta { display: none; }
+}
+.sx-fb-docked { position: static; inset: auto; height: 100%; pointer-events: auto; }
+.sx-fb-docked .sx-fb-sheet { position: static; width: auto; height: 100%; transform: none; box-shadow: 0 20px 50px -24px rgba(0,0,0,.25); border: 1px solid #eee8df; }
+@container (max-width: 900px) { .sx-top { display: none; } }
+@container (min-width: 1320px) {
+  .sx.sx-has-fb { grid-template-columns: minmax(0, 32fr) minmax(0, 46fr) minmax(360px, 22fr); }
+}
+@container (min-width: 901px) {
+  .sx-row { grid-template-columns: 168px minmax(0, 1fr) auto; }
+  .sx-buy { grid-template-columns: auto auto; align-items: center; column-gap: 10px; min-width: 0; }
+  .sx-fav { grid-row: 1; grid-column: 2; margin: 0; order: 0; }
+  .sx-buy .sp-buyrow { grid-column: 1 / -1; grid-row: 1 / span 2; display: contents; }
+  .sx-buy .sp-buyrow > .sp-price { grid-row: 1; grid-column: 1; justify-self: end; }
+  .sx-buy .sp-buyrow > .sp-btn, .sx-buy .sp-buyrow > a.sp-btn { grid-row: 2; grid-column: 1 / -1; justify-self: end; }
+  .sx-buy .sp-buyrow > .sp-aff-tag, .sx-buy .sp-buyrow > .sp-aff-note { grid-column: 1 / -1; justify-self: end; }
+  .sx-meta { flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
+}
