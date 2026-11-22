@@ -667,7 +667,13 @@ function Studio({
   useEffect(() => {
     const el = deviceRef.current
     if (!el || view !== 'desktop') return
-    const fit = () => el.style.setProperty('--z', String(Math.max(0.3, (el.clientWidth - 20) / 1440)))
+    // Lay the page out at 1440px (or the frame's own width if that's wider) and only ever shrink it.
+    const fit = () => {
+      const w = Math.max(320, el.clientWidth - 24)
+      const z = Math.max(0.3, Math.min(1, w / 1440))
+      el.style.setProperty('--z', String(z))
+      el.style.setProperty('--pw', `${Math.floor(w / z)}px`)
+    }
     fit()
     const ro = new ResizeObserver(fit)
     ro.observe(el)
