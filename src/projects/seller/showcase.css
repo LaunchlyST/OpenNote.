@@ -411,3 +411,14 @@
 .sp-sheet-scroll > * { flex: none; }
 .sp-sheet-scroll > .sp-gal-single, .sp-sheet-scroll > .sp-gal { display: block; width: 100%; aspect-ratio: 16 / 10; }
 .sp-sheet-head .sp-pbadge.feat { background: #141312; color: #fff; } .sp-sheet-head .sp-pbadge.new { background: #f06a1d; color: #fff; }
+/* Product card sits at the right end of the page at its own width (not stretched). */
+@container (min-width: 901px) {
+  .sx, .sx.sx-has-fb { grid-template-columns: minmax(0, 1fr) minmax(560px, 46%); }
+  .sx-panel { padding-right: clamp(24px, 3vw, 48px); }
+  .sx-collection, .sx-panel > .sp-pick, .sx-panel > .sp-block, .sx-panel > .sx-foot { max-width: 760px; }
+  .sx-stage-copy { width: min(560px, 40vw); }
+  .sx-stage-art { right: 20%; }
+}
+@container (min-width: 1320px) { .sx, .sx.sx-has-fb { grid-template-columns: minmax(0, 1fr) minmax(560px, 46%); } }
+/* The design owns button colours (seller CTA colour would clash). */
+.sx-buy .sp-btn { background: var(--ink) !important; border-color: var(--ink) !important; color: #fff !important; }
