@@ -90,3 +90,22 @@ export function productTypeOf(extras: { productType?: ProductType; affiliate?: {
   // Data saved before the explicit type existed used a valid external URL.
   return extras?.affiliate?.url ? 'affiliate' : 'normal'
 }
+
+/**
+ * A readable title from the seller's own link, used when they give none.
+ * Amazon product URLs usually carry the listing name as a slug before /dp/
+ * (e.g. /Sony-WH-1000XM5-Headphones/dp/B09…). No page is fetched or scraped.
+ */
+export function amazonTitleFromUrl(raw: string): string {
+  let path = ''
+  try { path = new URL(raw).pathname } catch { return 'Amazon product' }
+  const parts = path.split('/').filter(Boolean)
+  const at = parts.findIndex((p) => /^(?:dp|gp|product|e)$/i.test(p))
+  const slug = at > 0 ? parts[at - 1] : ''
+  let words = ''
+  try { words = decodeURIComponent(slug) } catch { words = slug }
+  words = words.replace(/[-_+]+/g, ' ').replace(/[^\p{L}\p{N} &'.,()]/gu, '').replace(/\s+/g, ' ').trim()
+  if (words.length >= 3 && !/^ref\b/i.test(words)) return words.slice(0, 80).trim()
+  const asin = path.match(/\/(?:dp|product|gp\/product)\/([A-Z0-9]{10})/i)?.[1]
+  return asin ? `Amazon product ${asin.toUpperCase()}` : 'Amazon product'
+}

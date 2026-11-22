@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { apiUrl } from '../lib/api-base'
 import { storeApi } from '../projects/seller/api'
 
@@ -9,12 +9,11 @@ import { storeApi } from '../projects/seller/api'
  * normal product page. The Amazon URL never enters this bundle.
  */
 export default function ShortLink({ shortId }: { shortId: string }) {
-  const started = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (started.current) return
-    started.current = true
+    // No one-shot guard: under StrictMode the first run is cleaned up and only
+    // the second may navigate, otherwise the page hangs on "Opening product…".
     let alive = true
     storeApi.shortLink(shortId).then((link) => {
       if (!alive) return

@@ -32,7 +32,7 @@ import type { Sql } from './sql.ts'
 import { env } from './env.ts'
 import { enqueueEmail, sendNow, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
-import { AMAZON_LINK_ERROR, checkAmazonUrl, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../shared/amazon-link.ts'
+import { AMAZON_LINK_ERROR, checkAmazonUrl, amazonTitleFromUrl, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../shared/amazon-link.ts'
 import { isShortProductId } from '../shared/short-link.ts'
 import { newShortProductId } from './short-id.ts'
 import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices, bankKey } from './payments.ts'
@@ -1850,6 +1850,53 @@ export function sellerRouter() {
     res.json({ ok: true, url: destination, short: checked.short })
   })
 
+  /** One-step Amazon affiliate: the seller's tagged link is the only input.
+   *  The link is checked (short links resolved server-side, query string and
+   *  Associates tag kept exactly), a title is filled from the link itself when
+   *  none is given, and the product is published on its own straight away —
+   *  no other draft product or page change goes live with it. */
+  me.post('/products/affiliate', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const checked = amazonLinkCheck(String(b.url ?? ''))
+    if (!checked.ok) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+    const final = checked.short ? await resolveAmazonDestination(checked.url) : checked.url
+    if (!final || !safeRedirectUrl(final, 'https://desknoty.com/')) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+    const count = (await q.products(s.id)).length
+    if (count >= 200) return void res.status(400).json({ error: 'Product limit reached.' })
+    const given = String(b.title ?? '').trim().slice(0, 80)
+    const title = given || amazonTitleFromUrl(final)
+    const cover = mediaRef(b.cover)
+    const extras = JSON.stringify(cleanExtras({ productType: 'affiliate', affiliate: { url: final, input: final, cta: DEFAULT_AMAZON_CTA, disclosure: DEFAULT_AFFILIATE_DISCLOSURE } }))
+    const t = now()
+    const id = `prd_${randomBytes(10).toString('hex')}`
+    const shortId = await uniqueShortId()
+    await sql.run(`INSERT INTO seller_product (id, "shortId", "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, extras, "pubExtras", "pubTitle", "pubDescription", "pubCover", "pubPriceMinor", "pubCurrency", "pubAt", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, '', ?, 0, 'free', 'gbp', 1, ?, ?, ?, ?, '', ?, 0, 'gbp', ?, ?, ?)`, id, shortId, s.id, title, cover, count, extras, extras, title, cover, t, t, t)
+    res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!), storeLive: Boolean(s.published) })
+  })
+
+  /** Edit an affiliate bio link in place: only its Amazon link and title.
+   *  The live copy updates at once and the short id never changes, so a link
+   *  already posted in a bio keeps working and goes to the new destination. */
+  me.put('/products/:id/affiliate', async (req: Authed, res) => {
+    const s = await mine(req, res)
+    if (!s) return
+    const p = await q.product(String(req.params.id), s.id)
+    if (!p || readExtras(p.extras).productType !== 'affiliate') return void res.status(404).json({ error: 'Affiliate link not found.' })
+    const b = (req.body ?? {}) as Record<string, unknown>
+    const checked = amazonLinkCheck(String(b.url ?? ''))
+    if (!checked.ok) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+    const final = checked.short ? await resolveAmazonDestination(checked.url) : checked.url
+    if (!final || !safeRedirectUrl(final, 'https://desknoty.com/')) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+    const title = String(b.title ?? '').trim().slice(0, 80) || amazonTitleFromUrl(final)
+    const x = readExtras(p.extras)
+    const extras = JSON.stringify(cleanExtras({ ...x, productType: 'affiliate', affiliate: { ...x.affiliate, url: final, input: final } }))
+    const t = now()
+    await sql.run(`UPDATE seller_product SET title = ?, extras = ?, "pubTitle" = ?, "pubExtras" = ?, listed = 1, "pubAt" = COALESCE("pubAt", ?), "updatedAt" = ?, revision = revision + 1 WHERE id = ?`, title, extras, title, extras, t, t, p.id)
+    res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
+  })
+
   me.patch('/products/:id', async (req: Authed, res) => {
     const s = await mine(req, res)
     if (!s) return
@@ -2533,13 +2580,15 @@ export function sellerRouter() {
     }
     return s
   }
-  const liveProducts = async (s: StoreRow) => (await q.products(s.id)).filter((p) => p.pubAt)
+  // Explicit affiliate entries are private bio links: they redirect from
+  // /p/<shortId> but never appear in the public shop, counts or slots.
+  const liveProducts = async (s: StoreRow) => (await q.products(s.id)).filter((p) => p.pubAt && readExtras(p.pubExtras).productType !== 'affiliate')
 
   /** Published stores and products, for pre-rendering their pages at deploy time. Public data only. */
   r.get('/api/store-directory', async (_req, res) => {
     const stores = await sql.all<{ id: string; handle: string }>(`SELECT id, handle FROM seller_store WHERE published IS NOT NULL ORDER BY handle LIMIT 5000`)
     const out = []
-    for (const s of stores) out.push({ handle: s.handle, products: (await sql.all<{ id: string }>(`SELECT id FROM seller_product WHERE "storeId" = ? AND "pubAt" IS NOT NULL`, s.id)).map((p) => p.id) })
+    for (const s of stores) out.push({ handle: s.handle, products: (await liveProducts(s as StoreRow)).map((p) => p.id) })
     res.set('Cache-Control', 'public, max-age=60').json({ stores: out })
   })
 

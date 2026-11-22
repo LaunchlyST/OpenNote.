@@ -28,6 +28,7 @@ import {
   Eye,
   EyeOff,
   ExternalLink,
+  Pencil,
   ImagePlus,
   Landmark,
   Package,
@@ -1042,14 +1043,6 @@ function Studio({
   }
 
   // Affiliate product from the Add product popup: a draft already set to Affiliate.
-  const createAffiliateProduct = async () => {
-    await flushSellerEdits()
-    const made = await sellerApi.addProduct({ title: '', priceMinor: 0, currency: 'gbp' })
-    const x = withExtras(made.product.extras)
-    await sellerApi.updateProduct(made.product.id, { extras: { ...x, productType: 'affiliate', affiliate: { ...x.affiliate, cta: x.affiliate?.cta || DEFAULT_AMAZON_CTA, disclosure: x.affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE } } }, made.product.revision)
-    await reload(true)
-    return made.product.id
-  }
 
   // Drag a section inside the phone preview: a drop line shows where it will land.
   const slideRef = useRef<HTMLDivElement>(null)
@@ -1134,7 +1127,7 @@ function Studio({
 
   // Untitled drafts still show in the phone (as "Untitled product"), so a product
   // just added to a swipe appears in its slide straight away.
-  const productsForPreview = store.products.filter((p) => !p.archived).map((p) => ({ ...p, title: p.title?.trim() ? p.title : 'Untitled product' })).map((p) => {
+  const productsForPreview = store.products.filter((p) => !p.archived && !isAffiliateEntry(p)).map((p) => ({ ...p, title: p.title?.trim() ? p.title : 'Untitled product' })).map((p) => {
     // an open part panel shows its change straight away, before the save returns
     const live = partPreview?.id === p.id ? partPreview : null
     const ex = withExtras(live ? live.extras : p.extras)
@@ -1259,7 +1252,6 @@ function Studio({
             onClose={() => { setPickReq(null); pendingAdd.current = null }}
             onPickExisting={(productId) => { setPickReq(null); onPickProduct(productId) }}
             createProduct={(f) => createProduct(f).then((id) => { setPickReq(null); onPickProduct(id) })}
-            createAffiliate={() => createAffiliateProduct().then((id) => { setPickReq(null); onPickProduct(id) })}
           />
         )}
         {tab === 'products' && (
@@ -1825,41 +1817,136 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }
   )
 }
 
+/** An explicit affiliate entry: a private bio link, never shown in the shop. */
+const isAffiliateEntry = (p: Pick<DraftProduct, 'extras'>) => p.extras?.productType === 'affiliate'
+
+/** The permanent public address of a product: <site>/p/<shortId>. */
+function bioLinkOf(store: StoreView, p: Pick<DraftProduct, 'id' | 'shortId'>): string {
+  const origin = (() => { try { return new URL(store.url).origin } catch { return window.location.origin } })()
+  return p.shortId ? `${origin}/p/${p.shortId}` : `${store.url}/p/${p.id}`
+}
+
+function CopyBioLink({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false)
+  return <button type="button" className="ss-primary" onClick={() => void copyToClipboard(link).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1500) } })}>{copied ? 'Copied' : 'Copy bio link'}</button>
+}
+
+/** Exactly two inputs: the Amazon product link and a title. Used to create a
+    bio link and, with `initial`, to edit one in place (same short id). */
+function AffiliateLinkForm({ initial, submitLabel, onSubmit, onCancel }: { initial?: { url: string; title: string }; submitLabel: string; onSubmit: (url: string, title: string) => Promise<void>; onCancel?: () => void }) {
+  const [url, setUrl] = useState(initial?.url ?? '')
+  const [title, setTitle] = useState(initial?.title ?? '')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErr(null)
+    if (!amazonUrlCheck(url).ok) return setErr(AMAZON_LINK_ERROR)
+    setBusy(true)
+    try { await onSubmit(url.trim(), title.trim()) } catch (e2) { setErr((e2 as Error).message || AMAZON_LINK_ERROR); setBusy(false) }
+  }
+  return (
+    <form style={{ display: 'grid', gap: 10 }} onSubmit={(e) => void submit(e)}>
+      <Field label="Amazon product link" hint="Your tracking tag is kept exactly as it is.">
+        <input className="ss-input" inputMode="url" autoFocus value={url} onChange={(e) => { setUrl(e.target.value); setErr(null) }} placeholder="https://www.amazon.co.uk/dp/B0...?tag=yourtag-21" aria-label="Amazon product link" />
+      </Field>
+      <Field label="Title"><input className="ss-input" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. My desk lamp" aria-label="Title" /></Field>
+      {err && <p className="ss-note" role="alert">{err}</p>}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button type="submit" className="ss-primary" disabled={busy || !url.trim()}>{busy ? 'Saving…' : submitLabel}</button>
+        {onCancel && <button type="button" className="ss-ghost" onClick={onCancel}>Cancel</button>}
+      </div>
+    </form>
+  )
+}
+
+/** Create step in the Add dialog, then the generated bio link with Copy. */
+function AffiliateCreator({ store, setStore, onDone }: { store: StoreView; setStore: (s: StoreView) => void; onDone: (productId: string) => void }) {
+  const [made, setMade] = useState<DraftProduct | null>(null)
+  if (made) {
+    const bio = bioLinkOf(store, made)
+    return (
+      <div className="ab-body"><section className="ab-main" style={{ display: 'grid', gap: 10 }}>
+        <p className="ss-hint" role="status"><b>{made.title}</b> is ready. It redirects to Amazon and is not shown in your shop.</p>
+        <Field label="Bio link"><input className="ss-input" readOnly value={bio} aria-label="Bio link" onFocus={(e) => e.currentTarget.select()} /></Field>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <CopyBioLink link={bio} />
+          <button type="button" className="ss-ghost" onClick={() => onDone(made.id)}>Done</button>
+        </div>
+      </section></div>
+    )
+  }
+  return (
+    <div className="ab-body"><section className="ab-main">
+      <AffiliateLinkForm submitLabel="Create link" onSubmit={async (url, title) => { await flushSellerEdits(); const r = await sellerApi.createAffiliate(url, title); setStore(r.store); setMade(r.product) }} />
+    </section></div>
+  )
+}
+
+/** A selected affiliate slot: title, bio link, copy, and a pencil to edit. */
+function AffiliateEntry({ product, store, setStore }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void }) {
+  const [editing, setEditing] = useState(false)
+  const bio = bioLinkOf(store, product)
+  if (editing) {
+    return (
+      <div className="pe" style={{ display: 'grid', gap: 10 }}>
+        <b>Edit affiliate link</b>
+        <AffiliateLinkForm
+          initial={{ url: String(product.extras?.affiliate?.url ?? ''), title: product.title }}
+          submitLabel="Save"
+          onCancel={() => setEditing(false)}
+          onSubmit={async (url, title) => { const r = await sellerApi.updateAffiliate(product.id, url, title); setStore(r.store); setEditing(false) }}
+        />
+      </div>
+    )
+  }
+  return (
+    <div className="pe" style={{ display: 'grid', gap: 10 }} aria-label="Affiliate link">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="pe-pill pe-pill-published">Affiliate link</span>
+        <b style={{ flex: 1 }}>{product.title || 'Amazon product'}</b>
+        <button type="button" className="ss-ghost" aria-label="Edit affiliate link" onClick={() => setEditing(true)}><Pencil className="h-4 w-4" /></button>
+      </div>
+      <Field label="Bio link"><input className="ss-input" readOnly value={bio} aria-label="Bio link" onFocus={(e) => e.currentTarget.select()} /></Field>
+      <div><CopyBioLink link={bio} /></div>
+      <p className="ss-hint">Opens the Amazon product directly. Private: not shown in your shop.</p>
+    </div>
+  )
+}
+
 /** The add-product picker: choose an existing product or make a new one.
     Deliberately its own dialog — the block library must not appear here. */
-function AddProductDialog({ products, onClose, onPickExisting, createProduct, createAffiliate }: { products: DraftProduct[]; onClose: () => void; onPickExisting: (productId: string) => void; createProduct: (f: NewProduct) => Promise<void>; createAffiliate?: () => Promise<void> }) {
+function AddProductDialog({ products, onClose, onPickExisting, createProduct}: { products: DraftProduct[]; onClose: () => void; onPickExisting: (productId: string) => void; createProduct: (f: NewProduct) => Promise<void> }) {
   const [making, setMaking] = useState(false)
-  // First step: choose Digital or Affiliate.
-  const [kind, setKind] = useState<'digital' | null>(createAffiliate ? null : 'digital')
-  const [busy, setBusy] = useState(false)
-  const [kindErr, setKindErr] = useState<string | null>(null)
+  // Storefront slots hold digital products only: affiliate entries are private
+  // bio links, created from the Products tab and never shown in the shop.
+  const [kind, setKind] = useState<'digital' | 'affiliate' | null>('digital')
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     document.addEventListener('keydown', k)
     return () => document.removeEventListener('keydown', k)
   }, [onClose])
-  const available = products.filter((p) => !p.archived)
+  const available = products.filter((p) => !p.archived && !isAffiliateEntry(p))
   return (
     <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ab ab-slim" role="dialog" aria-modal="true" aria-label="Add a product">
         <header className="ab-head">
-          <h2>{!kind ? 'What are you adding?' : making ? 'New digital product' : 'Add a product'}</h2>
+          <h2>{!kind ? 'What are you adding?' : kind === 'affiliate' ? 'New affiliate product' : making ? 'New digital product' : 'Add a product'}</h2>
           <button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
         </header>
         {!kind ? (
           <div className="ab-body ab-body-pick">
             <section className="ab-main">
               <div className="ab-grid ab-grid-pick">
-                <button type="button" className="ab-item" disabled={busy} onClick={() => setKind('digital')}>
+                <button type="button" className="ab-item" onClick={() => setKind('digital')}>
                   <span className="ab-thumb"><Package className="h-5 w-5" /></span>
                   <span><b>Digital product</b><small>Sell a file buyers download</small></span>
                 </button>
-                <button type="button" className="ab-item" disabled={busy} onClick={() => { setBusy(true); setKindErr(null); createAffiliate!().catch((e: Error) => { setKindErr(e.message); setBusy(false) }) }}>
+                <button type="button" className="ab-item" onClick={() => setKind('affiliate')}>
                   <span className="ab-thumb"><Globe className="h-5 w-5" /></span>
-                  <span><b>{busy ? 'Creating…' : 'Affiliate'}</b><small>Link to a product on Amazon</small></span>
+                  <span><b>Affiliate</b><small>Link to a product on Amazon</small></span>
                 </button>
               </div>
-              {kindErr && <p className="ss-note" role="alert">{kindErr}</p>}
             </section>
           </div>
         ) : making ? (
@@ -2470,18 +2557,16 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
 
   // "Add Product" first asks which kind: a digital product or an affiliate link.
   const [choosing, setChoosing] = useState(false)
-  const add = async (kind: ProductType = 'normal') => {
+  const [affiliateStep, setAffiliateStep] = useState(false)
+  const [slot, setSlot] = useState<string | null>(null)
+  const entries = store.products.filter((p) => !p.archived)
+  const slotEntry = slot ? entries.find((p) => p.id === slot && isAffiliateEntry(p)) ?? null : null
+  const add = async (_kind: ProductType = 'normal') => {
     setChoosing(false)
     try {
       await flushSellerEdits()
-      let r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
-      if (kind === 'affiliate') {
-        const x = withExtras(r.product.extras)
-        r = await sellerApi.updateProduct(r.product.id, { extras: { ...x, productType: 'affiliate', affiliate: { ...x.affiliate, cta: x.affiliate?.cta || DEFAULT_AMAZON_CTA, disclosure: x.affiliate?.disclosure || DEFAULT_AFFILIATE_DISCLOSURE } } }, r.product.revision)
-      }
+      const r = await sellerApi.addProduct({ title: '', priceMinor: 900, currency: 'gbp' })
       setStore(r.store)
-      // A product on its own is invisible on the store. Put it straight into the
-      // next free slide of the first product block, so it shows in the phone at once.
       const pagesNow = storePages(r.store.draft)
       const blockWithRoom = (pagesNow[0]?.blocks ?? [])
         .filter((b) => b.type === 'featured' || b.type === 'grid')
@@ -2547,7 +2632,7 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
   const selPage = pages[0]
   const productBlocks = (selPage?.blocks ?? []).filter((b) => b.type === 'featured' || b.type === 'grid')
 
-  const unplaced = store.products.filter((p) => !p.archived && !pages.some((pg) => pg.blocks.some((b) => (b.type === 'featured' || b.type === 'grid') && slidesOf(b).some((sl) => sl.kind === 'digital' && sl.productId === p.id))))
+  const unplaced = store.products.filter((p) => !p.archived && !isAffiliateEntry(p) && !pages.some((pg) => pg.blocks.some((b) => (b.type === 'featured' || b.type === 'grid') && slidesOf(b).some((sl) => sl.kind === 'digital' && sl.productId === p.id))))
 
   return (
     <div className="ss-stack">
@@ -2559,9 +2644,12 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
         <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && setChoosing(false)}>
           <div className="ab ab-slim" role="dialog" aria-modal="true" aria-label="Choose product type">
             <header className="ab-head">
-              <h2>What are you adding?</h2>
-              <button type="button" className="ab-x" onClick={() => setChoosing(false)} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
+              <h2>{affiliateStep ? 'New affiliate product' : 'What are you adding?'}</h2>
+              <button type="button" className="ab-x" onClick={() => { setChoosing(false); setAffiliateStep(false) }} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
             </header>
+            {affiliateStep ? (
+              <AffiliateCreator store={store} setStore={setStore} onDone={(id) => { setChoosing(false); setAffiliateStep(false); setSlot(id) }} />
+            ) : (
             <div className="ab-body ab-body-pick">
               <section className="ab-main">
                 <div className="ab-grid ab-grid-pick">
@@ -2569,17 +2657,31 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
                     <span className="ab-thumb"><Package className="h-5 w-5" /></span>
                     <span><b>Digital product</b><small>Sell a file buyers download</small></span>
                   </button>
-                  <button type="button" className="ab-item" onClick={() => void add('affiliate')}>
+                  <button type="button" className="ab-item" onClick={() => setAffiliateStep(true)}>
                     <span className="ab-thumb"><Globe className="h-5 w-5" /></span>
                     <span><b>Affiliate</b><small>Link to a product on Amazon</small></span>
                   </button>
                 </div>
               </section>
             </div>
+            )}
           </div>
         </div>
       )}
       {err && <div className="ss-note" role="alert">{err}</div>}
+
+      {/* Numbered selector: every entry in order. Selecting never changes its type. */}
+      {entries.length > 0 && (
+        <div className="pg-slots" role="tablist" aria-label="Your products and links" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {entries.map((p, i) => (
+            <button key={p.id} type="button" role="tab" aria-selected={slotEntry?.id === p.id} className={cn('ss-ghost', slotEntry?.id === p.id && 'on')} style={slotEntry?.id === p.id ? { outline: '2px solid currentColor' } : undefined}
+              onClick={() => (isAffiliateEntry(p) ? setSlot(p.id) : (setSlot(null), choose(p.id)))}>
+              {i + 1} · {p.title.trim() || (isAffiliateEntry(p) ? 'Amazon product' : 'Untitled product')}
+            </button>
+          ))}
+        </div>
+      )}
+      {slotEntry && <AffiliateEntry key={slotEntry.id} product={slotEntry} store={store} setStore={setStore} />}
 
       {/* Product blocks on the selected page. */}
       {productBlocks.map((block, bi) => {

@@ -352,8 +352,8 @@ try {
   const unpublishedLink = await req('GET', `/api/p/${savedAff.json?.product?.shortId}`)
   check('an unpublished product link is unavailable', unpublishedLink.status === 404, String(unpublishedLink.status))
   check('an Amazon product needs no uploaded file to publish', (await req('POST', '/api/seller/store/publish', undefined, A)).status === 200)
-  const liveAff = (await req('GET', '/api/store/ava-makes')).json.products.find((p: { id: string }) => p.id === aff.id)
-  check('the live Amazon card has a custom CTA and disclosure, with no Desknoty checkout', liveAff?.productType === 'affiliate' && liveAff?.affiliate?.cta === 'Shop on Amazon' && liveAff?.affiliate?.disclosure === 'I earn from qualifying purchases.' && liveAff?.affiliate?.url === '', JSON.stringify(liveAff))
+  const liveAff = (await req('GET', '/api/seller/store', undefined, A)).json.store.products.find((p: { id: string }) => p.id === aff.id)
+  check('a published Amazon entry keeps its CTA and disclosure but stays out of the public shop', liveAff?.published === true && liveAff?.extras?.affiliate?.cta === 'Shop on Amazon' && !(await req('GET', '/api/store/ava-makes')).json.products.some((p: { id: string }) => p.id === aff.id), JSON.stringify(liveAff?.extras?.affiliate))
   const affShort = savedAff.json?.product?.shortId as string
   check('an Amazon product keeps its short id through saves and publishing', isShortProductId(affShort) && liveAff?.shortId === affShort && affShort !== normalShort, JSON.stringify(liveAff?.shortId))
   const affLink = await req('GET', `/api/p/${affShort}`)
@@ -367,6 +367,27 @@ try {
   await req('POST', '/api/seller/store/publish', undefined, A)
   const afterRepublish = await req('GET', `/api/p/${affShort}/redirect`)
   check('editing and republishing keep the short link working', republished.json?.product?.shortId === affShort && afterRepublish.status === 302 && afterRepublish.headers.get('location') === amazonUrl)
+  // Private affiliate bio links: link + title only, redirect, never in the shop.
+  const linkA = 'https://www.amazon.co.uk/Desk-Lamp-LED-Dimmable/dp/B0D2LAMP01/ref=sr_1_3?tag=ava-21&th=1'
+  const linkB = 'https://www.amazon.com/dp/B0E3CHAIR2?tag=ava-20&psc=1'
+  const badOne = await req('POST', '/api/seller/products/affiliate', { url: 'https://amazon.co.uk.evil.example/dp/B0C1ABCDEF?tag=x', title: 'x' }, A)
+  check('a bio link refuses a lookalike Amazon URL', badOne.status === 400 && badOne.json?.error === AMAZON_LINK_ERROR)
+  const one = await req('POST', '/api/seller/products/affiliate', { url: linkA, title: 'My lamp' }, A)
+  const oneP = one.json?.product
+  check('a bio link is created from the Amazon link and title', one.status === 201 && oneP?.title === 'My lamp' && productTypeOf(oneP?.extras) === 'affiliate' && isShortProductId(oneP?.shortId), JSON.stringify(oneP))
+  const untitled = await req('POST', '/api/seller/products/affiliate', { url: linkA, title: '' }, A)
+  check('an empty title falls back to the name in the link', untitled.json?.product?.title === 'Desk Lamp LED Dimmable', untitled.json?.product?.title)
+  const oneGo = await req('GET', `/p/${oneP?.shortId}`)
+  check('a bio link redirects straight to the tagged Amazon URL', oneGo.status === 302 && oneGo.headers.get('location') === linkA, `${oneGo.status} ${oneGo.headers.get('location')}`)
+  const shop = (await req('GET', '/api/store/ava-makes')).json.products as Array<{ id: string }>
+  check('bio links never appear in the public shop', !shop.some((p) => p.id === oneP?.id || p.id === untitled.json?.product?.id || p.id === aff.id))
+  const edited = await req('PUT', `/api/seller/products/${oneP?.id}/affiliate`, { url: linkB, title: 'My chair' }, A)
+  check('editing a bio link keeps its short id', edited.status === 200 && edited.json?.product?.shortId === oneP?.shortId && edited.json?.product?.title === 'My chair', JSON.stringify(edited.json))
+  const afterEdit = await req('GET', `/p/${oneP?.shortId}`)
+  check('the same bio link now redirects to the updated URL with its tag', afterEdit.status === 302 && afterEdit.headers.get('location') === linkB, String(afterEdit.headers.get('location')))
+  const badEdit = await req('PUT', `/api/seller/products/${oneP?.id}/affiliate`, { url: 'https://example.com/dp/B0E3CHAIR2', title: 'x' }, A)
+  check('an edit refuses a non-Amazon URL', badEdit.status === 400)
+  check('a normal product cannot be edited as a bio link', (await req('PUT', `/api/seller/products/${pid}/affiliate`, { url: linkB, title: 'x' }, A)).status === 404)
   const privateAff = await req('PATCH', `/api/seller/products/${aff.id}`, { extras: { productType: 'affiliate', affiliate: { url: 'http://127.0.0.1/dp/B0C1ABCDEF?tag=ava-21' } } }, A)
   check('private-network Amazon destinations are refused', privateAff.status === 400 && privateAff.json?.error === AMAZON_LINK_ERROR, JSON.stringify(privateAff.json))
   const gone = await req('POST', '/api/seller/products', { title: 'Temporary', priceMinor: 100, currency: 'gbp' }, A)

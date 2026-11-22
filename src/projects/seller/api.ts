@@ -54,6 +54,8 @@ export const sellerApi = {
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
   updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'paymentType' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number, token?: string) =>
     call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision, token }),
+  createAffiliate: (url: string, title: string) => call<{ product: DraftProduct; store: StoreView; storeLive: boolean }>('POST', '/api/seller/products/affiliate', { url, title }),
+  updateAffiliate: (id: string, url: string, title: string) => call<{ product: DraftProduct; store: StoreView }>('PUT', `/api/seller/products/${id}/affiliate`, { url, title }),
   checkAmazonUrl: (url: string) => call<{ ok: true; url: string; short: boolean }>('POST', '/api/seller/products/amazon-check', { url }),
   coupons: () => call<{ coupons: Coupon[] }>('GET', '/api/seller/coupons'),
   createCoupon: (c: CouponInput) => call<{ coupon: Coupon }>('POST', '/api/seller/coupons', c),
