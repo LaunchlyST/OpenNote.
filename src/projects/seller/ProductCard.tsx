@@ -489,7 +489,7 @@ function Reviews({ handle, productId }: { handle: string; productId: string }) {
           <ul className="sp-rlist">
             {data.reviews.map((r) => (
               <li key={r.id}>
-                <div className="sp-rhead"><Stars value={r.rating} /><b>{r.name}</b><span className="sp-verified"><Check className="h-3.5 w-3.5" aria-hidden="true" /> Verified buyer</span></div>
+                <div className="sp-rhead"><Stars value={r.rating} />{r.name && r.name !== 'Verified buyer' && <b>{r.name}</b>}<span className="sp-verified"><Check className="h-3.5 w-3.5" aria-hidden="true" /> Verified buyer</span></div>
                 {r.body && <p>{r.body}</p>}
                 <div className="sp-rfoot">
                   <time dateTime={r.createdAt}>{new Date(r.createdAt).toLocaleDateString()}</time>{r.edited ? ' · edited' : ''}

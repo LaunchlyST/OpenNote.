@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
+import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { gsap } from 'gsap'
 import { AtSign, Check, ChevronDown, Download, Globe, Heart, MessageSquare, Play, Search, MoreVertical, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
 import { isFreeProduct, mediaUrl } from './model'
 import type { Block, CardPart, Page, ShopProduct } from './model'
 import { storeApi } from './api'
 import type { PublicReview } from './api'
-import { BuyRow } from './StorePage'
+import { Banner, BuyRow } from './StorePage'
 import type { StorePageProps } from './StorePage'
 import './showcase.css'
 
@@ -26,6 +26,30 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const needle = q.trim().toLowerCase()
   const list = (cat ? products.filter((p) => p.category?.trim() === cat) : products).filter((p) => !needle || p.title.toLowerCase().includes(needle))
   const [drawer, setDrawer] = useState(false)
+  // Which nav item is current: Reviews while the feedback drawer is open, otherwise
+  // Products once the collection reaches the top of the screen, else Home.
+  const [section, setSection] = useState<'home' | 'products'>('home')
+  const active = drawer ? 'reviews' : section
+  const links = useRef<HTMLSpanElement>(null)
+  const [ind, setInd] = useState<CSSProperties>({ opacity: 0 })
+  useEffect(() => {
+    const on = () => {
+      const c = document.getElementById('sx-collection')
+      setSection(c && c.getBoundingClientRect().top < innerHeight * 0.35 ? 'products' : 'home')
+    }
+    on()
+    addEventListener('scroll', on, { passive: true })
+    return () => removeEventListener('scroll', on)
+  }, [])
+  useEffect(() => {
+    const place = () => {
+      const b = links.current?.querySelector<HTMLElement>(`[data-k="${active}"]`)
+      setInd(b ? { opacity: 1, width: b.offsetWidth, transform: `translateX(${b.offsetLeft}px)` } : { opacity: 0 })
+    }
+    place()
+    addEventListener('resize', place)
+    return () => removeEventListener('resize', place)
+  }, [active])
   const root = useRef<HTMLDivElement>(null)
   const head = page.blocks.find((b) => b.type === 'header') ?? { id: 'header', type: 'header', hidden: false, data: {} } as Block
   const gridId = page.blocks.find((b) => b.type === 'grid' || b.type === 'featured')?.id ?? head.id
@@ -71,10 +95,11 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           <span className="sx-logo-av" style={mediaUrl(page.avatar) ? { backgroundImage: `url(${mediaUrl(page.avatar)})` } : undefined}>{!page.avatar && (page.name.trim().charAt(0) || handle.charAt(0)).toUpperCase()}</span>
           {page.name || `@${handle}`}
         </span>
-        <span className="sx-top-links">
-          <button type="button" className="on" onClick={() => scrollTo({ top: 0, behavior: 'smooth' })}>Home</button>
-          {products.length > 0 && <button type="button" onClick={shop}>Products</button>}
-          {products.length > 0 && live && <button type="button" onClick={() => setDrawer(true)}>Reviews</button>}
+        <span className="sx-top-links" ref={links}>
+          <button type="button" data-k="home" className={active === 'home' ? 'on' : ''} aria-current={active === 'home' || undefined} onClick={() => { setSection('home'); scrollTo({ top: 0, behavior: 'smooth' }) }}>Home</button>
+          {products.length > 0 && <button type="button" data-k="products" className={active === 'products' ? 'on' : ''} aria-current={active === 'products' || undefined} onClick={() => { setSection('products'); shop() }}>Products</button>}
+          {products.length > 0 && live && <button type="button" data-k="reviews" className={active === 'reviews' ? 'on' : ''} aria-current={active === 'reviews' || undefined} onClick={() => setDrawer(true)}>Reviews</button>}
+          <i className="sx-ind" style={ind} aria-hidden="true" />
         </span>
         {products.length > 1 && (
           <span className={searching ? 'sx-search on' : 'sx-search'}>
@@ -86,9 +111,8 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
       </nav>
       <aside className="sx-stage" ref={stage} onMouseMove={move} onMouseLeave={() => { stage.current?.style.setProperty('--mx', '0'); stage.current?.style.setProperty('--my', '0') }}>
         <div className="sx-stage-art">
-          {bannerVideo ? <video className="sx-stage-img" src={bannerVideo} muted playsInline autoPlay preload="metadata" onEnded={(e) => e.currentTarget.pause()} />
-            : banner ? <span className="sx-stage-img" style={{ backgroundImage: `url(${banner})` }} />
-              : <span className="sx-stage-img sx-stage-plain" />}
+          {page.banner && (banner || bannerVideo) ? <span className="sx-stage-img sx-stage-banner"><Banner banner={page.banner} /></span>
+            : <span className="sx-stage-img sx-stage-plain" />}
           <span className="sx-stage-light" aria-hidden="true" />
         </div>
         <div className="sx-stage-copy">
@@ -177,7 +201,7 @@ function Profile({ page, handle, showSocials }: { page: Page; handle: string; sh
   return (
     <header className="sx-profile">
       <div className={banner || video ? 'sx-banner' : 'sx-banner sx-banner-plain'}>
-        {video ? <video src={video} muted playsInline autoPlay preload="metadata" onEnded={(e) => e.currentTarget.pause()} /> : banner ? <img src={banner} alt="" /> : null}
+        {page.banner && (banner || video) ? <Banner banner={page.banner} /> : null}
       </div>
       <div className="sx-id">
         <span className="sx-avatar" style={avatar ? { backgroundImage: `url(${avatar})` } : undefined}>

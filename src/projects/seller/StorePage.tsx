@@ -344,7 +344,7 @@ function PageTabs({ tabs, index, onSelect, onHide }: { tabs: number[]; index: nu
 }
 
 /** The banner behind the profile. Tap it: a video plays once and stops; an image does a short zoom and settles. */
-function Banner({ banner }: { banner: NonNullable<Page['banner']> }) {
+export function Banner({ banner }: { banner: NonNullable<Page['banner']> }) {
   const src = mediaUrl(banner.media)
   const [play, setPlay] = useState(0)
   const video = useRef<HTMLVideoElement>(null)
