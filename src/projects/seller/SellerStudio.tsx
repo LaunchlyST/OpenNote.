@@ -660,7 +660,19 @@ function Studio({
       void addProductBlockBelow(p.blockId, productId)
     }
   }
-  const view = 'mobile' as 'mobile' | 'desktop'
+  // Preview size: a phone, or a laptop (the page laid out at 1440px and scaled to fit). Remembered per browser.
+  const [view, setViewRaw] = useState<'mobile' | 'desktop'>(() => { try { return localStorage.getItem('desknoty.studio.view') === 'desktop' ? 'desktop' : 'mobile' } catch { return 'mobile' } })
+  const setView = (v: 'mobile' | 'desktop') => { setViewRaw(v); try { localStorage.setItem('desknoty.studio.view', v) } catch { /* private mode */ } }
+  const deviceRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = deviceRef.current
+    if (!el || view !== 'desktop') return
+    const fit = () => el.style.setProperty('--z', String(Math.max(0.3, (el.clientWidth - 20) / 1440)))
+    fit()
+    const ro = new ResizeObserver(fit)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [view])
   // the phone preview can sit on the left or the right of the editor (remembered per browser)
   const [publishing, setPublishing] = useState(false)
   const [err, setErr] = useState<string | null>(null)
@@ -1133,7 +1145,7 @@ function Studio({
   const status = !store.publishedAt ? 'Not published yet' : store.unpublishedChanges || saving === 'saving' || pageSave.dirty ? 'Unpublished changes' : 'Live'
 
   return (
-    <div className="ss">
+    <div className={view === 'desktop' ? 'ss ss-desk' : 'ss'}>
       <section className="ss-editor" aria-label="Store builder">
         {/* One navbar at the very top; scrolls sideways in one row on phones */}
         <nav className="ss-tabs" role="tablist" aria-label="Seller Studio">
@@ -1284,12 +1296,17 @@ function Studio({
           <span className={cn('pv-saved', (saving === 'saving' || pageSave.dirty) && 'busy', saving === 'error' && 'err')} aria-live="polite">
             <i />{saving === 'saving' || pageSave.dirty ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved ✓'}
           </span>
+          <div className="ss-seg pv-size" role="tablist" aria-label="Preview size">
+            <button type="button" role="tab" aria-selected={view === 'mobile'} onClick={() => setView('mobile')}><Smartphone className="h-3.5 w-3.5" /> Phone</button>
+            <button type="button" role="tab" aria-selected={view === 'desktop'} onClick={() => setView('desktop')}><Monitor className="h-3.5 w-3.5" /> Laptop</button>
+          </div>
           <button type="button" className="pv-btn" onClick={() => setPreviewOpen(true)}><Eye className="h-4 w-4" /> Preview</button>
           <button type="button" className="pv-btn" title={`Copy ${store.url || `${window.location.origin}/${store.handle}`}`} onClick={() => void share()}><Share2 className="h-4 w-4" /> {shared ? 'Link copied' : shareFailed ? 'Copy failed' : 'Share'}</button>
           <button type="button" className="pv-btn pv-publish" onClick={() => void publish()} disabled={publishing}><Globe className="h-4 w-4" /> {publishing ? 'Publishing…' : 'Publish'}</button>
         </div>
         <div
           className={cn('ss-device', view === 'desktop' && 'ss-device-desk')}
+          ref={deviceRef}
         >
           {view === 'mobile' && <span className="ss-island" aria-hidden="true" />}
           <div

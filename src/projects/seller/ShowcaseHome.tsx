@@ -131,7 +131,7 @@ export function useViewTransition({ home, root, initial, live, onState }: {
     h.style.display = ''
     const els = shopEls()
     for (const el of els) { el.style.visibility = ''; }
-    gsap.set([...h.querySelectorAll('.sx-mo-tile, .sx-mo-copy, .sx-mo-hero, .sx-mo-hero-img'), h, ...els, ...r.querySelectorAll('.sx-row, .sx-art')], { clearProps: 'all' })
+    gsap.set([...h.querySelectorAll('.sx-mo-tile, .sx-mo-copy, .sx-mo-hero, .sx-mo-hero-img'), h, ...els, ...r.querySelectorAll('.sx-shop-in > *, .sx-card-art')], { clearProps: 'all' })
     const frame = h.querySelector<HTMLElement>('.sx-mo')!
     const hero = h.querySelector<HTMLElement>('.sx-mo-hero')!
     const slot = h.querySelector<HTMLElement>('.sx-mo-slot')!
@@ -141,10 +141,10 @@ export function useViewTransition({ home, root, initial, live, onState }: {
     const cx = fr.left + fr.width / 2, cy = fr.top + fr.height / 2
     const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
     // where each product cover lives in the shopping layout (measured before hiding it)
-    const arts = new Map([...r.querySelectorAll<HTMLElement>('.sx-row[data-pid]')].map((row) => [row.dataset.pid!, row.querySelector<HTMLElement>('.sx-art')!]))
+    const arts = new Map([...r.querySelectorAll<HTMLElement>('.sx-card[data-pid]')].map((row) => [row.dataset.pid!, row.querySelector<HTMLElement>('.sx-card-art')!]))
     const artRect = new Map([...arts].map(([k, a]) => [k, a.getBoundingClientRect()]))
     const stage = r.querySelector(':scope > .sx-stage'), panel = r.querySelector(':scope > .sx-panel'), fab = r.querySelector(':scope > .sx-fab')
-    const rows = r.querySelectorAll('.sx-panel .sx-shop-in > *, .sx-row')
+    const rows = r.querySelectorAll('.sx-panel .sx-shop-in > *')
 
     const t = gsap.timeline({
       paused: true,
@@ -229,7 +229,7 @@ export function useViewTransition({ home, root, initial, live, onState }: {
       if (state.current !== 'HOME_READY' && state.current !== 'PRODUCTS_READY') return
       tl.current?.kill(); tl.current = null
       const h = home.current, r = root.current
-      if (h && r) gsap.set([...h.querySelectorAll('.sx-mo-tile, .sx-mo-copy, .sx-mo-hero, .sx-mo-hero-img, .sx-mo'), h, ...shopEls(), ...r.querySelectorAll('.sx-shop-in > *, .sx-row, .sx-art')], { clearProps: 'all' })
+      if (h && r) gsap.set([...h.querySelectorAll('.sx-mo-tile, .sx-mo-copy, .sx-mo-hero, .sx-mo-hero-img, .sx-mo'), h, ...shopEls(), ...r.querySelectorAll('.sx-shop-in > *, .sx-card-art')], { clearProps: 'all' })
       rest(state.current === 'PRODUCTS_READY' ? 'products' : 'home')
     }
     addEventListener('resize', off)

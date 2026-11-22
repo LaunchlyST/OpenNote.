@@ -16,9 +16,15 @@ Files: `src/projects/seller/Showcase.tsx`, `ShowcaseHome.tsx`, `showcase.css`
   Instant download / Secure checkout, orange "Shop collection".
 - Top bar: logo, Home / Products / Reviews with one sliding orange underline; right: socials +
   "N digital products" pill; search only for 9+ products. No "Shop now", no cart.
-- Right: white slanted card at the right end (~46% width) with "Explore the collection",
-  category tabs (only if ≥2 real categories), compact rows: art, title, short line,
-  price, ⋮ menu (View details / Save / Copy link), black Buy/Get free download button.
+- Right: the slanted card at the right end (~46% width) — KEEP THIS SHAPE. Inside it:
+  "Explore the collection", category tabs (only if ≥2 real categories) and the showroom
+  carousel (`ShowcaseCarousel.tsx`): one large card in front, neighbours peeking, drag/swipe,
+  arrows, dots, keyboard, trackpad. Each product has a deterministic theme (hash of id over 6
+  palettes; seller's CTA colour overrides); the shape fills with that product's scene
+  (gradients + blurred cover light + arc) blending continuously with the drag.
+  Card: art (contain over blurred copy), title, short line, chips (type/format/real rating),
+  sale price when discounted, accent button "Buy now — £X" / "Get free download".
+- Studio: Phone / Laptop switch above the preview (laptop = page at 1440px, scaled).
 - Feedback: only from the floating button or "Reviews"; drawer with real reviews and verified writing.
 
 ## Transition (one GSAP timeline, `useViewTransition`)
