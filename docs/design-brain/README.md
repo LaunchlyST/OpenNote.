@@ -33,3 +33,9 @@ to it after.
   a DESIGN.md. **Not installed.** Needs the owner's approval for: an API key, a new
   private repo, and GitHub Actions minutes.
 - **Fallback in use now:** this Markdown folder (in git, no third-party services).
+
+
+## Working rule (owner, Nov 2026)
+Before **every** design change: re-read this folder (README, STYLE1_SPEC or the Style 2 docs,
+RESEARCH, MISTAKES), and in the reply name which notes were used. After the change, update the
+spec and add any new mistake.
