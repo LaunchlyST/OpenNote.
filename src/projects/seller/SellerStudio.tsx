@@ -669,14 +669,16 @@ function Studio({
     if (!el || view !== 'desktop') return
     // Lay the page out at 1440px (or the frame's own width if that's wider) and only ever shrink it.
     const fit = () => {
+      // measure the column, not the frame, so the page inside can never widen it
       const w = Math.max(320, el.clientWidth - 24)
       const z = Math.max(0.3, Math.min(1, w / 1440))
       el.style.setProperty('--z', String(z))
       el.style.setProperty('--pw', `${Math.floor(w / z)}px`)
+      el.style.setProperty('--ph', `${Math.floor(Math.max(560, el.clientHeight - 30) / z)}px`)
     }
     fit()
     const ro = new ResizeObserver(fit)
-    ro.observe(el)
+    ro.observe(el.parentElement ?? el)
     return () => ro.disconnect()
   }, [view])
   // the phone preview can sit on the left or the right of the editor (remembered per browser)

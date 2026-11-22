@@ -9173,3 +9173,16 @@ select.ss-input option {
 .ss-device-desk > .ss-screen { border-radius: 4px; }
 .ss-device-desk::after { inset: auto -7% -22px -7%; height: 22px; border-radius: 3px 3px 16px 16px; background: linear-gradient(180deg, #c9cbd1, #9a9ca4 60%, #74767e); box-shadow: 0 18px 30px -12px rgba(0,0,0,.6); pointer-events: none; }
 .pv-size { padding: 0 10px; }
+/* Laptop preview: heights follow the laptop screen, not the real browser window. */
+.ss-device-desk .sx { min-height: var(--ph, 900px); }
+.ss-device-desk .sx-stage { height: var(--ph, 900px); }
+.ss-device-desk .sx-panel { min-height: var(--ph, 900px); }
+.ss-device-desk .sx-track { height: clamp(560px, calc(var(--ph, 900px) - 270px), 720px); }
+.ss-device-desk .sx-home-inline, .ss-device-desk .sx-home-inline .sx-mo { min-height: var(--ph, 900px); height: var(--ph, 900px); }
+.ss-device-desk .ss-screen { background: #0c0b0a; }
+.ss-preview .ss-device.ss-device-desk { contain: inline-size; min-width: 0; overflow: visible; }
+.ss-device-desk > .ss-screen { overflow-x: hidden; max-width: 100%; }
+.ss-device-desk .ss-slide { overflow: hidden; }
+.ss.ss-desk > .ss-preview { min-width: 0; overflow: hidden; padding-bottom: 30px; }
+.ss-preview .ss-device.ss-device-desk { width: 92%; }
+.ss-device-desk .sx-panel { min-height: calc(var(--ph, 900px) - 84px); } .ss-device-desk .sx { background: #0c0b0a; }
