@@ -8,6 +8,8 @@ import { storeApi } from './api'
 import type { PublicReview } from './api'
 import { Banner, BuyRow } from './StorePage'
 import type { StorePageProps } from './StorePage'
+import { HomeView, useInitialView, useViewTransition } from './ShowcaseHome'
+import type { NavState, View } from './ShowcaseHome'
 import './showcase.css'
 
 /**
@@ -26,21 +28,33 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const needle = q.trim().toLowerCase()
   const list = (cat ? products.filter((p) => p.category?.trim() === cat) : products).filter((p) => !needle || p.title.toLowerCase().includes(needle))
   const [drawer, setDrawer] = useState(false)
-  // Which nav item is current: Reviews while the feedback drawer is open, otherwise
-  // Products once the collection reaches the top of the screen, else Home.
-  const [section, setSection] = useState<'home' | 'products'>('home')
-  const active = drawer ? 'reviews' : section
+  // Home ⇄ Products is one reversible timeline (see useViewTransition).
+  const initial = useInitialView(live)
+  const [view, setView] = useState<View>(initial)
+  const [nav, setNav] = useState<NavState>(initial === 'products' ? 'PRODUCTS_READY' : 'HOME_READY')
+  const homeRef = useRef<HTMLElement | null>(null)
+  const shopRef = useRef<HTMLElement | null>(null)
+  const goTo = useViewTransition({ home: homeRef, shop: shopRef, initial, onState: setNav })
+  const go = (v: View, push = true) => {
+    setView(v)
+    goTo(v)
+    if (push && live) {
+      try {
+        const u = new URL(location.href)
+        if (v === 'products') u.searchParams.set('view', 'products'); else u.searchParams.delete('view')
+        if (u.href !== location.href) history.pushState({ sxView: v }, '', u)
+      } catch { /* ignore */ }
+    }
+  }
+  useEffect(() => {
+    if (!live) return
+    const pop = () => { const v: View = new URLSearchParams(location.search).get('view') === 'products' ? 'products' : 'home'; setView(v); goTo(v) }
+    addEventListener('popstate', pop)
+    return () => removeEventListener('popstate', pop)
+  }, [live, goTo])
+  const active = drawer ? 'reviews' : view
   const links = useRef<HTMLSpanElement>(null)
   const [ind, setInd] = useState<CSSProperties>({ opacity: 0 })
-  useEffect(() => {
-    const on = () => {
-      const c = document.getElementById('sx-collection')
-      setSection(c && c.getBoundingClientRect().top < innerHeight * 0.35 ? 'products' : 'home')
-    }
-    on()
-    addEventListener('scroll', on, { passive: true })
-    return () => removeEventListener('scroll', on)
-  }, [])
   useEffect(() => {
     const place = () => {
       const b = links.current?.querySelector<HTMLElement>(`[data-k="${active}"]`)
@@ -63,12 +77,9 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
       tl.from('.sx-stage-img', { scale: 1.12, opacity: 0, duration: 1.4 })
         .from('.sx-stage-copy > *', { y: 24, opacity: 0, duration: 0.8, stagger: 0.07 }, 0.25)
         .from('.sx-panel', { xPercent: 6, opacity: 0, duration: 0.9 }, 0.1)
-        .from('.sx-banner', { clipPath: 'inset(0 0 100% 0 round 22px)', duration: 0.9, ease: 'power3.inOut' }, 0.2)
-        .from('.sx-avatar', { scale: 0.6, opacity: 0, duration: 0.6, ease: 'back.out(1.7)' }, 0.65)
-        .from('.sx-id > *:not(.sx-avatar)', { y: 12, opacity: 0, duration: 0.6, stagger: 0.05 }, 0.75)
-      gsap.utils.toArray<HTMLElement>('.sx-row').forEach((row, i) => {
-        gsap.from(row, { y: 28, opacity: 0, duration: 0.7, delay: 0.9 + Math.min(i, 4) * 0.08 })
-      })
+        .from('.sx-mo-hero', { scale: 1.04, duration: 1.2 }, 0.1)
+        .from('.sx-mo-tile', { opacity: 0, y: 18, duration: 0.8, stagger: 0.05, clearProps: 'opacity,transform' }, 0.3)
+        .from('.sx-mo-copy > *', { opacity: 0, y: 14, duration: 0.7, stagger: 0.06, clearProps: 'opacity,transform' }, 0.55)
     }, el)
     return () => ctx.revert()
   }, [live])
@@ -82,7 +93,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
     const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5
     s.style.setProperty('--mx', String(x)); s.style.setProperty('--my', String(y))
   }
-  const shop = () => document.getElementById('sx-collection')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  const shop = () => go('products')
 
   const banner = page.banner?.kind === 'image' ? mediaUrl(page.banner.media) : null
   const bannerVideo = page.banner?.kind === 'video' ? mediaUrl(page.banner.media) : null
@@ -96,8 +107,8 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           {page.name || `@${handle}`}
         </span>
         <span className="sx-top-links" ref={links}>
-          <button type="button" data-k="home" className={active === 'home' ? 'on' : ''} aria-current={active === 'home' || undefined} onClick={() => { setSection('home'); scrollTo({ top: 0, behavior: 'smooth' }) }}>Home</button>
-          {products.length > 0 && <button type="button" data-k="products" className={active === 'products' ? 'on' : ''} aria-current={active === 'products' || undefined} onClick={() => { setSection('products'); shop() }}>Products</button>}
+          <button type="button" data-k="home" className={active === 'home' ? 'on' : ''} aria-current={active === 'home' || undefined} onClick={() => go('home')}>Home</button>
+          {products.length > 0 && <button type="button" data-k="products" className={active === 'products' ? 'on' : ''} aria-current={active === 'products' || undefined} onClick={() => go('products')}>Products</button>}
           {products.length > 0 && live && <button type="button" data-k="reviews" className={active === 'reviews' ? 'on' : ''} aria-current={active === 'reviews' || undefined} onClick={() => setDrawer(true)}>Reviews</button>}
           <i className="sx-ind" style={ind} aria-hidden="true" />
         </span>
@@ -110,8 +121,8 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
         <span className="sx-top-right">
           {head.data?.showSocials !== false && <Socials page={page} />}
           {products.length > 0 && (
-            <button type="button" className="sx-count" onClick={() => { setSection('products'); shop() }}>
-              <b>{products.length}</b> digital product{products.length === 1 ? '' : 's'} <span aria-hidden="true">↓</span>
+            <button type="button" className="sx-count" onClick={() => go('products')}>
+              <b>{products.length}</b> digital product{products.length === 1 ? '' : 's'} <span aria-hidden="true">→</span>
             </button>
           )}
         </span>
@@ -138,25 +149,35 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
       </aside>
 
       <main className="sx-panel">
-        {props.pickable(head, <Profile page={page} handle={handle} showSocials={head.data?.showSocials !== false} />)}
-
-        {products.length > 0 && (
-          <section className="sx-collection" id="sx-collection" aria-labelledby="sx-col-h">
-            <p className="sx-kicker sx-kicker-dark"><span />Digital products</p>
-            <h2 id="sx-col-h">Explore the <em>collection</em></h2>
-            {cats.length > 1 && (
-              <div className="sx-filters" role="tablist" aria-label="Filter products">
-                {[null, ...cats].map((c) => (
-                  <button key={c ?? 'all'} type="button" role="tab" aria-selected={cat === c} className={cat === c ? 'on' : ''} onClick={() => setCat(c)}>{c ?? 'All products'}</button>
-                ))}
+        <div className="sx-seg" role="tablist" aria-label="Store view">
+          <button type="button" role="tab" aria-selected={view === 'home'} className={view === 'home' ? 'on' : ''} onClick={() => go('home')}>Home</button>
+          {products.length > 0 && <button type="button" role="tab" aria-selected={view === 'products'} className={view === 'products' ? 'on' : ''} onClick={() => go('products')}>Products</button>}
+          <i style={{ transform: view === 'products' ? 'translateX(100%)' : 'none' }} aria-hidden="true" />
+        </div>
+        <div className="sx-views" data-nav={nav}>
+          <HomeView props={props} products={products} onExplore={() => go('products')} homeRef={homeRef} />
+          <section className="sx-shop" ref={shopRef} aria-label="Products">
+            <div className="sx-shop-in">
+              {props.pickable(head, <Profile page={page} handle={handle} showSocials={head.data?.showSocials !== false} />)}
+              <p className="sx-kicker sx-kicker-dark" id="sx-collection"><span />Digital products</p>
+              <h2 id="sx-col-h">Explore the <em>collection</em></h2>
+              {cats.length > 1 && (
+                <div className="sx-filters" role="tablist" aria-label="Filter products">
+                  {[null, ...cats].map((c) => (
+                    <button key={c ?? 'all'} type="button" role="tab" aria-selected={cat === c} className={cat === c ? 'on' : ''} onClick={() => setCat(c)}>{c ?? 'All products'}</button>
+                  ))}
+                </div>
+              )}
+              {needle && !list.length && <p className="sx-none">No products match “{q}”.</p>}
+              {!products.length && <p className="sx-none">No products yet.</p>}
+              <div className="sx-list-wrap">
+                <ol className="sx-list">
+                  {list.map((p) => <Row key={p.id} p={p} blockId={gridId} {...props} />)}
+                </ol>
               </div>
-            )}
-            {needle && !list.length && <p className="sx-none">No products match “{q}”.</p>}
-            <ol className="sx-list">
-              {list.map((p) => <Row key={p.id} p={p} blockId={gridId} {...props} />)}
-            </ol>
+            </div>
           </section>
-        )}
+        </div>
         {props.rest}
         {props.foot}
       </main>
@@ -278,7 +299,7 @@ function Row({ p, blockId, ...props }: { p: ShopProduct; blockId: string } & Sto
     gsap.to(el, { height: open ? 'auto' : 0, opacity: open ? 1 : 0, duration: 0.45, ease: 'power3.inOut' })
   }, [open])
   return (
-    <li className={'sx-row' + (open ? ' is-open' : '') + picked('card')} onClick={live ? undefined : pick('card')}>
+    <li data-pid={p.id} className={'sx-row' + (open ? ' is-open' : '') + picked('card')} onClick={live ? undefined : pick('card')}>
       <button type="button" className={'sx-art' + picked('cover')} onClick={live ? openIt : pick('cover')} aria-label={`View ${p.title}`}>
         {cover ? <img src={cover} alt="" loading="lazy" /> : <span className="sx-art-ph">{p.title.slice(0, 2)}</span>}
         {p.offer && <span className="sx-off">−{p.offer.percent}%</span>}

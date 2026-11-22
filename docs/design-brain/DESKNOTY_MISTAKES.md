@@ -42,3 +42,7 @@ Real failures from this project (Nov 2026). Format: what → why → fix → pre
 
 13. **Duplicate price on sale items** (custom "was" price beside PriceTag, which already
     strikes the old price). Prevention: reuse BuyRow/PriceTag; screenshot a discounted row.
+
+14. **Hidden layer visible at the start of a timeline** (`fromTo(..., immediateRender:false)`
+    leaves the target visible until its tween starts). Prevention: `gsap.set` the start state
+    when building the timeline; check the first frames of a recording, not just the ends.

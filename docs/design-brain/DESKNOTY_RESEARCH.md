@@ -107,3 +107,14 @@ Totals: 10 inspected, 3 partial, 4 inaccessible. Need 5+ more full inspections
 3. A campaign block between product rows (where real discounts live).
 4. Buy box: price + discount tag + benefit ticks + one primary CTA, above the fold.
 5. 3D sells atmosphere; the store must work fully before/without it.
+
+### Oversight Supply — "Home — Product Showcase 01" (Evergrid)
+1. https://supply.madebyoversight.com/sections/evergrid-home-product-showcase-01
+2. Inspected: the public page and its free interactive preview (desktop, scrolled). Source code
+   needs a signed-in account — **not obtained, not used**.
+3. Seen: one full-bleed landscape image that, on scroll, shrinks into the centre panel of a
+   dark mosaic of rounded landscape tiles (2 on top, 1 each side, 2 below); a serif two-line
+   headline fades in over the centre panel.
+8. Adapted (own code): Style 1 Home = that mosaic built from the seller's own images; Home →
+   Products is one GSAP timeline (centre panel opens via clip-path, other tiles part, product
+   covers fly to their rows); Home plays the same timeline in reverse.
