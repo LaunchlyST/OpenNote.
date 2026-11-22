@@ -1,144 +1,188 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { ComingSoon, PriceTag } from './StorePage'
-import { Daisy, Flower, Sticky } from '../../landing/AeroPage'
 import type { StorePageProps } from './StorePage'
 import { affiliateHref, ensureFont, isFreeProduct, mediaUrl } from './model'
 import type { ShopProduct } from './model'
-import { Style2Carousel } from './Style2Carousel'
 import './style2.css'
 
 /**
- * STYLE 2 — the premium digital-product shop.
+ * STYLE 2 — a premium storefront for digital products.
  *
- * Shows in Seller Studio's phone (Style 2) and on the live store once the
- * seller publishes Style 2. Same data and purchase handlers as Style 1:
- * Buy now always calls onBuy (the real checkout), affiliate products link to
- * Amazon, product links stay /<handle>/p/<productId>.
+ * Shows in Seller Studio's preview (Style 2) and on the live store once the
+ * seller publishes Style 2. Same data and purchase handlers as Style 1: Buy
+ * always calls onBuy (the real checkout), affiliate products link out, product
+ * links stay /<handle>/p/<productId>.
  *
- * Layout: a dark opening hero over the seller's banner (the featured product,
- * fully usable from the first frame) → a warm ivory catalogue grid → the
- * Coming Soon teaser.
+ * Layout: slim header → one featured product over a full-width scene (swipe or
+ * arrows to change product; the scene follows the product) → "Shop all" grid →
+ * Coming soon (once) → compact footer.
  */
+
+/**
+ * Scene library. Free previews from Backgrounds Supply, licensed for commercial
+ * website use (https://backgrounds.supply/license-agreement):
+ *   garden — Viridian: https://app.backgrounds.supply/api/r2-public/previews/viridian/image-1.webp
+ *   dune   — Serenox:  https://app.backgrounds.supply/api/r2-public/previews/serenox/image-8.webp
+ */
+const SCENES = {
+  garden: { src: '/scenes/viridian-garden.webp', tint: '#2f3b1f' },
+  dune: { src: '/scenes/serenox-dune.webp', tint: '#3a2618' },
+} as const
+type SceneId = keyof typeof SCENES
+const SCENE_ORDER: SceneId[] = ['garden', 'dune']
+/** Scenes chosen for specific live products (x--x039's lemon cleaner → the sunlit garden). */
+const PINNED: Record<string, SceneId> = { prd_32afe7a32e425e47793b: 'garden' }
+const BOTANICAL = /lemon|citrus|lime|orange|fruit|flower|floral|garden|botanic|plant|leaf|spring|summer/i
+
+/** A product's scene is fixed by its id (and botanical products get the garden), so swiping back restores it. */
+export function sceneFor(p: ShopProduct): SceneId {
+  if (PINNED[p.id]) return PINNED[p.id]
+  if (BOTANICAL.test(`${p.title} ${p.description ?? ''}`)) return 'garden'
+  let h = 0
+  for (const c of p.id) h = (h * 31 + c.charCodeAt(0)) | 0
+  return SCENE_ORDER[Math.abs(h) % SCENE_ORDER.length]
+}
+
 export function Style2Page(props: StorePageProps) {
   const { page, products, handle, only } = props
   useEffect(() => { ensureFont(page.theme.font) }, [page.theme.font])
   const list = only ? [only] : products.filter((p) => !p.hidden)
   const name = (page.name || handle).trim()
-  const [glyphs] = useState(makeGlyphs)
+  const accent = page.theme.accent && !/^#?(fff|ffffff)$/i.test(page.theme.accent) ? page.theme.accent : '#1b1a17'
+  const avatar = mediaUrl(page.avatar)
+  const home = props.live ? `/${handle}` : undefined
+
   return (
-    <div className="s2k">
-      <pre className="s2k-glyphs" aria-hidden="true">{glyphs}</pre>
-      <header className="s2k-top">
-        <a className="s2k-brand" href={props.live ? `/${handle}` : undefined}>
-          <span className="s2k-ava" aria-hidden="true">{name.charAt(0).toUpperCase()}</span>
-          {name}
+    <div className="s2s" style={{ ['--ac' as string]: accent } as CSSProperties}>
+      <header className="s2s-top">
+        <a className="s2s-brand" href={home}>
+          <span className="s2s-mark" aria-hidden="true" style={avatar ? { backgroundImage: `url(${avatar})` } : undefined}>{!avatar && (name.charAt(0).toUpperCase() || '✦')}</span>
+          <span>{name}</span>
         </a>
-        <span className="s2k-status"><i />Open · {list.length} {list.length === 1 ? 'product' : 'products'}</span>
+        <a className="s2s-shoplink" href={list.length > 1 && !only ? '#s2s-all' : '#s2s-feature'}>Shop</a>
       </header>
 
-      {!only && (
-        <section className="s2k-hero">
-          <span className="s2k-st s2k-daisy" aria-hidden="true"><Daisy /></span>
-          <span className="s2k-st s2k-f1" aria-hidden="true"><Flower c="#e36b62" /></span>
-          <span className="s2k-st s2k-f2" aria-hidden="true"><Flower c="#7aa35a" m="#f2c94c" /></span>
-          <span className="s2k-st s2k-sticky" aria-hidden="true"><Sticky /></span>
-          <h1>Good things<br />from <em>{name}</em><span className="s2k-dot" aria-hidden="true" /></h1>
-          <p className="s2k-hand">{page.bio?.trim() || 'made with care, ready to download'}</p>
-        </section>
-      )}
+      {list.length === 0
+        ? <p className="s2s-empty">{props.live ? 'New products are on the way.' : 'Add products in the Products tab to show them here.'}</p>
+        : <Feature list={list} {...props} />}
 
-      {!only && list.length > 0 && <Rail list={list} {...props} />}
-
-      {only
-        ? <section id="s2-shop" className="s2k-shop" aria-label="Products">{list.map((p, i) => <Card key={p.id} p={p} n={i} {...props} />)}</section>
-        : <div id="s2-shop"><Style2Carousel list={list} props={props} Buy={Buy} /></div>}
-      {!only && <div className="s2k-next"><span className="s2k-hand s2k-next-note">psst… next one’s on the way</span><Teaser /></div>}
-      {!only && (
-        <section className="s2k-promo" aria-label="Stay in the loop">
-          <div className="s2k-promo-in">
-            <span className="s2k-promo-kicker">New drops, every month</span>
-            <h2>Good things take<br />a little time.</h2>
-            <a className="s2k-promo-btn" href="#s2-shop">Shop {list.length} {list.length === 1 ? 'product' : 'products'} →</a>
+      {!only && list.length > 1 && (
+        <section id="s2s-all" className="s2s-all" aria-labelledby="s2s-all-h">
+          <div className="s2s-wrap">
+            <div className="s2s-all-head">
+              <h2 id="s2s-all-h">Shop all</h2>
+              <span>{list.length} products</span>
+            </div>
+            <div className="s2s-grid">
+              {list.map((p) => <Card key={p.id} p={p} {...props} />)}
+            </div>
           </div>
         </section>
       )}
 
-      <footer className="s2k-foot">
-        <span>© {new Date().getFullYear()} {name}</span>
-        <span className="s2k-word" aria-hidden="true">{name}</span>
-        <a href="https://desknoty.com" target="_blank" rel="noopener">Made with Desknoty</a>
+      {!only && (
+        <div className="s2s-wrap s2s-soon"><Teaser /></div>
+      )}
+
+      <footer className="s2s-foot">
+        <div className="s2s-wrap s2s-foot-in">
+          <a className="s2s-brand s2s-brand-sm" href={home}>
+            <span className="s2s-mark" aria-hidden="true" style={avatar ? { backgroundImage: `url(${avatar})` } : undefined}>{!avatar && (name.charAt(0).toUpperCase() || '✦')}</span>
+            <span>{name}</span>
+          </a>
+          <span className="s2s-foot-meta">© {new Date().getFullYear()} {name} · <a href="https://desknoty.com" target="_blank" rel="noopener">Made with Desknoty</a></span>
+        </div>
       </footer>
     </div>
   )
 }
 
-/** Virtual-store rail: products hang on a rail; pick one to bring it forward. Pill tabs filter. */
-function Rail({ list, ...props }: { list: ShopProduct[] } & StorePageProps) {
-  const [tab, setTab] = useState<'all' | 'paid' | 'free'>('all')
-  const shown = list.filter((p) => tab === 'all' || (tab === 'free' ? isFreeProduct(p) : !isFreeProduct(p)))
+/** The featured product over its scene. Swipe, arrows or ←/→ change product; one product hides the controls. */
+function Feature({ list, ...props }: { list: ShopProduct[] } & StorePageProps) {
   const [at, setAt] = useState(0)
-  const cur = shown[Math.min(at, shown.length - 1)]
-  const hasFree = list.some(isFreeProduct), hasPaid = list.some((p) => !isFreeProduct(p))
+  const i = Math.min(at, list.length - 1)
+  const p = list[i]
+  const many = list.length > 1
+  const go = useCallback((d: number) => setAt((n) => (Math.min(n, list.length - 1) + d + list.length) % list.length), [list.length])
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const onDown = (e: ReactPointerEvent) => {
+    if (!many || (e.target as HTMLElement).closest('button, a, input')) return
+    start.current = { x: e.clientX, y: e.clientY }
+  }
+  const onUp = (e: ReactPointerEvent) => {
+    const s = start.current
+    start.current = null
+    if (!s) return
+    const dx = e.clientX - s.x, dy = e.clientY - s.y
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy)) go(dx < 0 ? 1 : -1)
+  }
+  const scene = SCENES[sceneFor(p)]
+  const src = mediaUrl(p.cover)
+  const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
+  const type = p.format || p.fileType
+
   return (
-    <section className="s2k-rail" aria-label="Pick a product">
-      <div className="s2k-bar" aria-hidden="true" />
-      <div className="s2k-hang" role="listbox" aria-label="Products">
-        {shown.map((p, i) => {
-          const src = mediaUrl(p.cover)
-          return (
-            <button key={p.id} type="button" role="option" aria-selected={p === cur} className={p === cur ? 'on' : ''} onClick={() => setAt(i)} onMouseEnter={() => setAt(i)} style={{ ['--d' as string]: `${(i % 5) * 0.4}s` }}>
-              <i className="s2k-hook" aria-hidden="true" />
-              <span className="s2k-tag">{src ? <img src={src} alt="" draggable={false} /> : <b>{p.title.charAt(0).toUpperCase()}</b>}</span>
-              <span className="s2k-sr">{p.title}</span>
-            </button>
-          )
-        })}
+    <section
+      id="s2s-feature"
+      className="s2s-feature"
+      aria-roledescription={many ? 'carousel' : undefined}
+      aria-label="Featured product"
+      data-product={p.id}
+      data-scene={sceneFor(p)}
+      onPointerDown={onDown}
+      onPointerUp={onUp}
+      onPointerCancel={() => { start.current = null }}
+      onKeyDown={(e) => { if (!many) return; if (e.key === 'ArrowRight') go(1); if (e.key === 'ArrowLeft') go(-1) }}
+      style={{ ['--tint' as string]: scene.tint } as CSSProperties}
+    >
+      <div className="s2s-scenes" aria-hidden="true">
+        {SCENE_ORDER.map((id) => (
+          <img key={id} src={SCENES[id].src} alt="" className={id === sceneFor(p) ? 'on' : ''} draggable={false} decoding="async" />
+        ))}
       </div>
-      {cur && (
-        <div className="s2k-pick" key={cur.id}>
-          <h2>{props.live ? <a href={`/${props.handle}/p/${cur.id}`}>{cur.title}</a> : cur.title}</h2>
-          <Buy p={cur} {...props} />
+      <div className="s2s-wrap s2s-feature-in" key={p.id} aria-live="polite">
+        <a className="s2s-art" href={link} tabIndex={-1} aria-hidden="true" draggable={false}>
+          {src ? <img src={src} alt="" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}
+        </a>
+        <div className="s2s-info">
+          <p className="s2s-kicker">{affiliateHref(p) ? 'Recommended' : type ? `Digital download · ${type}` : 'Digital download'}</p>
+          <h1>{link ? <a href={link}>{p.title}</a> : p.title}</h1>
+          {p.description && <p className="s2s-desc">{p.description.split('\n')[0]}</p>}
+          {p.rating && p.rating.count > 0 && <p className="s2s-rating">★ {p.rating.average.toFixed(1)} <span>({p.rating.count})</span></p>}
+          <Buy p={p} big {...props} />
+          {many && (
+            <div className="s2s-ctrl">
+              <button type="button" onClick={() => go(-1)} aria-label="Previous product">←</button>
+              <span>{i + 1} / {list.length}</span>
+              <button type="button" onClick={() => go(1)} aria-label="Next product">→</button>
+            </div>
+          )}
         </div>
-      )}
-      {hasFree && hasPaid && (
-        <div className="s2k-pills" role="tablist" aria-label="Filter">
-          {(['all', 'paid', 'free'] as const).map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => { setTab(t); setAt(0) }}>{t === 'all' ? 'All' : t === 'paid' ? 'Paid' : 'Free'}</button>)}
-        </div>
-      )}
+      </div>
     </section>
   )
 }
-
-/** The waitlist-style tile field: rows of faint typewriter characters (same feel as desknoty.com). */
-function makeGlyphs() {
-  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789'
-  let seed = 7, out = ''
-  const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
-  for (let y = 0; y < 90; y++) { for (let x = 0; x < 260; x++) out += A[Math.floor(r() * A.length)]; out += '\n' }
-  return out
-}
-
 
 /** Price + action, using the store's existing purchase flow (paid, free, owned, affiliate). */
 function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePageProps) {
   const free = isFreeProduct(p)
   const external = affiliateHref(p)
-  const cls = big ? 's2-buy s2-buy-big' : 's2-buy'
+  const cls = big ? 's2s-btn s2s-btn-big' : 's2s-btn'
   if (external) {
     return (
-      <div className="s2-buyrow">
+      <div className="s2s-buyrow">
+        <small className="s2s-price s2s-aff" title={p.affiliate?.disclosure || 'As an Amazon Associate, I earn from qualifying purchases.'}>Paid link</small>
         <a className={cls} href={external} target="_blank" rel="sponsored noopener noreferrer" onClick={props.live ? undefined : (e) => e.preventDefault()}>
           {p.cta?.text && !/amazon/i.test(p.cta.text) ? p.cta.text : 'View product'}
         </a>
-        <small className="s2-aff" title={p.affiliate?.disclosure || 'As an Amazon Associate, I earn from qualifying purchases.'}>Paid link</small>
       </div>
     )
   }
-
   if (props.live && props.owned?.[p.id] && p.priceMinor > 0) {
     return (
-      <div className="s2-buyrow">
-        <span className="s2-price">Purchased</span>
+      <div className="s2s-buyrow">
+        <span className="s2s-price">Purchased</span>
         {props.onDownload
           ? <button type="button" className={cls} onClick={() => props.onDownload!(p)} disabled={props.downloading === p.id}>{props.downloading === p.id ? 'Starting…' : 'Download'}</button>
           : <a className={cls} href={props.owned[p.id]}>Download</a>}
@@ -147,35 +191,32 @@ function Buy({ p, big, ...props }: { p: ShopProduct; big?: boolean } & StorePage
   }
   const disabled = free ? !props.live || props.buying === p.id : !props.live || !props.checkoutReady || props.buying === p.id
   return (
-    <div className="s2-buyrow">
-      {free ? <span className="s2-price">Free</span> : <span className="s2-price"><PriceTag prod={p} /></span>}
+    <div className="s2s-buyrow">
+      {free ? <span className="s2s-price">Free</span> : <span className="s2s-price"><PriceTag prod={p} /></span>}
       <button type="button" className={cls} disabled={disabled} onClick={() => (free && props.claims?.[p.id] ? props.onClaimAgain?.(p) : props.onBuy?.(p))}>
-        {props.buying === p.id ? 'Opening checkout…' : props.claims?.[p.id] ? 'Send again' : (free ? (p.cta?.text && !/^\s*buy/i.test(p.cta.text) ? p.cta.text : 'Get it free') : (p.cta?.text || 'Buy now'))}
+        {props.buying === p.id ? 'Opening checkout…' : free && props.claims?.[p.id] ? 'Send again' : (free ? (p.cta?.text && !/^\s*buy/i.test(p.cta.text) ? p.cta.text : 'Get it free') : (p.cta?.text || 'Buy now'))}
       </button>
     </div>
   )
 }
 
-function Card({ p, n, ...props }: { p: ShopProduct; n: number } & StorePageProps) {
+function Card({ p, ...props }: { p: ShopProduct } & StorePageProps) {
   const src = mediaUrl(p.cover)
   const link = props.live ? `/${props.handle}/p/${p.id}` : undefined
   const type = p.format || p.fileType
   return (
-    <article className={`s2k-card s2k-r${n % 3}`}>
-      <a className="s2k-img" href={link} tabIndex={-1} aria-hidden="true">
+    <article className="s2s-card">
+      <a className="s2s-card-img" href={link} tabIndex={-1} aria-hidden="true">
         {src ? <img src={src} alt="" loading="lazy" draggable={false} /> : <span>{p.title.charAt(0).toUpperCase() || '✦'}</span>}
-        {p.rating && p.rating.count > 0 && <em className="s2k-badge">★ {p.rating.average.toFixed(1)}</em>}
       </a>
-      <div className="s2k-body">
-        <h2>{link ? <a href={link}>{p.title}</a> : p.title}</h2>
+      <div className="s2s-card-body">
+        <small>{affiliateHref(p) ? 'Recommended' : type ? `Digital · ${type}` : 'Digital download'}</small>
+        <h3>{link ? <a href={link}>{p.title}</a> : p.title}</h3>
         {p.description && <p>{p.description.split('\n')[0]}</p>}
-      </div>
-      <div className="s2k-foot2">
         <Buy p={p} {...props} />
-        <small className="s2k-note">{affiliateHref(p) ? 'Ships from the store' : type ? `Instant download · ${type}` : 'Instant download'}</small>
       </div>
       {!props.live && (props.onEditProduct || props.onHideProduct) && (
-        <div className="s2k-admin">
+        <div className="s2s-admin">
           {props.onEditProduct && <button type="button" onClick={() => props.onEditProduct!(p.id)}>Edit / replace</button>}
           {props.onHideProduct && <button type="button" onClick={() => props.onHideProduct!(p.id)}>Remove</button>}
         </div>
