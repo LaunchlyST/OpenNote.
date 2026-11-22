@@ -691,3 +691,53 @@
 @container (max-width: 900px) { .sx-panel { background: #0c0b0a !important; } }
 @container (min-width: 901px) { .sx-card { width: min(380px, 56%); } .sx-track { clip-path: inset(-80px -24px -90px -24px); } }
 .ss-device-desk .sx-home-inline, .ss-device-desk .sx-home-inline .sx-mo { min-height: 900px; } .ss-device-desk .sx { min-height: 900px; }
+
+/* ================= The Digital Portal (Home) ================= */
+.sx-portal { overflow-y: auto; overscroll-behavior: contain; background: #07060b; }
+.sx-portal .sx-mo { display: none; }
+.sx-portal-stage { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+.sx-home-inline .sx-portal-stage { position: absolute; }
+.sx-portal-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; opacity: 0; transition: opacity .8s cubic-bezier(.22,1,.36,1); }
+.sx-portal-3d .sx-portal-canvas { opacity: 1; }
+.sx-portal-still { position: absolute; inset: -2%; background: radial-gradient(60% 60% at 62% 45%, #2a2f6e, #07060b 70%) center / cover; transform-origin: 62% 45%; filter: saturate(1.05) brightness(.9); transition: opacity .8s cubic-bezier(.22,1,.36,1); }
+.sx-portal-3d .sx-portal-still { opacity: 0; }
+.sx-portal-scan { position: absolute; inset: 0; background: repeating-linear-gradient(180deg, rgba(0,0,0,.16) 0 1px, transparent 1px 3px), radial-gradient(80% 80% at 60% 45%, transparent 40%, rgba(0,0,0,.7)); }
+.sx-portal-flash { position: absolute; inset: 0; background: radial-gradient(60% 60% at 62% 45%, #fffaf0, #fbf6ee 40%, rgba(251,246,238,.6)); opacity: 0; visibility: hidden; pointer-events: none; }
+
+.sx-portal-copy { position: relative; z-index: 1; min-height: 100%; display: flex; flex-direction: column; justify-content: center; width: min(560px, 44%); padding: 108px clamp(24px, 4vw, 64px) 48px; color: #fff;
+  background: linear-gradient(90deg, rgba(7,6,11,.88) 0%, rgba(7,6,11,.66) 70%, rgba(7,6,11,0) 100%); pointer-events: none; }
+.sx-portal-copy > * { pointer-events: auto; }
+.sx-portal-skip { position: absolute; top: 96px; left: clamp(24px, 4vw, 64px); display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.22); color: #fff !important; font-size: 13px; font-weight: 600; text-decoration: none; backdrop-filter: blur(8px); transition: background .2s; }
+.sx-portal-skip:hover, .sx-portal-skip:focus-visible { background: rgba(255,255,255,.22); }
+.sx-portal-skip svg { width: 14px; height: 14px; }
+.sx-portal-text { display: grid; gap: 14px; margin-top: 40px; }
+.sx-portal-text .sx-kicker { margin: 0; color: #fff; }
+.sx-portal-name { margin: 0; font-size: clamp(44px, 5vw, 84px); font-weight: 800; letter-spacing: -.04em; line-height: .95; overflow-wrap: anywhere; animation: sx-mask-in 1s cubic-bezier(.22,1,.36,1) 1.3s both; }
+.sx-portal-bio { margin: 0; max-width: 44ch; font-size: clamp(15px, 1.15vw, 18px); line-height: 1.55; color: rgba(255,255,255,.82); animation: sx-rise .8s cubic-bezier(.22,1,.36,1) 1.5s both; }
+.sx-portal-offer { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .04em; color: rgba(255,255,255,.62); animation: sx-rise .8s cubic-bezier(.22,1,.36,1) 1.6s both; }
+@keyframes sx-mask-in { from { clip-path: inset(0 0 100% 0); transform: translateY(18px); } to { clip-path: inset(0 0 -10% 0); transform: none; } }
+@keyframes sx-rise { from { opacity: 0; transform: translateY(14px); } }
+.sx-portal-cta { justify-self: start; display: inline-flex; align-items: center; gap: 12px; height: 58px; padding: 0 30px; margin-top: 6px; border: 0; border-radius: 999px; background: var(--orange, #f06a1d); color: #fff !important; font-size: 17px; font-weight: 800; cursor: pointer; box-shadow: 0 16px 36px -14px var(--orange, #f06a1d); transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s; }
+.sx-portal-cta svg { width: 20px; height: 20px; transition: transform .25s cubic-bezier(.22,1,.36,1); }
+.sx-portal-cta:hover { transform: translateY(-2px); } .sx-portal-cta:hover svg { transform: translateX(4px); }
+.sx-portal-cta:active { transform: scale(.97); }
+.sx-portal-objects { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.sx-portal-objects button { display: inline-flex; align-items: center; gap: 8px; max-width: 220px; height: 40px; padding: 0 12px 0 4px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.08); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .2s, border-color .2s; }
+.sx-portal-objects button img, .sx-portal-objects button i { width: 32px; height: 32px; border-radius: 999px; object-fit: cover; background: rgba(255,255,255,.2); flex: none; }
+.sx-portal-objects button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-portal-objects button.on, .sx-portal-objects button:hover { background: rgba(255,255,255,.2); border-color: #fff; }
+.sx-portal-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px; border-radius: 16px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); animation: sx-rise .4s cubic-bezier(.22,1,.36,1) both; }
+.sx-portal-pick b { flex-basis: 100%; font-size: 15px; }
+.sx-portal-pick button { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-radius: 999px; border: 0; background: #fff; color: #141312; font-weight: 700; font-size: 13px; cursor: pointer; }
+.sx-portal-pick button.ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.4); }
+.sx-portal-pick svg { width: 15px; height: 15px; }
+.sx-home-inline.sx-portal { min-height: var(--ph, 760px); }
+@container (max-width: 900px) {
+  .sx-portal-copy { width: auto; justify-content: flex-end; min-height: 100%; padding: 46vh 16px 28px; background: linear-gradient(180deg, rgba(7,6,11,0) 0%, rgba(7,6,11,.7) 46%, rgba(7,6,11,.94) 70%); }
+  .sx-portal-skip { top: 16px; left: 16px; }
+  .sx-portal-name { font-size: clamp(38px, 11vw, 56px); }
+  .sx-portal-cta { width: 100%; justify-content: center; }
+  .sx-portal-objects button { max-width: 160px; }
+  .sx-portal-still { background-position: 50% 30%; transform-origin: 50% 30%; }
+}
+@media (prefers-reduced-motion: reduce) { .sx-portal-name, .sx-portal-bio, .sx-portal-offer, .sx-portal-pick { animation: none !important; } }

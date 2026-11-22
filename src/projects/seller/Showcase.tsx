@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
-import { gsap } from 'gsap'
 import { AtSign, Check, ChevronDown, Download, Globe, MessageSquare, Play, Search, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
 import { isFreeProduct, mediaUrl, slidesOf } from './model'
 import type { Block, Page, ShopProduct } from './model'
@@ -9,7 +8,9 @@ import type { PublicReview } from './api'
 import { Banner } from './StorePage'
 import type { StorePageProps } from './StorePage'
 import { Carousel } from './ShowcaseCarousel'
-import { HomeView, useInitialView, useViewTransition } from './ShowcaseHome'
+import { useInitialView } from './ShowcaseHome'
+import { PortalView, usePortalTransition } from './PortalHome'
+import type { PortalBus } from './PortalHome'
 import type { NavState, View } from './ShowcaseHome'
 import './showcase.css'
 
@@ -37,10 +38,15 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const [nav, setNav] = useState<NavState>(initial === 'products' ? 'PRODUCTS_READY' : 'HOME_READY')
   const homeRef = useRef<HTMLElement | null>(null)
   const root = useRef<HTMLDivElement>(null)
-  const goTo = useViewTransition({ home: homeRef, root, initial, live, onState: setNav })
-  const go = (v: View, push = true) => {
+  const bus = useRef<PortalBus>({ scene: null, progress: { p: initial === 'products' ? 1 : 0 } })
+  const [picked, setPicked] = useState<string | null>(null)
+  // the 3D scene loads the first time Home is shown, and then stays
+  const [homeSeen, setHomeSeen] = useState(initial === 'home')
+  const goTo = usePortalTransition({ home: homeRef, root, initial, live, bus, onState: setNav })
+  const go = (v: View, push = true, fast = false) => {
     setView(v)
-    goTo(v)
+    if (v === 'home') setHomeSeen(true)
+    goTo(v, { fast })
     if (push && live) {
       try {
         const u = new URL(location.href)
@@ -51,7 +57,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   }
   useEffect(() => {
     if (!live) return
-    const pop = () => { const v: View = new URLSearchParams(location.search).get('view') === 'products' ? 'products' : 'home'; setView(v); goTo(v) }
+    const pop = () => { const v: View = new URLSearchParams(location.search).get('view') === 'products' ? 'products' : 'home'; setView(v); if (v === 'home') setHomeSeen(true); goTo(v) }
     addEventListener('popstate', pop)
     return () => removeEventListener('popstate', pop)
   }, [live, goTo])
@@ -70,20 +76,6 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const head = page.blocks.find((b) => b.type === 'header') ?? { id: 'header', type: 'header', hidden: false, data: {} } as Block
   const gridId = page.blocks.find((b) => b.type === 'grid' || b.type === 'featured')?.id ?? head.id
 
-  // Entrance: once per page load, quick, and skipped for reduced motion and in the editor.
-  useEffect(() => {
-    const el = root.current
-    if (!el || !live || matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const ctx = gsap.context(() => {
-      if (initial !== 'home') return
-      const tl = gsap.timeline({ defaults: { ease: 'expo.out' } })
-      tl.from('.sx-mo-hero-img', { scale: 1.12, duration: 1.6 }, 0)
-        .from('.sx-mo-tile', { opacity: 0, scale: 0.92, duration: 1, stagger: { each: 0.06, from: 'center' }, clearProps: 'opacity,transform' }, 0.15)
-        .from('.sx-mo-copy > *', { opacity: 0, y: 18, duration: 0.8, stagger: 0.07, clearProps: 'opacity,transform' }, 0.45)
-    }, el)
-    return () => ctx.revert()
-  }, [live])
-
   // Mouse depth on the stage: the artwork drifts a few px against the pointer.
   const stage = useRef<HTMLDivElement>(null)
   const move = (e: ReactMouseEvent) => {
@@ -101,7 +93,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
 
   return (
     <div className={products.length > 0 && live ? 'sx sx-has-fb' : 'sx'} ref={root}>
-      <HomeView props={props} products={products} onExplore={() => go('products')} homeRef={homeRef} />
+      <PortalView active={homeSeen} props={props} products={products} onEnter={() => go('products')} onSkip={() => go('products', true, true)} homeRef={homeRef} bus={bus} selected={picked} onSelect={setPicked} />
       <nav className="sx-top" aria-label="Store">
         <span className="sx-logo">
           <span className="sx-logo-av" style={mediaUrl(page.avatar) ? { backgroundImage: `url(${mediaUrl(page.avatar)})` } : undefined}>{!page.avatar && (page.name.trim().charAt(0) || handle.charAt(0)).toUpperCase()}</span>
@@ -171,7 +163,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
               {needle && !list.length && <p className="sx-none">No products match “{q}”.</p>}
               {!products.length && <p className="sx-none">No products yet.</p>}
               <div className="sx-list-wrap">
-                <Carousel list={list} blockId={gridId} props={props} />
+                <Carousel list={list} blockId={gridId} props={props} focusId={picked} />
               </div>
             </div>
           </section>

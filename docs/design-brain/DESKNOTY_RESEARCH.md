@@ -118,3 +118,12 @@ Totals: 10 inspected, 3 partial, 4 inaccessible. Need 5+ more full inspections
 8. Adapted (own code): Style 1 Home = that mosaic built from the seller's own images; Home →
    Products is one GSAP timeline (centre panel opens via clip-path, other tiles part, product
    covers fly to their rows); Home plays the same timeline in reverse.
+
+### MotionSites (motionsites.ai) — Nov 2026
+- Inspected: the gallery, the public lesson "Build a scroll-animated website with AI" (its full
+  prompt text is public: scroll-scrubbed video via a canvas frame cache, lerp 0.12, reveal
+  translate-y + opacity 700 ms), and preview pop-ups of Virtual Store, Golden Portal, VHS Archive,
+  Loops Virtual Store, Card Story, Orbit Sphere (two frames each, not full recordings).
+- Most prompts are behind a paid plan — not obtained, not used.
+- Taken: camera-led storytelling, one focal object, products as objects in a world, motion
+  that is driven by one progress value (here a reversible timeline rather than scroll).
