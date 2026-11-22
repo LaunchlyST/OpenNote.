@@ -39,3 +39,6 @@ Real failures from this project (Nov 2026). Format: what → why → fix → pre
     checks (overflow, card count, CTA opens checkout) at 375/390/430/768/1440 every pass.
 
 12. **Shipping to `main` = shipping live.** Prevention: branch first; owner approves merges.
+
+13. **Duplicate price on sale items** (custom "was" price beside PriceTag, which already
+    strikes the old price). Prevention: reuse BuyRow/PriceTag; screenshot a discounted row.

@@ -4,6 +4,7 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as 
 import { AtSign, ChevronDown, Globe, MoreVertical, Play, X as XIcon } from 'lucide-react'
 import { FONTS, PRESETS, affiliateHref, amazonUrlCheck, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, ensureFonts, fontById, formatPrice, isFreeProduct, mediaUrl, pageLabel, safeExternalUrl, slidesOf, storePages, MAX_PRODUCT_SLIDES } from './model'
 import type { Block, CardPart, Page, ProductSlide, ShopProduct } from './model'
+import { Showcase } from './Showcase'
 import { Badges, FactLine, Gallery, ProductCard, wasTextDragged } from './ProductCard'
 
 /**
@@ -244,6 +245,21 @@ export function StorePage(props: StorePageProps) {
   const head = page.blocks.find((b) => b.type === 'header')
   const foot = page.blocks.find((b) => b.type === 'footer')
   const body = current.blocks.filter((b) => !b.hidden && b.type !== 'header' && b.type !== 'footer')
+  // Home page: the showcase layout. Product blocks are replaced by its collection
+  // list; every other section the seller added keeps rendering (and stays editable).
+  if (!only) {
+    const rest = body.filter((b) => b.type !== 'grid' && b.type !== 'featured')
+    return (
+      <div className="sp sp-sx" style={storeStyle(page)}>
+        <Showcase
+          {...props}
+          pickable={(b, node) => <Pickable block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab}>{node}</Pickable>}
+          rest={rest.map((b) => <Pickable key={b.id} block={b} onPick={props.onPick} picked={props.picked} onGrab={props.onGrab} onContextMenu={props.onContextMenu}><BlockView block={b} {...props} /></Pickable>)}
+          foot={<div className="sx-foot"><BlockView block={foot ?? { id: 'footer', type: 'footer', hidden: false, data: { text: '' } }} {...props} /><a href="https://desknoty.com" target="_blank" rel="noopener">desknoty.com</a></div>}
+        />
+      </div>
+    )
+  }
   return (
     <div className="sp" style={storeStyle(page)}>
       {only ? (
@@ -845,7 +861,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
       ? 'Getting it…'
       : claim
         ? (claim.waitSeconds > 0 ? `Send again (${claim.waitSeconds}s)` : 'Send again')
-        : prod.cta?.text || 'Get it free'
+        : prod.cta?.text || 'Get free download'
     return (
       <div className="sp-buyrow">
         <span className={live ? 'sp-price' : 'sp-price sp-part'} {...(live ? {} : { 'data-edit-part': 'price', 'data-label': 'Price' })}>Free</span>
