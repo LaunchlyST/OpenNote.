@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { gsap } from 'gsap'
-import { AtSign, Check, ChevronDown, Download, Globe, Heart, MessageSquare, Play, Search, ShieldCheck, Star, X as XIcon } from 'lucide-react'
+import { AtSign, Check, ChevronDown, Download, Globe, Heart, MessageSquare, Play, Search, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
 import { isFreeProduct, mediaUrl } from './model'
 import type { Block, CardPart, Page, ShopProduct } from './model'
 import { storeApi } from './api'
@@ -62,7 +62,19 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const freeOnly = products.length > 0 && products.every(isFreeProduct)
 
   return (
-    <div className="sx" ref={root}>
+    <div className={products.length > 0 && live ? 'sx sx-has-fb' : 'sx'} ref={root}>
+      <nav className="sx-top" aria-label="Store">
+        <span className="sx-logo">
+          <span className="sx-logo-av" style={mediaUrl(page.avatar) ? { backgroundImage: `url(${mediaUrl(page.avatar)})` } : undefined}>{!page.avatar && (page.name.trim().charAt(0) || handle.charAt(0)).toUpperCase()}</span>
+          {page.name || `@${handle}`}
+        </span>
+        <span className="sx-top-links">
+          <button type="button" className="on" onClick={() => scrollTo({ top: 0, behavior: 'smooth' })}>Home</button>
+          {products.length > 0 && <button type="button" onClick={shop}>Products</button>}
+          {products.length > 0 && live && <button type="button" onClick={() => setDrawer(true)}>Reviews</button>}
+        </span>
+        {products.length > 0 && <button type="button" className="sx-top-cta" onClick={shop}>Shop now <span aria-hidden="true">→</span></button>}
+      </nav>
       <aside className="sx-stage" ref={stage} onMouseMove={move} onMouseLeave={() => { stage.current?.style.setProperty('--mx', '0'); stage.current?.style.setProperty('--my', '0') }}>
         <div className="sx-stage-art">
           {bannerVideo ? <video className="sx-stage-img" src={bannerVideo} muted playsInline autoPlay preload="metadata" onEnded={(e) => e.currentTarget.pause()} />
@@ -71,14 +83,18 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           <span className="sx-stage-light" aria-hidden="true" />
         </div>
         <div className="sx-stage-copy">
-          <p className="sx-kicker"><span />Creator store</p>
+          <p className="sx-kicker"><span />Creator store<span /></p>
           <p className="sx-stage-name">@{handle}</p>
           {page.name && page.name !== handle && <p className="sx-stage-sub">{page.name}</p>}
+          {page.bio?.trim() && <p className="sx-stage-bio">{page.bio}</p>}
           <ul className="sx-trust">
-            <li><Download aria-hidden="true" />{freeOnly ? 'Free download' : 'Instant download'}</li>
-            {!freeOnly && <li><ShieldCheck aria-hidden="true" />Secure checkout</li>}
+            <li><Download aria-hidden="true" /><span>{freeOnly ? <>Free<br />download</> : <>Instant<br />download</>}</span></li>
+            {!freeOnly && <li><ShieldCheck aria-hidden="true" /><span>Secure<br />checkout</span></li>}
           </ul>
-          {products.length > 0 && <button type="button" className="sx-cta" onClick={shop}>Shop the collection <span aria-hidden="true">→</span></button>}
+          <div className="sx-stage-actions">
+            {products.length > 0 && <button type="button" className="sx-cta" onClick={shop}><ShoppingBag aria-hidden="true" /> Shop collection <span aria-hidden="true">→</span></button>}
+            {head.data?.showSocials !== false && <Socials page={page} dark />}
+          </div>
         </div>
       </aside>
 
@@ -105,6 +121,11 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
         {props.foot}
       </main>
 
+      {products.length > 0 && live && (
+        <aside className="sx-dock" aria-label="Product feedback">
+          <Feedback docked open onClose={() => {}} products={products} handle={handle} owned={props.owned} live={!!live} />
+        </aside>
+      )}
       {products.length > 0 && live && (
         <>
           <button type="button" className="sx-fab" onClick={() => setDrawer(true)} aria-haspopup="dialog">
@@ -134,11 +155,20 @@ function safeHref(v: string | undefined): string | null {
   } catch { return null }
 }
 
+function Socials({ page, dark }: { page: Page; dark?: boolean }) {
+  const list = SOCIALS.map((s) => ({ ...s, href: safeHref(page.socials[s.k]) })).filter((s) => s.href)
+  if (!list.length) return null
+  return (
+    <div className={dark ? 'sx-socials sx-socials-dark' : 'sx-socials'}>
+      {list.map((s) => <a key={s.k} href={s.href!} target="_blank" rel="noopener noreferrer nofollow" aria-label={s.label}>{s.icon}</a>)}
+    </div>
+  )
+}
+
 function Profile({ page, handle, showSocials }: { page: Page; handle: string; showSocials: boolean }) {
   const avatar = mediaUrl(page.avatar)
   const banner = page.banner?.kind === 'image' ? mediaUrl(page.banner.media) : null
   const video = page.banner?.kind === 'video' ? mediaUrl(page.banner.media) : null
-  const socials = SOCIALS.map((s) => ({ ...s, href: safeHref(page.socials[s.k]) })).filter((s) => s.href)
   return (
     <header className="sx-profile">
       <div className={banner || video ? 'sx-banner' : 'sx-banner sx-banner-plain'}>
@@ -151,11 +181,7 @@ function Profile({ page, handle, showSocials }: { page: Page; handle: string; sh
         <h1 className="sx-user">@{handle}</h1>
         {page.name && page.name !== handle && <p className="sx-name">{page.name}</p>}
         {page.bio?.trim() && <p className="sx-bio">{page.bio}</p>}
-        {showSocials && socials.length > 0 && (
-          <div className="sx-socials">
-            {socials.map((s) => <a key={s.k} href={s.href!} target="_blank" rel="noopener noreferrer nofollow" aria-label={s.label}>{s.icon}</a>)}
-          </div>
-        )}
+        {showSocials && <Socials page={page} />}
       </div>
     </header>
   )
@@ -237,7 +263,7 @@ function orderOf(path?: string): { id: string; k: string } | null {
   return m && k ? { id: decodeURIComponent(m[1]), k } : null
 }
 
-function Feedback({ open, onClose, products, handle, owned, live }: { open: boolean; onClose: () => void; products: ShopProduct[]; handle: string; owned?: Record<string, string>; live: boolean }) {
+function Feedback({ open, onClose, products, handle, owned, live, docked }: { docked?: boolean; open: boolean; onClose: () => void; products: ShopProduct[]; handle: string; owned?: Record<string, string>; live: boolean }) {
   const [pid, setPid] = useState(products[0]?.id)
   const [tab, setTab] = useState<'read' | 'write'>('read')
   const [picking, setPicking] = useState(false)
@@ -256,7 +282,7 @@ function Feedback({ open, onClose, products, handle, owned, live }: { open: bool
   }, [open, prod?.id, handle, live])
 
   useEffect(() => {
-    if (!open) return
+    if (!open || docked) return
     const k = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     addEventListener('keydown', k)
     sheet.current?.focus()
@@ -265,12 +291,12 @@ function Feedback({ open, onClose, products, handle, owned, live }: { open: bool
 
   const found = products.filter((p) => p.title.toLowerCase().includes(q.trim().toLowerCase()))
   return (
-    <div className={open ? 'sx-fb is-open' : 'sx-fb'} aria-hidden={!open}>
-      <div className="sx-fb-scrim" onClick={onClose} />
-      <div className="sx-fb-sheet" role="dialog" aria-modal="true" aria-labelledby="sx-fb-h" tabIndex={-1} ref={sheet}>
+    <div className={(docked ? 'sx-fb sx-fb-docked' : 'sx-fb') + (open ? ' is-open' : '')} aria-hidden={!open}>
+      {!docked && <div className="sx-fb-scrim" onClick={onClose} />}
+      <div className="sx-fb-sheet" {...(docked ? {} : { role: 'dialog', 'aria-modal': true })} aria-labelledby={docked ? 'sx-fbd-h' : 'sx-fb-h'} tabIndex={-1} ref={sheet}>
         <div className="sx-fb-top">
-          <h2 id="sx-fb-h"><Star aria-hidden="true" /> Product feedback</h2>
-          <button type="button" className="sx-fb-x" onClick={onClose} aria-label="Close"><XIcon /></button>
+          <h2 id={docked ? 'sx-fbd-h' : 'sx-fb-h'}><Star aria-hidden="true" /> Product feedback</h2>
+          {!docked && <button type="button" className="sx-fb-x" onClick={onClose} aria-label="Close"><XIcon /></button>}
         </div>
         <p className="sx-fb-sub">See what customers think about the digital products.</p>
 
