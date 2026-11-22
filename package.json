@@ -40,6 +40,7 @@
     "test:email-check": "tsx scripts/email-check-smoke.ts",
     "test:e2e:studio": "tsx scripts/seller-e2e.ts",
     "test:payments": "tsx scripts/payments-smoke.ts",
+    "test:checkout": "tsx scripts/checkout-smoke.ts",
     "test:launch": "tsx scripts/launch-smoke.ts"
   },
   "dependencies": {

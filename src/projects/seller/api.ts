@@ -182,7 +182,7 @@ export const storeApi = {
   shortLink: (shortId: string) => call<ShortLinkInfo>('GET', `/api/p/${encodeURIComponent(shortId)}`),
   get: (handle: string) => call<PublicStore>('GET', `/api/store/${encodeURIComponent(handle)}`),
   checkout: (handle: string, productId: string, checkoutKey: string, method: PayMethod = 'stripe', email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean; inline?: boolean }) =>
-    call<{ url?: string; orderUrl?: string; clientSecret?: string; order?: PublicOrder; emailed?: boolean; email?: string; emailStatus?: EmailStatus; emailError?: string | null }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}), ...(opts?.payByBank ? { payByBank: true } : {}), ...(opts?.inline ? { inline: true } : {}) }),
+    call<{ url?: string; orderUrl?: string; clientSecret?: string; amountMinor?: number; currency?: string; order?: PublicOrder; emailed?: boolean; email?: string; emailStatus?: EmailStatus; emailError?: string | null }>('POST', `/api/store/${encodeURIComponent(handle)}/checkout`, { productId, checkoutKey, method, email, coupon: coupon || undefined, ...(payer ?? {}), ...(opts?.payByBank ? { payByBank: true } : {}), ...(opts?.inline ? { inline: true } : {}) }),
   /** The authoritative price right now, optionally with a discount code. Nothing is reserved. */
   quote: (handle: string, productId: string, coupon?: string) => call<{ quote: PriceQuote }>('POST', `/api/store/${encodeURIComponent(handle)}/quote`, { productId, coupon: coupon || undefined }),
   /** Send the download email again for an existing order (rate limited by the server). */

@@ -10,6 +10,7 @@ import type { Stripe, StripeElements } from '@stripe/stripe-js'
 import { storeApi } from '../projects/seller/api'
 
 export type CardPayHandle = { pay: () => Promise<void> }
+export type CardPayPhase = 'idle' | 'paying' | 'confirming'
 
 const stripes = new Map<string, Promise<Stripe | null>>()
 const stripeFor = (pk: string, account: string) => {
@@ -30,7 +31,8 @@ export const CardPayForm = forwardRef<CardPayHandle, {
   coupon?: string
   onReady: (ready: boolean) => void
   onBusy: (busy: boolean) => void
-}>(function CardPayForm({ pk, account, handle, productId, amountMinor, currency, email, name, coupon, onReady, onBusy }, ref) {
+  onPhase?: (phase: CardPayPhase) => void
+}>(function CardPayForm({ pk, account, handle, productId, amountMinor, currency, email, name, coupon, onReady, onBusy, onPhase }, ref) {
   const quick = useRef<HTMLDivElement>(null)
   const [hasQuick, setHasQuick] = useState(false)
   const box = useRef<HTMLDivElement>(null)
@@ -47,13 +49,15 @@ export const CardPayForm = forwardRef<CardPayHandle, {
     void stripeFor(pk, account).then((s) => {
       if (gone || !s || !box.current) return
       stripe.current = s
-      const els = s.elements({ mode: 'payment', amount: amountMinor, currency: currency.toLowerCase(), appearance: { theme: 'stripe', variables: { borderRadius: '10px', fontFamily: 'Inter, system-ui, sans-serif' } } })
+      const els = s.elements({ mode: 'payment', amount: amountMinor, currency: currency.toLowerCase(), appearance: { theme: 'stripe', variables: { borderRadius: '10px', fontFamily: 'Geist, system-ui, sans-serif' } } })
       elements.current = els
       // Quick-pay buttons on top (Google Pay / Apple Pay / Link, whichever the device offers), card form below.
       if (quick.current) {
         const ece = els.create('expressCheckout', { buttonHeight: 44, buttonType: { googlePay: 'pay', applePay: 'plain' } })
         ece.on('ready', (e) => { if (!gone) setHasQuick(Boolean(e.availablePaymentMethods && Object.values(e.availablePaymentMethods).some(Boolean))) })
         ece.on('confirm', () => { void run(false) })
+        // Closing a wallet sheet is a cancellation, not a failed payment.
+        ece.on('cancel', () => { if (!gone) { onBusy(false); onPhase?.('idle') } })
         ece.mount(quick.current)
       }
       const pe = els.create('payment', { layout: { type: 'tabs', defaultCollapsed: false }, wallets: { applePay: 'never', googlePay: 'never' } })
@@ -65,15 +69,16 @@ export const CardPayForm = forwardRef<CardPayHandle, {
   }, [pk, account, amountMinor, currency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Shared by the card form (Secure pay) and the quick-pay buttons.
-  const live = useRef({ handle, productId, email, name, coupon, onBusy })
-  live.current = { handle, productId, email, name, coupon, onBusy }
+  const live = useRef({ handle, productId, email, name, coupon, amountMinor, currency, onBusy })
+  live.current = { handle, productId, email, name, coupon, amountMinor, currency, onBusy }
   async function run(checkForm: boolean) {
-      const { handle, productId, email, name, coupon, onBusy } = live.current
+      const { handle, productId, email, name, coupon, amountMinor, currency, onBusy } = live.current
       const s = stripe.current
       const els = elements.current
       if (!s || !els) return
       setErr(null)
       onBusy(true)
+      onPhase?.('paying')
       try {
         if (checkForm) {
           const checked = await els.submit()
@@ -85,18 +90,30 @@ export const CardPayForm = forwardRef<CardPayHandle, {
         sessionStorage.setItem(keyName, key)
         const r = await storeApi.checkout(handle, productId, key, 'stripe', email || undefined, undefined, coupon, { inline: true })
         if (!r.clientSecret || !r.orderUrl) throw new Error('We could not start the payment. Please try again.')
+        // The server is the price authority. If an offer ended between the quote
+        // and this click, never confirm a different amount silently.
+        if (r.amountMinor != null && (r.amountMinor !== amountMinor || (r.currency ?? currency).toLowerCase() !== currency.toLowerCase())) {
+          throw new Error('The total changed while you were paying. Close checkout and open it again to review the new price.')
+        }
         const done = await s.confirmPayment({
           elements: els,
           clientSecret: r.clientSecret,
-          confirmParams: { return_url: new URL(r.orderUrl, window.location.origin).toString(), ...(email ? { receipt_email: email } : {}), ...(name ? { payment_method_data: { billing_details: { name, ...(email ? { email } : {}) } } } : {}) },
+          confirmParams: {
+            return_url: new URL(r.orderUrl, window.location.origin).toString(),
+            ...(email ? { receipt_email: email } : {}),
+            // Wallet sheets collect their own billing details; only the typed card form needs these.
+            ...(checkForm && name ? { payment_method_data: { billing_details: { name, ...(email ? { email } : {}) } } } : {}),
+          },
           redirect: 'if_required',
         })
         if (done.error) throw new Error(done.error.message ?? 'Your card was not charged. Please try again.')
         sessionStorage.removeItem(keyName)
         // The order page asks Stripe whether the payment succeeded before unlocking the download.
+        onPhase?.('confirming')
         window.location.assign(r.orderUrl)
       } catch (e) {
         setErr((e as Error).message)
+        onPhase?.('idle')
         onBusy(false)
       }
   }

@@ -268,7 +268,10 @@ const CARD_TONES = CARD_BACKGROUNDS.map((c) => c.id).filter((id): id is CardBg =
 /** One product card in the seller's chosen layout. Unused fields are simply not rendered. */
 export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, onToggleSave, edit }: CardProps) {
   const kind = layout ?? p.layout ?? 'compact'
-  const tp = p.textPos ?? { title: 0, desc: 0 }
+  // The card's composition puts the title and description at the top right of
+  // the content area. A seller can still drag either one anywhere; that saved
+  // position always wins over this default.
+  const tp = p.textPos ?? { title: 1, desc: 1 }
   const sub = p.subtitle || (p.description ? p.description.split('\n')[0] : '')
   const card = useRef<HTMLElement | null>(null)
   const [hover, setHover] = useState<CardPart | null>(null)
@@ -320,26 +323,33 @@ export function ProductCard({ p, onOpen, href, buy, onMoveText, layout, saved, o
             {p.offer && p.offer.priceMinor < p.priceMinor && <s>{formatPrice(p.priceMinor, p.currency)}</s>}
           </span>
         )}
-        <div className={cn('sp-move-box', part('title'))} {...mark('title')}>
-          {edit?.part === 'title' && edit.onText ? (
-            <InlineText key={p.id} as="title" value={p.title} placeholder="Product title" style={titleStyle} onText={(v) => edit.onText!('title', v)} />
-          ) : onMoveText ? (
-            <MovableText as="h3" pos={tp.title} onMove={(v) => onMoveText('title', v)} label="Title" style={titleStyle}>{p.title}</MovableText>
-          ) : (
-            <MovableText as="h3" pos={tp.title} label="Title" style={titleStyle}><Link>{p.title}</Link></MovableText>
+        {/* Title and description share one right aligned block: the title sits at
+            the top right of the content area and the description runs directly
+            beneath it, with no dead space between them. */}
+        <div className="sp-card-copy">
+          <div className={cn('sp-move-box', part('title'))} {...mark('title')}>
+            {edit?.part === 'title' && edit.onText ? (
+              <InlineText key={p.id} as="title" value={p.title} placeholder="Product title" style={titleStyle} onText={(v) => edit.onText!('title', v)} />
+            ) : onMoveText ? (
+              <MovableText as="h3" pos={tp.title} onMove={(v) => onMoveText('title', v)} label="Title" style={titleStyle}>{p.title}</MovableText>
+            ) : (
+              <MovableText as="h3" pos={tp.title} label="Title" style={titleStyle}><Link>{p.title}</Link></MovableText>
+            )}
+          </div>
+          {edit?.part === 'desc' && edit.onText ? (
+            <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
+              <InlineText key={p.id} as="desc" value={p.description ?? ''} placeholder="Describe the product" style={descStyle} onText={(v) => edit.onText!('desc', v)} />
+            </div>
+          ) : sub && (
+            <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
+              <MovableText as="p" pos={tp.desc} onMove={onMoveText ? (v) => onMoveText('desc', v) : undefined} label="Description" className="sp-card-sub" style={descStyle}>{sub}</MovableText>
+            </div>
           )}
         </div>
-        {edit?.part === 'desc' && edit.onText ? (
-          <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
-            <InlineText key={p.id} as="desc" value={p.description ?? ''} placeholder="Describe the product" style={descStyle} onText={(v) => edit.onText!('desc', v)} />
-          </div>
-        ) : sub && (
-          <div className={cn('sp-move-box', part('desc'))} {...mark('desc')}>
-            <MovableText as="p" pos={tp.desc} onMove={onMoveText ? (v) => onMoveText('desc', v) : undefined} label="Description" className="sp-card-sub" style={descStyle}>{sub}</MovableText>
-          </div>
-        )}
-        {p.rating && p.rating.count > 0 && <Stars value={p.rating.average} count={p.rating.count} />}
-        {kind !== 'compact' && <FactLine p={p} />}
+        <div className="sp-card-meta">
+          {p.rating && p.rating.count > 0 && <Stars value={p.rating.average} count={p.rating.count} />}
+          {kind !== 'compact' && <FactLine p={p} />}
+        </div>
         {kind === 'featured' && p.included?.length ? (
           <ul className="sp-incl sp-incl-card sp-chips">{p.included.slice(0, 4).map((x, i) => <li key={i}>{x}</li>)}</ul>
         ) : null}

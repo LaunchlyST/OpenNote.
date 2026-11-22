@@ -7,7 +7,7 @@ import { affiliateHref, formatPrice, isFreeProduct, mediaUrl } from '../projects
 import { storeApi } from '../projects/seller/api'
 import { BANK_ICONS, bankIcon } from '../projects/seller/bank-icons'
 import { CardPayForm } from './CardPayForm'
-import type { CardPayHandle } from './CardPayForm'
+import type { CardPayHandle, CardPayPhase } from './CardPayForm'
 import type { ClaimState, PriceQuote, PublicOrder, PublicStore as Store } from '../projects/seller/api'
 import type { PayMethod, ShopProduct } from '../projects/seller/model'
 
@@ -229,8 +229,6 @@ export default function PublicStore({ path }: { path: string }) {
 
 /** The buyer picks how to pay. Bank transfer asks for an email so the download can be sent once it arrives. */
 type Choice = 'card' | 'paypal' | 'bank' | 'bankapp'
-type Wallet = 'card' | 'apple' | 'google'
-const WALLET_LABEL: Record<Wallet, string> = { card: 'Debit or credit card', apple: 'Apple Pay', google: 'Google Pay' }
 const CHOICE_METHOD: Record<Choice, PayMethod> = { card: 'stripe', paypal: 'paypal', bank: 'bank', bankapp: 'stripe' }
 
 /** A bank's app icon when we have its logo; otherwise a neat initial. */
@@ -613,11 +611,16 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
   useEffect(() => { void loadQuote() }, [product.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const totalMinor = quote ? quote.totalMinor : (product.offer?.priceMinor ?? product.priceMinor)
   const free = totalMinor === 0
-  // Like Stan Store: card first (Apple Pay / Google Pay / Link on Stripe's page), then the rest.
-  // Stripe can't take cards under 0.50, so card is only offered from there.
-  const cardOk = methods.includes('stripe') && totalMinor >= 50
+  // Card and wallets first. Stripe's own minimum is per currency; the server
+  // publishes the exact figure, so a tiny total shows the reason before paying.
+  const cardMinimum = quote?.cardMinimum ?? 50
+  const belowMinimum = !free && totalMinor > 0 && totalMinor < cardMinimum
+  const stripeReady = methods.includes('stripe')
+  const cardOk = stripeReady && !belowMinimum
   const choices: Choice[] = free ? ['card'] : [
-    ...(cardOk ? (['card'] as Choice[]) : []),
+    // Keep the card tab visible below the minimum so the buyer sees why it
+    // can't be used, instead of silently being shown a different method.
+    ...(stripeReady ? (['card'] as Choice[]) : []),
     ...(payByBank && cardOk && product.currency.toLowerCase() === 'gbp' ? (['bankapp'] as Choice[]) : []),
     ...(methods.includes('paypal') ? (['paypal'] as Choice[]) : []),
     ...(methods.includes('bank') ? (['bank'] as Choice[]) : []),
@@ -629,9 +632,6 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
   // the buyer's own bank and name (never their account number); remembered on this device if they choose
   const [payerBank, setPayerBank] = useState('')
   const [payerName, setPayerName] = useState('')
-  // Card, Apple Pay (Apple devices that support it) and Google Pay; Stripe shows them on its secure page
-  const wallets: Wallet[] = ['card', ...(typeof window !== 'undefined' && 'ApplePaySession' in window ? (['apple'] as Wallet[]) : []), 'google']
-  const [wallet, setWallet] = useState<Wallet>('card')
   const [payTo, setPayTo] = useState<number>(() => (banks.find((b) => b.inUse) ?? banks[0])?.index ?? -1)
   const [remember, setRemember] = useState(true)
   const [pickingBank, setPickingBank] = useState(false)
@@ -639,6 +639,7 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
   const cardRef = useRef<CardPayHandle>(null)
   const [cardReady, setCardReady] = useState(false)
   const [cardBusy, setCardBusy] = useState(false)
+  const [cardPhase, setCardPhase] = useState<CardPayPhase>('idle')
   const [hasSaved, setHasSaved] = useState(() => { try { return Boolean(localStorage.getItem('desknoty.payer')) } catch { return false } })
   // Only the email, bank name and account name are remembered (never bank logins or numbers).
   const forget = () => { try { localStorage.removeItem('desknoty.payer') } catch { /* blocked */ } setHasSaved(false); setRemember(false); setEmail(''); setPayerBank(''); setPayerName('') }
@@ -654,8 +655,8 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
   const needsEmail = Boolean(quote?.needsEmail)
   // free (also when a code makes it free) and per-customer codes need an email; bank transfer needs the payer's details
   const ready = free ? valid : isBank ? valid && !noBank && payTo >= 0 && payerBank !== '' && payerName.trim().length >= 2 : needsEmail ? valid : valid || !email.trim()
-  const inlineCard = choice === 'card' && !free && Boolean(stripePk && stripeAccount)
-  const canPay = !busy && !cardBusy && ready && (!inlineCard || (cardReady && valid))
+  const inlineCard = choice === 'card' && !free && !belowMinimum && Boolean(stripePk && stripeAccount)
+  const canPay = !busy && !cardBusy && ready && (!(choice === 'card') || !belowMinimum) && (!inlineCard || (cardReady && valid))
   const price = formatPrice(totalMinor, product.currency)
   const money = (m: number) => formatPrice(m, product.currency)
   useEffect(() => {
@@ -701,6 +702,13 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
             </div>
           </div>
           <section className="co3-pay" aria-label="Payment details">
+            <h2 className="co3-pay-h">Payment details</h2>
+            {!stripeReady && !free && (
+              <p className="co3-warn" role="note">
+                {seller} hasn’t connected card payments yet, so card and wallet payments aren’t available.
+                {choices.length ? ' You can still pay by bank transfer or PayPal below.' : ' Check back soon.'}
+              </p>
+            )}
             {choices.length > 1 && !free && (
               <div className="co3-tabs" role="radiogroup" aria-label="Payment method">
                 {choices.map((c) => (
@@ -744,41 +752,32 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
                 {!noBank && (payerName.trim().length < 2 || !payerBank) && <p className="co3-field-err">{!payerBank ? 'Choose the bank you’ll pay from.' : 'Enter the name on your bank account (at least 2 letters).'}</p>}
 
               </>
+            ) : choice === 'bankapp' ? (
+              <>
+                <label className="co3-field"><span>Email for your receipt</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" /></label>
+                <div className="co3-cardnote"><p>Pick your bank on Stripe’s secure page, then approve the payment in your bank’s own app or website. Desknoty never sees your bank login, and your download unlocks only once your bank confirms the payment.</p></div>
+              </>
+            ) : choice === 'paypal' ? (
+              <>
+                <label className="co3-field"><span>Email for your receipt</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" /></label>
+                <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
+              </>
             ) : (
               <>
-                {inlineCard ? (
-                  <>
-                    <h3 className="co3-h3">Who should we send the file to?</h3>
-                    <div className="co3-two">
-                      <label className="co3-field"><span>Name</span><input autoComplete="name" placeholder="Jane Smith" value={payerName} onChange={(e) => setPayerName(e.target.value)} maxLength={80} aria-label="Name" /></label>
-                      <label className="co3-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" /></label>
-                    </div>
-                    <h3 className="co3-h3">Payment details</h3>
-                  </>
-                ) : (
-                  <label className="co3-field"><span>{free ? 'Your email (we send the download here)' : 'Email for your receipt'}</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required={free} aria-label="Email" /></label>
-                )}
-                {free ? (
-                  <p className="co3-hint">This product is free. Enter your email and we’ll send you the download link.</p>
-                ) : choice === 'bankapp' ? (
-                  <div className="co3-cardnote"><p>Pick your bank on Stripe’s secure page, then approve the payment in your bank’s own app or website. Desknoty never sees your bank login, and your download unlocks only once your bank confirms the payment.</p></div>
+                <h3 className="co3-h3">Who should we send the file to?</h3>
+                <div className="co3-two">
+                  <label className="co3-field"><span>Name</span><input autoComplete="name" placeholder="Jane Smith" value={payerName} onChange={(e) => setPayerName(e.target.value)} maxLength={80} aria-label="Name" /></label>
+                  <label className="co3-field"><span>Email address</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" /></label>
+                </div>
+                <h3 className="co3-h3">Card or wallet</h3>
+                {belowMinimum ? (
+                  <p className="co3-warn" role="alert" id="co3-minimum">
+                    Card payments need at least {money(cardMinimum)}. This total is {price}.{choices.some((c) => c !== 'card') ? ' Choose another way to pay, or ask the seller to adjust the price.' : ' Ask the seller to adjust the price before paying.'}
+                  </p>
                 ) : inlineCard ? (
-                  <CardPayForm ref={cardRef} pk={stripePk!} account={stripeAccount!} handle={handle} productId={product.id} amountMinor={totalMinor} currency={product.currency} email={email.trim()} name={payerName.trim() || undefined} coupon={applied ?? undefined} onReady={setCardReady} onBusy={setCardBusy} />
-                ) : method === 'paypal' ? (
-                  <div className="co3-cardnote"><p>You’ll finish paying on PayPal.</p></div>
+                  <CardPayForm ref={cardRef} pk={stripePk!} account={stripeAccount!} handle={handle} productId={product.id} amountMinor={totalMinor} currency={product.currency} email={email.trim()} name={payerName.trim() || undefined} coupon={applied ?? undefined} onReady={setCardReady} onBusy={setCardBusy} onPhase={setCardPhase} />
                 ) : (
-                  <>
-                    <div className="co3-wallets" role="radiogroup" aria-label="Pay with">
-                      {wallets.map((w) => (
-                        <label key={w} className={wallet === w ? 'on' : undefined}>
-                          <input type="radio" name="wallet" checked={wallet === w} onChange={() => setWallet(w)} aria-label={WALLET_LABEL[w]} />
-                          <span className="co3-wlogo" aria-hidden="true">{w === 'card' ? <><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i></> : w === 'apple' ? <b className="co3-apple">Pay</b> : <b className="co3-gpay"><span>G</span> Pay</b>}</span>
-                          <span>{WALLET_LABEL[w]}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <p className="co3-hint">{wallet === 'card' ? 'You’ll type your card on Stripe’s secure page. Desknoty never sees your card.' : `On Stripe’s secure page, tap ${WALLET_LABEL[wallet]}. Want to use a different card? You can type one there instead.`}</p>
-                  </>
+                  <div className="co3-cardnote"><p>You’ll enter your card or wallet details on Stripe’s secure page. Desknoty never sees your card.</p></div>
                 )}
               </>
             )}
@@ -817,8 +816,15 @@ export function PayChooser({ product, methods, payByBank, stripePk, stripeAccoun
             {quote && quote.savedMinor > 0 && <p className="co3-saved">You save {money(quote.savedMinor)}</p>}
             {needsEmail && !free && <p className="co3-hint-line">This code is once per customer, so we need your email.</p>}
             {error && <p className="co-err" role="alert">{error}</p>}
-            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy || cardBusy ? (free ? 'Sending…' : inlineCard ? 'Paying…' : isBank ? 'Getting bank details…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `🔒 Secure pay ${price}` : isBank ? `Get bank details · ${price}` : choice === 'bankapp' ? `Continue to your bank · ${price}` : `Pay ${price}`}</button>
-            {inlineCard && <p className="co3-secure"><span aria-hidden="true">🔒</span> Your card is secured by Stripe. Desknoty never sees it.<span className="co3-logos" aria-hidden="true"><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i><i className="co3-amex">AMEX</i></span></p>}
+            <button
+              type="submit"
+              className="co3-pay-btn"
+              disabled={!canPay}
+              aria-describedby={choice === 'card' && belowMinimum ? 'co3-minimum' : undefined}
+            >
+              {busy || cardBusy ? (free ? 'Sending…' : cardPhase === 'confirming' ? 'Confirming payment…' : inlineCard ? 'Paying…' : isBank ? 'Getting bank details…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `🔒 Secure pay ${price}` : isBank ? `Get bank details · ${price}` : choice === 'bankapp' ? `Continue to your bank · ${price}` : choice === 'paypal' ? `Continue to PayPal · ${price}` : `Pay ${price}`}
+            </button>
+            {choice === 'card' && !belowMinimum && <p className="co3-secure"><span aria-hidden="true">🔒</span> Your card is secured by Stripe. Desknoty never sees it.<span className="co3-logos" aria-hidden="true"><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i><i className="co3-amex">AMEX</i></span></p>}
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>
           </section>
         </div>
@@ -967,7 +973,7 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
   // lands on the live store instead of a stale address.
   const back = order?.storeHandle ? `/${order.storeHandle}` : `/${handle}`
   if (err) return <Message title="Order not found" text={err} back={back} />
-  if (!order) return <Message title="Checking your payment…" text="" />
+  if (!order) return <Message title="Confirming payment…" text="" />
   if (order.status === 'paid')
     return (
       <div className="ps-order">
@@ -1023,7 +1029,7 @@ function OrderStatus({ handle, load, claim, backToStore }: { handle: string; loa
   if (order.status === 'pending')
     return (
       <Message
-        title="Waiting for your payment to confirm"
+        title="Confirming payment…"
         text={tries > 40 ? 'This is taking longer than usual. Some payment methods take a while to clear; we’ll email you the download as soon as it does.' : 'This usually takes a few seconds. Keep this page open.'}
       />
     )

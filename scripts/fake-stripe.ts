@@ -37,6 +37,7 @@ export interface FakeStripe {
   disputes: Map<string, Obj>
   accounts: Map<string, Obj>
   sessions: Map<string, Obj>
+  intents: Map<string, Obj>
   calls: Array<{ method: string; path: string; account?: string; body: Obj }>
   /** Webhooks the fake hosted pages have sent, in order. */
   sent: Array<{ payload: string; header: string }>
@@ -46,6 +47,14 @@ export interface FakeStripe {
   failSessions(on: boolean): void
   /** Buyer pays: marks the session paid and returns the signed webhook it would send. */
   pay(sessionId: string, email?: string): { payload: string; header: string }
+  /** The bank asks the buyer to authenticate (3-D Secure): the intent needs another step. */
+  requireAction(intentId: string): Obj
+  /** The buyer finishes authentication: marks the intent succeeded and returns its webhook. */
+  succeedIntent(intentId: string, opts?: { email?: string }): { payload: string; header: string }
+  /** The card is declined: keeps the intent retryable and returns its failed webhook. */
+  failIntent(intentId: string, message?: string): { payload: string; header: string }
+  /** The buyer abandons the payment: marks the intent canceled and returns its webhook. */
+  cancelIntent(intentId: string): { payload: string; header: string }
   event(type: string, object: Obj, account?: string): { payload: string; header: string }
   close(): Promise<void>
 }
@@ -56,6 +65,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
   const idempotent = new Map<string, Obj>()
   const accounts = new Map<string, Obj>()
   const sessions = new Map<string, Obj>()
+  const intents = new Map<string, Obj>()
   const payouts: Obj[] = []
   const calls: FakeStripe['calls'] = []
   const sent: FakeStripe['sent'] = []
@@ -72,6 +82,39 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
   const send = (e: { payload: string; header: string }) =>
     (sent.push(e), fetch)(opts.webhookUrl, { method: 'POST', headers: { 'content-type': 'application/json', 'stripe-signature': e.header }, body: e.payload })
 
+  const requireAction: FakeStripe['requireAction'] = (id) => {
+    const pi = intents.get(id)!
+    Object.assign(pi, { status: 'requires_action', next_action: { type: 'use_stripe_sdk', use_stripe_sdk: { type: 'three_d_secure_redirect' } } })
+    return pi
+  }
+  const succeedIntent: FakeStripe['succeedIntent'] = (id, opts) => {
+    const pi = intents.get(id)!
+    Object.assign(pi, {
+      status: 'succeeded',
+      amount_received: pi.amount,
+      receipt_email: opts?.email ?? pi.receipt_email ?? 'buyer@example.test',
+      latest_charge: `ch_${id}`,
+      next_action: null,
+      last_payment_error: null,
+    })
+    charges.set(`ch_${id}`, { id: `ch_${id}`, payment_intent: id, amount_refunded: 0, disputed: false, amount: pi.amount, currency: pi.currency, _account: pi._account })
+    return event('payment_intent.succeeded', pi, pi._account as string)
+  }
+  const failIntent: FakeStripe['failIntent'] = (id, message = 'Your card was declined.') => {
+    const pi = intents.get(id)!
+    Object.assign(pi, {
+      status: 'requires_payment_method',
+      amount_received: 0,
+      last_payment_error: { code: 'card_declined', decline_code: 'generic_decline', message },
+      next_action: null,
+    })
+    return event('payment_intent.payment_failed', pi, pi._account as string)
+  }
+  const cancelIntent: FakeStripe['cancelIntent'] = (id) => {
+    const pi = intents.get(id)!
+    Object.assign(pi, { status: 'canceled', canceled_at: Math.floor(Date.now() / 1000) })
+    return event('payment_intent.canceled', pi, pi._account as string)
+  }
   const setAccount: FakeStripe['setAccount'] = (id, state) => {
     const a = accounts.get(id)!
     Object.assign(a, {
@@ -161,6 +204,48 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
       return json(res, 200, s)
     }
 
+    // ---- PaymentIntents (the embedded card / wallet flow) ----
+    if (req.method === 'POST' && p === '/v1/payment_intents') {
+      if (!account || !accounts.has(account)) return json(res, 400, { error: { message: 'Missing or unknown Stripe-Account' } })
+      const amount = Number(form.amount)
+      if (!Number.isInteger(amount) || amount <= 0) return json(res, 400, { error: { message: 'Amount must be a positive integer' } })
+      const id = `pi_test_${++n}${Date.now()}`
+      const pi: Obj = {
+        id, object: 'payment_intent', amount, amount_received: 0,
+        currency: String(form.currency ?? 'gbp').toLowerCase(),
+        status: 'requires_payment_method',
+        client_secret: `${id}_secret_${Math.random().toString(36).slice(2)}`,
+        description: form.description ?? null,
+        receipt_email: form.receipt_email ?? null,
+        metadata: form.metadata ?? {},
+        automatic_payment_methods: form.automatic_payment_methods ?? null,
+        last_payment_error: null, next_action: null, _account: account,
+      }
+      intents.set(id, pi)
+      if (idem) idempotent.set(idem, pi)
+      return json(res, 200, pi)
+    }
+    m = p.match(/^\/v1\/payment_intents\/(pi_\w+)$/)
+    if (req.method === 'GET' && m) {
+      const pi = intents.get(m[1])
+      if (!pi || pi._account !== account) return json(res, 404, { error: { message: 'No such payment_intent' } })
+      return json(res, 200, pi)
+    }
+    m = p.match(/^\/v1\/payment_intents\/(pi_\w+)\/confirm$/)
+    if (req.method === 'POST' && m) {
+      const pi = intents.get(m[1])
+      if (!pi || pi._account !== account) return json(res, 404, { error: { message: 'No such payment_intent' } })
+      Object.assign(pi, { status: 'succeeded', amount_received: pi.amount, last_payment_error: null, next_action: null })
+      return json(res, 200, pi)
+    }
+    m = p.match(/^\/v1\/payment_intents\/(pi_\w+)\/cancel$/)
+    if (req.method === 'POST' && m) {
+      const pi = intents.get(m[1])
+      if (!pi || pi._account !== account) return json(res, 404, { error: { message: 'No such payment_intent' } })
+      if (pi.status === 'succeeded') return json(res, 400, { error: { message: 'PaymentIntent already succeeded' } })
+      Object.assign(pi, { status: 'canceled', canceled_at: Math.floor(Date.now() / 1000) })
+      return json(res, 200, pi)
+    }
     // Two bank accounts on every connected account, for payout destinations.
     m = p.match(/^\/v1\/accounts\/(acct_\w+)\/external_accounts(?:\/(ba_\w+))?$/)
     if (req.method === 'GET' && m) {
@@ -229,7 +314,7 @@ export function startFakeStripe(opts: { webhookUrl: string; webhookSecret: strin
     srv.listen(0, '127.0.0.1', () => {
       const addr = srv.address() as { port: number }
       base = `http://127.0.0.1:${addr.port}`
-      resolve({ url: base, charges, disputes, accounts, sessions, calls, sent, setAccount, failSessions: (on) => { failSession = on }, pay, event, close: () => new Promise((r) => srv.close(() => r())) })
+      resolve({ url: base, charges, disputes, accounts, sessions, intents, calls, sent, setAccount, failSessions: (on) => { failSession = on }, pay, requireAction, succeedIntent, failIntent, cancelIntent, event, close: () => new Promise((r) => srv.close(() => r())) })
     })
   })
 }

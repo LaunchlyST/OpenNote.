@@ -219,7 +219,7 @@ export function CardAppearance({ x, setX, preview, store, buy }: { x: ProductExt
       </div>
       <div className="ss-row">
         <span className="ss-hint">Drag the title or description sideways, or select one and use the arrow keys (C centres it).</span>
-        <button type="button" className="ss-ghost" onClick={() => setX({ textPos: { title: 0, desc: 0 } })}><RotateCcw className="h-3.5 w-3.5" /> Reset position</button>
+        <button type="button" className="ss-ghost" onClick={() => setX({ textPos: { title: 1, desc: 1 } })}><RotateCcw className="h-3.5 w-3.5" /> Reset position</button>
       </div>
     </div>
   )

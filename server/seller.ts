@@ -48,7 +48,7 @@ const legacyKey = process.env.STRIPE_SECRET_KEY ?? ''
 const seller = {
   stripeSecret: (modeKey || (legacyKey.includes(`_${stripeMode}_`) ? legacyKey : '')).trim(),
   // Public key for Stripe.js (the card form inside Desknoty's checkout). Safe to send to browsers.
-  publishableKey: (process.env[stripeMode === 'live' ? 'STRIPE_LIVE_PUBLISHABLE_KEY' : 'STRIPE_TEST_PUBLISHABLE_KEY'] || '').trim(),
+  publishableKey: (process.env[stripeMode === 'live' ? 'STRIPE_LIVE_PUBLISHABLE_KEY' : 'STRIPE_TEST_PUBLISHABLE_KEY'] || process.env.STRIPE_PUBLISHABLE_KEY || '').trim(),
   webhookSecret: (process.env[stripeMode === 'live' ? 'STRIPE_LIVE_WEBHOOK_SECRET' : 'STRIPE_TEST_WEBHOOK_SECRET'] || (stripeMode === 'test' ? process.env.STRIPE_WEBHOOK_SECRET : '') || '').trim(),
   /** Test-only: point the Stripe SDK at a local stand-in. Ignored in production. */
   stripeApiBase: env.isProduction ? '' : (process.env.STRIPE_API_BASE ?? '').trim(),
@@ -968,7 +968,7 @@ function cleanCard(o: Record<string, any>) {
       .map((x: any) => ({ q: line(x?.q, 140), a: String(x?.a ?? '').trim().slice(0, 600) }))
       .filter((x: { q: string; a: string }) => x.q && x.a)
       .slice(0, 8),
-    textPos: { title: unit(tp.title, 0), desc: unit(tp.desc, 0) },
+    textPos: { title: unit(tp.title, 1), desc: unit(tp.desc, 1) },
     related: ids(o.related, 6),
     bundle: ids(o.bundle, 20),
     titleStyle: cleanTextStyle(o.titleStyle),
@@ -1269,15 +1269,43 @@ const retrievalUrl = (o: OrderRow, _handle?: string) => `${seller.siteUrl}/store
  * Marks an order paid once Stripe confirms it, and sends the receipt exactly
  * once. Safe to call any number of times, from the webhook or the return page.
  */
-export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Session, 'payment_status' | 'amount_total' | 'currency' | 'customer_details' | 'id' | 'payment_intent'>): Promise<OrderRow> {
+export async function fulfil(order: OrderRow, session: Pick<Stripe.Checkout.Session, 'payment_status' | 'amount_total' | 'currency' | 'customer_details' | 'id' | 'payment_intent' | 'metadata'>): Promise<OrderRow> {
   if (session.id !== order.sessionId) return order
   if (session.payment_status !== 'paid' && session.payment_status !== 'no_payment_required') return order
-  if (session.amount_total !== order.amountMinor || (session.currency ?? '').toLowerCase() !== order.currency) {
+  if (session.metadata?.desknotyOrderId && session.metadata.desknotyOrderId !== order.id) return order
+  if (session.amount_total !== order.amountMinor || (session.currency ?? '').toLowerCase() !== order.currency.toLowerCase()) {
     console.error(`[seller] order ${order.id}: paid amount does not match, not fulfilling`)
     return order
   }
   const intent = typeof session.payment_intent === 'string' ? session.payment_intent : session.payment_intent?.id
   return completeOrder(order, session.customer_details?.email ?? null, intent ?? null)
+}
+
+/**
+ * The only test that marks an in-checkout card payment paid: Stripe says the
+ * PaymentIntent succeeded, for this order's own intent, on the seller's
+ * connected account, for exactly this amount and currency. The browser is
+ * never trusted, and a duplicate call changes nothing.
+ */
+export function verifyPaymentIntent(
+  order: OrderRow,
+  pi: Pick<Stripe.PaymentIntent, 'id' | 'status' | 'amount_received' | 'currency' | 'metadata' | 'receipt_email'>,
+): { ok: true; email: string | null } | { ok: false; reason: string } {
+  if (pi.id !== order.sessionId) return { ok: false, reason: 'different payment intent' }
+  if (pi.status !== 'succeeded') return { ok: false, reason: `not succeeded (${pi.status})` }
+  if (pi.amount_received !== order.amountMinor) return { ok: false, reason: `amount mismatch (${pi.amount_received} vs ${order.amountMinor})` }
+  if ((pi.currency ?? '').toLowerCase() !== order.currency.toLowerCase()) return { ok: false, reason: `currency mismatch (${pi.currency} vs ${order.currency})` }
+  if (pi.metadata?.desknotyOrderId && pi.metadata.desknotyOrderId !== order.id) return { ok: false, reason: 'order id mismatch' }
+  return { ok: true, email: pi.receipt_email ?? null }
+}
+
+export async function fulfilPaymentIntent(order: OrderRow, pi: Stripe.PaymentIntent): Promise<OrderRow> {
+  const check = verifyPaymentIntent(order, pi)
+  if (!check.ok) {
+    if (pi.status === 'succeeded') console.error(`[seller] payment intent ${pi.id} for ${order.id} refused: ${check.reason}`)
+    return order
+  }
+  return completeOrder(order, check.email ?? order.buyerEmail, pi.id)
 }
 
 /**
@@ -1498,6 +1526,37 @@ async function handleEvent(event: Stripe.Event) {
       const order = await q.orderBySession(s.id)
       if (!order || order.accountId !== event.account) return
       await markOrder(s.id, 'cancelled')
+      return
+    }
+    case 'payment_intent.succeeded': {
+      const pi = event.data.object as Stripe.PaymentIntent
+      let order = await q.orderBySession(pi.id)
+      if (!order && pi.metadata?.desknotyOrderId) {
+        const reserved = await q.order(pi.metadata.desknotyOrderId)
+        if (reserved && reserved.accountId === event.account && reserved.stripeMode === stripeMode && !reserved.sessionId) {
+          await sql.run('UPDATE seller_order SET "sessionId" = ? WHERE id = ? AND "sessionId" IS NULL', pi.id, reserved.id)
+          order = await q.order(reserved.id)
+        }
+      }
+      if (!order) throw new Error('Payment reservation is not available yet')
+      if (event.account !== order.accountId || order.stripeMode !== stripeMode) return
+      await fulfilPaymentIntent(order, pi)
+      return
+    }
+    case 'payment_intent.payment_failed': {
+      const pi = event.data.object as Stripe.PaymentIntent
+      const order = await q.orderBySession(pi.id)
+      if (!order || order.accountId !== event.account || order.stripeMode !== stripeMode) return
+      // A decline is not final: the buyer can retry the same intent with another
+      // card, and a later payment_intent.succeeded still fulfils the order.
+      await markOrder(pi.id, 'failed')
+      return
+    }
+    case 'payment_intent.canceled': {
+      const pi = event.data.object as Stripe.PaymentIntent
+      const order = await q.orderBySession(pi.id)
+      if (!order || order.accountId !== event.account || order.stripeMode !== stripeMode) return
+      await markOrder(pi.id, 'cancelled')
       return
     }
     case 'charge.refunded':
@@ -2744,18 +2803,33 @@ export function sellerRouter() {
     // The order is only marked paid after the server reads the payment from Stripe (see the order page).
     if (req.body?.inline === true && seller.publishableKey) {
       try {
-        const pi = order.sessionId?.startsWith('pi_')
+        const existing = order.sessionId?.startsWith('pi_')
           ? await st.paymentIntents.retrieve(order.sessionId, {}, { stripeAccount: order.accountId })
-          : await st.paymentIntents.create({
-              amount: order.amountMinor, currency: order.currency,
-              automatic_payment_methods: { enabled: true },
-              description: order.productTitle,
-              ...(validEmail ? { receipt_email: validEmail } : {}),
-              metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
-              ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
-            }, { stripeAccount: order.accountId, idempotencyKey: `pi_${order.id}` })
-        if (!order.sessionId) await sql.run('UPDATE seller_order SET "sessionId" = ? WHERE id = ? AND "sessionId" IS NULL', pi.id, order.id)
-        return void res.json({ clientSecret: pi.client_secret, orderUrl: retrievalUrl(order) })
+          : null
+        // Already paid (or Stripe already has the money): send the buyer to the
+        // order page, which verifies it with Stripe before releasing anything.
+        if (order.status === 'paid' || existing?.status === 'succeeded') {
+          return void res.json({ orderUrl: retrievalUrl(order), amountMinor: order.amountMinor, currency: order.currency })
+        }
+        // A cancelled intent can't be reused: start a fresh one for the retry,
+        // with an idempotency key tied to the old intent.
+        let pi = existing
+        if (!pi || pi.status === 'canceled') {
+          pi = await st.paymentIntents.create({
+            amount: order.amountMinor, currency: order.currency,
+            automatic_payment_methods: { enabled: true },
+            description: order.productTitle,
+            ...(validEmail ? { receipt_email: validEmail } : {}),
+            metadata: { desknotyOrderId: order.id, desknotyStoreId: s.id, desknotyProductId: p.id },
+            ...(PLATFORM_FEE_PERCENT > 0 ? { application_fee_amount: Math.round((order.amountMinor * PLATFORM_FEE_PERCENT) / 100) } : {}),
+          }, { stripeAccount: order.accountId, idempotencyKey: `pi_${order.id}${existing ? `_after_${existing.id}` : ''}` })
+          if (!existing) await sql.run('UPDATE seller_order SET "sessionId" = ? WHERE id = ? AND "sessionId" IS NULL', pi.id, order.id)
+          else {
+            await sql.run('UPDATE seller_order SET "sessionId" = ? WHERE id = ? AND "sessionId" = ?', pi.id, order.id, existing.id)
+            await sql.run(`UPDATE seller_order SET status = 'pending' WHERE id = ? AND status IN ('cancelled','failed')`, order.id)
+          }
+        }
+        return void res.json({ clientSecret: pi.client_secret, orderUrl: retrievalUrl(order), amountMinor: order.amountMinor, currency: order.currency })
       } catch (err) {
         console.error('[seller] Stripe payment could not be started', order.id, (err as Error).message)
         return void res.status(502).json({ error: 'We could not start the payment. Please try again.' })
@@ -2937,10 +3011,19 @@ export function sellerRouter() {
     // A card paid in the checkout form: ask Stripe (never the browser) whether it succeeded.
     let cur = o
     const st = stripe()
-    if (st && o.status === 'pending' && o.sessionId?.startsWith('pi_')) {
+    if (st && o.status !== 'paid' && o.sessionId?.startsWith('pi_')) {
       try {
         const pi = await st.paymentIntents.retrieve(o.sessionId, {}, { stripeAccount: o.accountId })
-        cur = await fulfil(o, { id: pi.id, payment_status: pi.status === 'succeeded' ? 'paid' : 'unpaid', amount_total: pi.amount_received, currency: pi.currency, customer_details: { email: pi.receipt_email ?? o.buyerEmail ?? null } as Stripe.Checkout.Session.CustomerDetails, payment_intent: pi.id })
+        if (pi.status === 'succeeded') cur = await fulfilPaymentIntent(o, pi)
+        else if (pi.status === 'canceled') {
+          await markOrder(pi.id, 'cancelled')
+          cur = (await q.order(o.id))!
+        } else if (pi.status === 'requires_payment_method' && pi.last_payment_error) {
+          // A failed card or bank authentication. The buyer can still retry the
+          // same intent from the checkout, and a later success fulfils it.
+          await markOrder(pi.id, 'failed')
+          cur = (await q.order(o.id))!
+        }
       } catch (err) {
         console.error('[seller] could not read the payment', o.id, (err as Error).message)
       }

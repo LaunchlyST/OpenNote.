@@ -224,7 +224,7 @@ export const DEFAULT_EXTRAS: ProductExtras = {
   included: [],
   access: '',
   faq: [],
-  textPos: { title: 0, desc: 0 },
+  textPos: { title: 1, desc: 1 },
   related: [],
   bundle: [],
   productType: 'normal',
