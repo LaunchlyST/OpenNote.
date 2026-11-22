@@ -132,11 +132,6 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
       </main>
 
       {products.length > 0 && live && (
-        <aside className="sx-dock" aria-label="Product feedback">
-          <Feedback docked open onClose={() => {}} products={products} handle={handle} owned={props.owned} live={!!live} />
-        </aside>
-      )}
-      {products.length > 0 && live && (
         <>
           <button type="button" className="sx-fab" onClick={() => setDrawer(true)} aria-haspopup="dialog">
             <MessageSquare aria-hidden="true" /> Feedback

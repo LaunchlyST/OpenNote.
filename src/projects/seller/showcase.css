@@ -337,3 +337,7 @@
 }
 @container (min-width: 1320px) { .sx.sx-has-fb { grid-template-columns: minmax(0, 32fr) minmax(0, 45fr) minmax(360px, 23fr); } }
 @container (min-width: 901px) { .sx-row { grid-template-columns: 172px minmax(0, 1fr) auto; column-gap: 20px; } .sx-title { font-size: 21px; } }
+/* Feedback opens only from the button; the product card runs to the right edge. */
+@container (min-width: 1320px) { .sx.sx-has-fb { grid-template-columns: minmax(0, 36fr) minmax(0, 64fr); } }
+@container (min-width: 901px) { .sx-panel { padding-right: clamp(32px, 5vw, 96px); } .sx-panel::before { right: 0; } .sx-collection, .sx-panel > .sp-pick, .sx-panel > .sp-block, .sx-panel > .sx-foot { max-width: 1000px; } }
+@container (min-width: 901px) { .sx-panel::before { right: -240px; } .sx { overflow-x: clip; } }
