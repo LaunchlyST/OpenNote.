@@ -422,3 +422,12 @@
 @container (min-width: 1320px) { .sx, .sx.sx-has-fb { grid-template-columns: minmax(0, 1fr) minmax(560px, 46%); } }
 /* The design owns button colours (seller CTA colour would clash). */
 .sx-buy .sp-btn { background: var(--ink) !important; border-color: var(--ink) !important; color: #fff !important; }
+.sx-top-right { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.sx-search ~ .sx-top-right { margin-left: 8px; }
+.sx-top-right .sx-socials { margin: 0; gap: 8px; }
+.sx-top-right .sx-socials a { width: 40px; height: 40px; background: #fff; }
+.sx-count { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; border: 1px solid #e3ddd2; border-radius: 999px; background: #fff; color: var(--ink) !important; font-weight: 600; font-size: 14px; cursor: pointer; box-shadow: 0 8px 20px -14px rgba(0,0,0,.4); transition: transform .2s; }
+.sx-count b { display: grid; place-items: center; min-width: 26px; height: 26px; padding: 0 6px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 13px; }
+.sx-count:hover { transform: translateY(-2px); }
+.sx-count span { transition: transform .2s; }
+.sx-count:hover span { transform: translateY(2px); }
