@@ -3,13 +3,17 @@
 Files: `src/projects/seller/Showcase.tsx`, `ShowcaseHome.tsx`, `showcase.css`
 (rendered by `StorePage.tsx` for the store home page; product detail = `ProductSheet` in `ProductCard.tsx`).
 
-## Home (full-screen intro)
-- Fixed full-viewport dark mosaic under the top bar; page does not scroll on Home.
-- Centre panel = seller banner; kicker = real formats; title = store name or @handle; bio; CTA
-  "Explore the collection →". Six tiles = product covers / gallery images (no duplicates;
-  spare tiles = dark texture). Tiles grow in from the centre on load; pointer parallax on images.
-- Inspiration: Oversight Supply "Home — Product Showcase 01" (composition only; their code not used).
-- Nothing below the intro (owner's rule: no catalog, FAQ, featured or second hero on Home).
+## Home — The Digital Portal (`PortalHome.tsx`, `PortalScene.ts`, `portalKind.ts`)
+- Full-viewport 3D desk scene under the nav: beige CRT (glass opening, scanlines, grid horizon,
+  @handle and real covers on screen), warm lamp + key light, keyboard, leaves, low-poly bird.
+- Copy is HTML in a left column: Skip to products (first focus), Creator store, name, bio,
+  real offer line, Enter the store; product chips = keyboard equivalent of the 3D objects.
+- Objects by type: sheets / book / display (video) / icon tiles / neutral display; hover opens,
+  click or chip selects → "View product" / "Open in the store" (brings it to the front).
+- Three.js is loaded only when Home is shown; still scene for reduced motion, no WebGL, failed
+  load and the Studio preview. Scene pauses when hidden or on Products.
+- Transition: one paused GSAP timeline (1.6 s, ×1.35 on mobile, ×3 for skip/reduced):
+  brighten → approach → glass → tunnel of covers and rings → shop fades in. Home = reverse().
 
 ## Products (shopping layout)
 - Left: sticky banner stage (seller's own tap-to-play `Banner`), "Creator store", @handle, bio,

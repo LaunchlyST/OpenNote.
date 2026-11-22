@@ -47,7 +47,7 @@ export function themeOf(p: ShopProduct, i: number, used: number[]): Theme {
   return t
 }
 
-export function Carousel({ list, blockId, props }: { list: ShopProduct[]; blockId: string; props: StorePageProps }) {
+export function Carousel({ list, blockId, props, focusId }: { list: ShopProduct[]; blockId: string; props: StorePageProps; focusId?: string | null }) {
   const { live } = props
   const used: number[] = []
   const themes = list.map((p, i) => themeOf(p, i, used))
@@ -109,6 +109,13 @@ export function Carousel({ list, blockId, props }: { list: ShopProduct[]; blockI
   // Category filter changed the list: start from the first product.
   const ids = list.map((p) => p.id).join(',')
   useEffect(() => { pos.current = 0; activeRef.current = 0; setActive(0); render() }, [ids, render])
+
+  // A product chosen on Home comes to the front when Products opens.
+  useEffect(() => {
+    const i = focusId ? list.findIndex((p) => p.id === focusId) : -1
+    if (i < 0) return
+    snapTween.current?.kill(); pos.current = i; activeRef.current = i; setActive(i); render()
+  }, [focusId, render]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Drag / swipe: the cards follow the finger, then settle on the nearest product.
   const drag = useRef<{ x: number; y: number; p: number; t: number; lastX: number; lastT: number; moved: boolean; axis: 'x' | 'y' | null } | null>(null)

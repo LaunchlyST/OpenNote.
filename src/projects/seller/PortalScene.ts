@@ -10,21 +10,14 @@
 import type * as T from 'three'
 
 export interface PortalProduct { id: string; title: string; cover: string | null; kind: Kind; accent: string }
-export type Kind = 'sheets' | 'book' | 'video' | 'icons' | 'display'
-
-export function kindOf(p: { format?: string; fileType?: string | null; title: string }): Kind {
-  const s = `${p.format ?? ''} ${p.fileType ?? ''} ${p.title}`.toLowerCase()
-  if (/\b(pdf|epub|ebook|e-book|book|guide|workbook)\b/.test(s)) return 'book'
-  if (/\b(mp4|mov|webm|video|course|lesson|reel)\b/.test(s)) return 'video'
-  if (/\b(svg|icon|icons|emoji|sticker)\b/.test(s)) return 'icons'
-  if (/\b(psd|template|templates|figma|canva|planner|notion|kit|pack|ai)\b/.test(s)) return 'sheets'
-  return 'display'
-}
+import type { Kind } from './portalKind'
+export type { Kind }
 
 export interface PortalHandle {
   setProgress(p: number): void
   setIntro(t: number): void
   setPaused(paused: boolean): void
+  setSelected(index: number | null): void
   resize(): void
   dispose(): void
 }
@@ -137,7 +130,7 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
     return im
   })
 
-  const screenGlow = new THREE.PointLight('#5b86ff', 0, 9, 1.6)
+  const screenGlow = new THREE.PointLight('#7f9cff', 0, 5, 2)
   screenGlow.position.set(0, SCREEN.y, SCREEN.z + 1.2)
   room.add(screenGlow)
 
@@ -196,7 +189,7 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
   // ---------- products as dimensional objects ----------
   const SLOTS: Array<[number, number, number, number]> = mobile
     ? [[-1.75, 3.55, 1.4, 0.3], [1.8, 3.7, 1.2, -0.3], [0, 4.6, 0.4, 0]]
-    : [[-3.4, 2.5, 1.6, 0.45], [3.6, 2.85, 1.2, -0.5], [-2.2, 4.15, 0.2, 0.25], [2.35, 4.4, -0.1, -0.25], [-4.6, 1.2, 2.8, 0.6], [4.8, 1.5, 2.6, -0.6]]
+    : [[3.55, 3.0, 1.0, -0.5], [-2.1, 3.2, 0.5, 0.35], [2.3, 3.75, -0.6, -0.2], [4.7, 1.35, 2.4, -0.65], [0.1, 3.85, -1.6, 0.05], [5.4, 3.3, -0.4, -0.55]]
   const products = opts.products.slice(0, SLOTS.length)
   type Obj = { g: T.Group; base: T.Vector3; rot: number; hover: number; sel: number; kind: Kind; parts: T.Object3D[]; dir: T.Vector3 }
   const objs: Obj[] = []
@@ -271,8 +264,10 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
   tunnel.add(endGlow)
 
   // ---------- lights ----------
-  const amb = new THREE.AmbientLight('#7d7fa8', 0.0); scene.add(amb)
-  const hemi = new THREE.HemisphereLight('#9fb4ff', '#3a2418', 0.0); scene.add(hemi)
+  const amb = new THREE.AmbientLight('#b3a58f', 0.0); scene.add(amb)
+  const hemi = new THREE.HemisphereLight('#d9d2c4', '#3a2418', 0.0); scene.add(hemi)
+  // a warm key from the front-left so the beige case reads as beige, not lit by the screen's blue
+  const key = new THREE.DirectionalLight('#ffd8a8', 0); key.position.set(-4, 5, 7); scene.add(key)
   const lampLight = new THREE.SpotLight('#ffb36b', 0, 22, 0.85, 0.55, 1.2)
   lampLight.position.set(-1.9, 3.0, -0.2); lampLight.target.position.set(0.5, 0, 1.2)
   lampLight.castShadow = !mobile; lampLight.shadow.mapSize.set(1024, 1024)
@@ -383,10 +378,11 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
     const i0 = intro
     // Scene A: lights, camera settle, screen power, products appear
     const lightsOn = smooth(0.0, 0.35, i0), sweepT = smooth(0.15, 0.45, i0), power = smooth(0.4, 0.7, i0), prodIn = smooth(0.55, 0.85, i0)
-    amb.intensity = 0.32 * lightsOn
-    hemi.intensity = 0.35 * lightsOn
+    amb.intensity = 0.38 * lightsOn
+    hemi.intensity = 0.45 * lightsOn
+    key.intensity = 1.5 * lightsOn
     lampLight.intensity = 26 * lightsOn
-    rim.intensity = 0.9 * lightsOn
+    rim.intensity = 0.35 * lightsOn
     sweep.intensity = 14 * Math.sin(sweepT * Math.PI)
     sweep.position.x = -6 + sweepT * 12
     bulb.material.color.setScalar(0.4 + 0.6 * lightsOn).multiply(new THREE.Color('#ffd9a0'))
@@ -397,9 +393,11 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
     const homeZ = mobile ? 12.5 : 10.2, homeY = mobile ? 2.6 : 2.25
     const introPush = (1 - ease3(Math.min(1, i0 * 1.4))) * 2.2
     const parX = reduce ? 0 : ptrS.x * 0.55, parY = reduce ? 0 : ptrS.y * 0.3
-    const a = ease3(smooth(0, 0.42, p))            // approach the monitor
-    const cross = smooth(0.42, 0.52, p)             // through the glass
-    const fly = smooth(0.5, 1, p)                   // down the tunnel
+    // timeline (1.6 s): 0–0.2 s brighten · 0.2–0.65 s approach · 0.65–1.1 s glass + tunnel · 1.1–1.6 s open
+    const pre = smooth(0, 0.125, p)                 // the CRT brightens
+    const a = ease3(smooth(0.1, 0.41, p))           // approach the monitor
+    const cross = smooth(0.4, 0.46, p)              // through the glass
+    const fly = smooth(0.44, 0.86, p)               // down the tunnel
     const hx = offsetX * (1 - a)
     const nearZ = SCREEN.z + 0.9
     camPos.set(
@@ -419,7 +417,7 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
     room.visible = !inside
     tunnel.visible = inside || p > 0.4
     tunnel.rotation.z = time * 0.08 + fly * 1.5
-    endGlow.material.opacity = smooth(0.8, 1, p)
+    endGlow.material.opacity = smooth(0.66, 0.84, p)
 
     // Scene B: products float, open on hover, part from the screen as the camera approaches
     objs.forEach((o, k) => {
@@ -448,10 +446,10 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
     head.rotation.x = THREE.MathUtils.lerp(head.rotation.x, -ptrS.y * 0.4, 0.08)
     bBody.scale.y = 0.85 + Math.sin(time * 2.2) * 0.015
 
-    const flash = smooth(0.34, 0.47, p) * 1.1 - smooth(0.5, 0.56, p) * 1.1
+    const flash = smooth(0.3, 0.42, p) * 1.1 - smooth(0.46, 0.52, p) * 1.1
     drawScreen(time, power, Math.max(0, flash))
-    screenMat.color.setScalar(1 + a * 0.8)
-    screenGlow.intensity = power * (6 + a * 30) + (hovered !== null ? 2 : 0)
+    screenMat.color.setScalar(1 + pre * 0.5 + a * 0.6)
+    screenGlow.intensity = power * (2.5 + pre * 8 + a * 22) + (hovered !== null ? 2 : 0)
     renderer.render(scene, camera)
   }
   raf = requestAnimationFrame(frame)
@@ -460,6 +458,7 @@ export async function createPortal(canvas: HTMLCanvasElement, opts: {
     setProgress(p) { progress = p },
     setIntro(t) { intro = t },
     setPaused(v) { paused = v; if (!v) clock.getDelta() },
+    setSelected(i) { selected = i },
     resize,
     dispose() {
       disposed = true
