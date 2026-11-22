@@ -4,6 +4,7 @@ import { Daisy, Flower, Sticky } from '../../landing/AeroPage'
 import type { StorePageProps } from './StorePage'
 import { affiliateHref, ensureFont, isFreeProduct, mediaUrl } from './model'
 import type { ShopProduct } from './model'
+import { Style2Carousel } from './Style2Carousel'
 import './style2.css'
 
 /**
@@ -48,9 +49,9 @@ export function Style2Page(props: StorePageProps) {
 
       {!only && list.length > 0 && <Rail list={list} {...props} />}
 
-      <section id="s2-shop" className="s2k-shop" aria-label="Products">
-        {list.map((p, i) => <Card key={p.id} p={p} n={i} {...props} />)}
-      </section>
+      {only
+        ? <section id="s2-shop" className="s2k-shop" aria-label="Products">{list.map((p, i) => <Card key={p.id} p={p} n={i} {...props} />)}</section>
+        : <div id="s2-shop"><Style2Carousel list={list} props={props} Buy={Buy} /></div>}
       {!only && <div className="s2k-next"><span className="s2k-hand s2k-next-note">psst… next one’s on the way</span><Teaser /></div>}
       {!only && (
         <section className="s2k-promo" aria-label="Stay in the loop">
