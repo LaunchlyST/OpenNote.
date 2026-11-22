@@ -1305,7 +1305,7 @@ function Studio({
             <i />{saving === 'saving' || pageSave.dirty ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved ✓'}
           </span>
           <button type="button" className="pv-btn pv-size" onClick={() => setView(view === 'desktop' ? 'mobile' : 'desktop')} aria-label={view === 'desktop' ? 'Show phone preview' : 'Show laptop preview'} title={view === 'desktop' ? 'Phone preview' : 'Laptop preview'}>
-            {view === 'desktop' ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+            {view === 'desktop' ? <Smartphone size={16} strokeWidth={2} /> : <Monitor size={16} strokeWidth={2} />}
           </button>
           <button type="button" className="pv-btn" onClick={() => setPreviewOpen(true)}><Eye className="h-4 w-4" /> Preview</button>
           <button type="button" className="pv-btn" title={`Copy ${store.url || `${window.location.origin}/${store.handle}`}`} onClick={() => void share()}><Share2 className="h-4 w-4" /> {shared ? 'Link copied' : shareFailed ? 'Copy failed' : 'Share'}</button>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { gsap } from 'gsap'
 import { AtSign, Check, ChevronDown, Download, Globe, MessageSquare, Play, Search, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
-import { isFreeProduct, mediaUrl } from './model'
+import { isFreeProduct, mediaUrl, slidesOf } from './model'
 import type { Block, Page, ShopProduct } from './model'
 import { storeApi } from './api'
 import type { PublicReview } from './api'
@@ -21,7 +21,9 @@ import './showcase.css'
  */
 export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactNode; pickable: (b: Block, node: ReactNode) => ReactNode }) {
   const { page, handle, live } = props
-  const products = props.products.filter((p) => !p.hidden)
+  // Show exactly the products the seller put on the page (their product blocks, in order),
+  // so the store matches the editor. A grid with nothing picked shows every product on sale.
+  const products = useMemo(() => pageProducts(page, props.products), [page, props.products])
   const cats = useMemo(() => [...new Set(products.map((p) => p.category?.trim()).filter(Boolean) as string[])], [products])
   const [cat, setCat] = useState<string | null>(null)
   const [searching, setSearching] = useState(false)
@@ -393,4 +395,21 @@ function Write({ p, handle, order, live, onDone }: { p: ShopProduct; handle: str
       <button type="button" className="sx-link" onClick={onDone}>Back to reviews</button>
     </form>
   )
+}
+
+export function pageProducts(page: Page, all: ShopProduct[]): ShopProduct[] {
+  const visible = all.filter((p) => !p.hidden)
+  const blocks = page.blocks.filter((b) => !b.hidden && (b.type === 'featured' || b.type === 'grid'))
+  if (!blocks.length) return visible
+  const ids: string[] = []
+  for (const b of blocks) {
+    if (b.type === 'grid') {
+      const picked: string[] = Array.isArray(b.data?.productIds) ? b.data.productIds : []
+      ids.push(...(picked.length ? picked : visible.map((p) => p.id)))
+    } else {
+      for (const sl of slidesOf(b)) if (sl.productId) ids.push(sl.productId)
+    }
+  }
+  const seen = new Set<string>()
+  return ids.filter((id) => !seen.has(id) && seen.add(id)).map((id) => visible.find((p) => p.id === id)).filter((p): p is ShopProduct => Boolean(p))
 }
