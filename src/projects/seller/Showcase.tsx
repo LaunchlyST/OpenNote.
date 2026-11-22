@@ -33,8 +33,8 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const [view, setView] = useState<View>(initial)
   const [nav, setNav] = useState<NavState>(initial === 'products' ? 'PRODUCTS_READY' : 'HOME_READY')
   const homeRef = useRef<HTMLElement | null>(null)
-  const shopRef = useRef<HTMLElement | null>(null)
-  const goTo = useViewTransition({ home: homeRef, shop: shopRef, initial, onState: setNav })
+  const root = useRef<HTMLDivElement>(null)
+  const goTo = useViewTransition({ home: homeRef, root, initial, live, onState: setNav })
   const go = (v: View, push = true) => {
     setView(v)
     goTo(v)
@@ -64,7 +64,6 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
     addEventListener('resize', place)
     return () => removeEventListener('resize', place)
   }, [active])
-  const root = useRef<HTMLDivElement>(null)
   const head = page.blocks.find((b) => b.type === 'header') ?? { id: 'header', type: 'header', hidden: false, data: {} } as Block
   const gridId = page.blocks.find((b) => b.type === 'grid' || b.type === 'featured')?.id ?? head.id
 
@@ -73,13 +72,11 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
     const el = root.current
     if (!el || !live || matchMedia('(prefers-reduced-motion: reduce)').matches) return
     const ctx = gsap.context(() => {
+      if (initial !== 'home') return
       const tl = gsap.timeline({ defaults: { ease: 'expo.out' } })
-      tl.from('.sx-stage-img', { scale: 1.12, opacity: 0, duration: 1.4 })
-        .from('.sx-stage-copy > *', { y: 24, opacity: 0, duration: 0.8, stagger: 0.07 }, 0.25)
-        .from('.sx-panel', { xPercent: 6, opacity: 0, duration: 0.9 }, 0.1)
-        .from('.sx-mo-hero', { scale: 1.04, duration: 1.2 }, 0.1)
-        .from('.sx-mo-tile', { opacity: 0, y: 18, duration: 0.8, stagger: 0.05, clearProps: 'opacity,transform' }, 0.3)
-        .from('.sx-mo-copy > *', { opacity: 0, y: 14, duration: 0.7, stagger: 0.06, clearProps: 'opacity,transform' }, 0.55)
+      tl.from('.sx-mo-hero-img', { scale: 1.12, duration: 1.6 }, 0)
+        .from('.sx-mo-tile', { opacity: 0, scale: 0.92, duration: 1, stagger: { each: 0.06, from: 'center' }, clearProps: 'opacity,transform' }, 0.15)
+        .from('.sx-mo-copy > *', { opacity: 0, y: 18, duration: 0.8, stagger: 0.07, clearProps: 'opacity,transform' }, 0.45)
     }, el)
     return () => ctx.revert()
   }, [live])
@@ -101,6 +98,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
 
   return (
     <div className={products.length > 0 && live ? 'sx sx-has-fb' : 'sx'} ref={root}>
+      <HomeView props={props} products={products} onExplore={() => go('products')} homeRef={homeRef} />
       <nav className="sx-top" aria-label="Store">
         <span className="sx-logo">
           <span className="sx-logo-av" style={mediaUrl(page.avatar) ? { backgroundImage: `url(${mediaUrl(page.avatar)})` } : undefined}>{!page.avatar && (page.name.trim().charAt(0) || handle.charAt(0)).toUpperCase()}</span>
@@ -155,8 +153,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
           <i style={{ transform: view === 'products' ? 'translateX(100%)' : 'none' }} aria-hidden="true" />
         </div>
         <div className="sx-views" data-nav={nav}>
-          <HomeView props={props} products={products} onExplore={() => go('products')} homeRef={homeRef} />
-          <section className="sx-shop" ref={shopRef} aria-label="Products">
+          <section className="sx-shop" aria-label="Products">
             <div className="sx-shop-in">
               {props.pickable(head, <Profile page={page} handle={handle} showSocials={head.data?.showSocials !== false} />)}
               <p className="sx-kicker sx-kicker-dark" id="sx-collection"><span />Digital products</p>
