@@ -46,3 +46,7 @@ Real failures from this project (Nov 2026). Format: what → why → fix → pre
 14. **Hidden layer visible at the start of a timeline** (`fromTo(..., immediateRender:false)`
     leaves the target visible until its tween starts). Prevention: `gsap.set` the start state
     when building the timeline; check the first frames of a recording, not just the ends.
+
+15. **Removed the owner's layout while "improving" it** (the slanted right card was replaced by a
+    full-width scene). Prevention: when asked to redesign *inside* an area, keep its shape and
+    position; change only its contents. Ask if unsure.

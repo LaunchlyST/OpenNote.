@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from 'react'
 import { gsap } from 'gsap'
-import { AtSign, Check, ChevronDown, Download, Globe, Heart, MessageSquare, Play, Search, MoreVertical, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
+import { AtSign, Check, ChevronDown, Download, Globe, MessageSquare, Play, Search, ShieldCheck, ShoppingBag, Star, X as XIcon } from 'lucide-react'
 import { isFreeProduct, mediaUrl } from './model'
-import type { Block, CardPart, Page, ShopProduct } from './model'
+import type { Block, Page, ShopProduct } from './model'
 import { storeApi } from './api'
 import type { PublicReview } from './api'
-import { Banner, BuyRow } from './StorePage'
+import { Banner } from './StorePage'
 import type { StorePageProps } from './StorePage'
+import { Carousel } from './ShowcaseCarousel'
 import { HomeView, useInitialView, useViewTransition } from './ShowcaseHome'
 import type { NavState, View } from './ShowcaseHome'
 import './showcase.css'
@@ -168,9 +169,7 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
               {needle && !list.length && <p className="sx-none">No products match “{q}”.</p>}
               {!products.length && <p className="sx-none">No products yet.</p>}
               <div className="sx-list-wrap">
-                <ol className="sx-list">
-                  {list.map((p) => <Row key={p.id} p={p} blockId={gridId} {...props} />)}
-                </ol>
+                <Carousel list={list} blockId={gridId} props={props} />
               </div>
             </div>
           </section>
@@ -245,89 +244,6 @@ function Stars({ value, size = 14 }: { value: number; size?: number }) {
     <span className="sx-stars" aria-label={`${value.toFixed(1)} out of 5`} style={{ ['--s' as string]: `${size}px` }}>
       {[1, 2, 3, 4, 5].map((i) => <Star key={i} aria-hidden="true" className={value >= i - 0.25 ? 'on' : ''} />)}
     </span>
-  )
-}
-
-function RowMenu({ p, ...props }: { p: ShopProduct } & StorePageProps) {
-  const [open, setOpen] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false) }
-    addEventListener('mousedown', off)
-    return () => removeEventListener('mousedown', off)
-  }, [open])
-  const saved = props.savedIds?.includes(p.id)
-  const link = `${location.origin}/${props.handle}/p/${p.id}`
-  return (
-    <div className="sx-menu" ref={ref}>
-      <button type="button" className="sx-menu-btn" aria-label={`More options for ${p.title}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}><MoreVertical aria-hidden="true" /></button>
-      {open && (
-        <div className="sx-menu-pop" role="menu">
-          {props.onOpenProduct && <button type="button" role="menuitem" onClick={() => { setOpen(false); props.onOpenProduct?.(p) }}>View details</button>}
-          {props.onToggleSave && <button type="button" role="menuitem" onClick={() => { props.onToggleSave?.(p); setOpen(false) }}><Heart aria-hidden="true" className={saved ? 'on' : ''} />{saved ? 'Remove from saved' : 'Save for later'}</button>}
-          <button type="button" role="menuitem" onClick={() => { void navigator.clipboard?.writeText(link).then(() => { setCopied(true); setTimeout(() => { setCopied(false); setOpen(false) }, 900) }) }}>{copied ? 'Link copied' : 'Copy link'}</button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Row({ p, blockId, ...props }: { p: ShopProduct; blockId: string } & StorePageProps) {
-  const { live } = props
-  const [open, setOpen] = useState(false)
-  const body = useRef<HTMLDivElement>(null)
-  const cover = mediaUrl(p.cover) ?? mediaUrl(p.affiliate?.image ?? null)
-  const meta = [p.format, p.fileType].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i)
-  const extra = (p.included?.length ?? 0) > 0 || (p.description?.length ?? 0) > 110
-  // Editor: a click on a part opens that part's settings in the Studio panel.
-  const pick = (part: CardPart) => (e: ReactMouseEvent<HTMLElement>) => {
-    if (live) return
-    e.preventDefault(); e.stopPropagation()
-    props.onPick?.(blockId, e.currentTarget, p.id, part)
-  }
-  const picked = (part: CardPart) => (!live && props.editCard?.productId === p.id && props.editCard.part === part ? ' sx-picked' : '')
-  const openIt = () => (live ? props.onOpenProduct?.(p) : undefined)
-  useEffect(() => {
-    const el = body.current
-    if (!el) return
-    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { el.style.height = open ? 'auto' : '0px'; return }
-    gsap.to(el, { height: open ? 'auto' : 0, opacity: open ? 1 : 0, duration: 0.45, ease: 'power3.inOut' })
-  }, [open])
-  return (
-    <li data-pid={p.id} className={'sx-row' + (open ? ' is-open' : '') + picked('card')} onClick={live ? undefined : pick('card')}>
-      <button type="button" className={'sx-art' + picked('cover')} onClick={live ? openIt : pick('cover')} aria-label={`View ${p.title}`}>
-        {cover ? <img src={cover} alt="" loading="lazy" /> : <span className="sx-art-ph">{p.title.slice(0, 2)}</span>}
-        {p.offer && <span className="sx-off">−{p.offer.percent}%</span>}
-      </button>
-      <div className="sx-info">
-        <h3 className={'sx-title' + picked('title')} onClick={live ? openIt : pick('title')}>{p.title}</h3>
-        {(p.subtitle || p.description) && <p className={'sx-desc' + picked('desc')} onClick={live ? undefined : pick('desc')}>{p.subtitle || p.description}</p>}
-        <p className="sx-meta">
-          {p.affiliate?.url || p.productType === 'affiliate' ? <span>Partner product</span> : <span>Digital download</span>}
-          {meta.map((m) => <span key={m}>{m}</span>)}
-          {p.rating && p.rating.count > 0 && <span className="sx-rate"><Stars value={p.rating.average} size={12} /> {p.rating.average.toFixed(1)} ({p.rating.count})</span>}
-        </p>
-        {extra && (
-          <button type="button" className="sx-more" aria-expanded={open} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o) }}>
-            {open ? 'Less' : 'What’s inside'} <ChevronDown aria-hidden="true" />
-          </button>
-        )}
-      </div>
-      <div className={'sx-buy' + picked('button')} onClickCapture={live ? undefined : pick('button')}>
-        {live && <RowMenu p={p} {...props} />}
-        <BuyRow prod={p} {...props} />
-      </div>
-      {extra && (
-        <div className="sx-drawer" ref={body} style={{ height: 0, opacity: 0 }} aria-hidden={!open}>
-          <div className="sx-drawer-in">
-            {p.description && <p>{p.description}</p>}
-            {!!p.included?.length && <ul>{p.included.map((x) => <li key={x}><Check aria-hidden="true" />{x}</li>)}</ul>}
-          </div>
-        </div>
-      )}
-    </li>
   )
 }
 

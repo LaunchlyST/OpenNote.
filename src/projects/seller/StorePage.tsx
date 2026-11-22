@@ -804,7 +804,7 @@ function Countdown({ endsAt }: { endsAt: string }) {
 }
 export const ctaStyle = (prod: ShopProduct): CSSProperties | undefined => (prod.cta?.color ? { background: prod.cta.color, borderColor: prod.cta.color, color: '#fff' } : undefined)
 
-export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, claims, onClaimAgain, onDownload, downloading }: { prod: ShopProduct; small?: boolean } & StorePageProps) {
+export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned, claims, onClaimAgain, onDownload, downloading, priceInButton }: { prod: ShopProduct; small?: boolean; priceInButton?: boolean } & StorePageProps) {
   const disabled = !live || !checkoutReady || buying === prod.id
   // Affiliate / external mode: the product is bought on the partner's site, never
   // here. No price, checkout or download is shown; the link keeps its tracking params.
@@ -882,7 +882,7 @@ export function BuyRow({ prod, live, checkoutReady, onBuy, buying, small, owned,
     <div className="sp-buyrow">
       <PriceTag prod={prod} edit={!live} />
       <button type="button" className={small ? 'sp-btn sp-btn-sm' : 'sp-btn'} style={ctaStyle(prod)} disabled={live ? disabled : undefined} aria-disabled={(live && disabled) || undefined} onClick={() => { if (!disabled) onBuy?.(prod) }} title={live && !checkoutReady ? 'This seller can’t take payments yet' : undefined}>
-        {buying === prod.id ? 'Opening checkout…' : prod.cta?.text || 'Buy now'}
+        {buying === prod.id ? 'Opening checkout…' : prod.cta?.text || (priceInButton ? `Buy now — ${formatPrice(prod.offer?.priceMinor ?? prod.priceMinor, prod.currency)}` : 'Buy now')}
       </button>
     </div>
   )

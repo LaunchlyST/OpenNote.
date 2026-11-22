@@ -9158,3 +9158,12 @@ select.ss-input option {
 .sp-card-featured .sp-facts, .sp-card-featured .sp-buyrow .sp-price { display: none !important; }
 .sp-card-featured .sp-buyrow { display: block !important; margin-top: 14px; }
 .sp-card-featured .sp-buyrow .sp-btn { width: 100%; min-height: 54px; border-radius: 999px; font-size: 18px; font-weight: 700; background: #111 !important; color: #fff !important; }
+
+/* Studio: laptop preview — the page is laid out at 1440px and scaled to fit the frame. */
+.ss.ss-desk { grid-template-columns: minmax(0, 36fr) minmax(0, 64fr); }
+@media (max-width: 1100px) { .ss.ss-desk { grid-template-columns: 1fr; } }
+.ss-preview .ss-device.ss-device-desk { width: 100%; max-width: none; height: calc(100vh - 150px); min-height: 520px; border-radius: 18px; padding: 10px; }
+.ss-device-desk .ss-slide > .sp, .ss-device-desk .ss-slide > .dk { width: 1440px; max-width: none; zoom: var(--z, .5); }
+.ss-device-desk .ss-addr { display: none; }
+.pv-size { margin-right: 2px; }
+.pv-size button { display: inline-flex; align-items: center; gap: 5px; }
