@@ -734,8 +734,15 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
                   {pickingBank && <BankPicker value={payerBank} onPick={(n) => { setPayerBank(n); setPickingBank(false) }} onClose={() => setPickingBank(false)} />}
                 </div>
                 <label className="co3-field"><span>Name on your bank account</span><input autoComplete="name" placeholder="Jane Smith" value={payerName} onChange={(e) => setPayerName(e.target.value)} required maxLength={80} aria-label="Name on your bank account" /></label>
-                <label className="co3-field"><span>Email for your download</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" /></label>
-                
+                <label className="co3-field"><span>Email for your download</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" aria-invalid={email.trim() !== '' && !valid} />{email.trim() !== '' && !valid && <small className="co3-field-err">Check this email: it should look like name@example.com.</small>}</label>
+                {!noBank && (
+                  <p className="co3-hint co3-banknext">
+                    <b>How this works:</b> this is a manual bank transfer. Next you’ll see {seller}’s bank details and a payment reference.
+                    Open {payerBank || 'your bank'}’s app and send {price} to {banks.find((b) => b.index === payTo)?.bankName ?? 'the seller'} ••{banks.find((b) => b.index === payTo)?.last4 ?? ''} with that reference. {seller} sends your download to your email once the money arrives.
+                  </p>
+                )}
+                {!noBank && (payerName.trim().length < 2 || !payerBank) && <p className="co3-field-err">{!payerBank ? 'Choose the bank you’ll pay from.' : 'Enter the name on your bank account (at least 2 letters).'}</p>}
+
               </>
             ) : (
               <>
@@ -809,7 +816,7 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
             {quote && quote.savedMinor > 0 && <p className="co3-saved">You save {money(quote.savedMinor)}</p>}
             {needsEmail && !free && <p className="co3-hint-line">This code is once per customer, so we need your email.</p>}
             {error && <p className="co-err" role="alert">{error}</p>}
-            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy || cardBusy ? (free ? 'Sending…' : inlineCard ? 'Paying…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `🔒 Secure pay ${price}` : 'Pay Now'}</button>
+            <button type="submit" className="co3-pay-btn" disabled={!canPay}>{busy || cardBusy ? (free ? 'Sending…' : inlineCard ? 'Paying…' : isBank ? 'Getting bank details…' : 'Opening…') : free ? 'Send digital product' : inlineCard ? `🔒 Secure pay ${price}` : isBank ? `Get bank details · ${price}` : choice === 'bankapp' ? `Continue to your bank · ${price}` : `Pay ${price}`}</button>
             {inlineCard && <p className="co3-secure"><span aria-hidden="true">🔒</span> Your card is secured by Stripe. Desknoty never sees it.<span className="co3-logos" aria-hidden="true"><i className="co-visa">VISA</i><i className="co-mc"><span /><span /></i><i className="co3-amex">AMEX</i></span></p>}
             <p className="co3-terms">By continuing, you agree to pay {seller} {price} for this digital download.</p>
           </section>
