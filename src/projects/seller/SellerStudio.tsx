@@ -1296,10 +1296,9 @@ function Studio({
           <span className={cn('pv-saved', (saving === 'saving' || pageSave.dirty) && 'busy', saving === 'error' && 'err')} aria-live="polite">
             <i />{saving === 'saving' || pageSave.dirty ? 'Saving…' : saving === 'error' ? 'Not saved' : 'Saved ✓'}
           </span>
-          <div className="ss-seg pv-size" role="tablist" aria-label="Preview size">
-            <button type="button" role="tab" aria-selected={view === 'mobile'} onClick={() => setView('mobile')}><Smartphone className="h-3.5 w-3.5" /> Phone</button>
-            <button type="button" role="tab" aria-selected={view === 'desktop'} onClick={() => setView('desktop')}><Monitor className="h-3.5 w-3.5" /> Laptop</button>
-          </div>
+          <button type="button" className="pv-btn pv-size" onClick={() => setView(view === 'desktop' ? 'mobile' : 'desktop')} aria-label={view === 'desktop' ? 'Show phone preview' : 'Show laptop preview'} title={view === 'desktop' ? 'Phone preview' : 'Laptop preview'}>
+            {view === 'desktop' ? <Smartphone className="h-4 w-4" /> : <Monitor className="h-4 w-4" />}
+          </button>
           <button type="button" className="pv-btn" onClick={() => setPreviewOpen(true)}><Eye className="h-4 w-4" /> Preview</button>
           <button type="button" className="pv-btn" title={`Copy ${store.url || `${window.location.origin}/${store.handle}`}`} onClick={() => void share()}><Share2 className="h-4 w-4" /> {shared ? 'Link copied' : shareFailed ? 'Copy failed' : 'Share'}</button>
           <button type="button" className="pv-btn pv-publish" onClick={() => void publish()} disabled={publishing}><Globe className="h-4 w-4" /> {publishing ? 'Publishing…' : 'Publish'}</button>
