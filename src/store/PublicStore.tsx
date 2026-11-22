@@ -586,12 +586,13 @@ function CopyRow({ label, value, strong }: { label: string; value: string; stron
 }
 
 /** Checkout: Payment Details on the left, Order Summary on the right (stacked on phones). */
-function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; payByBank?: boolean; stripePk?: string | null; stripeAccount?: string | null; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) => void; onClose: () => void }) {
+export function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, banks, busy, error, seller, onPay, onClose, handle }: { product: ShopProduct; methods: PayMethod[]; payByBank?: boolean; stripePk?: string | null; stripeAccount?: string | null; banks: NonNullable<Store['banks']>; busy: boolean; error: string | null; seller: string; handle: string; onPay: (m: PayMethod, email?: string, payer?: { payerName?: string; payerBank?: string; bankIndex?: number }, coupon?: string, opts?: { payByBank?: boolean }) => void; onClose: () => void }) {
   // The server's quote is the price: list price, live offer, then the code. The card's price is only a first guess.
   const [quote, setQuote] = useState<PriceQuote | null>(null)
   const [code, setCode] = useState('')
   const [applied, setApplied] = useState<string | null>(null)
   const [codeErr, setCodeErr] = useState<string | null>(null)
+  const [showCode, setShowCode] = useState(false)
   const [checking, setChecking] = useState(false)
   const [noQuotes, setNoQuotes] = useState(false)
   const loadQuote = async (c?: string) => {
@@ -737,8 +738,7 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
                 <label className="co3-field"><span>Email for your download</span><input type="email" autoComplete="email" inputMode="email" placeholder="jane@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required aria-label="Email" aria-invalid={email.trim() !== '' && !valid} />{email.trim() !== '' && !valid && <small className="co3-field-err">Check this email: it should look like name@example.com.</small>}</label>
                 {!noBank && (
                   <p className="co3-hint co3-banknext">
-                    <b>How this works:</b> this is a manual bank transfer. Next you’ll see {seller}’s bank details and a payment reference.
-                    Open {payerBank || 'your bank'}’s app and send {price} to {banks.find((b) => b.index === payTo)?.bankName ?? 'the seller'} ••{banks.find((b) => b.index === payTo)?.last4 ?? ''} with that reference. {seller} sends your download to your email once the money arrives.
+                    Next: you’ll get {seller}’s bank details and a reference. Send {price} from {payerBank || 'your bank'}’s app, and your download is emailed once it arrives.
                   </p>
                 )}
                 {!noBank && (payerName.trim().length < 2 || !payerBank) && <p className="co3-field-err">{!payerBank ? 'Choose the bank you’ll pay from.' : 'Enter the name on your bank account (at least 2 letters).'}</p>}
@@ -794,6 +794,8 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
                     <span>Code <b>{applied}</b> applied</span>
                     <button type="button" onClick={() => { setCode(''); void loadQuote() }}>Remove</button>
                   </div>
+                ) : !showCode ? (
+                  <button type="button" className="co3-code-toggle" onClick={() => setShowCode(true)}>+ Add discount code</button>
                 ) : (
                   <>
                     <label htmlFor="co3-code-in">Discount code</label>
@@ -810,7 +812,6 @@ function PayChooser({ product, methods, payByBank, stripePk, stripeAccount, bank
               <dt>Subtotal</dt><dd>{money(quote?.listMinor ?? product.priceMinor)}</dd>
               {quote?.offer && <><dt>Offer</dt><dd className="co3-minus">−{money(quote.offer.savedMinor)}</dd></>}
               {quote?.coupon && <><dt>Code {quote.coupon.code}</dt><dd className="co3-minus">−{money(quote.coupon.discountMinor)}</dd></>}
-              <dt>Delivery</dt><dd>FREE</dd>
             </dl>
             <div className="co3-total"><span>Total</span><b>{price}</b></div>
             {quote && quote.savedMinor > 0 && <p className="co3-saved">You save {money(quote.savedMinor)}</p>}
