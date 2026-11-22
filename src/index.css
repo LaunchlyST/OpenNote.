@@ -9192,3 +9192,39 @@ select.ss-input option {
 .co3-sum .co3-lines { padding-bottom: 12px; }
 .co3-field-err { display: block; margin-top: 6px; color: #c2333f; font-size: 12.5px; }
 .co3-banknext { margin-top: 2px; padding: 12px 14px; border-radius: 12px; background: #f4f6ff; line-height: 1.5; font-size: 13px; }
+
+/* ===== Checkout, simplified (one column, like a creator-store checkout) ===== */
+.co3 { max-width: 480px; padding: 26px 26px 22px; border-radius: 24px; }
+.co3-trail > :not(.co3-x) { display: none; }
+.co3-trail { justify-content: flex-end; margin: 0 0 4px; min-height: 0; }
+.co3-grid { display: block; }
+.co3-head { padding: 0 0 18px; border-bottom: 1px solid #eee; margin-bottom: 18px; }
+.co3-item { display: flex; gap: 14px; align-items: center; }
+.co3-thumb { width: 64px; height: 64px; border-radius: 14px; flex: none; }
+.co3-itemtop b { font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+.co3-itemtop strong { font-size: 18px; font-weight: 800; }
+.co3-item small { display: none; }
+.co3-meta { font-size: 12.5px; color: #8a8a93; }
+.co3-meta span:last-child { display: none; }
+.co3-field > span { font-size: 13px; font-weight: 600; color: #3f3f46; }
+.co3-field input, .co3-selectwrap select, .co3-bankbtn { height: 48px; border-radius: 12px; font-size: 15px; }
+.co3-banknext { background: #f6f6f8; color: #52525b; }
+.co3-remember { font-size: 13px; }
+.co3-sum { margin-top: 14px; padding: 0; border: 0; background: none; }
+.co3-sum > h2 { display: none; }
+.co3-code { margin: 0 0 12px; }
+.co3-code-toggle { padding: 0; border: 0; background: none; color: #52525b; font-size: 14px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.co3-sum .co3-lines { display: none; }
+.co3-sum .co3-lines:has(.co3-minus) { display: grid; border: 0; padding: 0 2px 8px; }
+.co3-total { display: flex; justify-content: space-between; align-items: baseline; padding: 14px 2px; border: 0; border-top: 1px solid #eee; border-radius: 0; font-size: 16px; }
+.co3-total b { font-size: 22px; font-weight: 800; }
+.co3-pay-btn { width: 100%; height: 56px; border-radius: 14px; font-size: 16px; }
+.co3-terms { text-align: center; font-size: 12px; color: #9a9aa3; }
+@media (max-width: 560px) { .co3 { max-width: none; padding: 20px 16px; border-radius: 22px 22px 0 0; } }
+.co3 { box-sizing: border-box; width: 100%; }
+.co3 * { box-sizing: border-box; }
+.co3-trail { position: relative; height: 0; margin: 0; }
+.co3-trail .co3-x { position: absolute; top: -6px; right: -6px; }
+.co3-itemtop { padding-right: 34px; }
+.co3-total { border: 0 !important; border-top: 1px solid #eee !important; border-radius: 0 !important; }
+@media (max-width: 560px) { .co-back { padding: 0 !important; align-items: flex-end; } .co3 { max-height: 94vh; overflow-y: auto; } }
