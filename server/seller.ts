@@ -33,7 +33,7 @@ import { env } from './env.ts'
 import { enqueueEmail, sendNow, transportName } from './mail/index.ts'
 import { migrateSeller } from './seller-migrations.ts'
 import { AMAZON_LINK_ERROR, checkAmazonUrl, amazonTitleFromUrl, DEFAULT_AFFILIATE_DISCLOSURE, DEFAULT_AMAZON_CTA, productTypeOf, type ProductType } from '../shared/amazon-link.ts'
-import { isShortProductId } from '../shared/short-link.ts'
+import { bioSlugFromTitle, isBioSlug, isShortProductId } from '../shared/short-link.ts'
 import { newShortProductId } from './short-id.ts'
 import { bankComplete, bankDetails, bankReference, captureOrRead, cleanPayments, createPaypalOrder, paypalConfigured, paypalMode, readPaypalOrder, readPayments, verifyPaypalPayment, verifyPaypalWebhook, bankDetailsOf, bankChoices, bankKey } from './payments.ts'
 import type { PaymentSettings } from './payments.ts'
@@ -1126,6 +1126,19 @@ async function uniqueShortId(): Promise<string> {
   throw new Error('Could not create a unique product link. Try again.')
 }
 
+/** A bio link named after the product: Desk-Lamp, then Desk-Lamp-2, Desk-Lamp-3…
+ *  Compared case-insensitively so two links never differ only by capitals.
+ *  Falls back to a random code when the title gives no usable name. */
+async function uniqueBioSlug(title: string): Promise<string> {
+  const base = bioSlugFromTitle(title)
+  if (!isBioSlug(base)) return uniqueShortId()
+  for (let n = 1; n <= 200; n++) {
+    const candidate = n === 1 ? base : `${base}-${n}`
+    if (!await sql.get(`SELECT 1 FROM seller_product WHERE LOWER("shortId") = LOWER(?)`, candidate)) return candidate
+  }
+  return uniqueShortId()
+}
+
 export type ProductLinkResult =
   | { ok: true; kind: 'affiliate' | 'normal'; path: string; url: string }
   | { ok: false; status: number; reason: string }
@@ -1871,7 +1884,7 @@ export function sellerRouter() {
     const extras = JSON.stringify(cleanExtras({ productType: 'affiliate', affiliate: { url: final, input: final, cta: DEFAULT_AMAZON_CTA, disclosure: DEFAULT_AFFILIATE_DISCLOSURE } }))
     const t = now()
     const id = `prd_${randomBytes(10).toString('hex')}`
-    const shortId = await uniqueShortId()
+    const shortId = await uniqueBioSlug(title)
     await sql.run(`INSERT INTO seller_product (id, "shortId", "storeId", title, description, cover, "priceMinor", "paymentType", currency, listed, sort, extras, "pubExtras", "pubTitle", "pubDescription", "pubCover", "pubPriceMinor", "pubCurrency", "pubAt", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, '', ?, 0, 'free', 'gbp', 1, ?, ?, ?, ?, '', ?, 0, 'gbp', ?, ?, ?)`, id, shortId, s.id, title, cover, count, extras, extras, title, cover, t, t, t)
     res.status(201).json({ product: productDraftView((await q.product(id, s.id))!), store: await storeView((await q.storeById(s.id))!), storeLive: Boolean(s.published) })
   })
