@@ -1,0 +1,12 @@
+
+/* Product block: one Add button, numbered circles, the selected product below. */
+.sb-addmenu { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; display: grid; gap: 4px; min-width: 220px; padding: 6px; border-radius: 12px; border: 1px solid #e6e4df; background: #fff; box-shadow: 0 14px 30px -14px rgba(0,0,0,.35); }
+.sb-addmenu button { display: grid; gap: 1px; padding: 9px 10px; border-radius: 8px; text-align: left; font-size: 13.5px; }
+.sb-addmenu button:hover, .sb-addmenu button:focus-visible { background: #f4f3f0; }
+.sb-addmenu small { font-size: 12px; color: #77756f; }
+.sb-circles { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 10px; }
+.sb-circle { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 999px; border: 1px solid #dddbd5; background: #fff; font-size: 13px; font-weight: 700; color: #444; cursor: pointer; }
+.sb-circle:hover { border-color: #111114; }
+.sb-circle.on { border-color: #111114; background: #111114; color: #fff; }
+.sb-selected { display: grid; gap: 10px; padding: 12px; border-radius: 12px; border: 1px solid #e6e4df; background: #fff; }
+.sb-selhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import './product-block.css'
 import { shortProductPath } from '../../../shared/short-link.ts'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
@@ -1101,9 +1102,12 @@ function Studio({
     try { await flushSellerEdits(); closePart(); setTab(id) } catch (e) { setErr((e as Error).message) }
   }
 
+  // An affiliate product the last publish held back because of its link.
+  const [held, setHeld] = useState<{ id: string; title: string; error: string } | null>(null)
   const publish = async () => {
     setPublishing(true)
     setErr(null)
+    setHeld(null)
     try {
       // A paid product with no valid price must never be published as Free.
       // The editor's unfinished price never reaches the server, so this also
@@ -1115,9 +1119,12 @@ function Studio({
       if ((full.use ?? 1) !== use) pageSave.edit({ ...full, use })
       // save this editor's draft (with the chosen style) before anything else
       await pageSave.flush()
-      await flushSellerEdits()
+      // An affiliate draft whose link is still invalid stays unsaved (its error
+      // shows under its own link field); it must not stop the rest publishing.
+      try { await flushSellerEdits() } catch (e) { if ((e as Error).message !== AMAZON_LINK_ERROR) throw e }
       const r = await sellerApi.publish()
       setStore(r.store)
+      setHeld(r.skipped?.[0] ?? null)
       setToast(true)
       window.setTimeout(() => setToast(false), 2600)
     } catch (e) {
@@ -1192,6 +1199,12 @@ function Studio({
             <p className="ss-needbank" role="status">
               Buyers can’t pay yet. <button type="button" onClick={() => void navigate('payouts')}>Add a bank account in Payouts</button>
             </p>
+          )}
+          {held && (
+            <div className="ss-note" role="status">
+              Everything else is live. “{held.title || 'An Amazon product'}” wasn’t published: its Amazon link needs fixing.{' '}
+              <button type="button" className="underline" onClick={() => { const id = held.id; setHeld(null); setEditPart(null); setOpenProduct(id); setTab('products') }}>Fix the link</button>
+            </div>
           )}
           {(notice || err) && (
             <div className="ss-note" role="status">
@@ -1889,70 +1902,6 @@ function AffiliateCreator({ store, setStore, onDone }: { store: StoreView; setSt
   )
 }
 
-/** An empty swipe slot: first choose Digital product or Affiliate link.
-    Digital opens the usual product picker for this slot. Affiliate shows its
-    own two-field form; the result is a private bio link with a Copy button
-    and never appears on the website, so the slot stays free for a product. */
-function EmptySlot({ n, onAddDigital }: { n: number; onAddDigital?: () => void }) {
-  const ctx = useContext(AffiliateCtx)
-  const [kind, setKind] = useState<'affiliate' | null>(null)
-  const [made, setMade] = useState<DraftProduct | null>(null)
-  const head = (
-    <div className="sld-head">
-      <span className="sld-num" aria-hidden="true">{n}</span>
-      <span className="ss-label">{kind === 'affiliate' ? 'New affiliate link' : `Product ${n} is empty`}</span>
-    </div>
-  )
-  if (kind === 'affiliate' && ctx) {
-    if (made) {
-      const bio = bioLinkOf(ctx.store, made)
-      return (
-        <div className="sld-card" style={{ display: 'grid', gap: 10 }}>
-          {head}
-          <p className="ss-hint" role="status"><b>{made.title || 'Your link'}</b> is ready. It opens the Amazon product directly.</p>
-          <Field label="Bio link"><input className="ss-input" readOnly value={bio} aria-label="Bio link" onFocus={(e) => e.currentTarget.select()} /></Field>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <CopyBioLink link={bio} />
-            <button type="button" className="ss-ghost" onClick={() => { setMade(null); setKind(null) }}>Done</button>
-          </div>
-          <p className="ss-muted">Private: it is not shown on your website. Find all your links under Products.</p>
-        </div>
-      )
-    }
-    return (
-      <div className="sld-card" style={{ display: 'grid', gap: 10 }}>
-        {head}
-        <AffiliateLinkForm
-          submitLabel="Create link"
-          onCancel={() => setKind(null)}
-          onSubmit={async (url, title) => { await flushSellerEdits(); const r = await sellerApi.createAffiliate(url, title); ctx.setStore(r.store); setMade(r.product) }}
-        />
-        <p className="ss-muted">Nothing is added to your website. You get a link for your bio.</p>
-      </div>
-    )
-  }
-  return (
-    <div className="sld-card">
-      {head}
-      <p className="ss-muted">What do you want to add?</p>
-      <div role="group" aria-label={`Product ${n} type`} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 8 }}>
-        {onAddDigital && (
-          <button type="button" className="ss-ghost" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', textAlign: 'left' }} onClick={onAddDigital}>
-            <b>Digital product</b>
-            <small style={{ opacity: 0.7, fontWeight: 400 }}>Sell a file here. Shows on your website.</small>
-          </button>
-        )}
-        {ctx && (
-          <button type="button" className="ss-ghost" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', textAlign: 'left' }} onClick={() => setKind('affiliate')}>
-            <b>Affiliate link</b>
-            <small style={{ opacity: 0.7, fontWeight: 400 }}>Amazon link for your bio. Not on your website.</small>
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 /** A selected affiliate slot: title, bio link, copy, and a pencil to edit. */
 function AffiliateEntry({ product, store, setStore }: { product: DraftProduct; store: StoreView; setStore: (s: StoreView) => void }) {
   const [editing, setEditing] = useState(false)
@@ -2277,100 +2226,111 @@ function summary(b: Block, products: DraftProduct[]) {
 }
 
 /**
- * Editor for a product block's slides. One slide shows on its own; two or more
- * become a carousel. Digital and affiliate settings are kept side by side, so
- * switching a slide's type never loses the product, file or cover.
+ * Editor for a product block: one "+ Add product" button, a row of numbered
+ * circles (one per product in the block), and the selected product's own
+ * fields right underneath. Each circle is tied to its slide's stable id, so
+ * switching numbers never edits the wrong product. Digital products show the
+ * real product form (file, price...); Amazon affiliate products show their link
+ * and button settings, with any link error right under the link field.
  */
-function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSetProductType, onAddSlide, onAddEmptySlide, activeSlide, onActiveSlideChange }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
-  const set = (i: number, patch: Partial<ProductSlide>) => onChange(slides.map((s, j) => (j === i ? { ...s, ...patch } : s)))
-  const setAff = (i: number, patch: Partial<ProductSlide['affiliate']>) => onChange(slides.map((s, j) => (j === i ? { ...s, affiliate: { ...s.affiliate, ...patch } } : s)))
-  const [active, setActive] = useState(0)
-  // The studio owns the active slide. Keep a local value only for callers with
-  // no prop. The index can point at an empty preview slot beyond `slides`; that
-  // is rendered below instead of being silently clamped away.
-  const a = Math.max(0, Math.min(activeSlide ?? active, MAX_PRODUCT_SLIDES - 1))
-  const setActiveIdx = (i: number) => { setActive(i); onActiveSlideChange?.(i) }
+function SlidesEditor({ slides, products, onChange, activeSlide, onActiveSlideChange }: { slides: ProductSlide[]; products: DraftProduct[]; blockId: string; onChange: (s: ProductSlide[]) => void; onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
+  const ctx = useContext(AffiliateCtx)
+  const [local, setLocal] = useState(0)
+  const [menu, setMenu] = useState(false)
+  const [adding, setAdding] = useState(false)
+  const [addErr, setAddErr] = useState<string | null>(null)
+  const a = slides.length ? Math.max(0, Math.min(activeSlide ?? local, slides.length - 1)) : 0
+  const select = (i: number) => { setLocal(i); onActiveSlideChange?.(i) }
   const s = slides[a] ?? null
-  const problem = s && s.kind === 'affiliate' && s.affiliate.url.trim() && !amazonUrlCheck(s.affiliate.url).ok ? AMAZON_LINK_ERROR : null
-  const changeKind = (kind: ProductSlide['kind']) => {
-    if (s?.kind === kind) return
-    if (s?.productId) onSetProductType?.(s.productId, kind === 'affiliate' ? 'affiliate' : 'normal', kind === 'affiliate' ? s.affiliate.url : undefined)
-    set(a, { kind })
+  const setAff = (patch: Partial<ProductSlide['affiliate']>) => onChange(slides.map((x, j) => (j === a ? { ...x, affiliate: { ...x.affiliate, ...patch } } : x)))
+  const full = slides.length >= MAX_PRODUCT_SLIDES
+  const removeAt = (i: number) => {
+    const next = slides.filter((_, j) => j !== i)
+    onChange(next)
+    select(Math.max(0, Math.min(i, next.length - 1)))
   }
+  const add = async (kind: ProductSlide['kind']) => {
+    setMenu(false)
+    setAddErr(null)
+    if (full) return
+    if (kind === 'affiliate') {
+      onChange([...slides, newSlide('affiliate')])
+      select(slides.length)
+      return
+    }
+    if (!ctx) return
+    setAdding(true)
+    try {
+      await flushSellerEdits()
+      const r = await sellerApi.addProduct({})
+      ctx.setStore(r.store)
+      onChange([...slides, newSlide('digital', r.product.id)])
+      select(slides.length)
+    } catch (e) {
+      setAddErr((e as Error).message)
+    } finally {
+      setAdding(false)
+    }
+  }
+  const linkProblem = s && s.kind === 'affiliate'
+    ? (!s.affiliate.url.trim() ? 'Add the Amazon product link.' : amazonUrlCheck(s.affiliate.url).ok ? null : AMAZON_LINK_ERROR)
+    : null
+  const product = s?.kind === 'digital' && s.productId ? products.find((x) => x.id === s.productId) ?? null : null
+  const removeBtn = (
+    <button type="button" className="ss-ghost" aria-label={`Remove product ${a + 1} from this block`} title="Remove from this block" onClick={() => removeAt(a)}><Trash2 className="h-3.5 w-3.5" /></button>
+  )
   return (
     <div className="sb-edit">
-      <span className="ss-label">Swipe: product 1, 2 and 3</span>
-      <p className="ss-muted" style={{ marginTop: 0 }}>Each slot is one product in the swipe on your phone. Tap a slot to see or change it.</p>
-      <div role="tablist" aria-label="Slides" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6, marginBottom: 10 }}>
-        {Array.from({ length: Math.max(3, slides.length) }, (_, i) => {
-          const sl = slides[i]
-          const name = !sl ? 'Empty' : sl.kind === 'affiliate' ? (sl.affiliate?.title?.trim() || 'Affiliate') : (products.find((x) => x.id === sl.productId)?.title?.trim() || (sl.productId ? 'Untitled product' : 'Empty'))
-          return (
-            <button key={sl?.id ?? `empty-${i}`} type="button" role="tab" aria-selected={i === a} className={cn('ss-ghost', i === a && 'on')} style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, minWidth: 0, borderStyle: sl ? undefined : 'dashed' }} onClick={() => setActiveIdx(i)}>
-              <b style={{ fontSize: 12 }}>Product {i + 1}</b>
-              <small style={{ fontSize: 11, opacity: 0.7, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</small>
-            </button>
-          )
-        })}
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
-        {slides.length >= 3 && slides.length < MAX_PRODUCT_SLIDES && (onAddEmptySlide ?? onAddSlide) && (
-          <button type="button" className="ss-ghost" onClick={() => (onAddEmptySlide ?? onAddSlide)!(blockId, slides.length)}>+ Add product slide</button>
+      <div style={{ position: 'relative' }}>
+        <button type="button" className="ss-ghost self-start" disabled={full || adding} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+          <Plus className="h-3.5 w-3.5" /> {adding ? 'Adding...' : 'Add product'}
+        </button>
+        {full && <span className="ss-muted" style={{ marginLeft: 8 }}>Up to {MAX_PRODUCT_SLIDES} products in one block.</span>}
+        {menu && (
+          <div role="menu" className="sb-addmenu">
+            <button type="button" role="menuitem" onClick={() => void add('digital')}><b>Digital product</b><small>A file you sell here</small></button>
+            <button type="button" role="menuitem" onClick={() => void add('affiliate')}><b>Amazon affiliate</b><small>Links to Amazon with your tag</small></button>
+          </div>
         )}
       </div>
-      {!s && <EmptySlot key={`empty-${a}`} n={a + 1} onAddDigital={onAddSlide ? () => onAddSlide(blockId, a) : undefined} />}
-      {s && (
-        <div className="sld-card" key={s.id}>
-          <div className="sld-head">
-            <span className="sld-num" aria-hidden="true">{a + 1}</span>
-            {s.kind === 'digital' ? (
-              <span className="sld-kind-static" aria-label={`Slide ${a + 1} type`}>Digital product</span>
-            ) : (
-              <div className="sld-kinds" role="group" aria-label={`Slide ${a + 1} type`}>
-                <button type="button" aria-pressed={false} onClick={() => changeKind('digital')}>Digital product</button>
-                <button type="button" aria-pressed={true} className="on" onClick={() => changeKind('affiliate')}>Affiliate</button>
-              </div>
-            )}
-            <button type="button" className="ss-ghost" aria-label={`Remove slide ${a + 1}`} onClick={() => { onChange(slides.filter((_, j) => j !== a)); setActive(0); onActiveSlideChange?.(0) }}><Trash2 className="h-3.5 w-3.5" /></button>
-          </div>
-          {s.kind === 'digital' ? (
-            <Field label="Product">
-              {products.length === 0 ? (
-                <p className="ss-muted">Create a product in the Products tab first.</p>
-              ) : (
-                <select className="ss-input" aria-label={`Product for slide ${a + 1}`} value={s.productId ?? ''} onChange={(e) => { const id = e.target.value || null; set(a, { productId: id }); if (id) onSetProductType?.(id, 'normal') }}>
-                  <option value="">Choose a product…</option>
-                  {products.map((p) => <option key={p.id} value={p.id}>{p.title.trim() || 'Untitled product'}</option>)}
-                </select>
-              )}
-            </Field>
-          ) : (
-            <>
-              <Field label="Amazon product link" hint="Amazon marketplace product pages and short links only.">
-                <input className="ss-input" inputMode="url" value={s.affiliate.url} onChange={(e) => { setAff(a, { url: e.target.value }); if (s.productId) onSetProductType?.(s.productId, 'affiliate', e.target.value) }} placeholder="https://www.amazon.co.uk/dp/B0..." />
-              </Field>
-              {problem && <span className="sld-err" role="alert">{problem}</span>}
-              <Field label="Title"><input className="ss-input" maxLength={80} value={s.affiliate.title} onChange={(e) => setAff(a, { title: e.target.value })} /></Field>
-              <Field label="Description (optional)"><textarea className="ss-input" rows={2} maxLength={500} value={s.affiliate.description} onChange={(e) => setAff(a, { description: e.target.value })} /></Field>
-              <Field label="Cover image"><ImagePicker value={s.affiliate.cover} onChange={(v) => setAff(a, { cover: v })} label="Upload cover" /></Field>
-              <Field label="Button text" hint="Empty hides the button; the cover still opens the link.">
-                <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff(a, { cta: e.target.value })} placeholder={DEFAULT_AMAZON_CTA} />
-              </Field>
-              <p className="sld-note">Payments and delivery are handled by the external website. Commission depends on your affiliate programme and tracking link.</p>
-            </>
-          )}
-          {s.kind === 'digital' && s.productId && onOpenProduct && (
-            <button type="button" className="ss-ghost self-start" onClick={() => onOpenProduct(s.productId!)}>Edit this product</button>
-          )}
+      {addErr && <p className="ss-note" role="alert">{addErr}</p>}
+      {slides.length > 0 && (
+        <div className="sb-circles" role="tablist" aria-label="Products in this block">
+          {slides.map((sl, i) => {
+            const name = sl.kind === 'affiliate' ? (sl.affiliate.title.trim() || 'Amazon affiliate') : (products.find((x) => x.id === sl.productId)?.title.trim() || 'Untitled product')
+            return <button key={sl.id} type="button" role="tab" aria-selected={i === a} aria-label={`Product ${i + 1}: ${name}`} title={name} className={cn('sb-circle', i === a && 'on')} onClick={() => select(i)}>{i + 1}</button>
+          })}
         </div>
       )}
-      <p className="ss-muted">Your visitors swipe left and right between these products.</p>
+      {s && s.kind === 'digital' && (
+        <div className="sb-selected" key={s.id}>
+          <div className="sb-selhead"><span className="sld-kind-static" style={{ marginLeft: 0 }}>Digital product</span>{removeBtn}</div>
+          {product && ctx
+            ? <ProductForm key={product.id} product={product} store={ctx.store} setStore={ctx.setStore} onDeleted={() => removeAt(a)} />
+            : <p className="ss-muted">This product no longer exists. Remove it from the block.</p>}
+        </div>
+      )}
+      {s && s.kind === 'affiliate' && (
+        <div className="sb-selected" key={s.id}>
+          <div className="sb-selhead"><span className="sld-kind-static" style={{ marginLeft: 0 }}>Amazon affiliate</span>{removeBtn}</div>
+          <Field label="Amazon product link" hint="Your tracking tag is kept exactly as it is.">
+            <input className="ss-input" inputMode="url" value={s.affiliate.url} aria-invalid={Boolean(linkProblem && s.affiliate.url.trim())} aria-describedby={`sld-link-err-${s.id}`} onChange={(e) => setAff({ url: e.target.value })} placeholder="https://www.amazon.co.uk/dp/B0...?tag=yourtag-21" />
+          </Field>
+          {linkProblem && <span id={`sld-link-err-${s.id}`} className="sld-err" role="alert">{linkProblem}</span>}
+          <Field label="Title"><input className="ss-input" maxLength={80} value={s.affiliate.title} onChange={(e) => setAff({ title: e.target.value })} /></Field>
+          <Field label="Description (optional)"><textarea className="ss-input" rows={2} maxLength={500} value={s.affiliate.description} onChange={(e) => setAff({ description: e.target.value })} /></Field>
+          <Field label="Cover image"><ImagePicker value={s.affiliate.cover} onChange={(v) => setAff({ cover: v })} label="Upload cover" /></Field>
+          <Field label="Button text" hint="Empty hides the button; the cover still opens the link.">
+            <input className="ss-input" maxLength={40} value={s.affiliate.cta} onChange={(e) => setAff({ cta: e.target.value })} placeholder={DEFAULT_AMAZON_CTA} />
+          </Field>
+          <p className="sld-note">Payments and delivery happen on Amazon. Commission depends on your affiliate programme and tracking link.</p>
+        </div>
+      )}
     </div>
   )
 }
 
-
-function BlockEditor({ block, products, update, onOpenProduct, onSetProductType, onAddBelow, onAddSlide, onAddEmptySlide, activeSlide, onActiveSlideChange }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
+function BlockEditor({ block, products, update, onOpenProduct, onSetProductType, onAddSlide, onAddEmptySlide, activeSlide, onActiveSlideChange }: { block: Block; products: DraftProduct[]; update: (d: Record<string, unknown>) => void; onOpenProduct?: (id: string) => void; onSetProductType?: (id: string, type: ProductType, amazonUrl?: string) => void; onAddBelow?: (blockId: string) => void; onAddSlide?: (blockId: string, slideIndex: number) => void; onAddEmptySlide?: (blockId: string, slideIndex: number) => void; activeSlide?: number; onActiveSlideChange?: (i: number) => void }) {
   const d = block.data
   switch (block.type) {
     case 'header':
@@ -2457,9 +2417,6 @@ function BlockEditor({ block, products, update, onOpenProduct, onSetProductType,
     case 'featured':
       return (
         <>
-          {onAddBelow && (
-            <button type="button" className="ss-ghost self-start" onClick={() => onAddBelow(block.id)}><Plus className="h-3.5 w-3.5" /> Add product below</button>
-          )}
           <SlidesEditor
             slides={slidesOf(block)}
             products={products}

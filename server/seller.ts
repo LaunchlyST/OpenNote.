@@ -1786,7 +1786,9 @@ export function sellerRouter() {
       }
       await tx.run(`UPDATE seller_store SET published = ?, "publishedAt" = ?, "updatedAt" = ? WHERE id = ?`, liveOf((await q.storeById(s.id, tx))?.draft ?? s.draft), t, t, s.id)
     })
-    res.json({ store: await storeView((await q.storeById(s.id))!) })
+    // Name what was held back, so the editor can take the seller straight to it.
+    const held = (await q.products(s.id)).filter((p) => skipped.has(p.id)).map((p) => ({ id: p.id, title: p.title, error: AMAZON_LINK_ERROR }))
+    res.json({ store: await storeView((await q.storeById(s.id))!), skipped: held })
   })
 
   /* products */

@@ -40,6 +40,14 @@ export function Showcase(props: StorePageProps & { rest: ReactNode; foot: ReactN
   const root = useRef<HTMLDivElement>(null)
   const bus = useRef<PortalBus>({ scene: null, progress: { p: initial === 'products' ? 1 : 0 } })
   const [picked, setPicked] = useState<string | null>(null)
+  // Studio: the product selected under the block's numbered circles comes to the front.
+  const studioPick = useMemo(() => {
+    if (live || !props.activeSlideBlock || props.activeSlide === undefined) return null
+    const block = [page.blocks, ...(page.pages ?? []).map((x) => x.blocks)].flat().find((b) => b.id === props.activeSlideBlock)
+    const slide = block ? slidesOf(block)[props.activeSlide] : undefined
+    return slide?.kind === 'digital' ? slide.productId : null
+  }, [live, page, props.activeSlideBlock, props.activeSlide])
+  useEffect(() => { if (studioPick) setPicked(studioPick) }, [studioPick])
   // the 3D scene loads the first time Home is shown, and then stays
   const [homeSeen, setHomeSeen] = useState(initial === 'home')
   const goTo = usePortalTransition({ home: homeRef, root, initial, live, bus, onState: setNav })

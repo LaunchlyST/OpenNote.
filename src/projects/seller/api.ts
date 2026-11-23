@@ -50,7 +50,7 @@ export const sellerApi = {
   startOver: (confirm: string) => call<{ store: null }>('DELETE', '/api/seller/store', { confirm }),
   changeHandle: (handle: string) => call<{ store: StoreView }>('PUT', '/api/seller/handle', { handle }),
   saveDraft: (page: Page, revision: number, token?: string) => call<{ store: StoreView }>('PUT', '/api/seller/store/draft', { page, revision, token }),
-  publish: () => call<{ store: StoreView }>('POST', '/api/seller/store/publish'),
+  publish: () => call<{ store: StoreView; skipped?: Array<{ id: string; title: string; error: string }> }>('POST', '/api/seller/store/publish'),
   addProduct: (p: Partial<DraftProduct> = {}) => call<{ product: DraftProduct; store: StoreView }>('POST', '/api/seller/products', p),
   updateProduct: (id: string, p: Partial<Pick<DraftProduct, 'title' | 'description' | 'cover' | 'priceMinor' | 'paymentType' | 'currency' | 'listed' | 'extras' | 'archived'>>, revision: number, token?: string) =>
     call<{ product: DraftProduct; store: StoreView }>('PATCH', `/api/seller/products/${id}`, { ...p, revision, token }),
