@@ -6,7 +6,7 @@ import { SITE, useDocumentMeta } from './landing/seo'
 import { Button, Logo } from './landing/components/primitives'
 import { LandingGate } from './landing/LandingGate'
 import { HomeGate } from './landing/HomeGate'
-import { isShortProductId } from '../shared/short-link.ts'
+import { isRootShortId, isShortProductId } from '../shared/short-link.ts'
 
 /**
  * Application shell.
@@ -156,7 +156,8 @@ function Routes() {
   }
   if (path === '/') return <HomeGate />
   if (path === '/landing') return <LandingGate />
-  const shortId = path.startsWith('/p/') ? path.slice(3) : ''
+  const bare = path.replace(/\/$/, '').slice(1)
+  const shortId = path.startsWith('/p/') ? path.slice(3) : isRootShortId(bare) ? bare : ''
   if (isShortProductId(shortId)) {
     return (
       <Suspense fallback={<RouteFallback />}>

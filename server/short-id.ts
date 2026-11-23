@@ -1,11 +1,17 @@
 import { randomBytes } from 'node:crypto'
-import { SHORT_ID_ALPHABET, SHORT_ID_LENGTH } from '../shared/short-link.ts'
+import { SHORT_ID_ALPHABET, SHORT_ID_LENGTH, isRootShortId } from '../shared/short-link.ts'
 
 /**
  * Unpredictable, non-repeating-looking short IDs. Rejection sampling keeps the
  * distribution even; the DB's unique index is the final authority on reuse.
  */
 export function newShortProductId(): string {
+  // Always at least one capital letter, so desknoty.com/<shortId> can never
+  // collide with a (lowercase) store handle.
+  for (;;) { const id = drawShortId(); if (isRootShortId(id)) return id }
+}
+
+function drawShortId(): string {
   const size = SHORT_ID_ALPHABET.length
   const limit = Math.floor(256 / size) * size
   let out = ''

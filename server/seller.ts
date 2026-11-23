@@ -1164,7 +1164,7 @@ export async function resolveProductLink(shortId: string): Promise<ProductLinkRe
   // A stored destination must never point back into this resolver.
   let pathname = ''
   try { pathname = new URL(target).pathname } catch { return unavailable() }
-  if (pathname === `/p/${shortId}` || pathname === `/api/p/${shortId}/redirect`) return unavailable()
+  if (pathname === `/p/${shortId}` || pathname === `/${shortId}` || pathname === `/api/p/${shortId}/redirect`) return unavailable()
   return { ok: true, kind, path: kind === 'affiliate' ? `/api/p/${shortId}/redirect` : `/${p.storeHandle}/p/${p.id}`, url: target }
 }
 

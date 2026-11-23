@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import type { Request, Response } from 'express'
 import { resolveProductLink } from './seller.ts'
-import { isShortProductId } from '../shared/short-link.ts'
+import { isRootShortId, isShortProductId } from '../shared/short-link.ts'
 
 /**
  * Desknoty product links.
@@ -45,6 +45,8 @@ export function productLinksRouter(): Router {
     res.redirect(302, link.url)
   }
   r.get('/p/:shortId', redirect)
+  // desknoty.com/<shortId>: only IDs with a capital, which no store handle can be.
+  r.get('/:shortId', (req, res, next) => (isRootShortId(String(req.params.shortId ?? '')) ? redirect(req, res) : next()))
   r.get('/api/p/:shortId/redirect', redirect)
 
   return r

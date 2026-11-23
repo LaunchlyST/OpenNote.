@@ -13,6 +13,16 @@ export function isShortProductId(value: unknown): value is string {
   return typeof value === 'string' && SHORT_ID_RE.test(value)
 }
 
+/**
+ * Store addresses are desknoty.com/<handle>, and handles are lowercase only.
+ * A short ID with at least one capital letter can therefore never be a store
+ * handle, so it is also served at the root: desknoty.com/<shortId>.
+ * (Every new short ID has a capital; older all-lowercase ones keep /p/.)
+ */
+export function isRootShortId(value: unknown): value is string {
+  return isShortProductId(value) && /[A-HJ-NP-Z]/.test(value)
+}
+
 export function shortProductPath(shortId: string): string {
-  return `/p/${shortId}`
+  return isRootShortId(shortId) ? `/${shortId}` : `/p/${shortId}`
 }

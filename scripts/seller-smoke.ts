@@ -22,7 +22,7 @@ import Database from 'better-sqlite3'
 import pg from 'pg'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
 import { AMAZON_LINK_ERROR, checkAmazonUrl, productTypeOf } from '../shared/amazon-link.ts'
-import { isShortProductId } from '../shared/short-link.ts'
+import { isRootShortId, isShortProductId } from '../shared/short-link.ts'
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-seller-'))
 const PORT = 4000 + Math.floor(Math.random() * 90)
@@ -385,6 +385,11 @@ try {
   check('editing a bio link keeps its short id', edited.status === 200 && edited.json?.product?.shortId === oneP?.shortId && edited.json?.product?.title === 'My chair', JSON.stringify(edited.json))
   const afterEdit = await req('GET', `/p/${oneP?.shortId}`)
   check('the same bio link now redirects to the updated URL with its tag', afterEdit.status === 302 && afterEdit.headers.get('location') === linkB, String(afterEdit.headers.get('location')))
+  // desknoty.com/<shortId>: one slash, no /p/.
+  check('new short ids always contain a capital (never a store handle)', isRootShortId(oneP?.shortId) && isRootShortId(normalShort) && isRootShortId(untitled.json?.product?.shortId), `${oneP?.shortId} ${normalShort}`)
+  const bare302 = await req('GET', `/${oneP?.shortId}`)
+  check('desknoty.com/<shortId> redirects straight to the updated tagged Amazon URL', bare302.status === 302 && bare302.headers.get('location') === linkB, `${bare302.status} ${bare302.headers.get('location')}`)
+  check('a store handle is not mistaken for a short link', (await req('GET', '/ava-makes')).status !== 302)
   const badEdit = await req('PUT', `/api/seller/products/${oneP?.id}/affiliate`, { url: 'https://example.com/dp/B0E3CHAIR2', title: 'x' }, A)
   check('an edit refuses a non-Amazon URL', badEdit.status === 400)
   check('a normal product cannot be edited as a bio link', (await req('PUT', `/api/seller/products/${pid}/affiliate`, { url: linkB, title: 'x' }, A)).status === 404)

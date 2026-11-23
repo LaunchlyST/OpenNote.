@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { shortProductPath } from '../../../shared/short-link.ts'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
 import {
@@ -1823,7 +1824,7 @@ const isAffiliateEntry = (p: Pick<DraftProduct, 'extras'>) => p.extras?.productT
 /** The permanent public address of a product: <site>/p/<shortId>. */
 function bioLinkOf(store: StoreView, p: Pick<DraftProduct, 'id' | 'shortId'>): string {
   const origin = (() => { try { return new URL(store.url).origin } catch { return window.location.origin } })()
-  return p.shortId ? `${origin}/p/${p.shortId}` : `${store.url}/p/${p.id}`
+  return p.shortId ? `${origin}${shortProductPath(p.shortId)}` : `${store.url}/p/${p.id}`
 }
 
 function CopyBioLink({ link }: { link: string }) {
@@ -2917,7 +2918,7 @@ function ProductForm({ product, store, setStore, onDeleted, onEditParts }: { pro
   // The short id is created with the product and never changes on edit or
   // republish. Older rows without one keep their original address.
   const siteOrigin = (() => { try { return new URL(store.url).origin } catch { return store.url.replace(/\/$/, '') } })()
-  const productLink = product.shortId ? `${siteOrigin}/p/${product.shortId}` : `${store.url}/p/${product.id}`
+  const productLink = product.shortId ? `${siteOrigin}${shortProductPath(product.shortId)}` : `${store.url}/p/${product.id}`
   const copyProductLink = () => void copyToClipboard(productLink).then((ok) => { if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1500) } })
   // The mode is explicit: typing 0 (or clearing the field) never flips it.
   // A recovered value from an older build has no mode; the saved product's mode
