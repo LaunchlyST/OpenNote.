@@ -1753,21 +1753,27 @@ export function sellerRouter() {
     // A published affiliate product must have a checked Amazon destination.
     // Short links resolve on the server; a failed check blocks the publish.
     // The checked URL (not a short link) is what goes into the live snapshot.
+    // One affiliate entry with a bad or unreachable link must never block the
+    // rest of the store: it is skipped (its last live copy, if any, stays as
+    // it was) and everything else publishes. Bio links are published on their
+    // own when created or edited, so they don't depend on this step.
     const publishedExtras = new Map<string, string>()
+    const skipped = new Set<string>()
     for (const p of await q.products(s.id)) {
       if (!p.listed || p.archived) continue
       const x = readExtras(p.extras)
       if (x.productType !== 'affiliate') continue
       const prepared = await prepareAffiliateBody({ extras: x })
-      if (prepared.error) return void res.status(400).json({ error: prepared.error })
+      if (prepared.error) { skipped.add(p.id); continue }
       const checked = readExtras(JSON.stringify(prepared.body.extras))
-      const final = checked.affiliate?.url ? await resolveAmazonDestination(checked.affiliate.url) : null
-      if (!final || !safeRedirectUrl(final, 'https://desknoty.com/')) return void res.status(400).json({ error: AMAZON_LINK_ERROR })
+      const final = checked.affiliate?.url ? await resolveAmazonDestination(checked.affiliate.url).catch(() => null) : null
+      if (!final || !safeRedirectUrl(final, 'https://desknoty.com/')) { skipped.add(p.id); continue }
       publishedExtras.set(p.id, JSON.stringify({ ...checked, affiliate: { ...checked.affiliate, url: final, input: final } }))
     }
     const t = now()
     await sql.tx(async (tx) => {
       for (const p of await q.products(s.id, tx)) {
+        if (skipped.has(p.id)) continue
         if (p.listed && !p.archived && !productProblem(p)) {
           // A free product is always published at 0, whatever price an older
           // draft still carries. A paid product was checked above, so its price

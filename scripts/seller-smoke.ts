@@ -401,6 +401,13 @@ try {
   const badEdit = await req('PUT', `/api/seller/products/${oneP?.id}/affiliate`, { url: 'https://example.com/dp/B0E3CHAIR2', title: 'x' }, A)
   check('an edit refuses a non-Amazon URL', badEdit.status === 400)
   check('a normal product cannot be edited as a bio link', (await req('PUT', `/api/seller/products/${pid}/affiliate`, { url: linkB, title: 'x' }, A)).status === 404)
+  // An affiliate entry with no link yet must not block publishing the rest.
+  const half = (await req('POST', '/api/seller/products', { title: 'Half done', priceMinor: 0, currency: 'gbp' }, A)).json.product
+  const halfSave = await req('PATCH', `/api/seller/products/${half.id}`, { extras: { productType: 'affiliate', affiliate: { url: '' } } }, A)
+  const pubWithHalf = await req('POST', '/api/seller/store/publish', undefined, A)
+  const liveNames = ((await req('GET', '/api/store/ava-makes')).json.products as Array<{ id: string; title: string }>)
+  check('an affiliate entry with no link never blocks publishing the store', pubWithHalf.status === 200 && liveNames.some((p) => p.id === pid) && !liveNames.some((p) => p.id === half.id), `${halfSave.status} ${pubWithHalf.status} ${JSON.stringify(pubWithHalf.json?.error ?? '')}`)
+  await req('DELETE', `/api/seller/products/${half.id}`, undefined, A)
   const privateAff = await req('PATCH', `/api/seller/products/${aff.id}`, { extras: { productType: 'affiliate', affiliate: { url: 'http://127.0.0.1/dp/B0C1ABCDEF?tag=ava-21' } } }, A)
   check('private-network Amazon destinations are refused', privateAff.status === 400 && privateAff.json?.error === AMAZON_LINK_ERROR, JSON.stringify(privateAff.json))
   const gone = await req('POST', '/api/seller/products', { title: 'Temporary', priceMinor: 100, currency: 'gbp' }, A)

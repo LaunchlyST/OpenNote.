@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { shortProductPath } from '../../../shared/short-link.ts'
 import { createPortal } from 'react-dom'
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from 'react'
@@ -1218,6 +1218,7 @@ function Studio({
             <button type="button" onClick={redo} disabled={!hist.current.future.length} aria-label="Redo"><span aria-hidden="true">↷</span> Redo</button>
             <span>Changes save as a draft. Visitors see them only after you publish.</span>
           </div>
+          <AffiliateCtx.Provider value={{ store, setStore }}>
           <PageEditor
             onOpenProduct={(pid) => { setEditPart(null); setFromCarousel(true); setOpenProduct(pid); setTab('products') }}
             onSetProductType={setSlideProductType}
@@ -1234,6 +1235,7 @@ function Studio({
             activeSlide={activeSlide}
             onActiveSlideChange={(i) => { setActiveSlideBlock(picked); setActiveSlide(Math.max(0, Math.min(MAX_PRODUCT_SLIDES - 1, i))) }}
           />
+          </AffiliateCtx.Provider>
           {picked && allBlocks(page).find((x) => x.id === picked)?.type !== 'featured' && <FloatingEditor key={picked} page={page} pageIndex={safePageIndex} onChange={edit} products={store.products} id={picked} anchor={anchor} onClose={closeEditor} />}
         </>}
         {/* Add block: the only way to open the block library popup. */}
@@ -1818,6 +1820,9 @@ function AddBlockDialog({ products, onClose, onAdd, onDragStart, createProduct }
   )
 }
 
+/** Lets an empty swipe slot create a private affiliate bio link in place. */
+const AffiliateCtx = createContext<{ store: StoreView; setStore: (s: StoreView) => void } | null>(null)
+
 /** An explicit affiliate entry: a private bio link, never shown in the shop. */
 const isAffiliateEntry = (p: Pick<DraftProduct, 'extras'>) => p.extras?.productType === 'affiliate'
 
@@ -1881,6 +1886,70 @@ function AffiliateCreator({ store, setStore, onDone }: { store: StoreView; setSt
     <div className="ab-body"><section className="ab-main">
       <AffiliateLinkForm submitLabel="Create link" onSubmit={async (url, title) => { await flushSellerEdits(); const r = await sellerApi.createAffiliate(url, title); setStore(r.store); setMade(r.product) }} />
     </section></div>
+  )
+}
+
+/** An empty swipe slot: first choose Digital product or Affiliate link.
+    Digital opens the usual product picker for this slot. Affiliate shows its
+    own two-field form; the result is a private bio link with a Copy button
+    and never appears on the website, so the slot stays free for a product. */
+function EmptySlot({ n, onAddDigital }: { n: number; onAddDigital?: () => void }) {
+  const ctx = useContext(AffiliateCtx)
+  const [kind, setKind] = useState<'affiliate' | null>(null)
+  const [made, setMade] = useState<DraftProduct | null>(null)
+  const head = (
+    <div className="sld-head">
+      <span className="sld-num" aria-hidden="true">{n}</span>
+      <span className="ss-label">{kind === 'affiliate' ? 'New affiliate link' : `Product ${n} is empty`}</span>
+    </div>
+  )
+  if (kind === 'affiliate' && ctx) {
+    if (made) {
+      const bio = bioLinkOf(ctx.store, made)
+      return (
+        <div className="sld-card" style={{ display: 'grid', gap: 10 }}>
+          {head}
+          <p className="ss-hint" role="status"><b>{made.title || 'Your link'}</b> is ready. It opens the Amazon product directly.</p>
+          <Field label="Bio link"><input className="ss-input" readOnly value={bio} aria-label="Bio link" onFocus={(e) => e.currentTarget.select()} /></Field>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <CopyBioLink link={bio} />
+            <button type="button" className="ss-ghost" onClick={() => { setMade(null); setKind(null) }}>Done</button>
+          </div>
+          <p className="ss-muted">Private: it is not shown on your website. Find all your links under Products.</p>
+        </div>
+      )
+    }
+    return (
+      <div className="sld-card" style={{ display: 'grid', gap: 10 }}>
+        {head}
+        <AffiliateLinkForm
+          submitLabel="Create link"
+          onCancel={() => setKind(null)}
+          onSubmit={async (url, title) => { await flushSellerEdits(); const r = await sellerApi.createAffiliate(url, title); ctx.setStore(r.store); setMade(r.product) }}
+        />
+        <p className="ss-muted">Nothing is added to your website. You get a link for your bio.</p>
+      </div>
+    )
+  }
+  return (
+    <div className="sld-card">
+      {head}
+      <p className="ss-muted">What do you want to add?</p>
+      <div role="group" aria-label={`Product ${n} type`} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginTop: 8 }}>
+        {onAddDigital && (
+          <button type="button" className="ss-ghost" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', textAlign: 'left' }} onClick={onAddDigital}>
+            <b>Digital product</b>
+            <small style={{ opacity: 0.7, fontWeight: 400 }}>Sell a file here. Shows on your website.</small>
+          </button>
+        )}
+        {ctx && (
+          <button type="button" className="ss-ghost" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', textAlign: 'left' }} onClick={() => setKind('affiliate')}>
+            <b>Affiliate link</b>
+            <small style={{ opacity: 0.7, fontWeight: 400 }}>Amazon link for your bio. Not on your website.</small>
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -2249,18 +2318,7 @@ function SlidesEditor({ slides, products, blockId, onChange, onOpenProduct, onSe
           <button type="button" className="ss-ghost" onClick={() => (onAddEmptySlide ?? onAddSlide)!(blockId, slides.length)}>+ Add product slide</button>
         )}
       </div>
-      {!s && (
-        <div className="sld-card">
-          <div className="sld-head">
-            <span className="sld-num" aria-hidden="true">{a + 1}</span>
-            <span className="ss-label">Product {a + 1} is empty</span>
-          </div>
-          <p className="ss-muted">Add a product here and it shows as product {a + 1} in the swipe.</p>
-          {onAddSlide && (
-            <button type="button" className="ss-ghost self-start" onClick={() => onAddSlide(blockId, a)}>+ Add product</button>
-          )}
-        </div>
-      )}
+      {!s && <EmptySlot key={`empty-${a}`} n={a + 1} onAddDigital={onAddSlide ? () => onAddSlide(blockId, a) : undefined} />}
       {s && (
         <div className="sld-card" key={s.id}>
           <div className="sld-head">
