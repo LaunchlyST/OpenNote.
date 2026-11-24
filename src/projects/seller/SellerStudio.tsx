@@ -3696,6 +3696,10 @@ function PayoutsPanel({ store, setup, reload }: { store: StoreView; setup: Selle
             {s === 'ready' && (() => {
               // The account you chose under "Your Bank Accounts" is where card money goes.
               // Shows what you chose: Stripe, or the bank box that's in use.
+              // Wallet money is withdrawn through Stripe, so with cards on it follows the
+              // Stripe payout bank (the one picked with "Use this account"). Otherwise it
+              // is the bank buyers pay into by transfer.
+              if (stripeInUse && payTo) return <span className="wl-link wl-dest"><BankMark name={payTo.bankName} /> Paid to {payTo.bankName} ••{payTo.last4}</span>
               const inUse = payments.bank.enabled ? saved.find((x) => isActive(x)) ?? null : null
               if (!inUse && stripeInUse) return <span className="wl-link wl-dest"><span className="wl-stripe-mark" aria-hidden="true">S</span> Connected to Stripe</span>
               return inUse ? <span className="wl-link wl-dest"><BankMark name={inUse.bankName} /> Paid to {inUse.bankName} ••{inUse.accountNumber.slice(-4) || inUse.iban.slice(-4)}</span> : null
