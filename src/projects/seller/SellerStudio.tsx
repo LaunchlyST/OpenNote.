@@ -2210,7 +2210,7 @@ function summary(b: Block, products: DraftProduct[]) {
     case 'links': return `${(d.links ?? []).filter((l: { url: string }) => l.url).length} link(s)`
     case 'featured': {
       const slides = slidesOf(b)
-      if (!slides.length) return 'Empty — drag a product in'
+      if (!slides.length) return 'Empty — use Add product'
       if (slides.length > 1) return `${slides.length} slides (carousel)`
       const one = slides[0]
       if (one.kind === 'affiliate') return `Affiliate: ${one.affiliate.title || one.affiliate.url || 'no link yet'}`

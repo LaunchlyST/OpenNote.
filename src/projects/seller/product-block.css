@@ -1,6 +1,6 @@
 
 /* Product block: one Add button, numbered circles, the selected product below. */
-.sb-addmenu { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; display: grid; gap: 4px; min-width: 220px; padding: 6px; border-radius: 12px; border: 1px solid #e6e4df; background: #fff; box-shadow: 0 14px 30px -14px rgba(0,0,0,.35); }
+.sb-addmenu { position: static; margin-top: 8px; max-width: 320px; display: grid; gap: 4px; min-width: 220px; padding: 6px; border-radius: 12px; border: 1px solid #e6e4df; background: #fff; box-shadow: 0 14px 30px -14px rgba(0,0,0,.35); }
 .sb-addmenu button { display: grid; gap: 1px; padding: 9px 10px; border-radius: 8px; text-align: left; font-size: 13.5px; }
 .sb-addmenu button:hover, .sb-addmenu button:focus-visible { background: #f4f3f0; }
 .sb-addmenu small { font-size: 12px; color: #77756f; }
