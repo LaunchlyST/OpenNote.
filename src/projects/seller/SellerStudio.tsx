@@ -97,6 +97,8 @@ import {
 
 /** Largest product file a seller can upload (Supabase Free allows 50 MB per file). */
 const MAX_PRODUCT_FILE_MB = 50
+/** Product cards shown per block in the studio: one box fills before the next appears. */
+const PRODUCT_SLOTS = 3
 import type { Block, BlockType, CardPart, DraftProduct, PaymentType, ProductExtras, ProductType, Page, PayMethod, PaymentSettings, ProductSlide, SavedBank, SellerSetup, ShopProduct, StoreView } from './model'
 
 /** Copy text even when the async Clipboard API is blocked, denied or missing. */
@@ -2761,9 +2763,12 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
       )}
       {slotEntry && <AffiliateEntry key={slotEntry.id} product={slotEntry} store={store} setStore={setStore} />}
 
-      {/* Product blocks on the selected page. */}
+      {/* Product blocks on the selected page. One box at a time: "Product 2"
+          appears only once "Product 1" holds all three products, and so on,
+          so the list never shows two empty boxes side by side. */}
       {productBlocks.map((block, bi) => {
         const slides = slidesOf(block)
+        if (productBlocks.slice(0, bi).some((b) => slidesOf(b).length < PRODUCT_SLOTS)) return null
         return (
           <section key={bi} className="sb-block" style={{ marginBottom: 10 }}>
             <div className="sb-row">
@@ -2771,7 +2776,7 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
               <span className="sb-title"><b>Product {bi + 1}</b><small>{block ? `${slides.length} slide${slides.length === 1 ? '' : 's'}` : 'Empty slot'}</small></span>
             </div>
             <div className="pg-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-              {[0, 1, 2].map((si) => {
+              {Array.from({ length: PRODUCT_SLOTS }, (_, i) => i).map((si) => {
                 const slide = slides[si]
                 const populated = !!slide && (slide.kind === 'digital' ? Boolean(slide.productId) : Boolean(slide.affiliate.url))
                 if (populated) {
@@ -2816,7 +2821,7 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
           </section>
         )
       })}
-      {productBlocks.length < MAX_PRODUCT_BLOCKS_PER_PAGE && (
+      {productBlocks.length < MAX_PRODUCT_BLOCKS_PER_PAGE && productBlocks.every((b) => slidesOf(b).length >= PRODUCT_SLOTS) && (
         <button type="button" className="bl-add" style={{ width: '100%', marginTop: 6 }} onClick={() => onAddSlot?.(0, productBlocks.length)}><Plus className="h-4 w-4" /> Add product block</button>
       )}
 
