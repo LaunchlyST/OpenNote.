@@ -33,3 +33,4 @@
 .pg-slot-empty:hover:not(:disabled) { border-color: #111114; color: #111114; }
 .pg-slot-empty:disabled { cursor: default; color: #b9b7b1; font-weight: 500; }
 .pg-switch { width: auto; max-width: 70%; height: 36px; padding: 0 10px; font-size: 13.5px; }
+.sb-links { display: grid; gap: 8px; margin-top: 12px; }

@@ -2293,6 +2293,7 @@ function SlidesEditor({ slides, products, onChange, onOpenProduct, activeSlide, 
           {removeBtn}
         </div>
       )}
+      {ctx && <AffiliateRows store={ctx.store} setStore={ctx.setStore} />}
       {boxOpen && ctx && createPortal(
         <AddProductBox
           full={full}
@@ -2304,6 +2305,61 @@ function SlidesEditor({ slides, products, onChange, onOpenProduct, activeSlide, 
         document.body,
       )}
     </div>
+  )
+}
+
+/** Your affiliate links, each as a small box: name, your link, copy, edit and
+    delete. They are private bio links, so they never change the website. */
+function AffiliateRows({ store, setStore }: { store: StoreView; setStore: (s: StoreView) => void }) {
+  const links = store.products.filter((p) => !p.archived && isAffiliateEntry(p))
+  const [editing, setEditing] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  if (!links.length) return null
+  const remove = async (p: DraftProduct) => {
+    if (!window.confirm(`Delete “${p.title || 'this link'}”? Anyone opening ${bioLinkOf(store, p)} will see “Link unavailable”.`)) return
+    setErr(null)
+    try { await flushSellerEdits(); const r = await sellerApi.deleteProduct(p.id); setStore(r.store) } catch (e) { setErr((e as Error).message) }
+  }
+  return (
+    <div className="sb-links" aria-label="Your affiliate links">
+      <span className="ss-label">Your affiliate links</span>
+      {links.map((p) => {
+        const own = bioLinkOf(store, p)
+        if (editing === p.id) {
+          return (
+            <div key={p.id} className="sb-selected">
+              <AffiliateLinkForm
+                initial={{ url: String(p.extras?.affiliate?.url ?? ''), title: p.title }}
+                submitLabel="Save"
+                onCancel={() => setEditing(null)}
+                onSubmit={async (url, title) => { const r = await sellerApi.updateAffiliate(p.id, url, title); setStore(r.store); setEditing(null) }}
+              />
+            </div>
+          )
+        }
+        return (
+          <div key={p.id} className="sb-selected sb-digital">
+            <span className="sb-digital-name">
+              <b>{p.title.trim() || 'Amazon product'}</b>
+              <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{own}</small>
+            </span>
+            <CopyIconButton text={own} />
+            <button type="button" className="ss-ghost" aria-label={`Edit ${p.title || 'link'}`} title="Edit" onClick={() => setEditing(p.id)}><Pencil className="h-4 w-4" /></button>
+            <button type="button" className="ss-ghost" aria-label={`Delete ${p.title || 'link'}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>
+          </div>
+        )
+      })}
+      {err && <p className="sld-err" role="alert">{err}</p>}
+    </div>
+  )
+}
+
+function CopyIconButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false)
+  return (
+    <button type="button" className="ss-ghost" aria-label="Copy link" title={done ? 'Copied' : 'Copy link'} onClick={() => void copyToClipboard(text).then((ok) => { if (ok) { setDone(true); window.setTimeout(() => setDone(false), 1400) } })}>
+      {done ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </button>
   )
 }
 
