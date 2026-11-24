@@ -34,3 +34,4 @@
 .pg-slot-empty:disabled { cursor: default; color: #b9b7b1; font-weight: 500; }
 .pg-switch { width: auto; max-width: 70%; height: 36px; padding: 0 10px; font-size: 13.5px; }
 .sb-links { display: grid; gap: 8px; margin-top: 12px; }
+.sb-link-full { flex: 1; min-width: 0; height: 38px; font-size: 13px; }

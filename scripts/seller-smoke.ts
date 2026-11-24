@@ -389,13 +389,13 @@ try {
   check('editing a bio link keeps its short id', edited.status === 200 && edited.json?.product?.shortId === oneP?.shortId && edited.json?.product?.title === 'My chair', JSON.stringify(edited.json))
   const afterEdit = await req('GET', `/p/${oneP?.shortId}`)
   check('the same bio link now redirects to the updated URL with its tag', afterEdit.status === 302 && afterEdit.headers.get('location') === linkB, String(afterEdit.headers.get('location')))
-  // Bio links are named after the product: desknoty.com/My-Lamp, then My-Lamp-2.
-  check('a bio link is named after its title', oneP?.shortId === 'My-Lamp', String(oneP?.shortId))
-  check('editing the title keeps the original name link', edited.json?.product?.shortId === 'My-Lamp', String(edited.json?.product?.shortId))
+  // Bio links get a short code: desknoty.com/Xy7kQ2. Edits keep it.
+  check('a bio link gets a short code with a capital', isRootShortId(oneP?.shortId) && (oneP?.shortId?.length ?? 0) === 6, String(oneP?.shortId))
+  check('editing keeps the same short code', edited.json?.product?.shortId === oneP?.shortId, String(edited.json?.product?.shortId))
   const twin = await req('POST', '/api/seller/products/affiliate', { url: linkA, title: 'my  lamp!' }, A)
-  check('a second link with the same name gets -2', twin.status === 201 && twin.json?.product?.shortId === 'My-Lamp-2', String(twin.json?.product?.shortId))
-  const named302 = await req('GET', '/My-Lamp-2')
-  check('desknoty.com/My-Lamp-2 redirects straight to its tagged Amazon URL', named302.status === 302 && named302.headers.get('location') === linkA, `${named302.status} ${named302.headers.get('location')}`)
+  check('a second link gets its own short code', twin.status === 201 && isRootShortId(twin.json?.product?.shortId) && twin.json?.product?.shortId !== oneP?.shortId, String(twin.json?.product?.shortId))
+  const coded302 = await req('GET', `/${twin.json?.product?.shortId}`)
+  check('desknoty.com/<code> redirects straight to its tagged Amazon URL', coded302.status === 302 && coded302.headers.get('location') === linkA, `${coded302.status} ${coded302.headers.get('location')}`)
   await req('DELETE', `/api/seller/products/${twin.json?.product?.id}`, undefined, A)
   // desknoty.com/<shortId>: one slash, no /p/.
   check('new short ids always contain a capital (never a store handle)', isRootShortId(oneP?.shortId) && isRootShortId(normalShort) && isRootShortId(untitled.json?.product?.shortId), `${oneP?.shortId} ${normalShort}`)

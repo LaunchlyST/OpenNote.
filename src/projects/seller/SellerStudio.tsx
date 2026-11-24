@@ -1854,7 +1854,7 @@ function CopyBioLink({ link }: { link: string }) {
 
 /** Exactly two inputs: the Amazon product link and a title. Used to create a
     bio link and, with `initial`, to edit one in place (same short id). */
-function AffiliateLinkForm({ initial, submitLabel, onSubmit, onCancel }: { initial?: { url: string; title: string }; submitLabel: string; onSubmit: (url: string, title: string) => Promise<void>; onCancel?: () => void }) {
+function AffiliateLinkForm({ initial, submitLabel, onSubmit, onCancel, hideTitle }: { initial?: { url: string; title: string }; submitLabel: string; onSubmit: (url: string, title: string) => Promise<void>; onCancel?: () => void; hideTitle?: boolean }) {
   const [url, setUrl] = useState(initial?.url ?? '')
   const [title, setTitle] = useState(initial?.title ?? '')
   const [busy, setBusy] = useState(false)
@@ -1871,7 +1871,7 @@ function AffiliateLinkForm({ initial, submitLabel, onSubmit, onCancel }: { initi
       <Field label="Amazon product link" hint="Your tracking tag is kept exactly as it is.">
         <input className="ss-input" inputMode="url" autoFocus value={url} onChange={(e) => { setUrl(e.target.value); setErr(null) }} placeholder="https://www.amazon.co.uk/dp/B0...?tag=yourtag-21" aria-label="Amazon product link" />
       </Field>
-      <Field label="Title"><input className="ss-input" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. My desk lamp" aria-label="Title" /></Field>
+      {!hideTitle && <Field label="Title"><input className="ss-input" maxLength={80} value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. My desk lamp" aria-label="Title" /></Field>}
       {err && <p className="ss-note" role="alert">{err}</p>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button type="submit" className="ss-primary" disabled={busy || !url.trim()}>{busy ? 'Saving…' : submitLabel}</button>
@@ -2330,6 +2330,7 @@ function AffiliateRows({ store, setStore }: { store: StoreView; setStore: (s: St
             <div key={p.id} className="sb-selected">
               <AffiliateLinkForm
                 initial={{ url: String(p.extras?.affiliate?.url ?? ''), title: p.title }}
+                hideTitle
                 submitLabel="Save"
                 onCancel={() => setEditing(null)}
                 onSubmit={async (url, title) => { const r = await sellerApi.updateAffiliate(p.id, url, title); setStore(r.store); setEditing(null) }}
@@ -2339,10 +2340,7 @@ function AffiliateRows({ store, setStore }: { store: StoreView; setStore: (s: St
         }
         return (
           <div key={p.id} className="sb-selected sb-digital">
-            <span className="sb-digital-name">
-              <b>{p.title.trim() || 'Amazon product'}</b>
-              <small style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{own}</small>
-            </span>
+            <input className="ss-input sb-link-full" readOnly value={own.replace(/^https?:\/\//, '')} aria-label="Your link" onFocus={(e) => e.currentTarget.select()} />
             <CopyIconButton text={own} />
             <button type="button" className="ss-ghost" aria-label={`Edit ${p.title || 'link'}`} title="Edit" onClick={() => setEditing(p.id)}><Pencil className="h-4 w-4" /></button>
             <button type="button" className="ss-ghost" aria-label={`Delete ${p.title || 'link'}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>
@@ -2355,10 +2353,10 @@ function AffiliateRows({ store, setStore }: { store: StoreView; setStore: (s: St
 }
 
 function CopyIconButton({ text }: { text: string }) {
-  const [done, setDone] = useState(false)
+  const [done, setDone] = useState<'ok' | 'fail' | null>(null)
   return (
-    <button type="button" className="ss-ghost" aria-label="Copy link" title={done ? 'Copied' : 'Copy link'} onClick={() => void copyToClipboard(text).then((ok) => { if (ok) { setDone(true); window.setTimeout(() => setDone(false), 1400) } })}>
-      {done ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    <button type="button" className="ss-primary ss-primary-sm" aria-label="Copy link" onClick={() => void copyToClipboard(text).then((ok) => { setDone(ok ? 'ok' : 'fail'); window.setTimeout(() => setDone(null), 1800) })}>
+      {done === 'ok' ? <><Check className="h-4 w-4" /> Copied</> : done === 'fail' ? 'Select & copy' : <><Copy className="h-4 w-4" /> Copy</>}
     </button>
   )
 }
@@ -2435,7 +2433,7 @@ function AddProductBox({ full, store, setStore, onClose, onDigital }: { full: bo
           )}
           {made && (
             <div className="sb-box-form">
-              <Field label="Your link"><input className="ss-input" readOnly value={own} aria-label="Your link" onFocus={(e) => e.currentTarget.select()} /></Field>
+              <Field label="Your link"><input className="ss-input" readOnly value={own.replace(/^https?:\/\//, '')} aria-label="Your link" onFocus={(e) => e.currentTarget.select()} /></Field>
               <div style={{ display: 'flex', gap: 8 }}>
                 <CopyBioLink link={own} />
                 <button type="button" className="ss-ghost" onClick={onClose}>Done</button>
