@@ -1,5 +1,6 @@
 import { sql, authDatabase } from './db.ts'
 import { newShortProductId } from './short-id.ts'
+import { amazonLinkCode } from '../shared/short-link.ts'
 import type Database from 'better-sqlite3'
 
 /** Retain the store and purchase ledger when its owner closes their account. */
@@ -43,9 +44,22 @@ export async function migrateSeller() {
   // backfilled once; later edits never regenerate the id, and the unique index
   // is the final guard against handing the same address to two products.
   await sql.exec('CREATE UNIQUE INDEX IF NOT EXISTS seller_product_short_id ON seller_product ("shortId") WHERE "shortId" IS NOT NULL')
-  // Name-style bio links (Amazon-Product-B0…-2) are replaced by a short code:
-  // links are desknoty.com/<6-character code> only.
-  for (const row of await sql.all<{ id: string }>(`SELECT id FROM seller_product WHERE "shortId" IS NULL OR "shortId" = '' OR length("shortId") <> 6 OR "shortId" LIKE '%-%'`)) {
+  // Name-style bio links (Amazon-Product-B0…-2) are replaced: an affiliate link
+  // takes its Amazon link's own code (link.amazon/B09BT4lv2 -> B09BT4lv2).
+  for (const row of await sql.all<{ id: string; extras: string | null }>(`SELECT id, extras FROM seller_product WHERE "shortId" IS NULL OR "shortId" = '' OR "shortId" LIKE '%-%'`)) {
+    let aff: { input?: string; url?: string } = {}
+    try { aff = (JSON.parse(row.extras ?? '{}') as { affiliate?: { input?: string; url?: string } }).affiliate ?? {} } catch { /* not JSON */ }
+    const code = [aff.input ?? '', aff.url ?? ''].map((l) => amazonLinkCode(l)).find(Boolean)
+    if (code) {
+      let done = false
+      for (let n = 1; n <= 20 && !done; n++) {
+        const candidate = n === 1 ? code : `${code}${n}`
+        if (await sql.get(`SELECT 1 FROM seller_product WHERE LOWER("shortId") = LOWER(?)`, candidate)) continue
+        await sql.run(`UPDATE seller_product SET "shortId" = ? WHERE id = ?`, candidate, row.id)
+        done = true
+      }
+      if (done) continue
+    }
     for (let attempt = 0; attempt < 12; attempt++) {
       const shortId = newShortProductId()
       if (await sql.get(`SELECT 1 FROM seller_product WHERE "shortId" = ?`, shortId)) continue

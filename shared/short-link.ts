@@ -25,6 +25,28 @@ export function isShortProductId(value: unknown): value is string {
   return typeof value === 'string' && (SHORT_ID_RE.test(value) || isBioSlug(value))
 }
 
+/**
+ * The code inside an Amazon link, used as the Desknoty link:
+ *   https://link.amazon/B09BT4lv2          -> B09BT4lv2
+ *   https://amzn.to/3xYzAbC                -> 3xYzAbC
+ *   https://www.amazon.co.uk/dp/B0GT4BZ3D1 -> B0GT4BZ3D1
+ * '' when there is none, or it has no capital letter (a link must hold one
+ * so it can never be a lowercase store handle).
+ */
+export function amazonLinkCode(raw: string): string {
+  let u: URL
+  try { u = new URL(raw.trim()) } catch { return '' }
+  const host = u.hostname.toLowerCase().replace(/^www\./, '')
+  const parts = u.pathname.split('/').filter(Boolean)
+  let code = ''
+  if (['link.amazon', 'amzn.to', 'amzn.eu', 'a.co'].includes(host)) code = parts[parts.length - 1] ?? ''
+  else {
+    const m = u.pathname.match(/\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Za-z0-9]{10})(?:[/?]|$)/)
+    code = m ? m[1].toUpperCase() : ''
+  }
+  return /^[A-Za-z0-9]{3,40}$/.test(code) && /[A-Z]/.test(code) ? code : ''
+}
+
 /** "LED desk lamp – white!" → "LED-Desk-Lamp-White". '' when the title has no letters or digits. */
 export function bioSlugFromTitle(title: string): string {
   const words = title

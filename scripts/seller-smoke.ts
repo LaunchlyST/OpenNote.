@@ -22,7 +22,7 @@ import Database from 'better-sqlite3'
 import pg from 'pg'
 import { sendWebhook, startFakeStripe } from './fake-stripe.ts'
 import { AMAZON_LINK_ERROR, checkAmazonUrl, productTypeOf } from '../shared/amazon-link.ts'
-import { isRootShortId, isShortProductId } from '../shared/short-link.ts'
+import { amazonLinkCode, isRootShortId, isShortProductId } from '../shared/short-link.ts'
 
 const tmp = mkdtempSync(join(tmpdir(), 'desknoty-seller-'))
 const PORT = 4000 + Math.floor(Math.random() * 90)
@@ -390,10 +390,11 @@ try {
   const afterEdit = await req('GET', `/p/${oneP?.shortId}`)
   check('the same bio link now redirects to the updated URL with its tag', afterEdit.status === 302 && afterEdit.headers.get('location') === linkB, String(afterEdit.headers.get('location')))
   // Bio links get a short code: desknoty.com/Xy7kQ2. Edits keep it.
-  check('a bio link gets a short code with a capital', isRootShortId(oneP?.shortId) && (oneP?.shortId?.length ?? 0) === 6, String(oneP?.shortId))
+  check('a bio link uses the Amazon product code', isRootShortId(oneP?.shortId) && new RegExp(`/dp/${oneP?.shortId}`, 'i').test(linkA), `${oneP?.shortId} ${linkA}`)
   check('editing keeps the same short code', edited.json?.product?.shortId === oneP?.shortId, String(edited.json?.product?.shortId))
   const twin = await req('POST', '/api/seller/products/affiliate', { url: linkA, title: 'my  lamp!' }, A)
-  check('a second link gets its own short code', twin.status === 201 && isRootShortId(twin.json?.product?.shortId) && twin.json?.product?.shortId !== oneP?.shortId, String(twin.json?.product?.shortId))
+  check('a second link to the same product gets the code plus a number', twin.status === 201 && /^\d+$/.test(String(twin.json?.product?.shortId ?? '').slice(String(oneP?.shortId).length)) && String(twin.json?.product?.shortId).startsWith(String(oneP?.shortId)) && twin.json?.product?.shortId !== oneP?.shortId, String(twin.json?.product?.shortId))
+  check('link.amazon/B09BT4lv2 gives the code B09BT4lv2', amazonLinkCode('https://link.amazon/B09BT4lv2') === 'B09BT4lv2' && amazonLinkCode('https://www.amazon.co.uk/Desk-Lamp/dp/B0GT4BZ3D1?tag=x-21') === 'B0GT4BZ3D1')
   const coded302 = await req('GET', `/${twin.json?.product?.shortId}`)
   check('desknoty.com/<code> redirects straight to its tagged Amazon URL', coded302.status === 302 && coded302.headers.get('location') === linkA, `${coded302.status} ${coded302.headers.get('location')}`)
   await req('DELETE', `/api/seller/products/${twin.json?.product?.id}`, undefined, A)
