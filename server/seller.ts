@@ -497,6 +497,11 @@ function safeRedirectUrl(location: string, base: string): string | null {
  *  product page at the end is accepted. No body is read and no page is executed.
  *  Returns the final URL so the checked destination can be stored. */
 export async function resolveAmazonDestination(raw: string): Promise<string | null> {
+  // Amazon often refuses requests from cloud servers. When a short Amazon link
+  // (link.amazon, amzn.to…) can't be followed from here, keep the short link
+  // itself: it is an Amazon address, and Amazon sends the buyer on to the product.
+  const start = checkAmazonUrl(raw)
+  const fallback = start.ok ? start.url : null
   let current = raw
   const seen = new Set<string>()
   for (let hop = 0; hop < 5; hop++) {
@@ -509,10 +514,10 @@ export async function resolveAmazonDestination(raw: string): Promise<string | nu
     try {
       res = await fetch(safe, { method: 'GET', redirect: 'manual', headers: { 'User-Agent': 'Desknoty link check' }, signal: AbortSignal.timeout(4000) })
     } catch {
-      return null
+      return fallback
     }
     const location = res.headers.get('location')
-    if (!location) return null
+    if (!location) return fallback
     const next = safeRedirectUrl(location, safe)
     if (!next || seen.has(next)) return null
     current = next
