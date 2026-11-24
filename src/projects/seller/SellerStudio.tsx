@@ -2239,6 +2239,8 @@ function SlidesEditor({ slides, products, onChange, activeSlide, onActiveSlideCh
   const [menu, setMenu] = useState(false)
   const [adding, setAdding] = useState(false)
   const [addErr, setAddErr] = useState<string | null>(null)
+  const [linkBox, setLinkBox] = useState(false)
+  const [made, setMade] = useState<DraftProduct | null>(null)
   const a = slides.length ? Math.max(0, Math.min(activeSlide ?? local, slides.length - 1)) : 0
   const select = (i: number) => { setLocal(i); onActiveSlideChange?.(i) }
   const s = slides[a] ?? null
@@ -2252,13 +2254,13 @@ function SlidesEditor({ slides, products, onChange, activeSlide, onActiveSlideCh
   const add = async (kind: ProductSlide['kind']) => {
     setMenu(false)
     setAddErr(null)
-    if (full) return
     if (kind === 'affiliate') {
-      onChange([...slides, newSlide('affiliate')])
-      select(slides.length)
+      // An affiliate is a private bio link: paste the Amazon link, get your own link.
+      setMade(null)
+      setLinkBox(true)
       return
     }
-    if (!ctx) return
+    if (full || !ctx) return
     setAdding(true)
     try {
       await flushSellerEdits()
@@ -2282,18 +2284,46 @@ function SlidesEditor({ slides, products, onChange, activeSlide, onActiveSlideCh
   return (
     <div className="sb-edit">
       <div style={{ position: 'relative' }}>
-        <button type="button" className="ss-ghost self-start" disabled={full || adding} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+        <button type="button" className="ss-ghost self-start" disabled={adding} aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
           <Plus className="h-3.5 w-3.5" /> {adding ? 'Adding...' : 'Add product'}
         </button>
         {full && <span className="ss-muted" style={{ marginLeft: 8 }}>Up to {MAX_PRODUCT_SLIDES} products in one block.</span>}
         {menu && (
           <div role="menu" className="sb-addmenu">
-            <button type="button" role="menuitem" onClick={() => void add('digital')}><b>Digital product</b><small>A file you sell here</small></button>
-            <button type="button" role="menuitem" onClick={() => void add('affiliate')}><b>Amazon affiliate</b><small>Links to Amazon with your tag</small></button>
+            <button type="button" role="menuitem" disabled={full} title={full ? `Up to ${MAX_PRODUCT_SLIDES} products in one block` : undefined} onClick={() => void add('digital')}><b>Digital product</b><small>A file you sell here</small></button>
+            <button type="button" role="menuitem" onClick={() => void add('affiliate')}><b>Amazon affiliate</b><small>Paste a link, get your own bio link</small></button>
           </div>
         )}
       </div>
       {addErr && <p className="ss-note" role="alert">{addErr}</p>}
+      {linkBox && ctx && (
+        <div className="sb-selected sb-linkbox">
+          <div className="sb-selhead">
+            <span className="sld-kind-static" style={{ marginLeft: 0 }}>Amazon affiliate</span>
+            <button type="button" className="ss-ghost" aria-label="Close" onClick={() => { setLinkBox(false); setMade(null) }}><CloseIcon className="h-3.5 w-3.5" /></button>
+          </div>
+          {made ? (
+            <>
+              <p className="ss-hint" role="status"><b>{made.title || 'Your link'}</b> is ready. It opens the Amazon product directly.</p>
+              <Field label="Your link"><input className="ss-input" readOnly value={bioLinkOf(ctx.store, made)} aria-label="Your link" onFocus={(e) => e.currentTarget.select()} /></Field>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <CopyBioLink link={bioLinkOf(ctx.store, made)} />
+                <button type="button" className="ss-ghost" onClick={() => { setLinkBox(false); setMade(null) }}>Done</button>
+              </div>
+              <p className="ss-muted">Private: not shown on your website. All your links are under Products.</p>
+            </>
+          ) : (
+            <>
+              <AffiliateLinkForm
+                submitLabel="Create link"
+                onCancel={() => setLinkBox(false)}
+                onSubmit={async (url, title) => { await flushSellerEdits(); const r = await sellerApi.createAffiliate(url, title); ctx.setStore(r.store); setMade(r.product) }}
+              />
+              <p className="ss-muted">Paste your Amazon link (with your tag). You get your own short link for your bio.</p>
+            </>
+          )}
+        </div>
+      )}
       {slides.length > 0 && (
         <div className="sb-circles" role="tablist" aria-label="Products in this block">
           {slides.map((sl, i) => {
