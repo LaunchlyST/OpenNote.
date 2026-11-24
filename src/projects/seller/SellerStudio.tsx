@@ -2239,6 +2239,7 @@ function SlidesEditor({ slides, products, onChange, onOpenProduct, activeSlide, 
   const ctx = useContext(AffiliateCtx)
   const [local, setLocal] = useState(0)
   const [boxOpen, setBoxOpen] = useState(false)
+  const [editLink, setEditLink] = useState<DraftProduct | null>(null)
   const a = slides.length ? Math.max(0, Math.min(activeSlide ?? local, slides.length - 1)) : 0
   const select = (i: number) => { setLocal(i); onActiveSlideChange?.(i) }
   const s = slides[a] ?? null
@@ -2293,13 +2294,15 @@ function SlidesEditor({ slides, products, onChange, onOpenProduct, activeSlide, 
           {removeBtn}
         </div>
       )}
-      {ctx && <AffiliateRows store={ctx.store} setStore={ctx.setStore} />}
-      {boxOpen && ctx && createPortal(
+      {ctx && <AffiliateRows store={ctx.store} setStore={ctx.setStore} onEdit={(p) => setEditLink(p)} />}
+      {(boxOpen || editLink) && ctx && createPortal(
         <AddProductBox
+          key={editLink?.id ?? 'new'}
           full={full}
           store={ctx.store}
           setStore={ctx.setStore}
-          onClose={() => setBoxOpen(false)}
+          editing={editLink}
+          onClose={() => { setBoxOpen(false); setEditLink(null) }}
           onDigital={(id) => { onChange([...slides, newSlide('digital', id)]); select(slides.length); setBoxOpen(false) }}
         />,
         document.body,
@@ -2310,9 +2313,8 @@ function SlidesEditor({ slides, products, onChange, onOpenProduct, activeSlide, 
 
 /** Your affiliate links, each as a small box: name, your link, copy, edit and
     delete. They are private bio links, so they never change the website. */
-function AffiliateRows({ store, setStore }: { store: StoreView; setStore: (s: StoreView) => void }) {
+function AffiliateRows({ store, setStore, onEdit }: { store: StoreView; setStore: (s: StoreView) => void; onEdit: (p: DraftProduct) => void }) {
   const links = store.products.filter((p) => !p.archived && isAffiliateEntry(p))
-  const [editing, setEditing] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   if (!links.length) return null
   const remove = async (p: DraftProduct) => {
@@ -2325,24 +2327,11 @@ function AffiliateRows({ store, setStore }: { store: StoreView; setStore: (s: St
       <span className="ss-label">Your affiliate links</span>
       {links.map((p) => {
         const own = bioLinkOf(store, p)
-        if (editing === p.id) {
-          return (
-            <div key={p.id} className="sb-selected">
-              <AffiliateLinkForm
-                initial={{ url: String(p.extras?.affiliate?.url ?? ''), title: p.title }}
-                hideTitle
-                submitLabel="Save"
-                onCancel={() => setEditing(null)}
-                onSubmit={async (url, title) => { const r = await sellerApi.updateAffiliate(p.id, url, title); setStore(r.store); setEditing(null) }}
-              />
-            </div>
-          )
-        }
         return (
           <div key={p.id} className="sb-selected sb-digital">
             <input className="ss-input sb-link-full" readOnly value={own.replace(/^https?:\/\//, '')} aria-label="Your link" onFocus={(e) => e.currentTarget.select()} />
             <CopyIconButton text={own} />
-            <button type="button" className="ss-ghost" aria-label={`Edit ${p.title || 'link'}`} title="Edit" onClick={() => setEditing(p.id)}><Pencil className="h-4 w-4" /></button>
+            <button type="button" className="ss-ghost" aria-label={`Edit ${p.title || 'link'}`} title="Edit" onClick={() => onEdit(p)}><Pencil className="h-4 w-4" /></button>
             <button type="button" className="ss-ghost" aria-label={`Delete ${p.title || 'link'}`} title="Delete" onClick={() => void remove(p)}><Trash2 className="h-3.5 w-3.5" /></button>
           </div>
         )
@@ -2365,9 +2354,9 @@ function CopyIconButton({ text }: { text: string }) {
     affiliate. Digital adds a new product to the block. Affiliate stays in the
     box: paste the Amazon link, get your own link to copy (it opens the Amazon
     product directly), with the Amazon link shown under it. */
-function AddProductBox({ full, store, setStore, onClose, onDigital }: { full: boolean; store: StoreView; setStore: (s: StoreView) => void; onClose: () => void; onDigital: (productId: string) => void }) {
-  const [step, setStep] = useState<'pick' | 'link'>('pick')
-  const [url, setUrl] = useState('')
+function AddProductBox({ full, store, setStore, onClose, onDigital, editing }: { full: boolean; store: StoreView; setStore: (s: StoreView) => void; onClose: () => void; onDigital: (productId: string) => void; editing?: DraftProduct | null }) {
+  const [step, setStep] = useState<'pick' | 'link'>(editing ? 'link' : 'pick')
+  const [url, setUrl] = useState(editing ? String(editing.extras?.affiliate?.url ?? '') : '')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [made, setMade] = useState<DraftProduct | null>(null)
@@ -2393,7 +2382,7 @@ function AddProductBox({ full, store, setStore, onClose, onDigital }: { full: bo
     setBusy(true)
     try {
       await flushSellerEdits()
-      const r = await sellerApi.createAffiliate(url.trim(), '')
+      const r = editing ? await sellerApi.updateAffiliate(editing.id, url.trim(), editing.title) : await sellerApi.createAffiliate(url.trim(), '')
       setStore(r.store)
       setMade(r.product)
     } catch (e2) { setErr((e2 as Error).message || AMAZON_LINK_ERROR) } finally { setBusy(false) }
@@ -2404,7 +2393,7 @@ function AddProductBox({ full, store, setStore, onClose, onDigital }: { full: bo
     <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ab ab-slim sb-box" role="dialog" aria-modal="true" aria-label="Add product">
         <header className="ab-head">
-          <h2>{step === 'pick' ? 'Add product' : made ? 'Your link is ready' : 'Amazon affiliate'}</h2>
+          <h2>{step === 'pick' ? 'Add product' : made ? (editing ? 'Link updated' : 'Your link is ready') : editing ? 'Edit link' : 'Amazon affiliate'}</h2>
           <button type="button" className="ab-x" onClick={onClose} aria-label="Close"><CloseIcon className="h-4 w-4" /></button>
         </header>
         <div className="sb-box-body">
@@ -2426,8 +2415,10 @@ function AddProductBox({ full, store, setStore, onClose, onDigital }: { full: bo
                 <input className="ss-input" inputMode="url" autoFocus value={url} onChange={(e) => { setUrl(e.target.value); setErr(null) }} placeholder="https://www.amazon.co.uk/dp/B0...?tag=yourtag-21" aria-label="Amazon product link" />
               </Field>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button type="submit" className="ss-primary" disabled={busy || !url.trim()}>{busy ? 'Creating…' : 'Create link'}</button>
-                <button type="button" className="ss-ghost" onClick={() => { setStep('pick'); setErr(null) }}>Back</button>
+                <button type="submit" className="ss-primary" disabled={busy || !url.trim()}>{busy ? 'Saving…' : editing ? 'Save' : 'Create link'}</button>
+                {editing
+                  ? <button type="button" className="ss-ghost" onClick={onClose}>Cancel</button>
+                  : <button type="button" className="ss-ghost" onClick={() => { setStep('pick'); setErr(null) }}>Back</button>}
               </div>
             </form>
           )}
