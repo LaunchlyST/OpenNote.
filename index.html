@@ -2,6 +2,20 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Bio links (desknoty.com/B09BT4lv2, desknoty.com/p/<id>) go straight to the
+      // server's checked redirect, before any of the site loads: one hop to Amazon.
+      // Store pages and app routes are lowercase, so a capital means a bio link.
+      (function () {
+        var path = location.pathname
+        var m = path.match(/^\/(p\/)?([A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\/?$/)
+        if (!m || m[2].length < 2 || m[2].length > 48) return
+        if (!m[1] && !/[A-Z]/.test(m[2])) return
+        var base = '%VITE_API_BASE_URL%'
+        if (base.charAt(0) === '%') base = ''
+        location.replace(base.replace(/\/+$/, '') + '/api/p/' + encodeURIComponent(m[2]) + '/redirect')
+      })()
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f3efe7" />
