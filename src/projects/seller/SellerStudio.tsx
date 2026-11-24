@@ -2664,7 +2664,10 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
 
   // Two mutually exclusive views: the product list, or one product's full editor.
   // Never both — the editor replaces the list instead of sitting under it.
-  const selected = open ? store.products.find((p) => p.id === open) ?? null : null
+  // The Products tab opens straight into a product's editor (never the list):
+  // the chosen one, else the first product on sale.
+  const editable = store.products.filter((p) => !p.archived && !isAffiliateEntry(p))
+  const selected = (open ? store.products.find((p) => p.id === open) ?? null : null) ?? editable[0] ?? null
   if (selected) {
     return (
       <div className="ss-stack" ref={panel}>
@@ -2673,11 +2676,11 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
             <button type="button" className="pg-back" onClick={onBackToCarousel}>
               <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to carousel
             </button>
-          ) : (
-            <button type="button" className="pg-back" onClick={() => choose(null)}>
-              <ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back to Products
-            </button>
-          )}
+          ) : editable.length > 1 ? (
+            <select className="ss-input pg-switch" aria-label="Product" value={selected.id} onChange={(e) => choose(e.target.value)}>
+              {editable.map((p, i) => <option key={p.id} value={p.id}>{i + 1}. {p.title.trim() || 'Untitled product'}</option>)}
+            </select>
+          ) : <span />}
           <span className="pg-state">{selected.archived ? 'Archived' : selected.published ? 'Live' : 'Draft'}</span>
         </div>
         {focus?.productId === selected.id ? (
@@ -2750,17 +2753,6 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
       )}
       {err && <div className="ss-note" role="alert">{err}</div>}
 
-      {/* Numbered selector: every entry in order. Selecting never changes its type. */}
-      {entries.length > 0 && (
-        <div className="pg-slots" role="tablist" aria-label="Your products and links" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {entries.map((p, i) => (
-            <button key={p.id} type="button" role="tab" aria-selected={slotEntry?.id === p.id} className={cn('ss-ghost', slotEntry?.id === p.id && 'on')} style={slotEntry?.id === p.id ? { outline: '2px solid currentColor' } : undefined}
-              onClick={() => (isAffiliateEntry(p) ? setSlot(p.id) : (setSlot(null), choose(p.id)))}>
-              {i + 1} · {p.title.trim() || (isAffiliateEntry(p) ? 'Amazon product' : 'Untitled product')}
-            </button>
-          ))}
-        </div>
-      )}
       {slotEntry && <AffiliateEntry key={slotEntry.id} product={slotEntry} store={store} setStore={setStore} />}
 
       {/* Product blocks on the selected page. One box at a time: "Product 2"
@@ -2773,7 +2765,7 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
           <section key={bi} className="sb-block" style={{ marginBottom: 10 }}>
             <div className="sb-row">
               <span className="sb-ico" aria-hidden="true">{bi + 1}</span>
-              <span className="sb-title"><b>Product {bi + 1}</b><small>{block ? `${slides.length} slide${slides.length === 1 ? '' : 's'}` : 'Empty slot'}</small></span>
+              <span className="sb-title"><b>Product {bi + 1}</b><small>{`${Math.min(slides.length, PRODUCT_SLOTS)} of ${PRODUCT_SLOTS} products`}</small></span>
             </div>
             <div className="pg-grid" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
               {Array.from({ length: PRODUCT_SLOTS }, (_, i) => i).map((si) => {
@@ -2800,20 +2792,19 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
                     </div>
                   )
                 }
-                // An empty slot keeps its own "Add product" placeholder, so the
-                // block always offers its three slides (Product 3 included).
-                if (slides.length === 0 && si > 0) return null
+                // Small slots: only the next free one can be filled, so a block
+                // fills 1, 2, 3 in order; later ones are faint placeholders.
+                const next = si === slides.length
                 return (
                   <button
                     key={`empty-${block.id}-${si}`}
                     type="button"
-                    className="pg-card"
-                    style={{ display: 'grid', placeItems: 'center', minHeight: 120, border: '1.5px dashed #d6d4cf', background: '#fafaf8' }}
+                    className="pg-slot-empty"
+                    disabled={!next}
                     onClick={() => (onAddSlideAt ? onAddSlideAt(block.id, si) : onAddSlot?.(0, bi))}
-                    aria-label="Add product"
+                    aria-label={next ? `Add product ${si + 1}` : `Slot ${si + 1}, fill the earlier slot first`}
                   >
-                    <span style={{ fontSize: 22, opacity: 0.5 }}>+</span>
-                    <span style={{ fontSize: 12, opacity: 0.6 }}>Add product</span>
+                    {next ? <><Plus className="h-4 w-4" /> Add product</> : <span>{si + 1}</span>}
                   </button>
                 )
               })}

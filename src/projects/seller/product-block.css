@@ -28,3 +28,8 @@
 .sb-box-amazon { margin: 2px 0 0; font-size: 12px; color: #77756f; overflow-wrap: anywhere; }
 .sb-box-amazon span { font-weight: 600; color: #555; }
 @media (max-width: 420px) { .sb-box-pick { grid-template-columns: 1fr; } }
+/* Products tab: small empty slots (no big squares). */
+.pg-slot-empty { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 64px; border-radius: 14px; border: 1.5px dashed #d6d4cf; background: #fafaf8; font-size: 12.5px; font-weight: 600; color: #555; cursor: pointer; }
+.pg-slot-empty:hover:not(:disabled) { border-color: #111114; color: #111114; }
+.pg-slot-empty:disabled { cursor: default; color: #b9b7b1; font-weight: 500; }
+.pg-switch { width: auto; max-width: 70%; height: 36px; padding: 0 10px; font-size: 13.5px; }
