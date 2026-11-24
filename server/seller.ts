@@ -1916,6 +1916,14 @@ export function sellerRouter() {
     const extras = JSON.stringify(cleanExtras({ ...x, productType: 'affiliate', affiliate: { ...x.affiliate, url: final, input: final } }))
     const t = now()
     await sql.run(`UPDATE seller_product SET title = ?, extras = ?, "pubTitle" = ?, "pubExtras" = ?, listed = 1, "pubAt" = COALESCE("pubAt", ?), "updatedAt" = ?, revision = revision + 1 WHERE id = ?`, title, extras, title, extras, t, t, p.id)
+    // The Desknoty link follows the new Amazon link's code (link.amazon/B0h0Hh6JP
+    // -> desknoty.com/B0h0Hh6JP). Same code, or no code in the link: unchanged.
+    const code = amazonLinkCode(checked.url) || amazonLinkCode(final)
+    const current = String(p.shortId ?? '')
+    const base = current.replace(/\d+$/, '')
+    if (code && code.toLowerCase() !== current.toLowerCase() && code.toLowerCase() !== base.toLowerCase()) {
+      await sql.run(`UPDATE seller_product SET "shortId" = ? WHERE id = ?`, await uniqueAmazonCode(checked.url, final), p.id)
+    }
     res.json({ product: productDraftView((await q.product(p.id, s.id))!), store: await storeView((await q.storeById(s.id))!) })
   })
 

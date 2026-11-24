@@ -2388,7 +2388,8 @@ function AddProductBox({ full, store, setStore, onClose, onDigital, editing }: {
     } catch (e2) { setErr((e2 as Error).message || AMAZON_LINK_ERROR) } finally { setBusy(false) }
   }
   const own = made ? bioLinkOf(store, made) : ''
-  const amazon = made ? String(made.extras?.affiliate?.url ?? url) : ''
+  // Show the link as pasted (often a short link.amazon one), not the long resolved address.
+  const amazon = made ? url.trim() || String(made.extras?.affiliate?.url ?? '') : ''
   return (
     <div className="ab-back" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="ab ab-slim sb-box" role="dialog" aria-modal="true" aria-label="Add product">
