@@ -2667,7 +2667,8 @@ function ProductsEditor({ inlineText, store, setStore, open, setOpen, focus, onF
   // The Products tab opens straight into a product's editor (never the list):
   // the chosen one, else the first product on sale.
   const editable = store.products.filter((p) => !p.archived && !isAffiliateEntry(p))
-  const selected = (open ? store.products.find((p) => p.id === open) ?? null : null) ?? editable[0] ?? null
+  const picked = open ? store.products.find((p) => p.id === open) : undefined
+  const selected = picked ?? editable[0] ?? null
   if (selected) {
     return (
       <div className="ss-stack" ref={panel}>
