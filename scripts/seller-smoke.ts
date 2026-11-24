@@ -337,6 +337,10 @@ try {
   const badAmazonUrl = 'https://amazon.co.uk.evil.example/dp/B0C1ABCDEF'
   // The same validator runs in the browser and on the API.
   check('the shared validator accepts recognised marketplaces and short links', checkAmazonUrl(amazonUrl).ok && checkAmazonUrl('https://amzn.to/abc123').ok)
+  // The Amazon app/share sheet hands out link.amazon deep links.
+  const appShare = checkAmazonUrl('https://link.amazon/B01hEFa4N')
+  check('the shared validator accepts Amazon app share links as short links', appShare.ok && appShare.short && appShare.host === 'link.amazon', JSON.stringify(appShare))
+  check('the shared validator rejects an empty Amazon share link', !checkAmazonUrl('https://link.amazon/').ok)
   check('the shared validator rejects lookalike hosts', !checkAmazonUrl(badAmazonUrl).ok && !checkAmazonUrl('https://notamazon.com/dp/B0C1ABCDEF').ok)
   const invalidCheck = await req('POST', '/api/seller/products/amazon-check', { url: badAmazonUrl }, A)
   check('the link-check API rejects a lookalike with the exact message', invalidCheck.status === 400 && invalidCheck.json?.error === AMAZON_LINK_ERROR, JSON.stringify(invalidCheck.json))

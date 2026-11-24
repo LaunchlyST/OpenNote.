@@ -26,8 +26,11 @@ const MARKETPLACES = new Set([
   'amazon.com.ph', 'amazon.com.my', 'amazon.com.pk', 'amazon.co.il',
 ])
 
-/** Amazon's own shorteners need a server-side redirect check before publishing. */
-const SHORT_HOSTS = new Set(['amzn.to', 'a.co', 'amzn.eu'])
+/** Amazon's own shorteners need a server-side redirect check before publishing.
+ *  link.amazon is the Amazon Creator/Associates deep link from the Amazon app
+ *  and share sheet (cert: creators-deeplinking.amazon.com); it redirects on to
+ *  a marketplace product page. */
+const SHORT_HOSTS = new Set(['amzn.to', 'a.co', 'amzn.eu', 'link.amazon'])
 
 const ASIN = /^[A-Z0-9]{10}$/
 const PRODUCT_PATH = /(?:^|\/)(?:dp|e|product|gp\/product|gp\/aw\/d|gp\/aw\/dp)\/([A-Z0-9]{10})(?:\/|$)/i
